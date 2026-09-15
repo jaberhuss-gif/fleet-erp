@@ -1,4 +1,4 @@
-import 'dotenv/config';
+﻿import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import Database from 'better-sqlite3';
@@ -43,6 +43,36 @@ if (count === 0) {
   console.log('? Default users created');
 }
 
+const RESET_OWNER_PASSWORD = process.env.RESET_OWNER_PASSWORD;
+
+if (RESET_OWNER_PASSWORD) {
+  const ownerPasswordHash = bcrypt.hashSync(RESET_OWNER_PASSWORD, 10);
+
+  const owner = db.prepare(
+    'SELECT id FROM users WHERE username = ?'
+  ).get('owner');
+
+  if (owner) {
+    db.prepare(
+      'UPDATE users SET password = ?, role = ?, is_active = 1 WHERE username = ?'
+    ).run(ownerPasswordHash, 'Owner', 'owner');
+
+    console.log('Owner password reset completed');
+  } else {
+    db.prepare(`
+      INSERT INTO users
+      (username, password, full_name, role, is_active)
+      VALUES (?, ?, ?, ?, 1)
+    `).run(
+      'owner',
+      ownerPasswordHash,
+      'System Owner',
+      'Owner'
+    );
+
+    console.log('Owner user created');
+  }
+}
 export function login(username, password) {
   const user = db.prepare('SELECT * FROM users WHERE username = ? AND is_active = 1').get(username);
   if (!user) throw new Error('Invalid credentials');
@@ -75,3 +105,4 @@ export function deleteUser(id) {
 }
 
 export default db;
+

@@ -13,38 +13,62 @@ function stringValue(value, fallback = "") {
 
 function formatVehicle(row) {
   if (!row) return null;
+
   const currentKM = numberValue(row.current_km, 0);
   const lastOilKM = numberValue(row.last_oil_km, 0);
   const interval = numberValue(row.oil_change_interval, 5000);
+
   const kmSinceOil = currentKM - lastOilKM;
   const remaining = interval - kmSinceOil;
 
   let oilStatus = "Safe";
+
   if (kmSinceOil >= interval) {
     oilStatus = "Urgent Overdue";
   } else if (kmSinceOil >= interval - 500) {
     oilStatus = "Warning";
   }
 
+  const plate = `${row.plate_number || ""} ${row.plate_code || ""}`.trim();
+  const driver = row.driver || "";
+  const phone = row.phone || "";
+
   return {
     id: row.id,
-    plate: `${row.plate_number || ""} ${row.plate_code || ""}`.trim(),
-    plate_number: row.plate_number,
-    plate_code: row.plate_code,
-    make: row.make,
-    model: row.model,
-    year: row.year,
-    status: row.status,
+
+    plate,
+    plate_number: row.plate_number || "",
+    plate_code: row.plate_code || "",
+
+    make: row.make || "",
+    model: row.model || "",
+    year: row.year || "",
+    status: oilStatus,
     location: row.location || "",
-    driver_name: row.driver || "",
-    driver_phone: row.phone || "",
+
+    driver,
+    driver_name: driver,
+    driver_phone: phone,
+    phone,
+
+    currentKm: currentKM,
     currentKM,
+
+    lastOilKm: lastOilKM,
     lastOilKM,
-    oilChangeInterval: interval,
-    lastOilChangeDate: row.last_oil_change_date || "",
+
+    sinceOil: kmSinceOil,
     kmSinceLastOil: kmSinceOil,
+
+    remaining,
     remainingKM: remaining,
+
+    oilChangeInterval: interval,
+    last_oil_change_date: row.last_oil_change_date || "",
+    lastOilChangeDate: row.last_oil_change_date || "",
+
     oilStatus,
+
     meter_updated_at: row.meter_updated_at,
     created_at: row.created_at,
     updated_at: row.updated_at
@@ -138,6 +162,149 @@ export async function deleteAllVehicles() {
   return { changes: result.rowCount };
 }
 
+
+export async function addReading(vehicleId, data = {}) {
+  const vehicleResult = await query(
+    `SELECT * FROM vehicles WHERE id = $1 LIMIT 1`,
+    [vehicleId]
+  );
+
+  const v = vehicleResult.rows[0];
+
+  if (!v) throw new Error("Vehicle not found");
+
+  const km = numberValue(data.readingKm, 0);
+
+  if (km <= 0) throw new Error("Reading must be positive");
+  if (km < numberValue(v.current_km, 0)) {
+    throw new Error("Reading must be >= current");
+  }
+
+  const readingDate =
+    stringValue(data.readingDate) ||
+    new Date().toISOString().slice(0, 10);
+
+  const plate = `${v.plate_number || ""} ${v.plate_code || ""}`.trim();
+
+  await query(
+    `INSERT INTO km_records
+      (vehicle_id, plate, reading_km, reading_date, notes)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [
+      vehicleId,
+      plate,
+      km,
+      readingDate,
+      stringValue(data.notes)
+    ]
+  );
+
+  await query(
+    `UPDATE vehicles
+     SET current_km = $1,
+         meter_updated_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $2`,
+    [km, vehicleId]
+  );
+
+  return getVehicleById(vehicleId);
+}
+
+export async function listReadings(vehicleId) {
+  const result = await query(
+    `SELECT *
+     FROM km_records
+     WHERE vehicle_id = $1
+     ORDER BY reading_date DESC, id DESC
+     LIMIT 50`,
+    [vehicleId]
+  );
+
+  return result.rows;
+}
+
+export async function changeOil(vehicleId, data = {}) {
+  const vehicleResult = await query(
+    `SELECT * FROM vehicles WHERE id = $1 LIMIT 1`,
+    [vehicleId]
+  );
+
+  const v = vehicleResult.rows[0];
+
+  if (!v) throw new Error("Vehicle not found");
+
+  const currentKM = numberValue(v.current_km, 0);
+
+  if (!currentKM) {
+    throw new Error("No current reading");
+  }
+
+  const oilDate =
+    stringValue(data.oilChangeDate) ||
+    new Date().toISOString().slice(0, 10);
+
+  const changedBy =
+    stringValue(data.changedBy) || "Driver";
+
+  const notes = stringValue(data.notes);
+
+  const plate = `${v.plate_number || ""} ${v.plate_code || ""}`.trim();
+
+  await query(
+    `INSERT INTO oil_changes
+      (vehicle_id, oil_change_km, oil_change_date, changed_by, notes)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [
+      vehicleId,
+      currentKM,
+      oilDate,
+      changedBy,
+      notes
+    ]
+  );
+
+  await query(
+    `UPDATE vehicles
+     SET last_oil_km = $1,
+         last_oil_change_date = $2,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $3`,
+    [
+      currentKM,
+      oilDate,
+      vehicleId
+    ]
+  );
+
+  await query(
+    `INSERT INTO km_records
+      (vehicle_id, plate, reading_km, reading_date, is_oil_change, notes)
+     VALUES ($1, $2, $3, $4, 1, $5)`,
+    [
+      vehicleId,
+      plate,
+      currentKM,
+      oilDate,
+      "Oil change"
+    ]
+  );
+
+  return getVehicleById(vehicleId);
+}
+
+export async function listOilChanges(vehicleId) {
+  const result = await query(
+    `SELECT *
+     FROM oil_changes
+     WHERE vehicle_id = $1
+     ORDER BY oil_change_date DESC, id DESC
+     LIMIT 20`,
+    [vehicleId]
+  );
+
+  return result.rows;
+}
 export default {
   listVehicles,
   getVehicleById,
@@ -147,3 +314,5 @@ export default {
   deleteVehicle,
   deleteAllVehicles
 };
+
+

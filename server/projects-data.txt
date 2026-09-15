@@ -1,0 +1,12 @@
+﻿PRJ001|A/C Project|A/C not Working - Done|Uqlat Al Soqour|Development|Closed|0|0|2026-07-08|2026-07-08|
+PRJ002|Project Bir Umq||Bir Umq|Development|Active|0|0|||
+PRJ003|Project Al Hulifa||Al Hulifa|Development|Active|0|0|||
+PRJ004|Project WB||Wadi Beddah|Development|Active|0|0|||
+PRJ-0005|Project Al Hadar||Al Hadar|Development|Active|0|0|||
+PRJ-0006|Emergency Light Installation|Emergency Light including installation|Al Sabiyah|Development|Closed|210|210|2026-07-08|2026-07-08|Al Jodood
+PRJ-0007|AC Split Installation|AC Split installation|Al Sabiyah|Development|Closed|450|450|2026-07-08|2026-07-08|Al Jodood
+PRJ-0008|Socket Assembly Work|Cable 3x4mm with Clips - Socket with Box - Condute|Uqlat Al Soqour|Development|Closed|65|65|2026-07-10|2026-07-10|Al Jodood
+PRJ-0009|Building a Staircase|Building a staircase - Block Sand Cement|Al Sabiyah|Development|Closed|600|600|2026-07-20|2026-07-22|Al Jodood
+PRJ-0010|AC Split Installation 2|AC Split installation|Al Sabiyah|Development|Closed|300|300|2026-07-20|2026-07-22|Al Jodood
+PRJ-0011|Excavation and Cable Installation|Excavation and install cable|Al Sabiyah|Development|Closed|500|500|2026-07-20|2026-07-20|Al Jodood
+PRJ-0012|Meeting Room Tim|Tim meeting room|Al Sabiyah|Development|Closed|400|400|2026-07-21|2026-07-21|Al Jodood

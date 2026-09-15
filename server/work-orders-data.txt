@@ -1,0 +1,96 @@
+﻿WO0001|Uqlat Al Soqour|Qassim|Carpentry|High|Caravan Floor Broken GYM|Hussein|Closed|2026-07-02|2026-07-18|0|||good condition
+WO0002|Uqlat Al Soqour|Qassim|Plumbing|High|Pump pipe discharge pipe|Hussein|Closed|2026-07-03|2026-07-19|0|||change by employee
+WO0003|Uqlat Al Soqour|Qassim|Plumbing|High|spray with hose 5 Pcs 4 bathroom|Hussein|Closed|2026-07-04|2026-07-05|0|||Repair Toilet spray
+WO0004|Uqlat Al Soqour|Qassim|Carpentry|High|Security Door Caravan|Hussein|Closed|2026-07-04|2026-07-05|0|||Door hinge holes repaired
+WO0005|Uqlat Al Soqour|Qassim|Other|Medium|Door Lock Room Nu 2|Hussein|Closed|2026-07-05|2026-07-05|0|||internal locking mechanism failed
+WO0006|Uqlat Al Soqour|Qassim|Plumbing|High|Hand Spry Hose 3 Pcs change|Hussein|Closed|2026-07-05|2026-07-18|0|||done
+WO-0007|Al Hadar|WD|HVAC|Urgent|A/C not Working|Contractor|Closed|2026-07-08|2026-07-09|270||Al Jodood|clean and add feron
+WO-0008|Al Hadar|WD|General|Urgent|Camera Parking area|Amro|Closed|2026-07-08|2026-07-18|0|||fixed
+WO-0009|Uqlat Al Soqour|Qassim|Carpentry|Urgent|Bed QTY 2|Hussein|Closed|2026-07-06|2026-07-08|0|||repair 2 beds
+WO-0010|Uqlat Al Soqour|Qassim|General|Urgent|Office Wall Crack|Hussein|Closed|2026-07-08|2026-07-08|0|||repair the wall
+WO-0011|Al Hulifa|Madina|General|High|Flush button Toilet seat 2 pcs|Noman|Closed|2026-07-06|2026-07-19|0|||
+WO-0012|Al Sabiyah|Madina|HVAC|Medium|Change pump for desert cooler|Shahzad|Closed|2026-07-19|2026-07-19|100||Al Jodood|change pump
+WO-0013|Al Sabiyah|Madina|HVAC|Medium|Clean AC and Washing 3pcs|Shahzad|Closed|2026-07-19|2026-07-19|450||Al Jodood|clean 3 pcs A/C
+WO-0014|Al Sabiyah|Madina|Electrical|High|Repair Electrical Breaker|Shahzad|Closed|2026-07-19|2026-07-19|80||Al Jodood|repair
+WO-0015|Al Sabiyah|Madina|Plumbing|High|Change existing Water pump|Shahzad|Closed|2026-07-19|2026-07-19|80||Al Jodood|done
+WO-0016|Al Hulifa|Madina|HVAC|High|Feron for Split AC|Nomaan|Closed|2026-07-19|2026-07-19|270||Al Jodood|done
+WO-0017|Al Hulifa|Madina|Electrical|Medium|Electrical Breaker|Nomaan|Closed|2026-07-19|2026-07-19|140||Al Jodood|fixed twice
+WO-0018|Uqlat Al Soqour|Qassim|Electrical|Medium|Cable 3x4mm with Clips Socket Box Condute|Rhys|Closed|2026-07-19|2026-07-30|0|||done
+WO-0019|Al Hulifa|Madina|HVAC|High|sensor For A/C window|Nomaan|Closed|2026-07-29|2026-07-29|0|||done
+WO-0020|Al Hulifa|Madina|General|Medium|Fan|Nomaan|Closed|2026-07-29|2026-07-29|70||Al Jodood|done
+WO-0021|Al Hulifa|Madina|General|Medium|Alumninum door lock|nomaan|Closed|2026-07-29|2026-07-29|70||Al Jodood|done
+WO-0022|Al Hulifa|Madina|HVAC|High|Feron For A/C window|nomaan|Closed|2026-07-29|2026-07-29|150||Al Jodood|good condition
+WO-0023|Al Sabiyah|Madina|Electrical|Medium|socket|Shahzad|Closed|2026-07-29|2026-07-29|0|||
+WO-0024|Al Sabiyah|Madina|Electrical|High|A/C switch|shahzad|Closed|2026-07-29|2026-07-29|0|||
+WO-0025|Al Hadar|WD|Plumbing|High|Kitchen waste pipe repair|Mostafa|Closed|2026-07-29|2026-07-29|250||Al Jodood|drain opened
+WO-0026|Uqlat Al Soqour|Qassim|Plumbing|Medium|Washbasin faucet|Samer|Closed|2026-07-29|2026-07-29|0|||replaced new
+WO-0027|Uqlat Al Soqour|Qassim|Plumbing|High|1 Toilet angle valve|Samer|Closed|2026-07-29|2026-07-29|0|||
+WO-0028|Uqlat Al Soqour|Qassim|Plumbing|Medium|Shower mixer|Samer|Closed|2026-07-29|2026-07-29|0|||
+WO-0030|Uqlat Al Soqour|Qassim|Electrical|Medium|Celling light not working Bathroom|Samer|Closed|2026-07-30|2026-07-30|80||Al Jodood|done
+WO-0031|Uqlat Al Soqour|Qassim|Electrical|Critical|Socket for Oven|Samer|Closed|2026-07-30|2026-07-30|50||Al Jodood|done
+WO-0032|Uqlat Al Soqour|Qassim|Electrical|Medium|Fan|Samer|Closed|2026-07-30|2026-07-30|60||Al Jodood|done
+WO-0033|Uqlat Al Soqour|Qassim|General|Medium|Steel dust repaint|Hussam|Closed|2026-07-30|2026-07-30|50||Al Jodood|done
+WO-0034|Al Sabiyah|Madina|Mechanical|Medium|Door bolt lock|Shahzad|Closed|2026-07-30|2026-07-31|0||Al Jodood|replaced new
+WO-0034-2|Al Sabiyah|Madina|Plumbing|Medium|Shower head not working|Shahzad|Closed|2026-07-31|2026-07-31|0|||replaced new
+WO-0035|Al Sabiyah|Madina|Plumbing|Medium|spray water bathroom not working|Shahzad|Closed|2026-07-31|2026-07-31|0|||replaced new
+WO-0036|Al Hadar|WD|HVAC|Medium|A/C water drain|mostafa|Closed|2026-08-01|2026-08-10|200||Al Jodood|add feron 2 pcs
+WO-0037|Al Hadar|WD|Electrical|Medium|Electric plug security room 2 pcs|mostafa|Closed|2026-08-01|2026-08-10|60||Al Jodood|new sockets 2 pcs
+WO-0038|Al Hadar|WD|Electrical|High|outside light|mostafa|Closed|2026-08-01|2026-08-10|70||Al Jodood|replaced done
+WO-0039|Al Sabiyah|Madina|Electrical|Medium|Flying Insect Killer light 3pcs|Shahzad|Closed|2026-08-02|2026-08-10|0|||fixed done
+WO-0040|Al Sabiyah|Madina|Electrical|Medium|DVR Fan|Shahzad|Closed|2026-08-02|2026-08-02|0|||clean fan fixed
+WO-0041|Uqlat Al Soqour|Qassim|General|High|Ceramic Tiles|Samer|Closed|2026-08-02|2026-08-15|160||Al Jodood|repair done
+WO-0042|Uqlat Al Soqour|Qassim|Plumbing|Medium|handheld spray|samer|Closed|2026-08-09|2026-08-11|0|||replaced
+WO-0043|Uqlat Al Soqour|Qassim|Plumbing|Medium|handheld spray|samer|Closed|2026-08-09|2026-08-11|0|||replace
+WO-0044|Uqlat Al Soqour|Qassim|General|Medium|Door handle wood|samer|Open|2026-08-09||0|||
+WO-0045|Al Hulifa|Madina|General|High|water doesnt go down drain|nomaan|Closed|2026-08-02|2026-08-13|170||Al Jodood|done
+WO-0046|Uqlat Al Soqour|Qassim|Electrical|Medium|Fan|samer|Closed|2026-08-09|2026-08-10|35||Al Jodood|replaced
+WO-0047|Uqlat Al Soqour|Qassim|Plumbing|Medium|mixer connection|samer|Closed|2026-08-09|2026-08-10|35||Al Jodood|install new mixer
+WO-0048|Uqlat Al Soqour|Qassim|General|Medium|toilet seat cover crack bolt|samer|Closed|2026-08-09|2026-08-11|0||Al Jodood|fixed
+WO-0049|Uqlat Al Soqour|Qassim|Plumbing|Medium|no water in bathroom|samer|Closed|2026-08-09|2026-08-11|0||Al Jodood|repair
+WO-0050|Uqlat Al Soqour|Qassim|Plumbing|Medium|no water hoses|samer|Closed|2026-08-09|2026-08-11|0|||install new hose
+WO-0051|Uqlat Al Soqour|Qassim|Plumbing|Medium|handle shower leaking|samer|Closed|2026-08-09|2026-08-11|0|||replace
+WO-0052|Al Hulifa|Madina|General|Medium|water in bathroom unlevel caravan|Nomaan|Closed|2026-08-09|2026-08-15|600||Al Jodood|done
+WO-0053|Al Hulifa|Madina|Plumbing|Medium|hot water not working|nomaan|Closed|2026-08-09|2026-08-15|115||Al Jodood|testing water heater
+WO-0054|Al Hadar|WD|Electrical|Medium|light not working 3 pcs|Amro|Closed|2026-08-09|2026-08-21|136||Al Jodood|change 8 pcs
+WO-0055|Al Hadar|WD|HVAC|Medium|A/C not working|Amro|Closed|2026-08-09|2026-08-13|300||Al Jodood|add feron
+WO-0056|Al Hulifa|Madina|Plumbing|Medium|spray water bathroom not working|Nomaan|Closed|2026-08-10|2026-08-10|0|||employee fixed
+WO-0057|Uqlat Al Soqour|Qassim|Electrical|Medium|light not working|samer|Closed|2026-08-10|2026-08-10|35||Al Jodood|install new light
+WO-0058|Uqlat Al Soqour|Qassim|Electrical|Medium|A/C Switch not working|samer|Closed|2026-08-10|2026-08-10|35||Al Jodood|install new switch
+WO-0059|Al Hulifa|Madina|Plumbing|Medium|water flashing toilet leaking|Nomaan|Closed|2026-08-10|2026-08-10|75||Al Jodood|install new
+WO-0060|Al Sabiyah|Madina|Electrical|Medium|light 3 pcs not working|Shahzad|Closed|2026-08-10|2026-08-10|0|||change new light 3 pcs
+WO-0061|Wadi Beddah|Al Baha|Plumbing|Medium|handle spray|meshal|Closed|2026-08-13|2026-08-13|690||Raghad Al OFQ|done
+WO-0062|Wadi Beddah|Al Baha|Plumbing|Medium|handle shower|meshal|Closed|2026-08-13|2026-08-13|0||Raghad Al OFQ|done
+WO-0063|Wadi Beddah|Al Baha|Electrical|Medium|Light outside 100 wat|meshal|Closed|2026-08-13|2026-08-13|0||Raghad Al OFQ|done
+WO-0064|Wadi Beddah|Al Baha|Electrical|Medium|spot light 20|meshal|Closed|2026-08-13|2026-08-13|0||Raghad Al OFQ|done
+WO-0065|Wadi Beddah|Al Baha|Electrical|Medium|spot light 8|meshal|Closed|2026-08-13|2026-08-13|0||Raghad Al OFQ|done
+WO-0066|Wadi Beddah|Al Baha|Plumbing|Medium|Drain trap|Meshal|Closed|2026-08-13|2026-08-13|0||Raghad Al OFQ|done
+WO-0067|Wadi Beddah|Al Baha|General|Medium|Door Handle|meshal|Closed|2026-08-13|2026-08-13|0||Raghad Al OFQ|done
+WO-0068|Wadi Beddah|Al Baha|Electrical|Medium|fan 30x30|meshal|Closed|2026-08-13|2026-08-13|0||Raghad Al OFQ|done
+WO-0069|Uqlat Al Soqour|Qassim|Electrical|Medium|fan not working|samer|Closed|2026-08-15|2026-08-27|0||Al Jodood|
+WO-0070|Uqlat Al Soqour|Qassim|General|Medium|handle door|samer|Closed|2026-08-15|2026-08-27|0||Al Jodood|
+WO-0071|Uqlat Al Soqour|Qassim|General|Medium|mold on the wall|Husam|Closed|2026-08-15|2026-08-15|0||Company|clean only
+WO-0072|Al Sabiyah|Madina|General|Medium|crack in kitchen floor|Shahzad|Closed|2026-08-15|2026-08-15|0|||fixed paint
+WO-0073|Al Hadar|WD|Plumbing|Medium|water pump timer|amro|Closed|2026-08-15|2026-08-15|110||Al Jodood|replaced done
+WO-0074|Wadi Beddah|Al Baha|HVAC|Medium|A/C not cooling good|meshal|Closed|2026-08-15|2026-08-27|450||Raghad Al OFQ|
+WO-0075|Al Sabiyah|Madina|General|Medium|core shed door not close|max|Closed|2026-08-18|2026-08-27|150||Al Jodood|done
+WO-0076|Al Sabiyah|Madina|General|Medium|cutting area door need fix|max|Closed|2026-08-18|2026-08-27|150||Al Jodood|done
+WO-0077|Al Sabiyah|Madina|Plumbing|Medium|shower need fix|shahzad|Closed|2026-08-18|2026-08-18|0|||fixed
+WO-0078|Al Sabiyah|Madina|Electrical|Medium|light not working 3 pcs|shahzad|Closed|2026-08-18|2026-08-15|0|||
+WO-0079|Uqlat Al Soqour|Qassim|Plumbing|Medium|water valve handle damaged|samer|Closed|2026-08-20|2026-08-27|100||Al Jodood|fixed
+WO-0080|Uqlat Al Soqour|Qassim|Plumbing|Medium|water leak in barracks|samer|Closed|2026-08-20|2026-08-27|100||Al Jodood|fixed
+WO-0081|Uqlat Al Soqour|Qassim|Plumbing|Medium|water unpleasant taste and odor|samer|Closed|2026-08-20|2026-08-27|200||Al Jodood|fixed
+WO-0082|Uqlat Al Soqour|Qassim|Electrical|Medium|Two lights not working|samer|Closed|2026-08-20|2026-08-27|0||Al Jodood|done
+WO-0083|Wadi Beddah|Al Baha|HVAC|Medium|A/C store leaking water|Meshal|Closed|2026-08-21|2026-08-27|0||Raghad Al OFQ|
+WO-0084|Wadi Beddah|Al Baha|Electrical|Medium|lights long 2 pcs|Meshal|Closed|2026-08-21|2026-08-27|0||Raghad Al OFQ|done
+WO-0085|Al Hulifa|Madina|HVAC|Medium|A/C Window 8 pcs|Nouman|Open|2026-08-21||0||Al Jodood|
+WO-0086|Al Hulifa|Madina|Plumbing|Medium|shower mixer|Nouman|Closed|2026-08-27|2026-08-27|24||Al Jodood|done
+WO-0087|Al Hulifa|Madina|Mechanical|Medium|aluminum door hand need repair|Nouman|Closed|2026-08-27|2026-08-27|92||Al Jodood|
+WO-0088|Al Hadar|WD|HVAC|Medium|need washing 3 pcs A/C|Amro|Closed|2026-08-27|2026-08-27|450||Al Jodood|clean filter
+WO-0089|Uqlat Al Soqour|Qassim|Electrical|High|Panel breaker 20 Am burn|samer|Closed|2026-08-27|2026-08-27|96||Al Jodood|done
+WO-0090|Wadi Beddah|WB|Electrical|Medium|light size 7|meshal|Closed|2026-08-27|2026-08-27|0||Raghad Al OFQ|done
+WO-0091|Wadi Beddah|WB|Electrical|Medium|light size 20|meshal|Closed|2026-08-27|2026-08-27|0||Raghad Al OFQ|done
+WO-0092|Wadi Beddah|WB|Electrical|Medium|out side light|meshal|Closed|2026-08-27|2026-08-27|0||Raghad Al OFQ|done
+WO-0093|Wadi Beddah|WB|Electrical|Medium|Long outdoor LED strip light|meshal|Closed|2026-08-27|2026-08-27|0||Raghad Al OFQ|done
+WO-0094|Wadi Beddah|WB|Plumbing|Medium|Arabic toilet flush|meshal|Closed|2026-08-27|2026-08-27|0||Raghad Al OFQ|done
+WO-0095|Wadi Beddah|WB|Plumbing|Medium|Angle valve|meshal|Closed|2026-08-27|2026-08-27|0||Raghad Al OFQ|done
+WO-0096|Wadi Beddah|WB|Plumbing|Medium|Shower mixer|meshal|Closed|2026-08-27|2026-08-27|0||Raghad Al OFQ|done

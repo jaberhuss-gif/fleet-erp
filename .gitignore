@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+node_modules/
+server/fleet.db
+server/fleet.db-shm
+server/fleet.db-wal
+server/backups/
+
+server/*.backup-*

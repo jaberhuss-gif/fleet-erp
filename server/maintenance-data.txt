@@ -1,0 +1,221 @@
+﻿4/16/2026|4463 JUA|Doors|Door lock repair
+4/17/2026|4463 JUA|Brake|Need Fix brake
+4/18/2026|2287 EUA|Tires|received 1 tire
+4/18/2026|1713 BUA|Tires|Received 2 new tires
+4/18/2026|2295 EUA|Tires|Received 2 new tires
+4/18/2026|1713 BUA|Tires|received 1 tire with tube
+4/18/2026|2287 EUA|Tires|Fixed one tire puncture
+4/19/2026|2287 EUA|Other|Tyre machine not working
+4/19/2026|4463 JUA|Brake|Brake fixed and front tire bearing
+4/19/2026|2287 EUA|Tires|received 1 new tire
+4/19/2026|1357 JER|Oil Engine|change oil engine (Ok)
+4/19/2026|2295 EUA|Wiper|Changed
+4/19/2026|4431 JUA|Wheel Alignment|Wheel Alignment
+4/19/2026|4431 JUA|Oil Engine|Changed
+4/21/2026|2287 EUA|Wiper|Change Wiper Done
+4/21/2026|4533 LUA|Engine Pulley|Pulley bearing replaced
+4/22/2026|6183 ZUA|Tires|Need 2 tyres
+4/23/2026|6183 ZUA|Tires|Change 1 new tyre
+4/24/2026|4533 LUA|Tires|Need 2 tires
+4/25/2026|6183 ZUA|Tires|Changing tire
+4/25/2026|4533 LUA|Tires|Received one tire
+4/25/2026|6183 ZUA|Tires|Received 1 new tire
+4/25/2026|2287 EUA|Tires|1 Tire puncture
+4/26/2026|1738 BUA|A/C|AC not cold
+4/27/2026|4533 LUA|Doors|Back gate not opening from outside
+4/27/2026|1706 BUA|Other|Fire extinguisher
+4/27/2026|2349 EUA|Other|Fire extinguisher
+4/27/2026|1738 BUA|A/C|AC fixed
+4/28/2026|4463 JUA|Oil Engine|Engine oil change done
+4/28/2026|2287 EUA|Tires|Spare tire not good
+4/28/2026|2349 EUA|A/C|Need fix air condition
+4/28/2026|1709 BUA|Check Engine|Engine light appears
+4/29/2026|2287 EUA|Tires|Got two new tires
+05/01/2026 18:37:51|4538 LUA|Tires|Change one tire
+05/01/2026 18:38:39|4481 JUA|Wheel Balance|Done
+05/01/2026 18:45:29|4481 JUA|Other|Need first aid
+05/01/2026 18:59:06|2287 EUA|Door Lock|Changed door lock sensor
+05/02/2026 06:47:39|2295 EUA|Fire extinguisher|Holder
+05/02/2026 06:48:19|2295 EUA|Other|Received new fire extinguisher
+05/02/2026 12:20:36|1560 EHR|Tires|Puncture
+05/02/2026 16:48:10|1713 BUA|Tires|2 tires received and balance front
+05/02/2026 18:49:32|2344 EUA|Battery|Battery issues changed
+05/02/2026 18:49:32|2344 EUA|Tires|Received 3 new tires
+05/02/2026 20:03:07|4533 LUA|Door Lock|2 door locks fixed
+05/03/2026 06:34:37|6183 ZUA|Tires|New tire received
+05/03/2026 08:30:00|1737 BUA|Oil Engine|Need to change oil
+05/04/2026 07:10:21|4538 LUA|Tires|Need two front tires
+05/04/2026 08:27:30|4431 JUA|Tires|Tires need to be changed
+05/04/2026 16:41:23|1706 BUA|Other|Brake program
+05/05/2026 06:55:37|4479 JUA|Oil Engine|Need engine oil and tyer balance
+05/06/2026 06:53:01|4481 JUA|Tires|3 Tires
+05/06/2026 06:53:01|4481 JUA|Other|Need winch
+05/06/2026 07:00:09|4435 JUA|Other|Front winch not opening
+05/06/2026 17:32:54|2287 EUA|Tires|Fixed 1 tire puncture
+05/07/2026 07:02:25|4538 LUA|Tires|Needs two tires
+05/07/2026 16:41:22|4538 LUA|Oil Engine|Changed engine oil
+05/07/2026 17:45:20|4533 LUA|Tires|1 puncture + new tube
+05/08/2026 07:29:30|1713 BUA|Tires|Fixed puncture of 1 tire
+05/09/2026 06:29:40|4431 JUA|Tires|2 tires need to be changed
+05/09/2026 06:30:29|2295 EUA|Tires|Received one tire
+05/09/2026 06:37:15|1713 BUA|Tires|Received 1 new tire
+05/09/2026 06:41:08|4538 LUA|Tires|Received 2 new tires
+05/09/2026 06:44:05|4533 LUA|Tires|Received 1 tire
+05/09/2026 13:41:23|1737 BUA|Tires|Received 1 new tire
+05/09/2026 16:38:46|4481 JUA|Tires|Received 2 tires
+05/09/2026 17:36:51|4435 JUA|Tires|Spare tire puncture fix
+05/09/2026 18:17:14|1713 BUA|Tires|Fixed 1 tire with new tube
+05/09/2026 18:47:13|2295 EUA|Tires|Fix new tire
+05/09/2026 18:48:14|4533 LUA|Tires|Fix 1 tire
+05/09/2026 19:15:13|2287 EUA|Tires|Fixed 1 tire puncture
+05/10/2026 07:08:17|4431 JUA|Tires|2 tires need to be changed
+05/10/2026 18:07:01|4538 LUA|Wheel Alignment|Done
+05/10/2026 18:07:22|4538 LUA|Tires|Received 2 new tires
+05/11/2026 06:32:12|2295 EUA|Tires|Received a tire
+05/11/2026 06:34:58|4479 JUA|Tires|Need tires change + balance + oil
+05/11/2026 08:15:05|4479 JUA|Tires|2 tires + alignment done
+05/11/2026 18:53:10|1737 BUA|Tires|Fixed new tires
+05/13/2026 06:29:19|2287 EUA|Other|Tire air machine not working
+05/14/2026 18:51:29|2158 EUA|A/C|Fixed air conditioner
+05/14/2026 18:54:59|2349 EUA|Tires|Fixed tire bolt
+05/15/2026 06:16:00|4541 LUA|Wheel Alignment|Wheel Alignment
+05/15/2026 06:16:00|4541 LUA|Other|Need brake adjustment
+05/15/2026 06:16:00|4541 LUA|Fire extinguisher|Fire extinguisher installation
+05/15/2026 06:16:00|4541 LUA|Other|Door problem
+05/16/2026 06:30:49|4481 JUA|Other|No winch remote
+05/16/2026 21:04:16|2687 EUA|A/C|Air-condition repair and clean filter
+05/20/2026 06:15:30|1709 BUA|Wheel Alignment|Done
+05/20/2026 11:34:05|4463 JUA|A/C|AC not work
+05/22/2026 09:36:56|1706 BUA|Other|Fixing number plate
+05/26/2026 12:26:58|1709 BUA|Door|Fixed 4 doors + number plate + back bumper
+05/26/2026 12:28:23|1706 BUA|Door|Fixed side mirror + foot pads + number plate
+05/26/2026 12:29:04|4463 JUA|A/C|Fixed air-condition
+05/28/2026 21:04:16|2687 EUA|Tires|Received 2 new tires
+06/02/2026 21:00:39|1709 BUA|Other|Fixed oxygen sensor
+06/02/2026 21:00:39|1709 BUA|Oil Engine|Engine oil change
+06/02/2026 21:00:39|1709 BUA|Other|Garees finish
+06/03/2026 11:49:37|4435 JUA|Other|Winch fixed
+06/03/2026 17:46:05|1709 BUA|Tires|Received 1 new tire
+06/03/2026 17:46:37|4463 JUA|Tires|Received 1 new tire
+06/03/2026 19:48:06|4533 LUA|Other|Horn fixed + handbrake warning light
+06/04/2026 06:17:03|1716 BUA|Oil Engine|Need to change oil
+06/05/2026 19:02:53|1737 BUA|Tires|One tube changed + one puncture
+06/05/2026 19:03:38|1737 BUA|A/C|AC filter cleaning
+06/07/2026 06:34:50|2295 EUA|Battery|Changed battery + fix sofa leaking
+06/07/2026 15:17:16|1713 BUA|Other|Changed windshield
+06/07/2026 15:24:46|4533 LUA|Other|Changed windshield
+06/09/2026 10:21:38|1716 BUA|Other|Wheel break issue fixed
+06/10/2026 05:58:35|1737 BUA|Tires|Change tube
+06/10/2026 17:08:51|1543 BUA|Wheel Alignment|Wheels alignment
+06/10/2026 17:08:51|1543 BUA|Other|Shock absorber fixed
+06/11/2026 06:53:37|1713 BUA|Battery|Changed battery
+06/11/2026 13:25:26|1709 BUA|Battery|Fixed check light + number plate + battery
+06/13/2026 06:22:10|2295 EUA|Tires|Changed 2 tires
+06/14/2026 17:33:37|4538 LUA|Oil Engine|Changed engine oil
+06/16/2026 14:03:13|4481 JUA|A/C|AC not working
+06/17/2026 06:23:04|4463 JUA|A/C|Need fix air-condition
+06/17/2026 16:52:49|1722 BUA|Battery|Fixed new battery
+06/17/2026 17:18:25|4463 JUA|Other|Fixed air-condition
+06/17/2026 17:19:05|4481 JUA|Other|Engine oil change finish
+06/17/2026 18:54:16|4980 JUA|Wipers|-
+06/17/2026 18:54:53|4980 JUA|A/C|AC not working well
+06/17/2026 18:56:02|4980 JUA|Other|Left side door sensor not work
+06/17/2026 18:58:02|4980 JUA|Wheel Alignment|Wheels alignment
+06/27/2026 13:25:48|1706 BUA|Tires|1 tire burst
+06/27/2026 13:26:17|1737 BUA|Tires|One puncture
+06/27/2026 13:27:01|6183 ZUA|Tires|1 tire burst
+06/27/2026 13:27:40|2110 EUA|Tires|1 tire burst
+06/27/2026 13:28:03|1716 BUA|Tires|1 tire burst
+06/30/2026 18:23:43|1716 BUA|Tires|1 tire burst
+07/02/2026 06:53:43|1715 BUA|Other|Back wheel coming sound
+07/03/2026 06:15:30|4541 LUA|Other|Gate problem + wheel element + vibration
+07/04/2026 05:46:50|1357 JER|Tires|Needed 1 tire urgent
+07/04/2026 06:52:03|1715 BUA|Other|Back side wheel break sound
+07/05/2026 06:38:28|4541 LUA|Door Lock|Wheel element + door not closing
+07/05/2026 06:38:30|4541 LUA|Wheel Alignment|Wheel alignment needed
+07/06/2026 05:34:03|1357 JER|Tires|Needed 1 tire today
+07/07/2026 08:34:21|1713 BUA|Other|Fixed break
+07/11/2026 21:15:04|4481 JUA|Tires|Took new tires
+07/11/2026 21:15:55|1706 BUA|Tires|Took new tire
+07/12/2026 06:29:57|4534 LUA|Other|Clutch problem
+07/13/2026 06:22:45|1715 BUA|Other|Back wheel brake sound
+07/14/2026 05:21:14|2295 EUA|Other|Fixed break
+07/14/2026 06:34:37|1712 BUA|Other|Clutch problem
+07/15/2026 06:27:22|4430 JUA|A/C|Break noise + AC cooling low
+07/15/2026 17:43:31|4435 JUA|Battery|Change battery
+07/18/2026 18:16:30|1737 BUA|Tires|Changed one tube + oil
+07/19/2026 05:25:48|4533 LUA|Tires|Need one tire immediately
+07/19/2026 17:03:10|2349 EUA|Battery|Received 1 new battery
+07/19/2026 17:04:59|1706 BUA|Other|Fixed door handle + clutch cylinder
+07/19/2026 17:06:14|1716 BUA|Tires|1 new tire received
+07/19/2026 17:06:48|6183 ZUA|Tires|1 new tire received
+07/19/2026 17:07:24|2110 EUA|Tires|1 new tire received
+07/21/2026 05:42:56|1713 BUA|Wheel Alignment|Fixed Balance + alignment
+07/25/2026 06:40:46|4430 JUA|Tires|2 back tyres bad condition
+07/29/2026 11:38:40|2349 EUA|Other|AC + door + clutch + brakes fixed
+07/29/2026 16:57:26|4533 LUA|A/C|AC evaporator coil replaced
+07/30/2026 06:21:10|4463 JUA|Tires|Take new tire
+07/30/2026 06:22:51|4463 JUA|Tires|Tire puncture
+07/30/2026 06:23:29|2158 EUA|Tires|2 tire puncture
+07/30/2026 06:25:53|2158 EUA|Tires|Tire changed
+07/30/2026 06:27:14|4479 JUA|Tires|Tire puncture
+07/30/2026 06:29:00|1716 BUA|Tires|Puncture
+07/30/2026 06:29:58|6183 ZUA|Tires|New tube installed
+07/30/2026 06:31:26|1716 BUA|Tires|New tube installed
+07/30/2026 06:32:22|4463 JUA|Tires|Puncture + new tube
+07/30/2026 06:33:05|2110 EUA|Tires|Puncture
+07/30/2026 06:35:18|4481 JUA|Wheel Alignment|-
+07/30/2026 06:36:12|1716 BUA|Tires|Tire change
+07/30/2026 06:38:14|2158 EUA|Tires|Tire changed
+07/30/2026 06:38:14|2158 EUA|Wheel Alignment|Alignment + tire changed
+07/30/2026 06:40:32|4479 JUA|Tires|Tire puncture + Riga
+07/30/2026 06:41:07|4463 JUA|Tires|Tire puncture
+07/30/2026 06:41:59|4481 JUA|Tires|Tire changed
+07/30/2026 06:42:42|1716 BUA|Tires|Puncture
+07/31/2026 13:42:28|1357 JER|Wipers|Front & rear wiper
+07/31/2026 13:43:06|1357 JER|Wheel Alignment|Wheel alignment
+08/01/2026 09:28:40|2287 EUA|Other|Engine light not turning off
+08/08/2026 19:00:29|6183 ZUA|Battery|Fixed new battery + wiring
+08/08/2026 20:06:30|4481 JUA|A/C|Check light coming + AC not working
+08/09/2026 08:19:14|2287 EUA|Tires|2 tires damaged - took 2 new
+08/09/2026 08:38:18|1737 BUA|Tires|Received 2 tires
+08/09/2026 13:33:32|4533 LUA|Tires|Received 2 tires
+08/09/2026 13:34:26|1709 BUA|Tires|Received 2 tires
+08/10/2026 05:40:07|2290 EUA|Other|Reverse parking light not working
+08/10/2026 18:28:25|2290 EUA|Other|Reverse light solved + charge plug
+08/13/2026 05:38:44|2290 EUA|Wheel Alignment|Car pulling to one side
+08/13/2026 06:56:24|3296 DER|Other|Check wheel brake
+08/13/2026 17:19:52|4435 JUA|Tires|Front tire bad - new tire
+08/15/2026 10:26:48|2290 EUA|Wheel Alignment|Alignment issue resolved
+08/15/2026 18:28:55|1713 BUA|Door Lock|Fixed front door of driver side
+08/16/2026 07:05:12|4431 JUA|Battery|Battery needs change
+08/16/2026 16:47:41|4431 JUA|Other|Car battery fixed with new one
+08/16/2026 16:47:41|4532 LUA|Tires|Received 2 tires
+08/18/2026 06:19:09|4431 JUA|Other|Car battery fixed with new one
+08/19/2026 20:12:43|4463 JUA|Other|AC thermostat + wheel balancing + brakes
+08/25/2026 10:54:23|1722 BUA|Other|Engine oil change finished
+08/26/2026 05:26:42|2295 EUA|Other|Change brake disk
+08/26/2026 17:20:22|2158 EUA|Tires|Received new 2 tire
+08/26/2026 17:21:25|2349 EUA|Tires|Received new 1 tire
+08/26/2026 17:22:05|1706 BUA|Tires|Received 1 new tire
+08/26/2026 17:22:46|6183 ZUA|Tires|Received 1 new tire
+08/26/2026 17:24:21|4479 JUA|Tires|Received 2 new tire
+08/26/2026 17:25:03|1722 BUA|Tires|Received 2 new tire
+08/26/2026 17:25:45|1543 BUA|Tires|Received 2 new tire
+08/26/2026 17:26:48|4481 JUA|Tires|Received 2 new tire
+08/26/2026 17:28:00|4463 JUA|Tires|Received 1 new tire
+08/26/2026 19:28:33|4532 LUA|Other|Front Leather replaced
+08/30/2026 06:00:35|4533 LUA|Wipers|Wipers + front brake pads needed
+09/02/2026 07:37:30|4533 LUA|Wipers|Changed brake pads + wipers
+09/02/2026 08:53:05|2158 EUA|Oil Engine|Engine oil chang finish
+09/02/2026 08:55:35|2158 EUA|Oil Engine|Engine oil has been changed
+09/02/2026 08:56:15|4481 JUA|Oil Engine|Engine oil changed
+09/03/2026 05:56:39|1709 BUA|Other|Door handle broken + bushes broken
+09/05/2026 05:44:36|1709 BUA|Door Lock|Right side back door handle broken
+09/05/2026 09:33:22|1722 BUA|Wipers|New wiper installed
+09/05/2026 09:33:58|1543 BUA|Wipers|New wiper installed
+09/05/2026 09:34:53|4479 JUA|Wipers|New wiper installed
+09/05/2026 18:31:36|1715 BUA|Other|Oil change needed in Taif
+09/07/2026 11:38:51|4463 JUA|Other|Engine oil changed
+09/09/2026 05:03:41|1737 BUA|Other|Change battery
+09/10/2026 09:48:39|2287 EUA|Other|Engine oil low - 700 km remaining

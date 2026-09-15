@@ -1,0 +1,81 @@
+﻿PUR-066062|Work Order|WO0068|Fan 30x30|1|180|180|Raghad AL OFQ|Contractor|2026-08-13|
+PUR-066061|Work Order|WO0067|door handle|1|120|120|Raghad Al OFQ|Contractor|2026-08-13|
+PUR-066059|Work Order|WO0066|Drain trap|2|48|96|Raghad Al OFQ|Contractor|2026-08-13|
+PUR-066058|Work Order|WO0064|spot light size 20|4|75|300|Raghad Al OFQ|Contractor|2026-08-13|
+PUR-066056|Work Order|WO0063|light 100 wat|5|85|425|Raghad Al OFQ|Contractor|2026-08-13|
+PUR-066055|Work Order|WO0062|shower handle|1|140|140|Raghad Al OFQ|Contractor|2026-08-13|full kit
+PUR-066054|Work Order|WO0061|Handle spray|3|56|168|Raghad Al OFQ|Contractor|2026-08-13|full kit
+PUR-066053|Work Order|WO0042|handle spray|1|20|20|Company|Company|2026-08-11|new handle spray
+PUR-066052|Work Order|WO0043|handle spray|1|20|20|Company|Company|2026-08-11|new handle spray
+PUR-066051|Work Order|WO0051|Handle Shower Hose|1|12|12|Company|Company|2026-08-11|handle shower hose
+PUR-066050|Work Order|WO0050|hoses|1|12|12|Company|Company|2026-08-11|new hose
+PUR-066049|Work Order|WO0059|Water Flashing toilet|1|85|85|Al Jodood|Contractor|2026-08-07|new
+PUR-066048|Work Order|WO0058|A/C Switch1|1|35|35|Al Jodood|Contractor|2026-08-08|new A/C Switch
+PUR-066047|Work Order|WO0057|light|1|15|15|Al Jodood|Contractor|2026-08-08|new light
+PUR-066046|Work Order|WO0047|mixer|1|115|115|Al Jodood|Contractor|2026-08-08|new mixer
+PUR-066045|Work Order|WO0046|fan|1|75|75|Al Jodood|Contractor|2026-08-08|new fan
+PUR-066044|Work Order|WO0036|feron|2|150|300|Al Jodood|Contractor|2026-07-30|feron for 2 pcs A/C Split
+PUR-066043|Work Order|WO0038|flood light 200 wat|1|130|130|Al Jodood|Contractor|2026-07-30|new flood light
+PUR-066042|Work Order|WO0037|socket & Switch|2|22|44|Al Jodood|Contractor|2026-07-30|new socket & switch
+PUR-066041|Work Order|WO0056|spray water bathroom|1|10|10|Company|Company|2026-08-09|fixed done
+PUR-066040|Work Order|WO0035|spray water hand|1|25|25|Company|Company|2026-07-31|replaced new
+PUR-066039|Work Order|WO0034|Shower head|1|30|30|Company|Company|2026-07-31|
+PUR-066038|Work Order|WO0034|bolt|4|15|60|Al Jodood|Contractor|2026-07-28|
+PUR-066037|Work Order|WO0033|Paint + Sanding Paper|1|25|25|Al Jodood|Contractor|2026-07-29|
+PUR-066036|Work Order|WO0032|fan|1|70|70|Al Jodood|Contractor|2026-07-29|
+PUR-066035|Work Order|WO0031|Oven plug|1|15|15|Al Jodood|Contractor|2026-07-28|
+PUR-066034|Work Order|WO0031|Socket|1|18|18|Al Jodood|Contractor|2026-07-29|
+PUR-066033|Work Order|WO0030|light|3|24|72|Al Jodood|Contractor|2026-07-29|replaced the old 3 pcs
+PUR-066032|Work Order|WO0024|A/C switch|1|25|25|Al Jodood|Contractor|2026-07-29|
+PUR-066031|Work Order|WO0023|socket|3|18|54|Al Jodood|Contractor|2026-07-29|
+PUR-066030|Work Order|WO0021|aluminum door lock|1|38|38|Al Jodood|Contractor|2026-07-19|re assembly
+PUR-066029|Work Order|WO0020|Toilet Fan|1|60|60|Al Jodood|Contractor|2026-07-29|new fan
+PUR-066028|Work Order|WO0026|Washbasin faucet|1|33|33|Company|Company|2026-07-29|replaced new
+PUR-066027|Work Order|WO0027|Complete hand bidet set|1|24|24|Company|Company|2026-07-29|replaced new
+PUR-066026|Work Order|WO0028|Shower Mixer|1|16|16|Company|Company|2026-07-29|replaced new
+PUR-066025|Work Order|WO0025|Acid|3|15|45|Al Jodood|Contractor|2026-07-26|Acid 3 pcs to clean the pipe
+PUR-066024|Dev Project|PRJ-0012|cable 4x3mm|12|8|96|Al Jodood|Contractor|2026-07-21|
+PUR-066023|Dev Project|PRJ-0012|Extension room with 4 outlet|2|105|210|Al Jodood|Contractor|2026-07-21|new item
+PUR-066022|Work Order|WO0021|door lock|0|0|0|Al Jodood|Contractor|2026-07-19|replaced the door lock
+PUR-066021|Work Order|WO0022|feron|1|120|120|Al Jodood|Contractor|2026-07-19|add feron
+PUR-066020|Work Order|WO0019|sensor A/C|1|135|135|Al Jodood|Contractor|2026-07-19|replace the new sensor
+PUR-066019|Dev Project|PRJ-0009|Block - Sand - Cement|1|500|500|Al Jodood|Contractor|2026-07-20|Building a staircase for cabin
+PUR-066018|Dev Project|PRJ-0008|Cable 3x4mm with Clips - Socket with Box - Condute|1|125|125|Al Jodood|Contractor|2026-07-10|assembly done
+PUR-066017|Work Order|WO0007|Feron for A/C|0|0|0|Al Jodood|Contractor|2026-07-05|add feron
+PUR-066016|Work Order|WO0017|Electrical Breaker|1|45|45|Al Jodood|Contractor|2026-07-08|replaced
+PUR-066015|Work Order|WO0015|existing Water pump|1|475|475|Al Jodood|Contractor|2026-07-08|replaced new water pump
+PUR-066014|Dev Project|PRJ-0006|Cable 3x4mm with Clips for Emergency Light|7|95|665|Al Jodood|Contractor|2026-07-11|install emergency light
+PUR-066013|Dev Project|PRJ-0006|Emergency Light|7|100|700|Al Jodood|Contractor|2026-07-11|to add new emergency light
+PUR-066012|Dev Project|PRJ-0007|AC Switch with Box & Bolts|3|45|135|Al Jodood|Contractor|2026-07-10|to connect the A/C
+PUR-066011|Dev Project|PRJ-0007|Cable 6mm with Clips for 3Pcs AC|50|17|850|Al Jodood|Contractor|2026-07-10|to connect the A/C
+PUR-066010|Work Order|WO0012|pump for desert cooler|1|160|160|Al Jodood|Contractor|2026-07-07|replaced the pump new
+PUR-066009|Work Order|WO0002|connector|1|25|25|Company|Company|2026-07-05|change the connector
+PUR-066008|Work Order|WO0041|white cement & adhesive|1|125|125|Al Jodood|Contractor|2026-08-12|
+PUR-066007|Work Order|WO0053|water heater heard with bulf|1|105|105|Al Jodood|Contractor|2026-08-12|
+PUR-066006|Work Order|WO0052|drain with pipe for toilet cabinet|6|80|480|Al Jodood|Contractor|2026-08-12|
+PUR-066005|Work Order|WO0073|water pump timer|1|140|140|Al Jodood|Contractor|2026-08-14|
+PUR-066004|Work Order|WO0078|led light|4|10|40|Al Jodood|Contractor|2026-08-14|
+PUR-066003|Work Order|WO0054|celling light|8|18|144|Al Jodood|Contractor|2026-08-18|
+PUR-066002|Work Order|WO0069|fan 30x30|1|75|75|Al Jodood|Contractor|2026-08-18|to replace
+PUR-066001|Work Order|WO0075|hinges for Almuinum|3|55|165|Al Jodood|Contractor|2026-08-24|for 2 doors
+PUR-066000|Work Order|WO0075|Rubber for camera stand 40 cm|2|16|32|Al Jodood|Contractor|2026-08-25|
+PUR-065999|Work Order|WO0076|iron chain to hold the doors|2|65|130|Al Jodood|Contractor|2026-08-25|
+PUR-065998|Work Order|WO0076|circle hold with hand for chain|2|85|170|Al Jodood|Contractor|2026-08-25|
+PUR-065997|Work Order|WO0079|main valve|3|49|147|Al Jodood|Contractor|2026-08-24|
+PUR-065996|Work Order|WO0082|light 4 pcs|4|19|76|Al Jodood|Contractor|2026-08-24|
+PUR-065995|Work Order|WO0070|bolt lock door with key for steel|1|55|55|Al Jodood|Contractor|2026-08-24|
+PUR-065994|Work Order|WO0055|Feron|2|100|200|Al Jodood|Contractor|2026-08-09|
+PUR-065993|Work Order|WO0080|Sink Mixer|1|125|125|Al Jodood|Contractor|2026-08-24|
+PUR-065992|Work Order|WO0081|shower connector|1|30|30|Al Jodood|Contractor|2026-08-27|
+PUR-065991|Work Order|WO0086|shower mixer|2|130|260|Al Jodood|Contractor|2026-08-24|
+PUR-065990|Work Order|WO0087|aluminum door hand repair|1|180|180|Al Jodood|Contractor|2026-08-24|
+PUR-065989|Work Order|WO0089|panel breaker 20 am|1|48|48|Al Jodood|Contractor|2026-08-25|
+PUR-065988|Work Order|WO0065|spot light 8|7|65|455|Raghad Al OFQ|Contractor|2026-08-13|
+PUR-065987|Work Order|WO0083|repair 2 pcs|2|170|340|Raghad Al OFQ|Contractor|2026-08-27|
+PUR-065986|Work Order|WO0096|Shower mixer|1|240|240|Raghad Al OFQ|Contractor|2026-08-27|
+PUR-065985|Work Order|WO0095|Angle valve|2|45|90|Raghad Al OFQ|Contractor|2026-08-27|
+PUR-065984|Work Order|WO0094|Arabic toilet flush|1|180|180|Raghad Al OFQ|Contractor|2026-08-27|
+PUR-065983|Work Order|WO0093|Long outdoor LED strip light|2|85|170|Raghad Al OFQ|Contractor|2026-08-27|
+PUR-065982|Work Order|WO0092|out side light|3|75|225|Raghad Al OFQ|Contractor|2026-08-27|
+PUR-065981|Work Order|WO0091|light size 20|2|85|170|Raghad Al OFQ|Contractor|2026-08-27|
+PUR-065980|Work Order|WO0090|light size 7|5|50|250|Raghad Al OFQ|Contractor|2026-08-27|

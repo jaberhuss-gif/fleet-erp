@@ -1,0 +1,11 @@
+﻿PRJ-0013|Shaded Area 20x10|Shaded area between office and core shed - 20x10m|Al Sabiyah|Development|Closed|15200|15200|2026-08-24||Al Jodood
+PRJ-0014|Outside Water Hook Up|Outside water hook up with hose reels|Al Sabiyah|Development|Closed|1650|1650|2026-08-24||Al Jodood
+PRJ-0015|Lighting Under Covered Area|Lighting under covered area as necessary|Al Sabiyah|Development|In Progress|0|0|2026-08-24||Al Jodood
+PRJ-0016|Waterproof Electrical Covering|Waterproof electrical covering for electrical box|Al Sabiyah|Development|In Progress|0|0|2026-08-24||Al Jodood
+PRJ-0017|Portable AC Water Units|x2 portable AC water units|Al Sabiyah|Development|Closed|4600|4600|2026-08-24||Al Jodood
+PRJ-0018|Trestles x50|x50 trestles|Al Sabiyah|Development|Closed|9500|9500|2026-08-24||Al Jodood
+PRJ-0019|Tabletop Stabilizers x300|x300 tabletop stabilizers|Al Sabiyah|Development|Closed|6000|6000|2026-08-24||Al Jodood
+PRJ-0020|New Door From Main Office|Open new door from main office to outside|Al Sabiyah|Development|In Progress|0|0|2026-08-24||Al Jodood
+PRJ-0021|Common Shaded Area 9x9m|9x9m common shaded area|Al Sabiyah|Development|Closed|12150|12150|2026-08-24||Al Jodood
+PRJ-0022|Additional Container Module|Additional container module with 2 rooms|Al Sabiyah|Development|Closed|9306|9306|2026-08-24||Al Jodood
+PRJ-0023|Water Storage Container|Additional water storage container installed|Al Sabiyah|Development|In Progress|0|0|2026-08-24||Al Jodood

@@ -1,0 +1,57 @@
+async function createTable(table) {
+  const columns = getTableInfo(table);
+
+  if (!columns.length) {
+    throw new Error(`SQLite table not found: ${table}`);
+  }
+
+  const primaryKeyColumns = columns
+    .filter((c) => c.pk > 0)
+    .sort((a, b) => a.pk - b.pk);
+
+  const singleIntegerPrimaryKey =
+    primaryKeyColumns.length === 1 &&
+    String(primaryKeyColumns[0].type || "").toUpperCase() === "INTEGER";
+
+  const definitions = columns.map((column) => {
+    const isSingleIntegerPrimaryKey =
+      singleIntegerPrimaryKey &&
+      column.name === primaryKeyColumns[0].name;
+
+    let definition;
+
+    if (isSingleIntegerPrimaryKey) {
+      definition = `${quoteIdent(column.name)} SERIAL`;
+    } else {
+      definition =
+        `${quoteIdent(column.name)} ${normalizeType(column.type)}`;
+    }
+
+    if (column.notnull === 1 && !isSingleIntegerPrimaryKey) {
+      definition += " NOT NULL";
+    }
+
+    return definition;
+  });
+
+  if (primaryKeyColumns.length > 0) {
+    const pk = primaryKeyColumns
+      .map((c) => quoteIdent(c.name))
+      .join(", ");
+
+    definitions.push(`PRIMARY KEY (${pk})`);
+  }
+
+  await client.query(
+    `CREATE TABLE ${quoteIdent(table)} (${definitions.join(", ")})`
+  );
+}
+
+async function dropTargetTables() {
+  console.log("\nRemoving existing target tables inside transaction...");
+
+  for (const table of [...tables].reverse()) {
+    await client.query(`DROP TABLE IF EXISTS ${quoteIdent(table)} CASCADE`);
+    console.log(`Dropped: ${table}`);
+  }
+}

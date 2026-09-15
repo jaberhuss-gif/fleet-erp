@@ -1,0 +1,164 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise ERP - Fleet Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f7f6; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        header { background: #2c3e50; color: #fff; padding: 20px; border-radius: 8px; text-align: center; margin-bottom: 20px; }
+        .login-box { background: #fff; padding: 30px; border-radius: 8px; max-width: 400px; margin: 60px auto; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: center; }
+        .login-box input { width: 90%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; font-size: 16px; }
+        .login-box button { background: #2c3e50; color: #fff; border: none; padding: 12px 20px; border-radius: 4px; cursor: pointer; font-size: 16px; width: 95%; margin-top: 10px; }
+        .login-box button:hover { background: #34495e; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center; }
+        .card h3 { margin: 0 0 10px 0; color: #7f8c8d; font-size: 16px; }
+        .card p { margin: 0; font-size: 24px; font-weight: bold; }
+        .table-container { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #ecf0f1; color: #2c3e50; }
+        .badge-safe { color: #27ae60; font-weight: bold; }
+        .hidden { display: none; }
+        .logout-btn { background: #e74c3c; color: #white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; float: right; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🛡️ Enterprise ERP - Fleet Dashboard</h1>
+            <p>Fleet & Operations Management System</p>
+        </header>
+
+        <!-- Login Section -->
+        <div id="login-section" class="login-box">
+            <h3>System Login</h3>
+            <input type="text" id="username" placeholder="Username" value="admin">
+            <input type="password" id="password" placeholder="Password" placeholder="Password">
+            <button onclick="handleLogin()">Login</button>
+            <p id="login-error" style="color: #e74c3c; font-size: 14px; margin-top: 15px;"></p>
+        </div>
+
+        <!-- Dashboard Section -->
+        <div id="dashboard-section" class="hidden">
+            <div style="margin-bottom: 15px; overflow: hidden;">
+                <button class="logout-btn" onclick="handleLogout()">Logout</button>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="card">
+                    <h3>System Status</h3>
+                    <p id="system-status" style="color: #27ae60;">Online & Authenticated</p>
+                </div>
+                <div class="card">
+                    <h3>Total Vehicles</h3>
+                    <p id="total-vehicles">0</p>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <h3>📋 Vehicles List</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Plate / Details</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vehicles-table-body">
+                        <tr><td colspan="3" style="text-align: center;">Loading vehicles...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function handleLogin() {
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+            const errEl = document.getElementById('login-error');
+            errEl.innerText = '';
+
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: user, password: pass })
+                });
+                const data = await res.json();
+
+                if (res.ok && data.token) {
+                    localStorage.setItem('token', data.token);
+                    showDashboard();
+                } else {
+                    errEl.innerText = data.error || data.message || 'Login failed. Check credentials.';
+                }
+            } catch (err) {
+                errEl.innerText = 'Server connection error.';
+            }
+        }
+
+        function handleLogout() {
+            localStorage.removeItem('token');
+            document.getElementById('dashboard-section').classList.add('hidden');
+            document.getElementById('login-section').classList.remove('hidden');
+        }
+
+        async function showDashboard() {
+            document.getElementById('login-section').classList.add('hidden');
+            document.getElementById('dashboard-section').classList.remove('hidden');
+            
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch('/api/vehicles', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                
+                if (res.status === 401) {
+                    handleLogout();
+                    return;
+                }
+
+                const data = await res.json();
+                let vehicles = [];
+                if (Array.isArray(data)) {
+                    vehicles = data;
+                } else if (data.vehicles && Array.isArray(data.vehicles)) {
+                    vehicles = data.vehicles;
+                }
+
+                document.getElementById('total-vehicles').innerText = vehicles.length;
+                const tbody = document.getElementById('vehicles-table-body');
+                tbody.innerHTML = '';
+
+                if (vehicles.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">No vehicles found in database.</td></tr>';
+                    return;
+                }
+
+                vehicles.forEach(v => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = 
+                        <td>\</td>
+                        <td>\</td>
+                        <td><span class="badge-safe">Active</span></td>
+                    ;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                console.error(err);
+                document.getElementById('vehicles-table-body').innerHTML = '<tr><td colspan="3" style="text-align: center; color: red;">Error loading vehicle data</td></tr>';
+            }
+        }
+
+        // Check if already logged in
+        if (localStorage.getItem('token')) {
+            showDashboard();
+        }
+    </script>
+</body>
+</html>

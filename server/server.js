@@ -2,8 +2,6 @@ import express from "express";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 import { login, verifyToken, listUsers, createUser, deleteUser } from "./auth.js";
 import cors from "cors";
 import { requirePermission } from "./rbac.js";
@@ -26,6 +24,9 @@ import {
   completePeriodicMaintenance, deletePeriodicMaintenance, getPeriodicAlerts, generateScheduledMaintenance,
   logAction, listAuditLog, getAuditStats, clearAuditLog, getFinancialReport
 } from "./database.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -692,4 +693,11 @@ app.listen(PORT, () => {
 
 
 
+
+
+
+
+
+
+app.use(express.static(path.join(__dirname, '..', 'client', 'dist')));
 

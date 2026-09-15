@@ -2,7 +2,38 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { login, verifyToken, listUsers, createUser, deleteUser } from "./auth.js";
+import cors from "cors";
+import { requirePermission } from "./rbac.js";
+import {
+  listVehicles, getVehicleById, createVehicle, updateVehicle,
+  deleteVehicle, deleteAllVehicles, importVehicles,
+  addReading, listReadings, changeOil, listOilChanges,
+  getAlerts, createTicket, listTickets, closeTicket, deleteAllTickets, acknowledgeTicket, closeTicketWithNotes, listTicketsByReporter, getReporterStats,
+  getDashboard,
+  listSites, getSite, createSite, updateSite, deleteSite,
+  listWorkOrders, getWorkOrder, createWorkOrder, updateWorkOrder, closeWorkOrder, deleteWorkOrder,
+  listProjects, getProject, createProject, updateProject, deleteProject,
+  listPurchases, createPurchase, deletePurchase,
+  getBuildingDashboard,
+  getMonthlyReport,
+  listDrivers, getDriver, createDriver, updateDriver, deleteDriver,
+  listInventory, getInventoryItem, createInventoryItem, updateInventoryItem, deleteInventoryItem,
+  stockIn, stockOut, transferStock, listStockTransactions, getLowStockItems,
+  listPeriodicMaintenance, getPeriodicMaintenance, createPeriodicMaintenance, updatePeriodicMaintenance,
+  completePeriodicMaintenance, deletePeriodicMaintenance, getPeriodicAlerts, generateScheduledMaintenance,
+  logAction, listAuditLog, getAuditStats, clearAuditLog, getFinancialReport
+} from "./database.js";
 
+import {
+  listVehicles as listVehiclesPG,
+  getVehicleById as getVehicleByIdPG,
+  getVehicleByPlate as getVehicleByPlatePG,
+  createVehicle as createVehiclePG,
+  updateVehicle as updateVehiclePG,
+  deleteVehicle as deleteVehiclePG,
+  deleteAllVehicles as deleteAllVehiclesPG
+} from './database-pg.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,7 +46,7 @@ app.use(express.json({ limit: "10mb" }));
 // ============================================================
 // GLOBAL API AUTHENTICATION
 // ============================================================
-app.use("/api", async (req, res, next) => {
+app.use("/api", (req, res, next) => {
   if (req.path === "/health") return next();
   if (req.path === "/auth/login") return next();
   return requireAuth(req, res, (err) => {
@@ -27,12 +58,12 @@ app.use("/api", async (req, res, next) => {
   });
 });
 
-app.get("/api/health", async (req, res) => res.json({ status: "ok", time: new Date().toISOString() }));
+app.get("/api/health", (req, res) => res.json({ status: "ok", time: new Date().toISOString() }));
 
 // ===== VEHICLES (PostgreSQL Connected) =====
 app.get("/api/vehicles", async (req, res) => {
   try {
-    const vehicles = listVehiclesPG();
+    const vehicles = await listVehiclesPG();
     res.json({ success: true, vehicles });
   } catch (e) {
     console.error("Error fetching vehicles:", e);
@@ -40,158 +71,92 @@ app.get("/api/vehicles", async (req, res) => {
   }
 });
 
-app.get("/api/vehicles/list", async (req, res) => {
-  try { res.json({ success: true, vehicles: listVehiclesPG().map(v => ({ id: v.id, plate: v.plate, driver: v.driver })) }); }
+app.get("/api/vehicles/list", (req, res) => {
+  try { res.json({ success: true, vehicles: listVehicles().map(v => ({ id: v.id, plate: v.plate, driver: v.driver })) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.get("/api/vehicles/:id", async (req, res) => {
-  try { const v = getVehicleByIdPG(req.params.id); if (!v) return res.status(404).json({ success: false }); res.json({ success: true, vehicle: v }); }
+app.get("/api/vehicles/:id", (req, res) => {
+  try { const v = getVehicleById(req.params.id); if (!v) return res.status(404).json({ success: false }); res.json({ success: true, vehicle: v }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.get("/api/vehicles/:id/details", async (req, res) => {
-  try { const v = getVehicleByIdPG(req.params.id); if (!v) return res.status(404).json({ success: false }); res.json({ success: true, vehicle: v, readings: await listReadingsPG(req.params.id), oilChanges: await listOilChangesPG(req.params.id) }); }
+app.get("/api/vehicles/:id/details", (req, res) => {
+  try { const v = getVehicleById(req.params.id); if (!v) return res.status(404).json({ success: false }); res.json({ success: true, vehicle: v, readings: listReadings(req.params.id), oilChanges: listOilChanges(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post("/api/vehicles", async (req, res) => {
-  try { res.json({ success: true, vehicle: createVehiclePG(req.body) }); }
+app.post("/api/vehicles", (req, res) => {
+  try { res.json({ success: true, vehicle: createVehicle(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.put("/api/vehicles/:id", async (req, res) => {
-  try { res.json({ success: true, vehicle: await updateVehiclePG(req.params.id, req.body) }); }
+app.put("/api/vehicles/:id", (req, res) => {
+  try { res.json({ success: true, vehicle: updateVehicle(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.delete("/api/vehicles/:id", async (req, res) => {
-  try { res.json({ success: await deleteVehiclePG(req.params.id) }); }
+app.delete("/api/vehicles/:id", (req, res) => {
+  try { res.json({ success: deleteVehicle(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.delete("/api/vehicles", async (req, res) => {
-  try { res.json({ success: true, message: "Deleted " + await deleteAllVehiclesPG() }); }
+app.delete("/api/vehicles", (req, res) => {
+  try { res.json({ success: true, message: "Deleted " + deleteAllVehicles() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post("/api/vehicles/import", async (req, res) => {
-  try { res.json({ success: true, ...await importVehiclesPG(req.body.vehicles) }); }
+app.post("/api/vehicles/import", (req, res) => {
+  try { res.json({ success: true, ...importVehicles(req.body.vehicles) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post("/api/vehicles/:id/reading", async (req, res) => {
-  try { res.json({ success: true, vehicle: await addReadingPG(req.params.id, req.body) }); }
+app.post("/api/vehicles/:id/reading", (req, res) => {
+  try { res.json({ success: true, vehicle: addReading(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.get("/api/vehicles/:id/readings", async (req, res) => {
-  try { res.json({ success: true, readings: await listReadingsPG(req.params.id) }); }
+app.get("/api/vehicles/:id/readings", (req, res) => {
+  try { res.json({ success: true, readings: listReadings(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post("/api/vehicles/:id/oil-change", async (req, res) => {
-  try { res.json({ success: true, vehicle: await changeOilPG(req.params.id, req.body) }); }
+app.post("/api/vehicles/:id/oil-change", (req, res) => {
+  try { res.json({ success: true, vehicle: changeOil(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.get("/api/vehicles/:id/oil-changes", async (req, res) => {
-  try { res.json({ success: true, oilChanges: await listOilChangesPG(req.params.id) }); }
+app.get("/api/vehicles/:id/oil-changes", (req, res) => {
+  try { res.json({ success: true, oilChanges: listOilChanges(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ===== ALERTS =====
-app.get("/api/alerts", async (req, res) => {
-  try { res.json({ success: true, ...await getAlertsPG() }); }
+app.get("/api/alerts", (req, res) => {
+  try { res.json({ success: true, ...getAlerts() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-// ===== TICKETS - POSTGRESQL =====
-
-app.get("/api/tickets", async (req, res) => {
-  try {
-    const tickets = await listTicketsPG(req.query);
-    res.json({ success: true, tickets });
-  } catch (e) {
-    console.error("Error fetching tickets:", e);
-    res.status(500).json({ success: false, error: e.message });
-  }
+// ===== TICKETS =====
+app.get("/api/tickets", (req, res) => {
+  try { res.json({ success: true, tickets: listTickets() }); }
+  catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+app.post("/api/tickets", (req, res) => {
+  try { res.json({ success: true, ticket: createTicket(req.body) }); }
+  catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+app.put("/api/tickets/:id/close", (req, res) => {
+  try { res.json({ success: true, ticket: closeTicket(req.params.id, req.body) }); }
+  catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+app.delete("/api/tickets", (req, res) => {
+  try { res.json({ success: true, message: "Deleted " + deleteAllTickets() }); }
+  catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post("/api/tickets", async (req, res) => {
-  try {
-    const ticket = await createTicketPG(req.body);
-    res.json({ success: true, ticket });
-  } catch (e) {
-    console.error("Error creating ticket:", e);
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
-
-app.put("/api/tickets/:id/close", async (req, res) => {
-  try {
-    const ticket = await closeTicketPG(req.params.id, req.body);
-    res.json({ success: true, ticket });
-  } catch (e) {
-    console.error("Error closing ticket:", e);
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
-
-app.delete("/api/tickets", async (req, res) => {
-  try {
-    const result = await deleteAllTicketsPG();
-    res.json({
-      success: true,
-      message: "Deleted " + result.changes
-    });
-  } catch (e) {
-    console.error("Error deleting tickets:", e);
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
-
-app.put("/api/tickets/:id/acknowledge", async (req, res) => {
-  try {
-    const ticket = await acknowledgeTicketPG(req.params.id, req.body);
-    res.json({ success: true, ticket });
-  } catch (e) {
-    console.error("Error acknowledging ticket:", e);
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
-
-app.put("/api/tickets/:id/close-with-notes", async (req, res) => {
-  try {
-    const ticket = await closeTicketWithNotesPG(req.params.id, req.body);
-    res.json({ success: true, ticket });
-  } catch (e) {
-    console.error("Error closing ticket with notes:", e);
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
-
-app.get("/api/tickets/by-reporter/:name", async (req, res) => {
-  try {
-    const tickets = await listTicketsByReporterPG(req.params.name);
-    res.json({ success: true, tickets });
-  } catch (e) {
-    console.error("Error fetching reporter tickets:", e);
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
-
-app.get("/api/tickets/stats/:name", async (req, res) => {
-  try {
-    const stats = await getReporterStatsPG(req.params.name);
-    res.json({ success: true, ...stats });
-  } catch (e) {
-    console.error("Error fetching reporter stats:", e);
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
 // ===== ISSUES =====
-app.get("/api/issues/types", async (req, res) => {
+app.get("/api/issues/types", (req, res) => {
   res.json({ success: true, types: [
     { value: "Tires", label: "Tires" }, { value: "Engine", label: "Engine" },
     { value: "A/C", label: "A/C" }, { value: "Lights", label: "Lights" },
@@ -200,192 +165,117 @@ app.get("/api/issues/types", async (req, res) => {
     { value: "Oil Engine", label: "Oil Engine" }, { value: "Other", label: "Other" }
   ]});
 });
-app.post("/api/issues/report", async (req, res) => {
+app.post("/api/issues/report", (req, res) => {
   try {
     const { vehicleId, issueType, category, description, reportedBy, priority, openedAt } = req.body;
     const finalCategory = issueType || category || "Other";
-    const ticket = await createTicketPG({ vehicleId, category: finalCategory, description, reportedBy: reportedBy || "Driver", priority: priority || "Medium", openedAt });
+    const ticket = createTicket({ vehicleId, category: finalCategory, description, reportedBy: reportedBy || "Driver", priority: priority || "Medium", openedAt });
     res.json({ success: true, message: "Ticket created", ticket });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ===== VEHICLE DASHBOARD =====
-app.get("/api/dashboard", async (req, res) => {
-  try { res.json({ success: true, ...await getDashboardPG() }); }
+app.get("/api/dashboard", (req, res) => {
+  try { res.json({ success: true, ...getDashboard() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ===== SITES =====
-
-app.get("/api/sites", async (req, res) => {
-  try {
-    const sites = await listSitesPG();
-    res.json({
-      success: true,
-      sites
-    });
-  } catch (error) {
-    console.error("GET /api/sites:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
+app.get("/api/sites", (req, res) => {
+  try { res.json({ success: true, sites: listSites() }); }
+  catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
-
-app.get("/api/sites/:id", async (req, res) => {
-  try {
-    const site = await getSitePG(req.params.id);
-
-    if (!site) {
-      return res.status(404).json({
-        success: false,
-        error: "Site not found"
-      });
-    }
-
-    res.json({
-      success: true,
-      site
-    });
-  } catch (error) {
-    console.error("GET /api/sites/:id:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
+app.post("/api/sites", (req, res) => {
+  try { res.json({ success: true, site: createSite(req.body) }); }
+  catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
-
-app.post("/api/sites", async (req, res) => {
-  try {
-    const site = await createSitePG(req.body);
-
-    res.status(201).json({
-      success: true,
-      site
-    });
-  } catch (error) {
-    console.error("POST /api/sites:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
+app.put("/api/sites/:id", (req, res) => {
+  try { res.json({ success: true, site: updateSite(req.params.id, req.body) }); }
+  catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
-
-app.put("/api/sites/:id", async (req, res) => {
-  try {
-    const site = await updateSitePG(req.params.id, req.body);
-
-    res.json({
-      success: true,
-      site
-    });
-  } catch (error) {
-    console.error("PUT /api/sites/:id:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-app.delete("/api/sites/:id", async (req, res) => {
-  try {
-    const result = await deleteSitePG(req.params.id);
-
-    res.json({
-      success: true,
-      ...result
-    });
-  } catch (error) {
-    console.error("DELETE /api/sites/:id:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
+app.delete("/api/sites/:id", (req, res) => {
+  try { res.json({ success: deleteSite(req.params.id) }); }
+  catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ===== WORK ORDERS =====
-app.get("/api/work-orders", async (req, res) => {
+app.get("/api/work-orders", (req, res) => {
   try {
     const filters = { month: req.query.month, year: req.query.year, site: req.query.site, status: req.query.status };
-    res.json({ success: true, orders: await listWorkOrdersPG(filters) });
+    res.json({ success: true, orders: listWorkOrders(filters) });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
-app.get("/api/work-orders/:id", async (req, res) => {
-  try { const w = await getWorkOrderPG(req.params.id); if (!w) return res.status(404).json({ success: false }); res.json({ success: true, order: w }); }
+app.get("/api/work-orders/:id", (req, res) => {
+  try { const w = getWorkOrder(req.params.id); if (!w) return res.status(404).json({ success: false }); res.json({ success: true, order: w }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
-app.post("/api/work-orders", async (req, res) => {
-  try { res.json({ success: true, order: await createWorkOrderPG(req.body) }); }
+app.post("/api/work-orders", (req, res) => {
+  try { res.json({ success: true, order: createWorkOrder(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
-app.put("/api/work-orders/:id", async (req, res) => {
-  try { res.json({ success: true, order: await updateWorkOrderPG(req.params.id, req.body) }); }
+app.put("/api/work-orders/:id", (req, res) => {
+  try { res.json({ success: true, order: updateWorkOrder(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
-app.put("/api/work-orders/:id/close", async (req, res) => {
-  try { res.json({ success: true, order: await closeWorkOrderPG(req.params.id, req.body) }); }
+app.put("/api/work-orders/:id/close", (req, res) => {
+  try { res.json({ success: true, order: closeWorkOrder(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
-app.delete("/api/work-orders/:id", async (req, res) => {
-  try { res.json({ success: await deleteWorkOrderPG(req.params.id) }); }
+app.delete("/api/work-orders/:id", (req, res) => {
+  try { res.json({ success: deleteWorkOrder(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ===== PROJECTS =====
-app.get("/api/projects", async (req, res) => {
+app.get("/api/projects", (req, res) => {
   try {
     const filters = { month: req.query.month, year: req.query.year, site: req.query.site };
-    res.json({ success: true, projects: await listProjectsPG(filters) });
+    res.json({ success: true, projects: listProjects(filters) });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
-app.get("/api/projects/:id", async (req, res) => {
-  try { const p = await getProjectPG(req.params.id); if (!p) return res.status(404).json({ success: false }); res.json({ success: true, project: p }); }
+app.get("/api/projects/:id", (req, res) => {
+  try { const p = getProject(req.params.id); if (!p) return res.status(404).json({ success: false }); res.json({ success: true, project: p }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
-app.post("/api/projects", async (req, res) => {
-  try { res.json({ success: true, project: await createProjectPG(req.body) }); }
+app.post("/api/projects", (req, res) => {
+  try { res.json({ success: true, project: createProject(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
-app.put("/api/projects/:id", async (req, res) => {
-  try { res.json({ success: true, project: await updateProjectPG(req.params.id, req.body) }); }
+app.put("/api/projects/:id", (req, res) => {
+  try { res.json({ success: true, project: updateProject(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
-app.delete("/api/projects/:id", async (req, res) => {
-  try { res.json({ success: await deleteProjectPG(req.params.id) }); }
+app.delete("/api/projects/:id", (req, res) => {
+  try { res.json({ success: deleteProject(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ===== PURCHASES =====
-app.get("/api/purchases", async (req, res) => {
+app.get("/api/purchases", (req, res) => {
   try {
     const filters = { month: req.query.month, year: req.query.year, referenceNo: req.query.referenceNo };
-    res.json({ success: true, purchases: await listPurchasesPG(filters) });
+    res.json({ success: true, purchases: listPurchases(filters) });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
-app.post("/api/purchases", async (req, res) => {
-  try { res.json({ success: true, purchase: await createPurchasePG(req.body) }); }
+app.post("/api/purchases", (req, res) => {
+  try { res.json({ success: true, purchase: createPurchase(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
-app.delete("/api/purchases/:id", async (req, res) => {
-  try { res.json({ success: await deletePurchasePG(req.params.id) }); }
+app.delete("/api/purchases/:id", (req, res) => {
+  try { res.json({ success: deletePurchase(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ===== BUILDING DASHBOARD =====
-app.get("/api/building/dashboard", async (req, res) => {
+app.get("/api/building/dashboard", (req, res) => {
   try {
     const filters = { month: req.query.month, year: req.query.year };
-    res.json({ success: true, ...await getBuildingDashboardPG(filters) });
+    res.json({ success: true, ...getBuildingDashboard(filters) });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ===== VOICE =====
-app.post("/api/voice/transcript", async (req, res) => {
+app.post("/api/voice/transcript", (req, res) => {
   try {
     const { transcript, vehicleId } = req.body;
     if (!transcript) return res.status(400).json({ success: false, error: "Empty" });
@@ -405,16 +295,16 @@ app.post("/api/voice/transcript", async (req, res) => {
     for (const [cat, words] of Object.entries(kw)) {
       if (words.some(w => txt.includes(w))) { category = cat; break; }
     }
-    const ticket = await createTicketPG({ vehicleId, category, description: transcript, reportedBy: "Voice", priority: "High" });
+    const ticket = createTicket({ vehicleId, category, description: transcript, reportedBy: "Voice", priority: "High" });
     res.json({ success: true, ticket, detectedCategory: category });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ===== MONTHLY REPORT =====
-app.get("/api/reports/monthly", async (req, res) => {
+app.get("/api/reports/monthly", (req, res) => {
   try {
     const filters = { year: req.query.year, site: req.query.site };
-    res.json({ success: true, ...await getMonthlyReportPG(filters) });
+    res.json({ success: true, ...getMonthlyReport(filters) });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
@@ -441,7 +331,7 @@ function requireAuth(req, res, next) {
 }
 
 function requireRole(...allowedRoles) {
-  return async (req, res, next) => {
+  return (req, res, next) => {
     if (!req.user || !allowedRoles.includes(req.user.role)) {
       return res.status(403).json({ success: false, error: "Forbidden", message: "You do not have permission to perform this action." });
     }
@@ -449,184 +339,184 @@ function requireRole(...allowedRoles) {
   };
 }
 
-app.get("/api/auth/me", requireAuth, async (req, res) => {
+app.get("/api/auth/me", requireAuth, (req, res) => {
   res.json({ success: true, user: req.user });
 });
 
-app.get("/api/users", requireRole("Owner"), async (req, res) => {
+app.get("/api/users", requireRole("Owner"), (req, res) => {
   try { res.json({ success: true, users: listUsers() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post("/api/users", requireRole("Owner"), async (req, res) => {
+app.post("/api/users", requireRole("Owner"), (req, res) => {
   try { res.json({ success: true, user: createUser(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.delete("/api/users/:id", requireRole("Owner"), async (req, res) => {
+app.delete("/api/users/:id", requireRole("Owner"), (req, res) => {
   try { res.json({ success: deleteUser(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ===== DRIVERS =====
-app.get("/api/drivers", async (req, res) => {
-  try { res.json({ success: true, drivers: await listDriversPG() }); }
+app.get("/api/drivers", (req, res) => {
+  try { res.json({ success: true, drivers: listDrivers() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.get("/api/drivers/:id", async (req, res) => {
+app.get("/api/drivers/:id", (req, res) => {
   try {
-    const d = await getDriverPG(req.params.id);
+    const d = getDriver(req.params.id);
     if (!d) return res.status(404).json({ success: false, error: "Not found" });
     res.json({ success: true, driver: d });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post("/api/drivers", async (req, res) => {
-  try { res.json({ success: true, driver: await createDriverPG(req.body) }); }
+app.post("/api/drivers", (req, res) => {
+  try { res.json({ success: true, driver: createDriver(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.put("/api/drivers/:id", async (req, res) => {
-  try { res.json({ success: true, driver: await updateDriverPG(req.params.id, req.body) }); }
+app.put("/api/drivers/:id", (req, res) => {
+  try { res.json({ success: true, driver: updateDriver(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.delete("/api/drivers/:id", async (req, res) => {
-  try { res.json({ success: await deleteDriverPG(req.params.id) }); }
+app.delete("/api/drivers/:id", (req, res) => {
+  try { res.json({ success: deleteDriver(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ===== WAREHOUSE =====
-app.get("/api/inventory", async (req, res) => {
-  try { res.json({ success: true, items: await listInventoryPG() }); }
+app.get("/api/inventory", (req, res) => {
+  try { res.json({ success: true, items: listInventory() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.get("/api/inventory/low-stock", async (req, res) => {
-  try { res.json({ success: true, items: await getLowStockItemsPG() }); }
+app.get("/api/inventory/low-stock", (req, res) => {
+  try { res.json({ success: true, items: getLowStockItems() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.get("/api/inventory/:id", async (req, res) => {
+app.get("/api/inventory/:id", (req, res) => {
   try {
-    const i = await getInventoryItemPG(req.params.id);
+    const i = getInventoryItem(req.params.id);
     if (!i) return res.status(404).json({ success: false, error: "Not found" });
     res.json({ success: true, item: i });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post("/api/inventory", async (req, res) => {
-  try { res.json({ success: true, item: await createInventoryItemPG(req.body) }); }
+app.post("/api/inventory", (req, res) => {
+  try { res.json({ success: true, item: createInventoryItem(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.put("/api/inventory/:id", async (req, res) => {
-  try { res.json({ success: true, item: await updateInventoryItemPG(req.params.id, req.body) }); }
+app.put("/api/inventory/:id", (req, res) => {
+  try { res.json({ success: true, item: updateInventoryItem(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.delete("/api/inventory/:id", async (req, res) => {
-  try { res.json({ success: await deleteInventoryItemPG(req.params.id) }); }
+app.delete("/api/inventory/:id", (req, res) => {
+  try { res.json({ success: deleteInventoryItem(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post("/api/inventory/stock-in", async (req, res) => {
-  try { res.json({ success: true, transaction: await stockInPG(req.body) }); }
+app.post("/api/inventory/stock-in", (req, res) => {
+  try { res.json({ success: true, transaction: stockIn(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.post("/api/inventory/stock-out", async (req, res) => {
-  try { res.json({ success: true, transaction: await stockOutPG(req.body) }); }
+app.post("/api/inventory/stock-out", (req, res) => {
+  try { res.json({ success: true, transaction: stockOut(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.post("/api/inventory/transfer", async (req, res) => {
-  try { res.json({ success: true, transaction: await transferStockPG(req.body) }); }
+app.post("/api/inventory/transfer", (req, res) => {
+  try { res.json({ success: true, transaction: transferStock(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.get("/api/stock-transactions", async (req, res) => {
-  try { res.json({ success: true, transactions: await listStockTransactionsPG() }); }
+app.get("/api/stock-transactions", (req, res) => {
+  try { res.json({ success: true, transactions: listStockTransactions() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ===== PERIODIC MAINTENANCE =====
-app.get("/api/periodic-maintenance", async (req, res) => {
+app.get("/api/periodic-maintenance", (req, res) => {
   try {
     const filters = { vehicleId: req.query.vehicleId, type: req.query.type, status: req.query.status };
-    res.json({ success: true, records: await listPeriodicMaintenancePG(filters) });
+    res.json({ success: true, records: listPeriodicMaintenance(filters) });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.get("/api/periodic-maintenance/alerts", async (req, res) => {
-  try { res.json({ success: true, ...await getPeriodicAlertsPG() }); }
+app.get("/api/periodic-maintenance/alerts", (req, res) => {
+  try { res.json({ success: true, ...getPeriodicAlerts() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.get("/api/periodic-maintenance/:id", async (req, res) => {
+app.get("/api/periodic-maintenance/:id", (req, res) => {
   try {
-    const r = await getPeriodicMaintenancePG(req.params.id);
+    const r = getPeriodicMaintenance(req.params.id);
     if (!r) return res.status(404).json({ success: false, error: "Not found" });
     res.json({ success: true, record: r });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post("/api/periodic-maintenance", async (req, res) => {
-  try { res.json({ success: true, record: await createPeriodicMaintenancePG(req.body) }); }
+app.post("/api/periodic-maintenance", (req, res) => {
+  try { res.json({ success: true, record: createPeriodicMaintenance(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.put("/api/periodic-maintenance/:id", async (req, res) => {
-  try { res.json({ success: true, record: await updatePeriodicMaintenancePG(req.params.id, req.body) }); }
+app.put("/api/periodic-maintenance/:id", (req, res) => {
+  try { res.json({ success: true, record: updatePeriodicMaintenance(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.put("/api/periodic-maintenance/:id/complete", async (req, res) => {
-  try { res.json({ success: true, record: await completePeriodicMaintenancePG(req.params.id, req.body) }); }
+app.put("/api/periodic-maintenance/:id/complete", (req, res) => {
+  try { res.json({ success: true, record: completePeriodicMaintenance(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.delete("/api/periodic-maintenance/:id", async (req, res) => {
-  try { res.json({ success: await deletePeriodicMaintenancePG(req.params.id) }); }
+app.delete("/api/periodic-maintenance/:id", (req, res) => {
+  try { res.json({ success: deletePeriodicMaintenance(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post("/api/periodic-maintenance/generate", async (req, res) => {
+app.post("/api/periodic-maintenance/generate", (req, res) => {
   try {
     const months = Number(req.body.monthsAhead) || 6;
-    const created = await generateScheduledMaintenancePG(months);
+    const created = generateScheduledMaintenance(months);
     res.json({ success: true, created: created.length, records: created });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ===== AUDIT LOG =====
-app.get("/api/audit-log", async (req, res) => {
+app.get("/api/audit-log", (req, res) => {
   try {
     const filters = { username: req.query.username, action: req.query.action, entityType: req.query.entityType, fromDate: req.query.fromDate, toDate: req.query.toDate };
-    res.json({ success: true, logs: await listAuditLogPG(filters) });
+    res.json({ success: true, logs: listAuditLog(filters) });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.get("/api/audit-log/stats", async (req, res) => {
-  try { res.json({ success: true, ...await getAuditStatsPG() }); }
+app.get("/api/audit-log/stats", (req, res) => {
+  try { res.json({ success: true, ...getAuditStats() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post("/api/audit-log", async (req, res) => {
-  try { res.json({ success: true, log: await logActionPG(req.body) }); }
+app.post("/api/audit-log", (req, res) => {
+  try { res.json({ success: true, log: logAction(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.delete("/api/audit-log/clear", async (req, res) => {
+app.delete("/api/audit-log/clear", (req, res) => {
   try {
     const days = Number(req.query.days) || 90;
-    res.json({ success: true, deleted: await clearAuditLogPG(days) });
+    res.json({ success: true, deleted: clearAuditLog(days) });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ===== BACKUP =====
-app.get("/api/backup/list", async (req, res) => {
+app.get("/api/backup/list", (req, res) => {
   try {
     const backupDir = path.join(__dirname, "backups");
     if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
@@ -660,7 +550,7 @@ app.post("/api/backup/create", async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.delete("/api/backup/:name", async (req, res) => {
+app.delete("/api/backup/:name", (req, res) => {
   try {
     const backupDir = path.join(__dirname, "backups");
     const name = req.params.name;
@@ -676,7 +566,7 @@ app.delete("/api/backup/:name", async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.get("/api/backup/download/:name", async (req, res) => {
+app.get("/api/backup/download/:name", (req, res) => {
   try {
     const backupDir = path.join(__dirname, "backups");
     const name = req.params.name;
@@ -690,7 +580,7 @@ app.get("/api/backup/download/:name", async (req, res) => {
 });
 
 // ===== LIVE ISSUES =====
-app.get("/api/live-issues", async (req, res) => {
+app.get("/api/live-issues", (req, res) => {
   try {
     const tickets = listTickets().filter(t => t.status === 'Open');
     const now = new Date();
@@ -743,34 +633,34 @@ app.get("/api/live-issues", async (req, res) => {
 });
 
 // ===== TICKET FEEDBACK =====
-app.put("/api/tickets/:id/acknowledge", async (req, res) => {
+app.put("/api/tickets/:id/acknowledge", (req, res) => {
   try { res.json({ success: true, ticket: acknowledgeTicket(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.put("/api/tickets/:id/close-with-notes", async (req, res) => {
+app.put("/api/tickets/:id/close-with-notes", (req, res) => {
   try { res.json({ success: true, ticket: closeTicketWithNotes(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.get("/api/tickets/by-reporter/:name", async (req, res) => {
+app.get("/api/tickets/by-reporter/:name", (req, res) => {
   try { res.json({ success: true, tickets: listTicketsByReporter(req.params.name) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.get("/api/tickets/stats/:name", async (req, res) => {
+app.get("/api/tickets/stats/:name", (req, res) => {
   try { res.json({ success: true, ...getReporterStats(req.params.name) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ===== FINANCIAL REPORT =====
-app.get("/api/reports/financial", async (req, res) => {
-  try { res.json({ success: true, ...await getFinancialReportPG() }); }
+app.get("/api/reports/financial", (req, res) => {
+  try { res.json({ success: true, ...getFinancialReport() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.use(express.static(path.join(__dirname, '../client/dist')));
-app.get('*', async (req, res) => { res.sendFile(path.join(__dirname, '../client/dist/index.html')); });
+app.get('*', (req, res) => { res.sendFile(path.join(__dirname, '../client/dist/index.html')); });
 
 app.listen(PORT, () => {
   console.log("");
@@ -782,17 +672,5 @@ app.listen(PORT, () => {
   console.log("Building APIs: /api/sites, /api/work-orders, /api/projects, /api/purchases");
   console.log("======================================");
 });
-
-
-
-
-
-
-
-
-
-
-
-
 
 

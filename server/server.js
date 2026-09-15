@@ -701,3 +701,5 @@ app.listen(PORT, () => {
 
 app.use(express.static(path.join(__dirname, '..', 'client', 'dist')));
 
+
+app.use(express.static(path.join(__dirname, '../client')));

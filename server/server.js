@@ -1,4 +1,5 @@
-﻿import express from "express";
+import express from "express";
+import cors from "cors";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -782,6 +783,7 @@ app.listen(PORT, () => {
   console.log("Building APIs: /api/sites, /api/work-orders, /api/projects, /api/purchases");
   console.log("======================================");
 });
+
 
 
 

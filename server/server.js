@@ -699,7 +699,7 @@ app.get("/api/backup/download/:name", async (req, res) => {
 // ===== LIVE ISSUES =====
 app.get("/api/live-issues", async (req, res) => {
   try {
-    const tickets = listTickets().filter(t => t.status === 'Open');
+    const tickets = (await listTickets()).filter(t => t.status === 'Open');
     const now = new Date();
     const classified = tickets.map(t => {
       const opened = new Date(t.opened_at);

@@ -49,7 +49,7 @@ const vehiclesData = [
 
 for (let v of vehiclesData) {
   await client.query(`
-    INSERT INTO vehicles (id, plate_number, plate_code, plate, make, model, year, location, driver_name, driver_phone, current_km, last_oil_km)
+    INSERT INTO vehicles (id, plate_number, plate_code, plate_number, make, model, year, location, driver_name, driver_phone, current_km, last_oil_km)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     ON CONFLICT (id) DO UPDATE SET 
       current_km = EXCLUDED.current_km,
@@ -60,3 +60,6 @@ for (let v of vehiclesData) {
 
 console.log("? ?? ????? ?????? ???? ?????? ??? 36 ????? ?? ????? ?????? Neon ?????!");
 await client.end();
+
+
+

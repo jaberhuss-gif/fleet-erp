@@ -1,16 +1,7 @@
-﻿import dotenv from "dotenv";
+import "dotenv/config";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import path from "path";
-import { fileURLToPath } from "url";
 import { query } from "./postgres.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-dotenv.config({
-  path: path.join(__dirname, ".env")
-});
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -19,7 +10,7 @@ if (!JWT_SECRET) {
 }
 
 // ============================================================
-// AUTHENTICATION — PostgreSQL
+// AUTHENTICATION � PostgreSQL
 // ============================================================
 
 export async function login(username, password) {
@@ -58,7 +49,9 @@ export async function login(username, password) {
       role: user.role
     },
     JWT_SECRET,
-    { expiresIn: "7d" }
+    {
+      expiresIn: "7d"
+    }
   );
 
   return {
@@ -74,6 +67,7 @@ export async function login(username, password) {
   };
 }
 
+
 // ============================================================
 // JWT VERIFICATION
 // ============================================================
@@ -85,6 +79,7 @@ export function verifyToken(token) {
     return null;
   }
 }
+
 
 // ============================================================
 // LIST USERS
@@ -107,6 +102,7 @@ export async function listUsers() {
 
   return result.rows;
 }
+
 
 // ============================================================
 // CREATE USER
@@ -167,6 +163,7 @@ export async function createUser(data = {}) {
 
   return result.rows[0];
 }
+
 
 // ============================================================
 // DELETE USER

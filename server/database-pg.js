@@ -2141,7 +2141,10 @@ export async function getBuildingDashboard(filters = {}) {
   ).length;
 
   const woContractor = workOrders.filter(
-    w => Number(w.is_contractor) === 1
+    w => {
+      const cn = String(w.contractor_name || "").trim();
+      return cn !== "" && cn.toLowerCase() !== "company" && cn.toLowerCase() !== "internal";
+    }
   ).length;
 
   const woInternal = woTotal - woContractor;
@@ -2253,7 +2256,8 @@ export async function getMonthlyReport(filters = {}) {
     b.woCount++;
     b.woCost += Number(w.final_cost || 0);
 
-    if (Number(w.is_contractor) === 1) {
+    const cn = String(w.contractor_name || "").trim();
+    if (cn !== "" && cn.toLowerCase() !== "company" && cn.toLowerCase() !== "internal") {
       b.woContractor++;
     } else {
       b.woInternal++;

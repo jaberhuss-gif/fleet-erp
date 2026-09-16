@@ -129,50 +129,7 @@ export default function BuildingDashboard() {
         </div>
       </div>
 
-      {/* Projects Table */}
-      {proj.list && proj.list.length > 0 && (
-        <div className="panel">
-          <h2>Active Projects ({proj.list.length})</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Project #</th><th>Name</th><th>Site</th><th>Type</th>
-                <th>Budget</th><th>Spent</th><th>Progress</th><th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {proj.list.slice(0, 10).map(p => {
-                const pct = p.budget > 0 ? Math.min((p.spent / p.budget) * 100, 100) : 0;
-                return (
-                  <tr key={p.id}>
-                    <td style={{ fontWeight: 'bold' }}>{p.project_no}</td>
-                    <td>{p.name}</td>
-                    <td>{p.site}</td>
-                    <td>{p.project_type}</td>
-                    <td>{Number(p.budget || 0).toLocaleString()}</td>
-                    <td>{Number(p.spent || 0).toLocaleString()}</td>
-                    <td style={{ minWidth: '120px' }}>
-                      <div style={{ background: '#e2e8f0', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
-                        <div style={{ background: pct > 90 ? '#dc2626' : pct > 70 ? '#f59e0b' : '#16a34a', width: pct + '%', height: '100%' }}></div>
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>{pct.toFixed(0)}%</div>
-                    </td>
-                    <td>
-                      <span className={
-                        'status-badge ' +
-                        (p.status === 'Active' ? 'status-warning' :
-                         p.status === 'Completed' ? 'status-safe' : 'status-warning')
-                      }>
-                        {p.status}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+
     </div>
   );
 }

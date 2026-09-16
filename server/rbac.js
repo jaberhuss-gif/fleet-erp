@@ -1,11 +1,4 @@
-import Database from "better-sqlite3";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const db = new Database(path.join(__dirname, "fleet.db"));
+﻿import { query } from "./postgres.js";
 
 const METHOD_ACTIONS = {
   GET: "view",
@@ -69,63 +62,79 @@ export function getPermissionForRequest(req) {
   if (!module) return null;
 
   const action = getSpecialAction(req.path, req.method);
-
   if (!action) return null;
 
   return { module, action };
 }
 
-export function hasPermission(user, module, action) {
+export async function hasPermission(user, module, action) {
   if (!user) return false;
 
-  // Owner always has full access.
   if (user.role === "Owner") return true;
 
-  const permission = db.prepare(`
+  const userPermission = await query(
+    `
     SELECT 1
     FROM user_permissions up
     JOIN permissions p ON p.id = up.permission_id
-    WHERE up.user_id = ?
-      AND p.module = ?
-      AND p.action = ?
-      AND up.allowed = 1
+    WHERE up.user_id = $1
+      AND p.module = $2
+      AND p.action = $3
+      AND up.allowed = TRUE
     LIMIT 1
-  `).get(user.id, module, action);
+    `,
+    [user.id, module, action]
+  );
 
-  if (permission) return true;
+  if (userPermission.rows.length > 0) return true;
 
-  const rolePermission = db.prepare(`
+  const rolePermission = await query(
+    `
     SELECT 1
     FROM role_permissions rp
     JOIN roles r ON r.id = rp.role_id
     JOIN permissions p ON p.id = rp.permission_id
-    WHERE r.name = ?
-      AND p.module = ?
-      AND p.action = ?
-      AND rp.allowed = 1
+    WHERE r.name = $1
+      AND p.module = $2
+      AND p.action = $3
+      AND rp.allowed = TRUE
     LIMIT 1
-  `).get(user.role, module, action);
+    `,
+    [user.role, module, action]
+  );
 
-  return !!rolePermission;
+  return rolePermission.rows.length > 0;
 }
 
-export function requirePermission(req, res, next) {
-  const permission = getPermissionForRequest(req);
+export async function requirePermission(req, res, next) {
+  try {
+    const permission = getPermissionForRequest(req);
 
-  // Routes without a defined permission mapping are allowed
-  // to continue under the existing authentication rules.
-  if (!permission) return next();
+    if (!permission) return next();
 
-  if (hasPermission(req.user, permission.module, permission.action)) {
-    return next();
+    const allowed = await hasPermission(
+      req.user,
+      permission.module,
+      permission.action
+    );
+
+    if (allowed) return next();
+
+    return res.status(403).json({
+      success: false,
+      error: "Forbidden",
+      message: `You do not have permission to ${permission.action} ${permission.module}.`,
+      required: permission
+    });
+  } catch (error) {
+    console.error("RBAC permission error:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: "Permission check failed",
+      message: error.message
+    });
   }
-
-  return res.status(403).json({
-    success: false,
-    error: "Forbidden",
-    message: `You do not have permission to ${permission.action} ${permission.module}.`,
-    required: permission
-  });
 }
 
 export default {

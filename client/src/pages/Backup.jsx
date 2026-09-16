@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../api/client';
 
 export default function Backup() {
@@ -40,7 +40,7 @@ export default function Backup() {
   };
 
   const handleDownload = (name) => {
-    window.open('http://localhost:3000/api/backup/download/' + encodeURIComponent(name), '_blank');
+    window.open('/api/backup/download/' + encodeURIComponent(name), '_blank');
   };
 
   const formatSize = (bytes) => {

@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 
 
 import * as db from "./database-pg.js";
+import { query as pgQuery } from "./postgres.js";
 
 const { listVehicles:listVehiclesPG, getVehicleById:getVehicleByIdPG, createVehicle:createVehiclePG, updateVehicle:updateVehiclePG, deleteVehicle:deleteVehiclePG, deleteAllVehicles:deleteAllVehiclesPG, addReading:addReadingPG, listReadings:listReadingsPG, changeOil:changeOilPG, listOilChanges:listOilChangesPG, createTicket:createTicketPG, listTickets:listTicketsPG, closeTicket:closeTicketPG, deleteAllTickets:deleteAllTicketsPG, acknowledgeTicket:acknowledgeTicketPG, closeTicketWithNotes:closeTicketWithNotesPG, listTicketsByReporter:listTicketsByReporterPG, getReporterStats:getReporterStatsPG, listSites:listSitesPG, getSite:getSitePG, createSite:createSitePG, updateSite:updateSitePG, deleteSite:deleteSitePG, getAlerts:getAlertsPG, importVehicles:importVehiclesPG, listWorkOrders:listWorkOrdersPG, getWorkOrder:getWorkOrderPG, createWorkOrder:createWorkOrderPG, updateWorkOrder:updateWorkOrderPG, closeWorkOrder:closeWorkOrderPG, deleteWorkOrder:deleteWorkOrderPG, listProjects:listProjectsPG, getProject:getProjectPG, createProject:createProjectPG, updateProject:updateProjectPG, deleteProject:deleteProjectPG, listPurchases:listPurchasesPG, createPurchase:createPurchasePG, deletePurchase:deletePurchasePG, listDrivers:listDriversPG, getDriver:getDriverPG, createDriver:createDriverPG, updateDriver:updateDriverPG, deleteDriver:deleteDriverPG, listInventory:listInventoryPG, getInventoryItem:getInventoryItemPG, createInventoryItem:createInventoryItemPG, updateInventoryItem:updateInventoryItemPG, deleteInventoryItem:deleteInventoryItemPG, stockIn:stockInPG, stockOut:stockOutPG, transferStock:transferStockPG, listStockTransactions:listStockTransactionsPG, getLowStockItems:getLowStockItemsPG, listPeriodicMaintenance:listPeriodicMaintenancePG, getPeriodicMaintenance:getPeriodicMaintenancePG, createPeriodicMaintenance:createPeriodicMaintenancePG, updatePeriodicMaintenance:updatePeriodicMaintenancePG, completePeriodicMaintenance:completePeriodicMaintenancePG, deletePeriodicMaintenance:deletePeriodicMaintenancePG, getPeriodicAlerts:getPeriodicAlertsPG, generateScheduledMaintenance:generateScheduledMaintenancePG, logAction:logActionPG, listAuditLog:listAuditLogPG, getAuditStats:getAuditStatsPG, clearAuditLog:clearAuditLogPG, getBuildingDashboard:getBuildingDashboardPG, getDashboard:getDashboardPG, getMonthlyReport:getMonthlyReportPG, getFinancialReport:getFinancialReportPG }=db;
 
@@ -650,7 +651,7 @@ app.get("/api/backup/list", async (req, res) => {
     const backupDir = path.join(__dirname, "backups");
     if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
     const files = fs.readdirSync(backupDir)
-      .filter(f => f.endsWith(".db"))
+      .filter(f => f.endsWith(".json"))
       .map(f => {
         const stats = fs.statSync(path.join(backupDir, f));
         return { name: f, size: stats.size, date: stats.mtime };
@@ -663,27 +664,74 @@ app.get("/api/backup/list", async (req, res) => {
 app.post("/api/backup/create", async (req, res) => {
   try {
     const backupDir = path.join(__dirname, "backups");
-    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const backupName = "fleet_backup_" + timestamp + ".db";
-    const backupPath = path.join(backupDir, backupName);
-    const dbPath = path.join(__dirname, "fleet.db");
-    
-    const { default: Database } = await import("better-sqlite3");
-    const src = new Database(dbPath);
-    src.pragma("wal_checkpoint(TRUNCATE)");
-    src.close();
-    
-    fs.copyFileSync(dbPath, backupPath);
-    res.json({ success: true, backup: backupName, size: fs.statSync(backupPath).size });
-  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
-});
 
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const backupName = "fleet_backup_" + timestamp + ".json";
+    const backupPath = path.join(backupDir, backupName);
+
+    const tables = [
+      "audit_log",
+      "drivers",
+      "inventory",
+      "km_records",
+      "oil_changes",
+      "periodic_maintenance",
+      "permissions",
+      "projects",
+      "purchases",
+      "role_permissions",
+      "roles",
+      "sites",
+      "stock_transactions",
+      "tickets",
+      "user_permissions",
+      "users",
+      "vehicles",
+      "warehouse_locations",
+      "warehouse_stock",
+      "work_orders"
+    ];
+
+    const backup = {
+      format: "Fleet ERP PostgreSQL Data Backup",
+      version: 1,
+      created_at: new Date().toISOString(),
+      tables: {}
+    };
+
+    for (const table of tables) {
+      const result = await pgQuery(`SELECT * FROM "${table}"`);
+      backup.tables[table] = result.rows;
+    }
+
+    fs.writeFileSync(
+      backupPath,
+      JSON.stringify(backup, null, 2),
+      "utf8"
+    );
+
+    res.json({
+      success: true,
+      backup: backupName,
+      size: fs.statSync(backupPath).size
+    });
+  } catch (e) {
+    console.error("Backup creation error:", e);
+    res.status(500).json({
+      success: false,
+      error: e.message
+    });
+  }
+});
 app.delete("/api/backup/:name", async (req, res) => {
   try {
     const backupDir = path.join(__dirname, "backups");
     const name = req.params.name;
-    if (!name.startsWith("fleet_backup_") || !name.endsWith(".db")) {
+    if (!name.startsWith("fleet_backup_") || !name.endsWith(".json")) {
       return res.status(400).json({ success: false, error: "Invalid backup name" });
     }
     const filePath = path.join(backupDir, name);
@@ -699,7 +747,7 @@ app.get("/api/backup/download/:name", async (req, res) => {
   try {
     const backupDir = path.join(__dirname, "backups");
     const name = req.params.name;
-    if (!name.startsWith("fleet_backup_") || !name.endsWith(".db")) {
+    if (!name.startsWith("fleet_backup_") || !name.endsWith(".json")) {
       return res.status(400).json({ success: false, error: "Invalid" });
     }
     const filePath = path.join(backupDir, name);
@@ -801,7 +849,6 @@ app.listen(PORT, () => {
   console.log("Building APIs: /api/sites, /api/work-orders, /api/projects, /api/purchases");
   console.log("======================================");
 });
-
 
 
 

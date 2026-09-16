@@ -1,0 +1,282 @@
+﻿import { useState, useEffect } from 'react';
+import api from '../api/client';
+import { printContent } from '../api/print';
+
+export default function FinancialReport() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => { load(); }, []);
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/reports/financial');
+      setData(res.data);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+
+  if (loading) return <div className="loading">Loading financial report...</div>;
+  if (error) return <div className="alert alert-error">{error}</div>;
+  if (!data) return <div className="loading">No data</div>;
+
+  const months = Array.isArray(data.months) ? data.months : (Array.isArray(data.rows) ? data.rows : []);
+  const MAINTENANCE_BASELINE = 20577;
+  const DEVELOPMENT_BASELINE = 132551;
+  const MAINTENANCE_SALARY = 2200;
+  const DEVELOPMENT_SALARY = 2200;
+  const monthCount = months.length;
+
+  const monthlyData = months.map(m => ({
+    ...m,
+    contractorWO: Number(m.contractorWO || 0),
+    partsWO: Number(m.partsWO || 0),
+    contractorDev: Number(m.contractorDev || 0),
+    partsDev: Number(m.partsDev || 0),
+    maintenanceSalary: MAINTENANCE_SALARY,
+    developmentSalary: DEVELOPMENT_SALARY,
+    maintActual: Number(m.contractorWO || 0) + Number(m.partsWO || 0) + MAINTENANCE_SALARY,
+    maintSavings: MAINTENANCE_BASELINE - (Number(m.contractorWO || 0) + Number(m.partsWO || 0) + MAINTENANCE_SALARY),
+    maintPct: ((MAINTENANCE_BASELINE - (Number(m.contractorWO || 0) + Number(m.partsWO || 0) + MAINTENANCE_SALARY)) / MAINTENANCE_BASELINE) * 100,
+    devActual: Number(m.contractorDev || 0) + Number(m.partsDev || 0) + DEVELOPMENT_SALARY,
+    devSavings: DEVELOPMENT_BASELINE - (Number(m.contractorDev || 0) + Number(m.partsDev || 0) + DEVELOPMENT_SALARY),
+    devPct: ((DEVELOPMENT_BASELINE - (Number(m.contractorDev || 0) + Number(m.partsDev || 0) + DEVELOPMENT_SALARY)) / DEVELOPMENT_BASELINE) * 100,
+    totalSavingsPct: (((MAINTENANCE_BASELINE + DEVELOPMENT_BASELINE) - (Number(m.contractorWO || 0) + Number(m.partsWO || 0) + MAINTENANCE_SALARY) - (Number(m.contractorDev || 0) + Number(m.partsDev || 0) + DEVELOPMENT_SALARY)) / (MAINTENANCE_BASELINE + DEVELOPMENT_BASELINE)) * 100
+  }));
+
+  const maintenanceBaselineTotal = MAINTENANCE_BASELINE * monthCount;
+  const developmentBaselineTotal = DEVELOPMENT_BASELINE * monthCount;
+  const totalBaseline = maintenanceBaselineTotal + developmentBaselineTotal;
+  const contractorWOTotal = monthlyData.reduce((s,m) => s + m.contractorWO, 0);
+  const partsWOTotal = monthlyData.reduce((s,m) => s + m.partsWO, 0);
+  const contractorDevTotal = monthlyData.reduce((s,m) => s + m.contractorDev, 0);
+  const partsDevTotal = monthlyData.reduce((s,m) => s + m.partsDev, 0);
+  const maintenanceActualTotal = contractorWOTotal + partsWOTotal + (MAINTENANCE_SALARY * monthCount);
+  const developmentActualTotal = contractorDevTotal + partsDevTotal + (DEVELOPMENT_SALARY * monthCount);
+  const totalActual = maintenanceActualTotal + developmentActualTotal;
+  const maintenanceSavingsTotal = maintenanceBaselineTotal - maintenanceActualTotal;
+  const developmentSavingsTotal = developmentBaselineTotal - developmentActualTotal;
+  const totalSavings = maintenanceSavingsTotal + developmentSavingsTotal;
+  const maintenanceSavingsPct = maintenanceBaselineTotal ? (maintenanceSavingsTotal / maintenanceBaselineTotal) * 100 : 0;
+  const developmentSavingsPct = developmentBaselineTotal ? (developmentSavingsTotal / developmentBaselineTotal) * 100 : 0;
+  const totalSavingsPct = totalBaseline ? (totalSavings / totalBaseline) * 100 : 0;
+
+  const getPctStyle = (pct) => {
+    if (pct >= 70) return { bg: '#dcfce7', color: '#16a34a', icon: '🟢' };
+    if (pct >= 40) return { bg: '#fef3c7', color: '#b45309', icon: '🟡' };
+    if (pct >= 0) return { bg: '#fee2e2', color: '#dc2626', icon: '🔴' };
+    return { bg: '#991b1b', color: 'white', icon: '⚠️' };
+  };
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+        <div>
+          <h2 style={{ margin: 0 }}>💰 Financial Report</h2>
+          <p style={{ color: '#64748b', fontSize: '13px', marginTop: '4px' }}>
+            Baseline vs Actual — Maintenance & Development
+          </p>
+        </div>
+        <button className="print-btn no-print" onClick={() => printContent('Financial Report', 'Baseline vs Actual')}>
+          🖨️ Print Report
+        </button>
+      </div>
+
+      {/* GRAND SUMMARY CARDS */}
+      <div className="cards-grid" style={{ marginBottom: '24px' }}>
+        <div className="card" style={{ borderLeft: '5px solid #1e3a8a' }}>
+          <h3>Total Baseline</h3>
+          <div className="big-number" style={{ color: '#1e3a8a' }}>{Number(totalBaseline).toLocaleString()}</div>
+          <div className="sub">SAR — All months</div>
+        </div>
+        <div className="card warning" style={{ borderLeft: '5px solid #f59e0b' }}>
+          <h3>Total Actual</h3>
+          <div className="big-number" style={{ color: '#f59e0b' }}>
+            {Number(totalActual).toLocaleString()}
+          </div>
+          <div className="sub">SAR — All costs</div>
+        </div>
+        <div className="card success" style={{ borderLeft: '5px solid #16a34a' }}>
+          <h3>Total Savings</h3>
+          <div className="big-number" style={{ color: '#16a34a' }}>{Number(totalSavings).toLocaleString()}</div>
+          <div className="sub">{totalSavingsPct.toFixed(1)}% saved</div>
+        </div>
+      </div>
+
+      {/* MAINTENANCE SECTION */}
+      <div className="panel" style={{ borderTop: '5px solid #1e3a8a', marginBottom: '20px' }}>
+        <h2 style={{ color: '#1e3a8a', marginTop: 0 }}>🔧 General Maintenance</h2>
+        <div className="cards-grid" style={{ marginBottom: '16px' }}>
+          <div className="card"><h3>Baseline</h3><div className="big-number" style={{ color: '#1e3a8a', fontSize: '22px' }}>20,577</div><div className="sub">SAR / month</div></div>
+          <div className="card success"><h3>Total Savings</h3><div className="big-number" style={{ color: '#16a34a', fontSize: '22px' }}>{Number(maintenanceSavingsTotal).toLocaleString()}</div><div className="sub">SAR</div></div>
+          <div className="card"><h3>Baseline × Months</h3><div className="big-number" style={{ color: '#64748b', fontSize: '22px' }}>{Number(maintenanceBaselineTotal).toLocaleString()}</div><div className="sub">{months.length} months</div></div>
+        </div>
+
+        <table>
+          <thead>
+            <tr style={{ background: '#eff6ff' }}>
+              <th>Month</th>
+              <th>Baseline</th>
+              <th>WO</th>
+              <th>Parts</th>
+              <th>Salary</th>
+              <th style={{ color: '#dc2626' }}>Actual</th>
+              <th style={{ color: '#16a34a' }}>Savings</th>
+              <th>%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {monthlyData.map(m => {
+              const s = getPctStyle(m.maintPct);
+              return (
+                <tr key={'m-' + m.month}>
+                  <td style={{ fontWeight: 'bold' }}>{m.month}</td>
+                  <td>20,577</td>
+                  <td>{Number(m.contractorWO).toLocaleString()}</td>
+                  <td>{Number(m.partsWO).toLocaleString()}</td>
+                  <td>{Number(m.maintenanceSalary).toLocaleString()}</td>
+                  <td style={{ fontWeight: 'bold', color: '#dc2626' }}>{Number(m.maintActual).toLocaleString()}</td>
+                  <td style={{ fontWeight: 'bold', color: '#16a34a' }}>{Number(m.maintSavings).toLocaleString()}</td>
+                  <td>
+                    <span className="status-badge" style={{ background: s.bg, color: s.color, fontWeight: 'bold' }}>
+                      {s.icon} {m.maintPct.toFixed(1)}%
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+            <tr style={{ background: '#dbeafe', fontWeight: 'bold' }}>
+              <td>TOTAL</td>
+              <td>{Number(maintenanceBaselineTotal).toLocaleString()}</td>
+              <td>{Number(contractorWOTotal).toLocaleString()}</td>
+              <td>{Number(partsWOTotal).toLocaleString()}</td>
+              <td>{Number(MAINTENANCE_SALARY * monthCount).toLocaleString()}</td>
+              <td style={{ color: '#dc2626' }}>{Number(maintenanceActualTotal).toLocaleString()}</td>
+              <td style={{ color: '#16a34a' }}>{Number(maintenanceSavingsTotal).toLocaleString()}</td>
+              <td>
+                <span className="status-badge status-safe" style={{ fontWeight: 'bold' }}>
+                  {maintenanceSavingsPct.toFixed(1)}%
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* DEVELOPMENT SECTION */}
+      <div className="panel" style={{ borderTop: '5px solid #16a34a', marginBottom: '20px' }}>
+        <h2 style={{ color: '#16a34a', marginTop: 0 }}>📁 Development Projects</h2>
+        <div className="cards-grid" style={{ marginBottom: '16px' }}>
+          <div className="card"><h3>Baseline</h3><div className="big-number" style={{ color: '#16a34a', fontSize: '22px' }}>132,551</div><div className="sub">SAR / month</div></div>
+          <div className="card success"><h3>Total Savings</h3><div className="big-number" style={{ color: '#16a34a', fontSize: '22px' }}>{Number(developmentSavingsTotal).toLocaleString()}</div><div className="sub">SAR</div></div>
+          <div className="card"><h3>Baseline × Months</h3><div className="big-number" style={{ color: '#64748b', fontSize: '22px' }}>{Number(developmentBaselineTotal).toLocaleString()}</div><div className="sub">{months.length} months</div></div>
+        </div>
+
+        <table>
+          <thead>
+            <tr style={{ background: '#f0fdf4' }}>
+              <th>Month</th>
+              <th>Baseline</th>
+              <th>Dev</th>
+              <th>Parts</th>
+              <th>Salary</th>
+              <th style={{ color: '#dc2626' }}>Actual</th>
+              <th style={{ color: '#16a34a' }}>Savings</th>
+              <th>%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {monthlyData.map(m => {
+              const s = getPctStyle(m.devPct);
+              return (
+                <tr key={'d-' + m.month}>
+                  <td style={{ fontWeight: 'bold' }}>{m.month}</td>
+                  <td>132,551</td>
+                  <td>{Number(m.contractorDev).toLocaleString()}</td>
+                  <td>{Number(m.partsDev).toLocaleString()}</td>
+                  <td>{Number(m.developmentSalary).toLocaleString()}</td>
+                  <td style={{ fontWeight: 'bold', color: '#dc2626' }}>{Number(m.devActual).toLocaleString()}</td>
+                  <td style={{ fontWeight: 'bold', color: '#16a34a' }}>{Number(m.devSavings).toLocaleString()}</td>
+                  <td>
+                    <span className="status-badge" style={{ background: s.bg, color: s.color, fontWeight: 'bold' }}>
+                      {s.icon} {m.devPct.toFixed(1)}%
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+            <tr style={{ background: '#dcfce7', fontWeight: 'bold' }}>
+              <td>TOTAL</td>
+              <td>{Number(developmentBaselineTotal).toLocaleString()}</td>
+              <td>{Number(contractorDevTotal).toLocaleString()}</td>
+              <td>{Number(partsDevTotal).toLocaleString()}</td>
+              <td>{Number(DEVELOPMENT_SALARY * monthCount).toLocaleString()}</td>
+              <td style={{ color: '#dc2626' }}>{Number(developmentActualTotal).toLocaleString()}</td>
+              <td style={{ color: '#16a34a' }}>{Number(developmentSavingsTotal).toLocaleString()}</td>
+              <td>
+                <span className="status-badge status-safe" style={{ fontWeight: 'bold' }}>
+                  {developmentSavingsPct.toFixed(1)}%
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* GRAND TOTAL */}
+      <div className="panel" style={{ borderTop: '5px solid #8b5cf6', background: 'linear-gradient(135deg, #faf5ff 0%, #ffffff 100%)' }}>
+        <h2 style={{ color: '#8b5cf6', marginTop: 0 }}>💰 Grand Total — Everything Combined</h2>
+
+        <table>
+          <thead>
+            <tr style={{ background: '#faf5ff' }}>
+              <th>Month</th>
+              <th>Baseline (Maint + Dev)</th>
+              <th>Actual (All Costs)</th>
+              <th style={{ color: '#16a34a' }}>Savings</th>
+              <th>Savings %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {monthlyData.map(m => {
+              const totalBaselineMonth = 20577 + 132551;
+              const totalActualMonth = m.maintActual + m.devActual;
+              const totalSavingsMonth = m.maintSavings + m.devSavings;
+              const s = getPctStyle(m.totalSavingsPct);
+              return (
+                <tr key={'g-' + m.month}>
+                  <td style={{ fontWeight: 'bold' }}>{m.month}</td>
+                  <td>{totalBaselineMonth.toLocaleString()}</td>
+                  <td>{totalActualMonth.toLocaleString()}</td>
+                  <td style={{ fontWeight: 'bold', color: '#16a34a' }}>{totalSavingsMonth.toLocaleString()}</td>
+                  <td>
+                    <span className="status-badge" style={{ background: s.bg, color: s.color, fontWeight: 'bold' }}>
+                      {s.icon} {m.totalSavingsPct.toFixed(1)}%
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+            <tr style={{ background: '#8b5cf6', color: 'white', fontWeight: 'bold', fontSize: '15px' }}>
+              <td>TOTAL ({months.length} months)</td>
+              <td>{Number(totalBaseline).toLocaleString()}</td>
+              <td>{Number(totalActual).toLocaleString()}</td>
+              <td>{Number(totalSavings).toLocaleString()}</td>
+              <td>{totalSavingsPct.toFixed(1)}%</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div style={{ marginTop: '16px', padding: '16px', background: 'white', borderRadius: '8px', textAlign: 'center' }}>
+          <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '6px' }}>Total Savings across {months.length} months</div>
+          <div style={{ fontSize: '36px', fontWeight: 'bold', color: '#8b5cf6' }}>{Number(totalSavings).toLocaleString()} SAR</div>
+          <div style={{ fontSize: '14px', color: '#16a34a', marginTop: '4px', fontWeight: 'bold' }}>Average {totalSavingsPct.toFixed(1)}% saved vs baseline</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+

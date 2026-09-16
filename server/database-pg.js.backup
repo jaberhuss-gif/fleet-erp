@@ -1,0 +1,2555 @@
+﻿import { query } from "./postgres.js";
+
+function numberValue(value, fallback = 0) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function stringValue(value, fallback = "") {
+  if (value === undefined || value === null) return fallback;
+  return String(value).trim();
+}
+
+function formatVehicle(row) {
+  if (!row) return null;
+
+  const currentKM = numberValue(row.current_km, 0);
+  const lastOilKM = numberValue(row.last_oil_km, 0);
+  const interval = numberValue(row.oil_change_interval, 5000);
+
+  const kmSinceOil = currentKM - lastOilKM;
+  const remaining = interval - kmSinceOil;
+
+  let oilStatus = "Safe";
+
+  if (kmSinceOil >= interval) {
+    oilStatus = "Urgent Overdue";
+  } else if (kmSinceOil >= interval - 500) {
+    oilStatus = "Warning";
+  }
+
+  const plate = `${row.plate_number || ""} ${row.plate_code || ""}`.trim();
+  const driver = row.driver || "";
+  const phone = row.phone || "";
+
+  return {
+    id: row.id,
+
+    plate,
+    plate_number: row.plate_number || "",
+    plate_code: row.plate_code || "",
+
+    make: row.make || "",
+    model: row.model || "",
+    year: row.year || "",
+    status: oilStatus,
+    location: row.location || "",
+
+    driver,
+    driver_name: driver,
+    driver_phone: phone,
+    phone,
+
+    currentKm: currentKM,
+    currentKM,
+
+    lastOilKm: lastOilKM,
+    lastOilKM,
+
+    sinceOil: kmSinceOil,
+    kmSinceLastOil: kmSinceOil,
+
+    remaining,
+    remainingKM: remaining,
+
+    oilChangeInterval: interval,
+    last_oil_change_date: row.last_oil_change_date || "",
+    lastOilChangeDate: row.last_oil_change_date || "",
+
+    oilStatus,
+
+    meter_updated_at: row.meter_updated_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
+export async function getVehicleById(id) {
+  const result = await query(`SELECT * FROM vehicles WHERE id = $1 LIMIT 1`, [id]);
+  return formatVehicle(result.rows[0]);
+}
+
+export async function getVehicleByPlate(plate) {
+  const parts = stringValue(plate).split(/\s+/).filter(Boolean);
+  const plateNumber = parts[0] || "";
+  const plateCode = parts.slice(1).join(" ").toUpperCase();
+  const result = await query(
+    `SELECT * FROM vehicles WHERE plate_number = $1 AND plate_code = $2 LIMIT 1`,
+    [plateNumber, plateCode]
+  );
+  return formatVehicle(result.rows[0]);
+}
+
+export async function listVehicles() {
+  const result = await query(`SELECT * FROM vehicles ORDER BY plate_number, plate_code`);
+  return result.rows.map(formatVehicle);
+}
+
+export async function createVehicle(vehicleData = {}) {
+  const parts = stringValue(vehicleData.plate).split(/\s+/).filter(Boolean);
+  const plateNumber = parts[0] || "";
+  const plateCode = parts.slice(1).join(" ").toUpperCase();
+  if (!plateNumber) throw new Error("Vehicle plate is required");
+
+  const result = await query(
+    `INSERT INTO vehicles (plate_number, plate_code, make, model, year, status, location, driver, phone, current_km, last_oil_km, oil_change_interval, last_oil_change_date, meter_updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+    [
+      plateNumber,
+      plateCode,
+      vehicleData.make || "Toyota",
+      vehicleData.model || "Hilux",
+      numberValue(vehicleData.year, 2022),
+      vehicleData.status || vehicleData.state || "جيد",
+      vehicleData.location || "",
+      vehicleData.driverName || vehicleData.driver || "",
+      vehicleData.driverPhone || vehicleData.phone || "",
+      numberValue(vehicleData.currentKM ?? vehicleData.km, 0),
+      numberValue(vehicleData.lastOilKM ?? vehicleData.serviceKm, 0),
+      numberValue(vehicleData.oilChangeInterval, 5000),
+      vehicleData.lastOilChangeDate || "",
+      new Date().toISOString()
+    ]
+  );
+  return formatVehicle(result.rows[0]);
+}
+
+export async function updateVehicle(plate, data = {}) {
+  const vehicle = await getVehicleByPlate(plate);
+  if (!vehicle) return { changes: 0 };
+
+  const currentKM = data.currentKM !== undefined || data.km !== undefined ? numberValue(data.currentKM ?? data.km, vehicle.currentKM) : vehicle.currentKM;
+  const lastOilKM = data.lastOilKM !== undefined || data.serviceKm !== undefined ? numberValue(data.lastOilKM ?? data.serviceKm, vehicle.lastOilKM) : vehicle.lastOilKM;
+  const parts = stringValue(plate).split(/\s+/).filter(Boolean);
+  const plateNumber = parts[0] || "";
+  const plateCode = parts.slice(1).join(" ").toUpperCase();
+
+  const result = await query(
+    `UPDATE vehicles SET current_km = $1, last_oil_km = $2, status = $3, location = $4, driver = $5, phone = $6, oil_change_interval = $7, last_oil_change_date = $8, updated_at = CURRENT_TIMESTAMP WHERE plate_number = $9 AND plate_code = $10`,
+    [
+      currentKM,
+      lastOilKM,
+      data.status ?? data.state ?? vehicle.status,
+      data.location ?? vehicle.location,
+      data.driverName ?? data.driver ?? vehicle.driver_name,
+      data.driverPhone ?? data.phone ?? vehicle.driver_phone,
+      numberValue(data.oilChangeInterval, data.oilChangeInterval),
+      data.lastOilChangeDate ?? vehicle.lastOilChangeDate,
+      plateNumber,
+      plateCode
+    ]
+  );
+  return { changes: result.rowCount };
+}
+
+export async function deleteVehicle(id) {
+  const result = await query(`DELETE FROM vehicles WHERE id = $1`, [id]);
+  return { changes: result.rowCount };
+}
+
+export async function deleteAllVehicles() {
+  const result = await query(`DELETE FROM vehicles`);
+  return { changes: result.rowCount };
+}
+
+
+export async function addReading(vehicleId, data = {}) {
+  const vehicleResult = await query(
+    `SELECT * FROM vehicles WHERE id = $1 LIMIT 1`,
+    [vehicleId]
+  );
+
+  const v = vehicleResult.rows[0];
+
+  if (!v) throw new Error("Vehicle not found");
+
+  const km = numberValue(data.readingKm, 0);
+
+  if (km <= 0) throw new Error("Reading must be positive");
+  if (km < numberValue(v.current_km, 0)) {
+    throw new Error("Reading must be >= current");
+  }
+
+  const readingDate =
+    stringValue(data.readingDate) ||
+    new Date().toISOString().slice(0, 10);
+
+  const plate = `${v.plate_number || ""} ${v.plate_code || ""}`.trim();
+
+  await query(
+    `INSERT INTO km_records
+      (vehicle_id, plate, reading_km, reading_date, notes)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [
+      vehicleId,
+      plate,
+      km,
+      readingDate,
+      stringValue(data.notes)
+    ]
+  );
+
+  await query(
+    `UPDATE vehicles
+     SET current_km = $1,
+         meter_updated_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $2`,
+    [km, vehicleId]
+  );
+
+  return getVehicleById(vehicleId);
+}
+
+export async function listReadings(vehicleId) {
+  const result = await query(
+    `SELECT *
+     FROM km_records
+     WHERE vehicle_id = $1
+     ORDER BY reading_date DESC, id DESC
+     LIMIT 50`,
+    [vehicleId]
+  );
+
+  return result.rows;
+}
+
+export async function changeOil(vehicleId, data = {}) {
+  const vehicleResult = await query(
+    `SELECT * FROM vehicles WHERE id = $1 LIMIT 1`,
+    [vehicleId]
+  );
+
+  const v = vehicleResult.rows[0];
+
+  if (!v) throw new Error("Vehicle not found");
+
+  const currentKM = numberValue(v.current_km, 0);
+
+  if (!currentKM) {
+    throw new Error("No current reading");
+  }
+
+  const oilDate =
+    stringValue(data.oilChangeDate) ||
+    new Date().toISOString().slice(0, 10);
+
+  const changedBy =
+    stringValue(data.changedBy) || "Driver";
+
+  const notes = stringValue(data.notes);
+
+  const plate = `${v.plate_number || ""} ${v.plate_code || ""}`.trim();
+
+  await query(
+    `INSERT INTO oil_changes
+      (vehicle_id, oil_change_km, oil_change_date, changed_by, notes)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [
+      vehicleId,
+      currentKM,
+      oilDate,
+      changedBy,
+      notes
+    ]
+  );
+
+  await query(
+    `UPDATE vehicles
+     SET last_oil_km = $1,
+         last_oil_change_date = $2,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $3`,
+    [
+      currentKM,
+      oilDate,
+      vehicleId
+    ]
+  );
+
+  await query(
+    `INSERT INTO km_records
+      (vehicle_id, plate, reading_km, reading_date, is_oil_change, notes)
+     VALUES ($1, $2, $3, $4, 1, $5)`,
+    [
+      vehicleId,
+      plate,
+      currentKM,
+      oilDate,
+      "Oil change"
+    ]
+  );
+
+  return getVehicleById(vehicleId);
+}
+
+export async function listOilChanges(vehicleId) {
+  const result = await query(
+    `SELECT *
+     FROM oil_changes
+     WHERE vehicle_id = $1
+     ORDER BY oil_change_date DESC, id DESC
+     LIMIT 20`,
+    [vehicleId]
+  );
+
+  return result.rows;
+}
+// ============================================================
+// TICKETS - POSTGRESQL
+// ============================================================
+
+export async function createTicket(data = {}) {
+  const result = await query(
+    `INSERT INTO tickets
+      (vehicle_id, title, location, category, priority, status,
+       description, reported_by, opened_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_TIMESTAMP)
+     RETURNING *`,
+    [
+      data.vehicleId || null,
+      stringValue(data.title),
+      stringValue(data.location),
+      stringValue(data.category),
+      stringValue(data.priority) || "Medium",
+      stringValue(data.status) || "Open",
+      stringValue(data.description),
+      stringValue(data.reportedBy || data.reporter)
+    ]
+  );
+
+  return result.rows[0];
+}
+
+export async function listTickets(filters = {}) {
+  let sql = `SELECT * FROM tickets WHERE 1=1`;
+  const params = [];
+
+  if (filters.status) {
+    params.push(filters.status);
+    sql += ` AND status = $${params.length}`;
+  }
+
+  if (filters.vehicleId) {
+    params.push(filters.vehicleId);
+    sql += ` AND vehicle_id = $${params.length}`;
+  }
+
+  if (filters.reportedBy) {
+    params.push(filters.reportedBy);
+    sql += ` AND reported_by = $${params.length}`;
+  }
+
+  sql += ` ORDER BY opened_at DESC, id DESC`;
+
+  const result = await query(sql, params);
+  return result.rows;
+}
+
+export async function closeTicket(id) {
+  const result = await query(
+    `UPDATE tickets
+     SET status = 'Closed',
+         closed_at = CURRENT_TIMESTAMP
+     WHERE id = $1`,
+    [id]
+  );
+
+  return { changes: result.rowCount };
+}
+
+export async function deleteAllTickets() {
+  const result = await query(`DELETE FROM tickets`);
+  return { changes: result.rowCount };
+}
+
+export async function acknowledgeTicket(id, data = {}) {
+  const acknowledgedBy =
+    stringValue(
+      data.acknowledgedBy ||
+      data.username ||
+      data.user
+    ) || "System";
+
+  const result = await query(
+    `UPDATE tickets
+     SET acknowledged_at = CURRENT_TIMESTAMP,
+         acknowledged_by = $1
+     WHERE id = $2`,
+    [acknowledgedBy, id]
+  );
+
+  return { changes: result.rowCount };
+}
+
+export async function closeTicketWithNotes(id, data = {}) {
+  const closedBy =
+    stringValue(
+      data.closedBy ||
+      data.username ||
+      data.user
+    ) || "System";
+
+  const resolutionNotes =
+    stringValue(
+      data.resolutionNotes ||
+      data.notes
+    );
+
+  const result = await query(
+    `UPDATE tickets
+     SET status = 'Closed',
+         closed_at = CURRENT_TIMESTAMP,
+         closed_by = $1,
+         resolution_notes = $2
+     WHERE id = $3`,
+    [closedBy, resolutionNotes, id]
+  );
+
+  return { changes: result.rowCount };
+}
+
+export async function listTicketsByReporter(reporter) {
+  const result = await query(
+    `SELECT *
+     FROM tickets
+     WHERE reported_by = $1
+     ORDER BY opened_at DESC, id DESC`,
+    [reporter]
+  );
+
+  return result.rows;
+}
+
+export async function getReporterStats(reporter) {
+  const result = await query(
+    `SELECT
+       COUNT(*)::int AS total,
+       COUNT(*) FILTER (WHERE status = 'Open')::int AS open,
+       COUNT(*) FILTER (WHERE status = 'Closed')::int AS closed,
+       COUNT(*) FILTER (WHERE status = 'Acknowledged')::int AS acknowledged
+     FROM tickets
+     WHERE reported_by = $1`,
+    [reporter]
+  );
+
+  return result.rows[0];
+}
+
+
+// ============================================================
+// DEFAULT EXPORT
+// ============================================================
+
+export default {
+  listVehicles,
+  getVehicleById,
+  getVehicleByPlate,
+  createVehicle,
+  updateVehicle,
+  deleteVehicle,
+  deleteAllVehicles,
+
+  addReading,
+  listReadings,
+  changeOil,
+  listOilChanges,
+
+  createTicket,
+  listTickets,
+  closeTicket,
+  deleteAllTickets,
+  acknowledgeTicket,
+  closeTicketWithNotes,
+  listTicketsByReporter,
+  getReporterStats
+};
+// ============================================================
+// SITES / CAMPS - POSTGRESQL
+// ============================================================
+
+export async function listSites() {
+  const result = await query(`
+    SELECT *
+    FROM sites
+    ORDER BY id ASC
+  `);
+
+  return result.rows;
+}
+
+export async function getSite(id) {
+  const result = await query(
+    `SELECT * FROM sites WHERE id = $1`,
+    [id]
+  );
+
+  return result.rows[0] || null;
+}
+
+export async function createSite(data = {}) {
+  const code = data.code || null;
+  const name = data.name || data.siteName || "";
+  const region = data.region || null;
+  const campusManager = data.campus_manager || data.campusManager || null;
+  const phone = data.phone || null;
+  const notes = data.notes || null;
+  const status = data.status || "Active";
+
+  if (!name.trim()) {
+    throw new Error("Site name is required");
+  }
+
+  const result = await query(
+    `INSERT INTO sites
+      (code, name, region, campus_manager, phone, notes, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING *`,
+    [
+      code,
+      name.trim(),
+      region,
+      campusManager,
+      phone,
+      notes,
+      status
+    ]
+  );
+
+  return result.rows[0];
+}
+
+export async function updateSite(id, data = {}) {
+  const result = await query(
+    `UPDATE sites
+     SET
+       code = COALESCE($1, code),
+       name = COALESCE($2, name),
+       region = COALESCE($3, region),
+       campus_manager = COALESCE($4, campus_manager),
+       phone = COALESCE($5, phone),
+       notes = COALESCE($6, notes),
+       status = COALESCE($7, status)
+     WHERE id = $8
+     RETURNING *`,
+    [
+      data.code ?? null,
+      data.name ?? data.siteName ?? null,
+      data.region ?? null,
+      data.campus_manager ?? data.campusManager ?? null,
+      data.phone ?? null,
+      data.notes ?? null,
+      data.status ?? null,
+      id
+    ]
+  );
+
+  if (!result.rows[0]) {
+    throw new Error("Site not found");
+  }
+
+  return result.rows[0];
+}
+
+export async function deleteSite(id) {
+  const result = await query(
+    `DELETE FROM sites
+     WHERE id = $1`,
+    [id]
+  );
+
+  if (result.rowCount === 0) {
+    throw new Error("Site not found");
+  }
+
+  return { changes: result.rowCount };
+}
+
+/* ============================================================
+   FULL POSTGRESQL ERP FUNCTIONS
+   Added by full SQLite -> PostgreSQL migration
+   ============================================================ */
+
+function pgNum(v, fallback = 0) {
+  if (v === undefined || v === null || v === "") return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function pgStr(v, fallback = "") {
+  if (v === undefined || v === null) return fallback;
+  return String(v).trim();
+}
+
+function pgMonthYear(date = new Date()) {
+  const d = new Date(date);
+  const month =
+    d.getFullYear() +
+    "-" +
+    String(d.getMonth() + 1).padStart(2, "0");
+
+  return {
+    month,
+    year: String(d.getFullYear())
+  };
+}
+
+function pgGenNo(prefix) {
+  return prefix + "-" + String(Date.now()).slice(-6);
+}
+
+function formatPGVehicle(v) {
+  const currentKm = Number(v.current_km || 0);
+  const lastOilKm = Number(v.last_oil_km || 0);
+  const interval = Number(v.oil_change_interval || 5000);
+  const sinceOil = Math.max(0, currentKm - lastOilKm);
+
+  let calculatedStatus = v.status || "Safe";
+
+  if (lastOilKm === 0 && currentKm > 0) {
+    calculatedStatus = "Urgent Overdue";
+  } else if (sinceOil >= interval) {
+    calculatedStatus = "Urgent Overdue";
+  } else if (sinceOil >= interval * 0.9) {
+    calculatedStatus = "Warning";
+  } else {
+    calculatedStatus = "Safe";
+  }
+
+  return {
+    id: v.id,
+    plate: `${v.plate_number || ""} ${v.plate_code || ""}`.trim(),
+    plateNumber: v.plate_number || "",
+    plateCode: v.plate_code || "",
+    make: v.make || "",
+    model: v.model || "",
+    year: v.year,
+    location: v.location || "",
+    driver: v.driver || "",
+    phone: v.phone || "",
+    currentKm,
+    lastOilKm,
+    sinceOil,
+    remaining: Math.max(0, interval - sinceOil),
+    interval,
+    status: calculatedStatus,
+    lastOilChangeDate: v.last_oil_change_date || null,
+    meterUpdatedAt: v.meter_updated_at || null,
+    createdAt: v.created_at,
+    updatedAt: v.updated_at
+  };
+}
+
+/* ============================================================
+   VEHICLES
+   ============================================================ */
+
+export async function getAlerts() {
+  const vehiclesResult = await query(`
+    SELECT *
+    FROM vehicles
+    ORDER BY id ASC
+  `);
+
+  const vehicles = vehiclesResult.rows.map(formatPGVehicle);
+
+  const urgent = vehicles.filter(v => v.status === "Urgent Overdue");
+  const warning = vehicles.filter(v => v.status === "Warning");
+
+  return {
+    total: vehicles.length,
+    urgent: urgent.length,
+    warning: warning.length,
+    safe: vehicles.filter(v => v.status === "Safe").length,
+    urgentVehicles: urgent,
+    warningVehicles: warning,
+    vehicles
+  };
+}
+
+export async function importVehicles(vehicles = []) {
+  if (!Array.isArray(vehicles)) {
+    throw new Error("Vehicles must be an array");
+  }
+
+  let imported = 0;
+
+  await transaction(async client => {
+    for (const data of vehicles) {
+      const plate = pgStr(data.plate || data.plateNumber);
+      const parts = plate.split(/\s+/);
+
+      const plateNumber =
+        pgStr(data.plateNumber) ||
+        parts[0] ||
+        "";
+
+      const plateCode =
+        pgStr(data.plateCode) ||
+        parts.slice(1).join(" ") ||
+        "";
+
+      if (!plateNumber) continue;
+
+      await client.query(`
+        INSERT INTO vehicles
+        (
+          plate_number,
+          plate_code,
+          make,
+          model,
+          year,
+          location,
+          driver,
+          phone,
+          current_km,
+          last_oil_km,
+          oil_change_interval,
+          last_oil_change_date,
+          status,
+          meter_updated_at
+        )
+        VALUES
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        ON CONFLICT (id) DO NOTHING
+      `, [
+        plateNumber,
+        plateCode,
+        pgStr(data.make, "Toyota"),
+        pgStr(data.model, "Hilux"),
+        pgNum(data.year, 2022),
+        pgStr(data.location),
+        pgStr(data.driver),
+        pgStr(data.phone),
+        pgNum(data.currentKm ?? data.current_km),
+        pgNum(data.lastOilKm ?? data.last_oil_km),
+        pgNum(data.interval ?? data.oil_change_interval, 5000),
+        data.lastOilChangeDate ?? data.last_oil_change_date ?? null,
+        pgStr(data.status, "Safe"),
+        data.meterUpdatedAt ?? data.meter_updated_at ?? null
+      ]);
+
+      imported++;
+    }
+  });
+
+  return { imported };
+}
+
+/* ============================================================
+   WORK ORDERS
+   ============================================================ */
+
+export async function listWorkOrders(filters = {}) {
+  let sql = `
+    SELECT *
+    FROM work_orders
+    WHERE 1=1
+  `;
+
+  const params = [];
+
+  if (filters.month) {
+    params.push(filters.month);
+    sql += ` AND month = $${params.length}`;
+  }
+
+  if (filters.year) {
+    params.push(String(filters.year));
+    sql += ` AND year = $${params.length}`;
+  }
+
+  if (filters.site) {
+    params.push(filters.site);
+    sql += ` AND site = $${params.length}`;
+  }
+
+  if (filters.status) {
+    params.push(filters.status);
+    sql += ` AND status = $${params.length}`;
+  }
+
+  sql += ` ORDER BY reported_date DESC, id DESC`;
+
+  const result = await query(sql, params);
+  return result.rows;
+}
+
+export async function getWorkOrder(id) {
+  const result = await query(
+    `SELECT * FROM work_orders WHERE id = $1`,
+    [id]
+  );
+
+  return result.rows[0] || null;
+}
+
+export async function createWorkOrder(data = {}) {
+  const { month, year } = pgMonthYear(
+    data.reportedDate || new Date()
+  );
+
+  const result = await query(`
+    INSERT INTO work_orders
+    (
+      wo_no,
+      site,
+      area,
+      category,
+      priority,
+      description,
+      assigned_to,
+      is_contractor,
+      contractor_name,
+      status,
+      reported_date,
+      completed_date,
+      final_cost,
+      contractor_cost,
+      labor_cost,
+      parts_cost,
+      closing_notes,
+      parts_used,
+      month,
+      year
+    )
+    VALUES
+    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+    RETURNING *
+  `, [
+    pgStr(data.woNo) || pgGenNo("WO"),
+    pgStr(data.site),
+    pgStr(data.area),
+    pgStr(data.category, "General"),
+    pgStr(data.priority, "Medium"),
+    pgStr(data.description),
+    pgStr(data.assignedTo ?? data.assigned_to),
+    data.isContractor ? 1 : 0,
+    pgStr(data.contractorName ?? data.contractor_name),
+    pgStr(data.status, "Open"),
+    data.reportedDate ?? data.reported_date ?? new Date(),
+    data.completedDate ?? data.completed_date ?? null,
+    pgNum(data.finalCost ?? data.final_cost),
+    pgNum(data.contractorCost ?? data.contractor_cost),
+    pgNum(data.laborCost ?? data.labor_cost),
+    pgNum(data.partsCost ?? data.parts_cost),
+    pgStr(data.closingNotes ?? data.closing_notes),
+    pgStr(data.partsUsed ?? data.parts_used),
+    month,
+    year
+  ]);
+
+  return result.rows[0];
+}
+
+export async function updateWorkOrder(id, data = {}) {
+  const current = await getWorkOrder(id);
+
+  if (!current) {
+    throw new Error("Work order not found");
+  }
+
+  const result = await query(`
+    UPDATE work_orders
+    SET
+      wo_no = $1,
+      site = $2,
+      area = $3,
+      category = $4,
+      priority = $5,
+      description = $6,
+      assigned_to = $7,
+      is_contractor = $8,
+      contractor_name = $9,
+      status = $10,
+      reported_date = $11,
+      completed_date = $12,
+      final_cost = $13,
+      contractor_cost = $14,
+      labor_cost = $15,
+      parts_cost = $16,
+      closing_notes = $17,
+      parts_used = $18,
+      month = $19,
+      year = $20,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = $21
+    RETURNING *
+  `, [
+    data.woNo ?? current.wo_no,
+    data.site ?? current.site,
+    data.area ?? current.area,
+    data.category ?? current.category,
+    data.priority ?? current.priority,
+    data.description ?? current.description,
+    data.assignedTo ?? data.assigned_to ?? current.assigned_to,
+    data.isContractor === undefined
+      ? current.is_contractor
+      : (data.isContractor ? 1 : 0),
+    data.contractorName ?? data.contractor_name ?? current.contractor_name,
+    data.status ?? current.status,
+    data.reportedDate ?? data.reported_date ?? current.reported_date,
+    data.completedDate ?? data.completed_date ?? current.completed_date,
+    data.finalCost ?? data.final_cost ?? current.final_cost,
+    data.contractorCost ?? data.contractor_cost ?? current.contractor_cost,
+    data.laborCost ?? data.labor_cost ?? current.labor_cost,
+    data.partsCost ?? data.parts_cost ?? current.parts_cost,
+    data.closingNotes ?? data.closing_notes ?? current.closing_notes,
+    data.partsUsed ?? data.parts_used ?? current.parts_used,
+    data.month ?? current.month,
+    data.year ?? current.year,
+    id
+  ]);
+
+  return result.rows[0];
+}
+
+export async function closeWorkOrder(id, data = {}) {
+  const result = await query(`
+    UPDATE work_orders
+    SET
+      status = 'Closed',
+      completed_date = CURRENT_DATE,
+      final_cost = $1,
+      contractor_cost = $2,
+      labor_cost = $3,
+      parts_cost = $4,
+      closing_notes = $5,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = $6
+    RETURNING *
+  `, [
+    pgNum(data.finalCost ?? data.final_cost),
+    pgNum(data.contractorCost ?? data.contractor_cost),
+    pgNum(data.laborCost ?? data.labor_cost),
+    pgNum(data.partsCost ?? data.parts_cost),
+    pgStr(data.closingNotes ?? data.closing_notes),
+    id
+  ]);
+
+  if (!result.rows[0]) {
+    throw new Error("Work order not found");
+  }
+
+  return result.rows[0];
+}
+
+export async function deleteWorkOrder(id) {
+  const result = await query(
+    `DELETE FROM work_orders WHERE id = $1`,
+    [id]
+  );
+
+  if (!result.rowCount) {
+    throw new Error("Work order not found");
+  }
+
+  return { changes: result.rowCount };
+}
+
+/* ============================================================
+   PROJECTS
+   ============================================================ */
+
+export async function listProjects(filters = {}) {
+  let sql = `SELECT * FROM projects WHERE 1=1`;
+  const params = [];
+
+  if (filters.month) {
+    params.push(filters.month);
+    sql += ` AND month = $${params.length}`;
+  }
+
+  if (filters.year) {
+    params.push(String(filters.year));
+    sql += ` AND year = $${params.length}`;
+  }
+
+  if (filters.site) {
+    params.push(filters.site);
+    sql += ` AND site = $${params.length}`;
+  }
+
+  sql += ` ORDER BY created_at DESC, id DESC`;
+
+  const result = await query(sql, params);
+  return result.rows;
+}
+
+export async function getProject(id) {
+  const result = await query(
+    `SELECT * FROM projects WHERE id = $1`,
+    [id]
+  );
+
+  return result.rows[0] || null;
+}
+
+export async function createProject(data = {}) {
+  const { month, year } = pgMonthYear(
+    data.startDate || data.start_date || new Date()
+  );
+
+  const result = await query(`
+    INSERT INTO projects
+    (
+      project_no,
+      name,
+      description,
+      site,
+      project_type,
+      status,
+      budget,
+      spent,
+      start_date,
+      end_date,
+      manager,
+      contractor,
+      month,
+      year,
+      notes
+    )
+    VALUES
+    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+    RETURNING *
+  `, [
+    pgStr(data.projectNo ?? data.project_no) || pgGenNo("PRJ"),
+    pgStr(data.name, "New Project"),
+    pgStr(data.description),
+    pgStr(data.site),
+    pgStr(data.projectType ?? data.project_type, "Development"),
+    pgStr(data.status, "Active"),
+    pgNum(data.budget),
+    pgNum(data.spent),
+    data.startDate ?? data.start_date ?? new Date(),
+    data.endDate ?? data.end_date ?? null,
+    pgStr(data.manager),
+    pgStr(data.contractor),
+    month,
+    year,
+    pgStr(data.notes)
+  ]);
+
+  return result.rows[0];
+}
+
+export async function updateProject(id, data = {}) {
+  const current = await getProject(id);
+
+  if (!current) {
+    throw new Error("Project not found");
+  }
+
+  const result = await query(`
+    UPDATE projects
+    SET
+      project_no = $1,
+      name = $2,
+      description = $3,
+      site = $4,
+      project_type = $5,
+      status = $6,
+      budget = $7,
+      spent = $8,
+      start_date = $9,
+      end_date = $10,
+      manager = $11,
+      contractor = $12,
+      month = $13,
+      year = $14,
+      notes = $15,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = $16
+    RETURNING *
+  `, [
+    data.projectNo ?? data.project_no ?? current.project_no,
+    data.name ?? current.name,
+    data.description ?? current.description,
+    data.site ?? current.site,
+    data.projectType ?? data.project_type ?? current.project_type,
+    data.status ?? current.status,
+    data.budget ?? current.budget,
+    data.spent ?? current.spent,
+    data.startDate ?? data.start_date ?? current.start_date,
+    data.endDate ?? data.end_date ?? current.end_date,
+    data.manager ?? current.manager,
+    data.contractor ?? current.contractor,
+    data.month ?? current.month,
+    data.year ?? current.year,
+    data.notes ?? current.notes,
+    id
+  ]);
+
+  return result.rows[0];
+}
+
+export async function deleteProject(id) {
+  const result = await query(
+    `DELETE FROM projects WHERE id = $1`,
+    [id]
+  );
+
+  if (!result.rowCount) {
+    throw new Error("Project not found");
+  }
+
+  return { changes: result.rowCount };
+}
+
+/* ============================================================
+   PURCHASES
+   ============================================================ */
+
+export async function listPurchases(filters = {}) {
+  let sql = `SELECT * FROM purchases WHERE 1=1`;
+  const params = [];
+
+  if (filters.month) {
+    params.push(filters.month);
+    sql += ` AND month = $${params.length}`;
+  }
+
+  if (filters.year) {
+    params.push(String(filters.year));
+    sql += ` AND year = $${params.length}`;
+  }
+
+  if (filters.referenceNo || filters.reference_no) {
+    params.push(filters.referenceNo ?? filters.reference_no);
+    sql += ` AND reference_no = $${params.length}`;
+  }
+
+  sql += ` ORDER BY purchase_date DESC, id DESC`;
+
+  const result = await query(sql, params);
+  return result.rows;
+}
+
+export async function createPurchase(data = {}) {
+  const purchaseDate =
+    data.purchaseDate ??
+    data.purchase_date ??
+    new Date();
+
+  const { month, year } = pgMonthYear(purchaseDate);
+
+  const quantity = pgNum(data.quantity, 1);
+  const unitCost = pgNum(data.unitCost ?? data.unit_cost);
+  const totalCost =
+    data.totalCost !== undefined || data.total_cost !== undefined
+      ? pgNum(data.totalCost ?? data.total_cost)
+      : quantity * unitCost;
+
+  const result = await query(`
+    INSERT INTO purchases
+    (
+      purchase_no,
+      type,
+      reference_no,
+      item_name,
+      quantity,
+      unit_cost,
+      total_cost,
+      supplier,
+      purchased_by,
+      purchase_date,
+      month,
+      year,
+      notes
+    )
+    VALUES
+    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+    RETURNING *
+  `, [
+    pgStr(data.purchaseNo ?? data.purchase_no) || pgGenNo("PUR"),
+    pgStr(data.type, "Work Order"),
+    pgStr(data.referenceNo ?? data.reference_no),
+    pgStr(data.itemName ?? data.item_name),
+    quantity,
+    unitCost,
+    totalCost,
+    pgStr(data.supplier),
+    pgStr(data.purchasedBy ?? data.purchased_by, "Company"),
+    purchaseDate,
+    month,
+    year,
+    pgStr(data.notes)
+  ]);
+
+  return result.rows[0];
+}
+
+export async function deletePurchase(id) {
+  const result = await query(
+    `DELETE FROM purchases WHERE id = $1`,
+    [id]
+  );
+
+  if (!result.rowCount) {
+    throw new Error("Purchase not found");
+  }
+
+  return { changes: result.rowCount };
+}
+
+/* ============================================================
+   DRIVERS
+   ============================================================ */
+
+export async function listDrivers() {
+  const result = await query(`
+    SELECT
+      d.*,
+      CASE
+        WHEN v.id IS NOT NULL
+        THEN CONCAT(v.plate_number, ' ', v.plate_code)
+        ELSE NULL
+      END AS vehicle_plate
+    FROM drivers d
+    LEFT JOIN vehicles v
+      ON v.id = d.vehicle_id
+    ORDER BY d.name ASC
+  `);
+
+  return result.rows.map(d => ({
+    ...d,
+    licenseNo: d.license_no,
+    licenseExpiry: d.license_expiry,
+    vehicleId: d.vehicle_id,
+    vehiclePlate: d.vehicle_plate
+  }));
+}
+
+export async function getDriver(id) {
+  const result = await query(`
+    SELECT
+      d.*,
+      CASE
+        WHEN v.id IS NOT NULL
+        THEN CONCAT(v.plate_number, ' ', v.plate_code)
+        ELSE NULL
+      END AS vehicle_plate
+    FROM drivers d
+    LEFT JOIN vehicles v
+      ON v.id = d.vehicle_id
+    WHERE d.id = $1
+  `, [id]);
+
+  if (!result.rows[0]) return null;
+
+  const d = result.rows[0];
+
+  return {
+    ...d,
+    licenseNo: d.license_no,
+    licenseExpiry: d.license_expiry,
+    vehicleId: d.vehicle_id,
+    vehiclePlate: d.vehicle_plate
+  };
+}
+
+export async function createDriver(data = {}) {
+  const result = await query(`
+    INSERT INTO drivers
+    (
+      name,
+      phone,
+      license_no,
+      license_expiry,
+      nationality,
+      vehicle_id,
+      status,
+      notes
+    )
+    VALUES
+    ($1,$2,$3,$4,$5,$6,$7,$8)
+    RETURNING *
+  `, [
+    pgStr(data.name),
+    pgStr(data.phone),
+    pgStr(data.licenseNo ?? data.license_no),
+    data.licenseExpiry ?? data.license_expiry ?? null,
+    pgStr(data.nationality),
+    data.vehicleId ?? data.vehicle_id ?? null,
+    pgStr(data.status, "Active"),
+    pgStr(data.notes)
+  ]);
+
+  return result.rows[0];
+}
+
+export async function updateDriver(id, data = {}) {
+  const current = await getDriver(id);
+
+  if (!current) {
+    throw new Error("Driver not found");
+  }
+
+  const result = await query(`
+    UPDATE drivers
+    SET
+      name = $1,
+      phone = $2,
+      license_no = $3,
+      license_expiry = $4,
+      nationality = $5,
+      vehicle_id = $6,
+      status = $7,
+      notes = $8,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = $9
+    RETURNING *
+  `, [
+    data.name ?? current.name,
+    data.phone ?? current.phone,
+    data.licenseNo ?? data.license_no ?? current.license_no,
+    data.licenseExpiry ?? data.license_expiry ?? current.license_expiry,
+    data.nationality ?? current.nationality,
+    data.vehicleId ?? data.vehicle_id ?? current.vehicle_id,
+    data.status ?? current.status,
+    data.notes ?? current.notes,
+    id
+  ]);
+
+  return result.rows[0];
+}
+
+export async function deleteDriver(id) {
+  const result = await query(
+    `DELETE FROM drivers WHERE id = $1`,
+    [id]
+  );
+
+  if (!result.rowCount) {
+    throw new Error("Driver not found");
+  }
+
+  return { changes: result.rowCount };
+}
+
+/* ============================================================
+   WAREHOUSE TABLES
+   ============================================================ */
+
+export async function ensureWarehouseTables() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS warehouse_locations (
+      id SERIAL PRIMARY KEY,
+      code TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      site TEXT,
+      status TEXT DEFAULT 'ACTIVE',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS warehouse_stock (
+      id SERIAL PRIMARY KEY,
+      item_code TEXT NOT NULL,
+      location_code TEXT NOT NULL,
+      quantity DOUBLE PRECISION DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(item_code, location_code)
+    )
+  `);
+
+  const locations = [
+    ["MAIN", "Main Warehouse", "Main"],
+    ["UQL", "Uqlat Al Soqour", "Uqlat Al Soqour"],
+    ["HAD", "Al Hadar", "Al Hadar"],
+    ["SAB", "Al Sabiyah", "Al Sabiyah"],
+    ["QUW", "Al Quwayiyah", "Al Quwayiyah"],
+    ["MAH", "Mahd ad Dhahab", "Mahd ad Dhahab"],
+    ["WB", "Wadi Beddah", "Wadi Beddah"],
+    ["HUL", "Al Hulifa", "Al Hulifa"]
+  ];
+
+  for (const [code, name, site] of locations) {
+    await query(`
+      INSERT INTO warehouse_locations
+        (code, name, site)
+      VALUES ($1,$2,$3)
+      ON CONFLICT (code) DO NOTHING
+    `, [code, name, site]);
+  }
+
+  return true;
+}
+
+/* ============================================================
+   INVENTORY
+   ============================================================ */
+
+export async function listInventory() {
+  const result = await query(`
+    SELECT *
+    FROM inventory
+    ORDER BY name ASC, id ASC
+  `);
+
+  return result.rows;
+}
+
+export async function getInventoryItem(id) {
+  const result = await query(`
+    SELECT *
+    FROM inventory
+    WHERE id::text = $1
+       OR code = $1
+    LIMIT 1
+  `, [String(id)]);
+
+  return result.rows[0] || null;
+}
+
+export async function createInventoryItem(data = {}) {
+  const result = await query(`
+    INSERT INTO inventory
+    (
+      code,
+      name,
+      category,
+      unit,
+      quantity,
+      min_stock,
+      unit_cost,
+      location,
+      supplier,
+      status,
+      notes
+    )
+    VALUES
+    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+    RETURNING *
+  `, [
+    pgStr(data.code),
+    pgStr(data.name),
+    pgStr(data.category, "General"),
+    pgStr(data.unit, "PCS"),
+    pgNum(data.quantity),
+    pgNum(data.minStock ?? data.min_stock, 5),
+    pgNum(data.unitCost ?? data.unit_cost),
+    pgStr(data.location, "Main Warehouse"),
+    pgStr(data.supplier),
+    pgStr(data.status, "ACTIVE"),
+    pgStr(data.notes)
+  ]);
+
+  return result.rows[0];
+}
+
+export async function updateInventoryItem(id, data = {}) {
+  const current = await getInventoryItem(id);
+
+  if (!current) {
+    throw new Error("Inventory item not found");
+  }
+
+  const result = await query(`
+    UPDATE inventory
+    SET
+      code = $1,
+      name = $2,
+      category = $3,
+      unit = $4,
+      quantity = $5,
+      min_stock = $6,
+      unit_cost = $7,
+      location = $8,
+      supplier = $9,
+      status = $10,
+      notes = $11,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = $12
+    RETURNING *
+  `, [
+    data.code ?? current.code,
+    data.name ?? current.name,
+    data.category ?? current.category,
+    data.unit ?? current.unit,
+    data.quantity ?? current.quantity,
+    data.minStock ?? data.min_stock ?? current.min_stock,
+    data.unitCost ?? data.unit_cost ?? current.unit_cost,
+    data.location ?? current.location,
+    data.supplier ?? current.supplier,
+    data.status ?? current.status,
+    data.notes ?? current.notes,
+    current.id
+  ]);
+
+  return result.rows[0];
+}
+
+export async function deleteInventoryItem(id) {
+  const current = await getInventoryItem(id);
+
+  if (!current) {
+    throw new Error("Inventory item not found");
+  }
+
+  const result = await query(
+    `DELETE FROM inventory WHERE id = $1`,
+    [current.id]
+  );
+
+  return { changes: result.rowCount };
+}
+
+export async function stockIn(data = {}) {
+  await ensureWarehouseTables();
+
+  const item = await getInventoryItem(
+    data.itemCode ?? data.item_code ?? data.id
+  );
+
+  if (!item) {
+    throw new Error("Inventory item not found");
+  }
+
+  const qty = pgNum(data.quantity);
+
+  if (qty <= 0) {
+    throw new Error("Quantity must be greater than zero");
+  }
+
+  const toLocation =
+    pgStr(data.toLocation ?? data.to_location) ||
+    item.location ||
+    "Main Warehouse";
+
+  return await transaction(async client => {
+    await client.query(`
+      UPDATE inventory
+      SET
+        quantity = quantity + $1,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+    `, [qty, item.id]);
+
+    await client.query(`
+      INSERT INTO stock_transactions
+      (
+        type,
+        item_code,
+        item_name,
+        quantity,
+        from_location,
+        to_location,
+        reference_no,
+        notes
+      )
+      VALUES
+      ('IN',$1,$2,$3,NULL,$4,$5,$6)
+    `, [
+      item.code,
+      item.name,
+      qty,
+      toLocation,
+      pgStr(data.referenceNo ?? data.reference_no),
+      pgStr(data.notes)
+    ]);
+
+    const result = await client.query(`
+      SELECT *
+      FROM inventory
+      WHERE id = $1
+    `, [item.id]);
+
+    return result.rows[0];
+  });
+}
+
+export async function stockOut(data = {}) {
+  await ensureWarehouseTables();
+
+  const item = await getInventoryItem(
+    data.itemCode ?? data.item_code ?? data.id
+  );
+
+  if (!item) {
+    throw new Error("Inventory item not found");
+  }
+
+  const qty = pgNum(data.quantity);
+
+  if (qty <= 0) {
+    throw new Error("Quantity must be greater than zero");
+  }
+
+  if (Number(item.quantity) < qty) {
+    throw new Error("Insufficient stock");
+  }
+
+  const fromLocation =
+    pgStr(data.fromLocation ?? data.from_location) ||
+    item.location ||
+    "Main Warehouse";
+
+  return await transaction(async client => {
+    await client.query(`
+      UPDATE inventory
+      SET
+        quantity = quantity - $1,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+    `, [qty, item.id]);
+
+    await client.query(`
+      INSERT INTO stock_transactions
+      (
+        type,
+        item_code,
+        item_name,
+        quantity,
+        from_location,
+        to_location,
+        reference_no,
+        notes
+      )
+      VALUES
+      ('OUT',$1,$2,$3,$4,NULL,$5,$6)
+    `, [
+      item.code,
+      item.name,
+      qty,
+      fromLocation,
+      pgStr(data.referenceNo ?? data.reference_no),
+      pgStr(data.notes)
+    ]);
+
+    const result = await client.query(`
+      SELECT *
+      FROM inventory
+      WHERE id = $1
+    `, [item.id]);
+
+    return result.rows[0];
+  });
+}
+
+export async function transferStock(data = {}) {
+  await ensureWarehouseTables();
+
+  const item = await getInventoryItem(
+    data.itemCode ?? data.item_code ?? data.id
+  );
+
+  if (!item) {
+    throw new Error("Inventory item not found");
+  }
+
+  const qty = pgNum(data.quantity);
+
+  if (qty <= 0) {
+    throw new Error("Quantity must be greater than zero");
+  }
+
+  if (Number(item.quantity) < qty) {
+    throw new Error("Insufficient stock");
+  }
+
+  const fromLocation =
+    pgStr(data.fromLocation ?? data.from_location) ||
+    item.location ||
+    "Main Warehouse";
+
+  const toLocation =
+    pgStr(data.toLocation ?? data.to_location);
+
+  if (!toLocation) {
+    throw new Error("Destination location is required");
+  }
+
+  if (fromLocation === toLocation) {
+    throw new Error("Source and destination cannot be the same");
+  }
+
+  return await transaction(async client => {
+    await client.query(`
+      UPDATE inventory
+      SET
+        quantity = quantity - $1,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+    `, [qty, item.id]);
+
+    await client.query(`
+      INSERT INTO stock_transactions
+      (
+        type,
+        item_code,
+        item_name,
+        quantity,
+        from_location,
+        to_location,
+        reference_no,
+        notes
+      )
+      VALUES
+      ('TRANSFER',$1,$2,$3,$4,$5,$6,$7)
+    `, [
+      item.code,
+      item.name,
+      qty,
+      fromLocation,
+      toLocation,
+      pgStr(data.referenceNo ?? data.reference_no),
+      pgStr(data.notes)
+    ]);
+
+    return {
+      success: true,
+      itemCode: item.code,
+      itemName: item.name,
+      quantity: qty,
+      fromLocation,
+      toLocation
+    };
+  });
+}
+
+export async function listStockTransactions() {
+  const result = await query(`
+    SELECT *
+    FROM stock_transactions
+    ORDER BY trans_date DESC, id DESC
+  `);
+
+  return result.rows;
+}
+
+export async function getLowStockItems() {
+  const result = await query(`
+    SELECT *
+    FROM inventory
+    WHERE status = 'ACTIVE'
+      AND quantity <= min_stock
+    ORDER BY quantity ASC, name ASC
+  `);
+
+  return result.rows;
+}
+
+/* ============================================================
+   PERIODIC MAINTENANCE
+   ============================================================ */
+
+export async function listPeriodicMaintenance(filters = {}) {
+  let sql = `
+    SELECT
+      pm.*,
+      CONCAT(v.plate_number, ' ', v.plate_code) AS vehicle_plate,
+      v.driver AS driver_name
+    FROM periodic_maintenance pm
+    LEFT JOIN vehicles v
+      ON v.id = pm.vehicle_id
+    WHERE 1=1
+  `;
+
+  const params = [];
+
+  if (filters.vehicleId || filters.vehicle_id) {
+    params.push(filters.vehicleId ?? filters.vehicle_id);
+    sql += ` AND pm.vehicle_id = $${params.length}`;
+  }
+
+  if (filters.type) {
+    params.push(filters.type);
+    sql += ` AND pm.type = $${params.length}`;
+  }
+
+  if (filters.status) {
+    params.push(filters.status);
+    sql += ` AND pm.status = $${params.length}`;
+  }
+
+  sql += ` ORDER BY pm.scheduled_date ASC, pm.id ASC`;
+
+  const result = await query(sql, params);
+  return result.rows;
+}
+
+export async function getPeriodicMaintenance(id) {
+  const result = await query(`
+    SELECT
+      pm.*,
+      CONCAT(v.plate_number, ' ', v.plate_code) AS vehicle_plate,
+      v.driver AS driver_name
+    FROM periodic_maintenance pm
+    LEFT JOIN vehicles v
+      ON v.id = pm.vehicle_id
+    WHERE pm.id = $1
+  `, [id]);
+
+  return result.rows[0] || null;
+}
+
+export async function createPeriodicMaintenance(data = {}) {
+  const vehicleId = data.vehicleId ?? data.vehicle_id;
+  const type = pgStr(data.type);
+  const scheduledDate =
+    data.scheduledDate ??
+    data.scheduled_date;
+
+  if (!vehicleId) {
+    throw new Error("Vehicle is required");
+  }
+
+  if (!type) {
+    throw new Error("Maintenance type is required");
+  }
+
+  if (!scheduledDate) {
+    throw new Error("Scheduled date is required");
+  }
+
+  const result = await query(`
+    INSERT INTO periodic_maintenance
+    (
+      vehicle_id,
+      type,
+      scheduled_date,
+      completed_date,
+      status,
+      technician,
+      cost,
+      notes
+    )
+    VALUES
+    ($1,$2,$3,$4,$5,$6,$7,$8)
+    RETURNING *
+  `, [
+    vehicleId,
+    type,
+    scheduledDate,
+    data.completedDate ?? data.completed_date ?? null,
+    pgStr(data.status, "Pending"),
+    pgStr(data.technician),
+    pgNum(data.cost),
+    pgStr(data.notes)
+  ]);
+
+  return result.rows[0];
+}
+
+export async function updatePeriodicMaintenance(id, data = {}) {
+  const current = await getPeriodicMaintenance(id);
+
+  if (!current) {
+    throw new Error("Periodic maintenance not found");
+  }
+
+  const result = await query(`
+    UPDATE periodic_maintenance
+    SET
+      vehicle_id = $1,
+      type = $2,
+      scheduled_date = $3,
+      completed_date = $4,
+      status = $5,
+      technician = $6,
+      cost = $7,
+      notes = $8
+    WHERE id = $9
+    RETURNING *
+  `, [
+    data.vehicleId ?? data.vehicle_id ?? current.vehicle_id,
+    data.type ?? current.type,
+    data.scheduledDate ?? data.scheduled_date ?? current.scheduled_date,
+    data.completedDate ?? data.completed_date ?? current.completed_date,
+    data.status ?? current.status,
+    data.technician ?? current.technician,
+    data.cost ?? current.cost,
+    data.notes ?? current.notes,
+    id
+  ]);
+
+  return result.rows[0];
+}
+
+export async function completePeriodicMaintenance(id, data = {}) {
+  const result = await query(`
+    UPDATE periodic_maintenance
+    SET
+      status = 'Completed',
+      completed_date = CURRENT_DATE,
+      technician = $1,
+      cost = $2,
+      notes = $3
+    WHERE id = $4
+    RETURNING *
+  `, [
+    pgStr(data.technician),
+    pgNum(data.cost),
+    pgStr(data.notes),
+    id
+  ]);
+
+  if (!result.rows[0]) {
+    throw new Error("Periodic maintenance not found");
+  }
+
+  return result.rows[0];
+}
+
+export async function deletePeriodicMaintenance(id) {
+  const result = await query(
+    `DELETE FROM periodic_maintenance WHERE id = $1`,
+    [id]
+  );
+
+  if (!result.rowCount) {
+    throw new Error("Periodic maintenance not found");
+  }
+
+  return { changes: result.rowCount };
+}
+
+export async function getPeriodicAlerts() {
+  const result = await query(`
+    SELECT
+      pm.*,
+      CONCAT(v.plate_number, ' ', v.plate_code) AS vehicle_plate,
+      v.driver AS driver_name
+    FROM periodic_maintenance pm
+    LEFT JOIN vehicles v
+      ON v.id = pm.vehicle_id
+    WHERE pm.status = 'Pending'
+      AND pm.scheduled_date <= CURRENT_DATE + INTERVAL '7 days'
+    ORDER BY pm.scheduled_date ASC
+  `);
+
+  const rows = result.rows;
+
+  return {
+    overdue: rows.filter(
+      r => new Date(r.scheduled_date) < new Date()
+    ),
+    dueSoon: rows.filter(
+      r => new Date(r.scheduled_date) >= new Date()
+    )
+  };
+}
+
+export async function generateScheduledMaintenance(monthsAhead = 6) {
+  const result = await query(`
+    SELECT id
+    FROM vehicles
+    ORDER BY id
+  `);
+
+  let created = 0;
+
+  const target = new Date();
+  target.setMonth(target.getMonth() + Number(monthsAhead || 6));
+
+  for (const vehicle of result.rows) {
+    for (const type of ["6_months_general", "inspection"]) {
+      const exists = await query(`
+        SELECT id
+        FROM periodic_maintenance
+        WHERE vehicle_id = $1
+          AND type = $2
+          AND status = 'Pending'
+        LIMIT 1
+      `, [vehicle.id, type]);
+
+      if (!exists.rows.length) {
+        await query(`
+          INSERT INTO periodic_maintenance
+          (
+            vehicle_id,
+            type,
+            scheduled_date,
+            status
+          )
+          VALUES ($1,$2,$3,'Pending')
+        `, [
+          vehicle.id,
+          type,
+          target.toISOString().slice(0,10)
+        ]);
+
+        created++;
+      }
+    }
+  }
+
+  return { created };
+}
+
+/* ============================================================
+   AUDIT LOG
+   ============================================================ */
+
+export async function logAction(data = {}) {
+  try {
+    const result = await query(`
+      INSERT INTO audit_log
+      (
+        user_id,
+        username,
+        action,
+        entity_type,
+        entity_id,
+        details,
+        ip_address
+      )
+      VALUES
+      ($1,$2,$3,$4,$5,$6,$7)
+      RETURNING *
+    `, [
+      data.userId ?? data.user_id ?? null,
+      pgStr(data.username),
+      pgStr(data.action, "UNKNOWN"),
+      pgStr(data.entityType ?? data.entity_type),
+      data.entityId ?? data.entity_id ?? null,
+      typeof data.details === "string"
+        ? data.details
+        : JSON.stringify(data.details ?? {}),
+      pgStr(data.ipAddress ?? data.ip_address)
+    ]);
+
+    return result.rows[0];
+  } catch (error) {
+    console.error("Audit log error:", error.message);
+    return null;
+  }
+}
+
+export async function listAuditLog(filters = {}) {
+  let sql = `
+    SELECT *
+    FROM audit_log
+    WHERE 1=1
+  `;
+
+  const params = [];
+
+  if (filters.username) {
+    params.push(filters.username);
+    sql += ` AND username = $${params.length}`;
+  }
+
+  if (filters.action) {
+    params.push(filters.action);
+    sql += ` AND action = $${params.length}`;
+  }
+
+  if (filters.entityType || filters.entity_type) {
+    params.push(filters.entityType ?? filters.entity_type);
+    sql += ` AND entity_type = $${params.length}`;
+  }
+
+  if (filters.fromDate || filters.from_date) {
+    params.push(filters.fromDate ?? filters.from_date);
+    sql += ` AND created_at >= $${params.length}`;
+  }
+
+  if (filters.toDate || filters.to_date) {
+    params.push(filters.toDate ?? filters.to_date);
+    sql += ` AND created_at <= $${params.length}`;
+  }
+
+  sql += ` ORDER BY created_at DESC, id DESC LIMIT 500`;
+
+  const result = await query(sql, params);
+  return result.rows;
+}
+
+export async function getAuditStats() {
+  const totalResult = await query(`
+    SELECT COUNT(*)::int AS total
+    FROM audit_log
+  `);
+
+  const todayResult = await query(`
+    SELECT COUNT(*)::int AS today
+    FROM audit_log
+    WHERE created_at >= CURRENT_DATE
+  `);
+
+  const usersResult = await query(`
+    SELECT
+      username,
+      COUNT(*)::int AS count
+    FROM audit_log
+    GROUP BY username
+    ORDER BY count DESC
+    LIMIT 10
+  `);
+
+  const actionsResult = await query(`
+    SELECT
+      action,
+      COUNT(*)::int AS count
+    FROM audit_log
+    GROUP BY action
+    ORDER BY count DESC
+    LIMIT 10
+  `);
+
+  return {
+    total: totalResult.rows[0].total,
+    today: todayResult.rows[0].today,
+    byUser: usersResult.rows,
+    byAction: actionsResult.rows
+  };
+}
+
+export async function clearAuditLog(olderThanDays = 90) {
+  const result = await query(`
+    DELETE FROM audit_log
+    WHERE created_at < CURRENT_TIMESTAMP
+      - ($1::text || ' days')::interval
+  `, [Number(olderThanDays)]);
+
+  return {
+    changes: result.rowCount
+  };
+}
+
+/* ============================================================
+   BUILDING DASHBOARD
+   ============================================================ */
+
+export async function getBuildingDashboard(filters = {}) {
+  const workOrders = await listWorkOrders(filters);
+  const projects = await listProjects(filters);
+  const purchases = await listPurchases(filters);
+
+  const woTotal = workOrders.length;
+
+  const woOpen = workOrders.filter(
+    w => String(w.status).toLowerCase() !== "closed"
+  ).length;
+
+  const woClosed = workOrders.filter(
+    w => String(w.status).toLowerCase() === "closed"
+  ).length;
+
+  const woContractor = workOrders.filter(
+    w => Number(w.is_contractor) === 1
+  ).length;
+
+  const woInternal = woTotal - woContractor;
+
+  const sum = (arr, field) =>
+    arr.reduce(
+      (total, row) => total + Number(row[field] || 0),
+      0
+    );
+
+  return {
+    workOrders: {
+      total: woTotal,
+      open: woOpen,
+      closed: woClosed,
+      contractor: woContractor,
+      internal: woInternal,
+      totalCost: sum(workOrders, "final_cost"),
+      contractorCost: sum(workOrders, "contractor_cost"),
+      laborCost: sum(workOrders, "labor_cost"),
+      partsCost: sum(workOrders, "parts_cost")
+    },
+    projects: {
+      total: projects.length,
+      budget: sum(projects, "budget"),
+      spent: sum(projects, "spent"),
+      list: projects
+    },
+    purchases: {
+      total: purchases.length,
+      totalCost: sum(purchases, "total_cost")
+    }
+  };
+}
+
+/* ============================================================
+   VEHICLE DASHBOARD
+   ============================================================ */
+
+export async function getDashboard() {
+  const vehiclesResult = await query(`
+    SELECT *
+    FROM vehicles
+    ORDER BY id ASC
+  `);
+
+  const vehicles = vehiclesResult.rows.map(formatPGVehicle);
+
+  const tickets = await listTickets();
+
+  return {
+    vehicles: {
+      total: vehicles.length,
+      urgent: vehicles.filter(v => v.status === "Urgent Overdue").length,
+      warning: vehicles.filter(v => v.status === "Warning").length,
+      safe: vehicles.filter(v => v.status === "Safe").length,
+      list: vehicles
+    },
+    tickets: {
+      total: tickets.length,
+      open: tickets.filter(
+        t => String(t.status).toLowerCase() !== "closed"
+      ).length,
+      closed: tickets.filter(
+        t => String(t.status).toLowerCase() === "closed"
+      ).length
+    },
+    alerts: await getAlerts()
+  };
+}
+
+/* ============================================================
+   MONTHLY REPORT
+   ============================================================ */
+
+export async function getMonthlyReport(filters = {}) {
+  const workOrders = await listWorkOrders(filters);
+  const projects = await listProjects(filters);
+  const purchases = await listPurchases(filters);
+
+  const months = {};
+
+  function getBucket(month) {
+    const key = month || "Unknown";
+
+    if (!months[key]) {
+      months[key] = {
+        month: key,
+        woCount: 0,
+        woCost: 0,
+        woContractor: 0,
+        woInternal: 0,
+        projCount: 0,
+        projSpent: 0,
+        purCount: 0,
+        purCost: 0,
+        purCompany: 0,
+        purContractor: 0,
+        total: 0
+      };
+    }
+
+    return months[key];
+  }
+
+  for (const w of workOrders) {
+    const b = getBucket(w.month);
+
+    b.woCount++;
+    b.woCost += Number(w.final_cost || 0);
+
+    if (Number(w.is_contractor) === 1) {
+      b.woContractor++;
+    } else {
+      b.woInternal++;
+    }
+  }
+
+  for (const p of projects) {
+    const b = getBucket(p.month);
+
+    b.projCount++;
+    b.projSpent += Number(p.spent || 0);
+  }
+
+  for (const p of purchases) {
+    const b = getBucket(p.month);
+
+    b.purCount++;
+    b.purCost += Number(p.total_cost || 0);
+
+    if (
+      String(p.purchased_by || "").toLowerCase()
+        .includes("contract")
+    ) {
+      b.purContractor += Number(p.total_cost || 0);
+    } else {
+      b.purCompany += Number(p.total_cost || 0);
+    }
+  }
+
+  const rows = Object.values(months)
+    .sort((a,b) => String(a.month).localeCompare(String(b.month)));
+
+  for (const row of rows) {
+    row.total =
+      row.woCost +
+      row.projSpent +
+      row.purCost;
+  }
+
+  const grandTotal =
+    rows.reduce((s,r) => s + r.total, 0);
+
+  const totalWO =
+    rows.reduce((s,r) => s + r.woCost, 0);
+
+  const totalProjects =
+    rows.reduce((s,r) => s + r.projSpent, 0);
+
+  const totalPurchases =
+    rows.reduce((s,r) => s + r.purCost, 0);
+
+  const totalContractor =
+    rows.reduce(
+      (s,r) => s + r.purContractor,
+      0
+    ) +
+    rows.reduce(
+      (s,r) => s + r.woContractor,
+      0
+    );
+
+  const totalInternal =
+    rows.reduce(
+      (s,r) => s + r.purCompany,
+      0
+    ) +
+    rows.reduce(
+      (s,r) => s + r.woInternal,
+      0
+    );
+
+  const total = totalContractor + totalInternal;
+
+  return {
+    rows,
+    summary: {
+      grandTotal,
+      totalWO,
+      totalProjects,
+      totalPurchases,
+      totalContractor,
+      totalInternal,
+      internalPercent:
+        total ? (totalInternal / total) * 100 : 0,
+      contractorPercent:
+        total ? (totalContractor / total) * 100 : 0
+    }
+  };
+}
+
+/* ============================================================
+   FINANCIAL REPORT
+   ============================================================ */
+
+export async function getFinancialReport() {
+  const MAINT_BASELINE = 20577;
+  const DEV_BASELINE = 132551;
+  const SALARY_PER_DEPT = 2200;
+
+  const workOrders = await listWorkOrders();
+  const projects = await listProjects();
+  const purchases = await listPurchases();
+
+  const months = {};
+
+  function bucket(month) {
+    const key = month || "Unknown";
+
+    if (!months[key]) {
+      months[key] = {
+        month: key,
+        contractorWO: 0,
+        contractorDev: 0,
+        partsWO: 0,
+        partsDev: 0,
+        otherPurchases: 0,
+        salary: SALARY_PER_DEPT,
+        totalLabor: 0,
+        totalParts: 0,
+        totalCost: 0,
+        maintActual: 0,
+        maintSavings: 0,
+        maintPct: 0,
+        devActual: 0,
+        devSavings: 0,
+        devPct: 0,
+        totalSavings: 0,
+        totalSavingsPct: 0
+      };
+    }
+
+    return months[key];
+  }
+
+  for (const w of workOrders) {
+    const b = bucket(w.month);
+
+    const contractor =
+      Number(w.contractor_cost || 0);
+
+    const labor =
+      Number(w.labor_cost || 0);
+
+    const parts =
+      Number(w.parts_cost || 0);
+
+    b.contractorWO += contractor;
+    b.totalLabor += labor;
+    b.partsWO += parts;
+  }
+
+  for (const p of projects) {
+    const b = bucket(p.month);
+
+    b.contractorDev +=
+      Number(p.spent || 0);
+  }
+
+  for (const p of purchases) {
+    const b = bucket(p.month);
+
+    const amount =
+      Number(p.total_cost || 0);
+
+    const type =
+      String(p.type || "").toLowerCase();
+
+    if (
+      type.includes("dev") ||
+      type.includes("project")
+    ) {
+      b.partsDev += amount;
+    } else if (
+      type.includes("work") ||
+      type.includes("order") ||
+      type.includes("maintenance")
+    ) {
+      b.partsWO += amount;
+    } else {
+      b.otherPurchases += amount;
+    }
+  }
+
+  for (const b of Object.values(months)) {
+    b.totalParts =
+      b.partsWO +
+      b.partsDev +
+      b.otherPurchases;
+
+    b.maintActual =
+      b.contractorWO +
+      b.partsWO +
+      b.totalLabor;
+
+    b.devActual =
+      b.contractorDev +
+      b.partsDev;
+
+    b.maintSavings =
+      MAINT_BASELINE - b.maintActual;
+
+    b.devSavings =
+      DEV_BASELINE - b.devActual;
+
+    b.totalCost =
+      b.maintActual +
+      b.devActual +
+      b.otherPurchases +
+      b.salary;
+
+    b.totalSavings =
+      b.maintSavings +
+      b.devSavings;
+
+    b.maintPct =
+      MAINT_BASELINE
+        ? (b.maintSavings / MAINT_BASELINE) * 100
+        : 0;
+
+    b.devPct =
+      DEV_BASELINE
+        ? (b.devSavings / DEV_BASELINE) * 100
+        : 0;
+
+    const baseline =
+      MAINT_BASELINE +
+      DEV_BASELINE +
+      b.salary;
+
+    b.totalSavingsPct =
+      baseline
+        ? (b.totalSavings / baseline) * 100
+        : 0;
+  }
+
+  const rows = Object.values(months)
+    .sort((a,b) =>
+      String(a.month).localeCompare(String(b.month))
+    );
+
+  const sum = field =>
+    rows.reduce(
+      (s,r) => s + Number(r[field] || 0),
+      0
+    );
+
+  const maintenanceTotalBaseline =
+    MAINT_BASELINE * rows.length;
+
+  const developmentTotalBaseline =
+    DEV_BASELINE * rows.length;
+
+  const totalSavings =
+    sum("totalSavings");
+
+  const baseline =
+    maintenanceTotalBaseline +
+    developmentTotalBaseline +
+    sum("salary");
+
+  return {
+    rows,
+
+    grand: {
+      monthCount: rows.length,
+      baseline,
+      maintenanceBaseline: MAINT_BASELINE,
+      developmentBaseline: DEV_BASELINE,
+      contractorWO: sum("contractorWO"),
+      contractorDev: sum("contractorDev"),
+      partsWO: sum("partsWO"),
+      partsDev: sum("partsDev"),
+      salary: sum("salary"),
+      totalCost: sum("totalCost"),
+      maintActual: sum("maintActual"),
+      maintSavings: sum("maintSavings"),
+      devActual: sum("devActual"),
+      devSavings: sum("devSavings"),
+      totalSavings,
+      totalSavingsPct:
+        baseline
+          ? (totalSavings / baseline) * 100
+          : 0,
+      maintenanceTotalBaseline,
+      developmentTotalBaseline,
+      maintTotalSavingsPct:
+        maintenanceTotalBaseline
+          ? (sum("maintSavings") /
+              maintenanceTotalBaseline) * 100
+          : 0,
+      devTotalSavingsPct:
+        developmentTotalBaseline
+          ? (sum("devSavings") /
+              developmentTotalBaseline) * 100
+          : 0
+    }
+  };
+}
+

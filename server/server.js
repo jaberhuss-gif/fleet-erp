@@ -473,7 +473,7 @@ app.get("/api/auth/me", requireAuth, async (req, res) => {
 });
 
 app.get("/api/users", requireRole("Owner"), async (req, res) => {
-  try { res.json({ success: true, users: listUsers() }); }
+  try { res.json({ success: true, users: await listUsers() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
@@ -801,6 +801,7 @@ app.listen(PORT, () => {
   console.log("Building APIs: /api/sites, /api/work-orders, /api/projects, /api/purchases");
   console.log("======================================");
 });
+
 
 
 

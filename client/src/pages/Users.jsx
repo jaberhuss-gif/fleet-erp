@@ -62,9 +62,14 @@ export default function Users() {
   };
 
   return (
-    <div className="panel">
+    <div>
+      {/* Gradient Header */}
+      <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #7c3aed 100%)', padding: '28px 24px', borderRadius: '12px', marginBottom: '20px', color: 'white' }}>
+        <h2 style={{ margin: 0, fontSize: '24px' }}>👥 Users Management</h2>
+        <p style={{ margin: '6px 0 0', opacity: 0.85, fontSize: '14px' }}>{users.length} registered users</p>
+      </div>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-        <h2 style={{ margin: 0 }}>Users Management ({users.length})</h2>
         <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(users, "users", [{key:"id",label:"ID"},{key:"username",label:"Username"},{key:"full_name",label:"Full Name"},{key:"role",label:"Role"},{key:"email",label:"Email"},{key:"phone",label:"Phone"},{key:"is_active",label:"Active"}])}>Export CSV</button><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
           {showForm ? 'Cancel' : '+ Add User'}
         </button>
@@ -83,7 +88,7 @@ export default function Users() {
             </div>
             <div className="form-group">
               <label>Password *</label>
-              <input type="text" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required placeholder="min 6 chars" />
+              <input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required placeholder="min 6 chars" />
             </div>
             <div className="form-group">
               <label>Full Name</label>

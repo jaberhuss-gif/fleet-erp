@@ -66,6 +66,12 @@ export default function AuditLog() {
 
   return (
     <div>
+      {/* Gradient Header */}
+      <div style={{ background: 'linear-gradient(135deg, #475569 0%, #1e293b 100%)', padding: '28px 24px', borderRadius: '12px', marginBottom: '20px', color: 'white' }}>
+        <h2 style={{ margin: 0, fontSize: '24px' }}>📋 Audit Log</h2>
+        <p style={{ margin: '6px 0 0', opacity: 0.85, fontSize: '14px' }}>Track all system activities</p>
+      </div>
+
       {message && <div className="alert alert-success">{message}</div>}
       {error && <div className="alert alert-error">{error}</div>}
 

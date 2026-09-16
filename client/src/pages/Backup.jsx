@@ -58,6 +58,12 @@ export default function Backup() {
 
   return (
     <div>
+      {/* Gradient Header */}
+      <div style={{ background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', padding: '28px 24px', borderRadius: '12px', marginBottom: '20px', color: 'white' }}>
+        <h2 style={{ margin: 0, fontSize: '24px' }}>💾 Database Backups</h2>
+        <p style={{ margin: '6px 0 0', opacity: 0.85, fontSize: '14px' }}>Create & manage restore points</p>
+      </div>
+
       {message && <div className="alert alert-success">{message}</div>}
       {error && <div className="alert alert-error">{error}</div>}
 

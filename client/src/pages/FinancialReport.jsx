@@ -102,14 +102,13 @@ export default function FinancialReport() {
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-        <div>
-          <h2 style={{ margin: 0 }}>💰 Financial Report</h2>
-          <p style={{ color: '#64748b', fontSize: '13px', marginTop: '4px' }}>
-            Baseline vs Actual — Maintenance & Development
-          </p>
-        </div>
+      {/* Gradient Header */}
+      <div style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', padding: '28px 24px', borderRadius: '12px', marginBottom: '20px', color: 'white' }}>
+        <h2 style={{ margin: 0, fontSize: '24px' }}>💰 Financial Report</h2>
+        <p style={{ margin: '6px 0 0', opacity: 0.85, fontSize: '14px' }}>Baseline vs Actual — Maintenance & Development</p>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
         <button className="print-btn no-print" onClick={() => printContent('Financial Report', 'Baseline vs Actual')}>
           🖨️ Print Report
         </button>

@@ -1,5 +1,4 @@
 ﻿import { useState, useEffect } from 'react';
-import { getVehicles } from '../api/client';
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
 import { printContent } from '../api/print';
@@ -27,8 +26,8 @@ export default function Vehicles({ onViewVehicle }) {
   const load = async () => {
     try {
       setLoading(true);
-      const res = await getVehicles();
-      setVehicles(res.vehicles || []);
+      const res = await api.get('/vehicles');
+      setVehicles(res.data.vehicles || []);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
@@ -137,19 +136,7 @@ export default function Vehicles({ onViewVehicle }) {
     e.target.value = '';
   };
 
-  const handleExport = () => {
-    const headers = ['plate', 'make', 'model', 'year', 'location', 'driver', 'phone', 'currentKm', 'lastOilKm', 'oilChangeInterval'];
-    const csv = [headers.join(',')];
-    vehicles.forEach(v => {
-      csv.push([v.plate, v.make, v.model, v.year, v.location, v.driver, v.phone, v.currentKm, v.lastOilKm, v.interval].join(','));
-    });
-    const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'vehicles.csv';
-    a.click();
-  };
+
 
   // Filter + Search
   const filtered = vehicles.filter(v => {

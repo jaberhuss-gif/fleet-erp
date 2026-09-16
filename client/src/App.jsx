@@ -4,7 +4,7 @@ import VehicleMaintenance from './pages/VehicleMaintenance';
 import Vehicles from './pages/Vehicles';
 import VehicleDetails from './pages/VehicleDetails';
 import Tickets from './pages/Tickets';
-import Charts from './pages/Charts';
+
 import Reports from './pages/Reports';
 import BuildingMaintenance from './pages/BuildingMaintenance';
 import Login from './pages/Login';
@@ -21,12 +21,12 @@ import AdvancedReports from './pages/AdvancedReports';
 import api from './api/client';
 
 const ROLE_TABS = {
-  Owner: ['gm', 'vehicles', 'drivers', 'periodic', 'tickets', 'troubleshooter', 'charts', 'reports', 'building', 'warehouse', 'maintenance', 'users', 'audit', 'backup', 'mytickets', 'advanced-reports'],
+  Owner: ['gm', 'vehicles', 'drivers', 'periodic', 'tickets', 'troubleshooter', 'reports', 'building', 'warehouse', 'maintenance', 'users', 'audit', 'backup', 'mytickets', 'advanced-reports'],
   GM: ['gm'],
   Accountant: ['reports', 'advanced-reports'],
   CampusManager: ['building', 'warehouse', 'troubleshooter'],
   Driver: ['maintenance', 'troubleshooter', 'mytickets'],
-  FleetSupervisor: ['gm', 'vehicles', 'drivers', 'periodic', 'tickets', 'troubleshooter', 'mytickets', 'charts', 'maintenance']
+  FleetSupervisor: ['gm', 'vehicles', 'drivers', 'periodic', 'tickets', 'troubleshooter', 'mytickets', 'maintenance']
 };
 
 const TAB_LABELS = {
@@ -38,7 +38,7 @@ const TAB_LABELS = {
   troubleshooter: '🧠 Troubleshooter',
   mytickets: '📋 My Tickets',
   'advanced-reports': '📊 Advanced Reports',
-  charts: 'Charts',
+
   reports: 'Reports',
   building: 'Building Maintenance',
   warehouse: 'Warehouse',
@@ -181,7 +181,7 @@ export default function App() {
         {tab === 'troubleshooter' && <Troubleshooter />}
         {tab === 'mytickets' && <MyTickets />}
         {tab === 'advanced-reports' && <AdvancedReports />}
-        {tab === 'charts' && <Charts />}
+
         {tab === 'reports' && <Reports />}
         {tab === 'building' && <BuildingMaintenance />}
         {tab === 'warehouse' && <Warehouse />}

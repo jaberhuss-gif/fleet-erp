@@ -41,6 +41,11 @@ export default function AdvancedReports() {
 
   return (
     <div>
+      {/* Gradient Header */}
+      <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #7c3aed 100%)', padding: '28px 24px', borderRadius: '12px', marginBottom: '20px', color: 'white' }}>
+        <h2 style={{ margin: 0, fontSize: '24px' }}>📊 Advanced Reports</h2>
+        <p style={{ margin: '6px 0 0', opacity: 0.85, fontSize: '14px' }}>Vehicle, Driver, Site & Executive reporting</p>
+      </div>
       <div className="sub-nav no-print">
         <button className={subTab === 'vehicle' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('vehicle')}>🚗 Vehicle Report</button>
         <button className={subTab === 'driver' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('driver')}>👤 Driver Report</button>

@@ -35,18 +35,19 @@ export default function FinancialReport() {
     partsWO: Number(m.partsWO || 0),
     salaryMaint: Number(m.salaryMaint || SALARY_MAINT),
     contractorDev: Number(m.contractorDev || 0),
+    partsDev: Number(m.partsDev || 0),
     salaryDev: Number(m.salaryDev || SALARY_DEV),
     employeeWOCount: Number(m.employeeWOCount || 0),
     contractorWOCount: Number(m.contractorWOCount || 0),
     internalProjectCount: Number(m.internalProjectCount || 0),
     contractorProjectCount: Number(m.contractorProjectCount || 0),
     maintActual: Number(m.contractorWO || 0) + Number(m.partsWO || 0) + Number(m.salaryMaint || SALARY_MAINT),
-    devActual: Number(m.contractorDev || 0) + Number(m.salaryDev || SALARY_DEV),
+    devActual: Number(m.contractorDev || 0) + Number(m.partsDev || 0) + Number(m.salaryDev || SALARY_DEV),
     maintSavings: MAINT_BASELINE - (Number(m.contractorWO || 0) + Number(m.partsWO || 0) + Number(m.salaryMaint || SALARY_MAINT)),
-    devSavings: DEV_BASELINE - (Number(m.contractorDev || 0) + Number(m.salaryDev || SALARY_DEV)),
+    devSavings: DEV_BASELINE - (Number(m.contractorDev || 0) + Number(m.partsDev || 0) + Number(m.salaryDev || SALARY_DEV)),
     maintPct: ((MAINT_BASELINE - (Number(m.contractorWO || 0) + Number(m.partsWO || 0) + Number(m.salaryMaint || SALARY_MAINT))) / MAINT_BASELINE) * 100,
-    devPct: ((DEV_BASELINE - (Number(m.contractorDev || 0) + Number(m.salaryDev || SALARY_DEV))) / DEV_BASELINE) * 100,
-    totalSavingsPct: (((MAINT_BASELINE + DEV_BASELINE) - (Number(m.contractorWO || 0) + Number(m.partsWO || 0) + Number(m.salaryMaint || SALARY_MAINT)) - (Number(m.contractorDev || 0) + Number(m.salaryDev || SALARY_DEV))) / (MAINT_BASELINE + DEV_BASELINE)) * 100
+    devPct: ((DEV_BASELINE - (Number(m.contractorDev || 0) + Number(m.partsDev || 0) + Number(m.salaryDev || SALARY_DEV))) / DEV_BASELINE) * 100,
+    totalSavingsPct: (((MAINT_BASELINE + DEV_BASELINE) - (Number(m.contractorWO || 0) + Number(m.partsWO || 0) + Number(m.salaryMaint || SALARY_MAINT)) - (Number(m.contractorDev || 0) + Number(m.partsDev || 0) + Number(m.salaryDev || SALARY_DEV))) / (MAINT_BASELINE + DEV_BASELINE)) * 100
   }));
 
   const maintBaselineTotal = MAINT_BASELINE * monthCount;
@@ -59,8 +60,9 @@ export default function FinancialReport() {
   const maintActualTotal = contractorWOTotal + partsWOTotal + salaryMaintTotal;
 
   const contractorDevTotal = monthlyData.reduce((s, m) => s + m.contractorDev, 0);
+  const partsDevTotal = monthlyData.reduce((s, m) => s + m.partsDev, 0);
   const salaryDevTotal = SALARY_DEV * monthCount;
-  const devActualTotal = contractorDevTotal + salaryDevTotal;
+  const devActualTotal = contractorDevTotal + partsDevTotal + salaryDevTotal;
 
   const totalActual = maintActualTotal + devActualTotal;
   const maintSavingsTotal = maintBaselineTotal - maintActualTotal;
@@ -75,6 +77,8 @@ export default function FinancialReport() {
   const internalProjectTotal = monthlyData.reduce((s, m) => s + m.internalProjectCount, 0);
   const contractorProjectCountTotal = monthlyData.reduce((s, m) => s + m.contractorProjectCount, 0);
 
+  const otherPurchasesTotal = monthlyData.reduce((s, m) => s + Number(m.otherPurchases || 0), 0);
+
   const getPctStyle = (pct) => {
     if (pct >= 70) return { bg: '#dcfce7', color: '#16a34a', icon: '🟢' };
     if (pct >= 40) return { bg: '#fef3c7', color: '#b45309', icon: '🟡' };
@@ -83,6 +87,18 @@ export default function FinancialReport() {
   };
 
   const fmt = (n) => Number(n).toLocaleString();
+
+  // Format month key to display name
+  const fmtMonth = (m) => {
+    if (!m || m === 'Unknown') return 'Unknown';
+    const match = m.match(/^(\d{4})-(\d{2})$/);
+    if (match) {
+      const [, y, mo] = match;
+      const names = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return names[parseInt(mo)] + ' ' + y;
+    }
+    return m;
+  };
 
   return (
     <div>
@@ -97,6 +113,15 @@ export default function FinancialReport() {
         <button className="print-btn no-print" onClick={() => printContent('Financial Report', 'Baseline vs Actual')}>
           🖨️ Print Report
         </button>
+      </div>
+
+      {/* Formula Explanation */}
+      <div style={{ marginBottom: '20px', padding: '14px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>
+        <strong>📐 Formula:</strong><br />
+        <strong>Maintenance:</strong> Actual = Contractor WO + Parts WO + Salary (2,200) | Savings = Baseline (20,577) − Actual<br />
+        <strong>Development:</strong> Actual = Contractor Dev + Parts Dev + Salary (2,200) | Savings = Baseline (132,551) − Actual<br />
+        <strong>Parts WO:</strong> Contractor purchases linked to same-month WOs only | <strong>Parts Dev:</strong> Purchases linked to same-month Dev Projects<br />
+        <strong>Note:</strong> Salary included in Actual, NOT in Baseline. Cross-month purchases excluded.
       </div>
 
       {/* GRAND SUMMARY CARDS */}
@@ -139,7 +164,7 @@ export default function FinancialReport() {
               <th>Baseline</th>
               <th>Employee WO</th>
               <th>Contractor WO</th>
-              <th>Parts</th>
+              <th>Parts WO</th>
               <th>Salary</th>
               <th style={{ color: '#dc2626' }}>Actual</th>
               <th style={{ color: '#16a34a' }}>Savings</th>
@@ -151,7 +176,7 @@ export default function FinancialReport() {
               const s = getPctStyle(m.maintPct);
               return (
                 <tr key={'m-' + m.month}>
-                  <td style={{ fontWeight: 'bold' }}>{m.month}</td>
+                  <td style={{ fontWeight: 'bold' }}>{fmtMonth(m.month)}</td>
                   <td>20,577</td>
                   <td>👤 {m.employeeWOCount}</td>
                   <td>🏗️ {m.contractorWOCount} ({fmt(m.contractorWO)})</td>
@@ -236,6 +261,7 @@ export default function FinancialReport() {
               <th>Baseline</th>
               <th>Internal</th>
               <th>Contractor</th>
+              <th>Parts Dev</th>
               <th>Salary</th>
               <th style={{ color: '#dc2626' }}>Actual</th>
               <th style={{ color: '#16a34a' }}>Savings</th>
@@ -247,10 +273,11 @@ export default function FinancialReport() {
               const s = getPctStyle(m.devPct);
               return (
                 <tr key={'d-' + m.month}>
-                  <td style={{ fontWeight: 'bold' }}>{m.month}</td>
+                  <td style={{ fontWeight: 'bold' }}>{fmtMonth(m.month)}</td>
                   <td>132,551</td>
                   <td>👤 {m.internalProjectCount}</td>
                   <td>🏗️ {m.contractorProjectCount} ({fmt(m.contractorDev)})</td>
+                  <td>{fmt(m.partsDev)}</td>
                   <td>{fmt(m.salaryDev)}</td>
                   <td style={{ fontWeight: 'bold', color: '#dc2626' }}>{fmt(m.devActual)}</td>
                   <td style={{ fontWeight: 'bold', color: '#16a34a' }}>{fmt(m.devSavings)}</td>
@@ -267,6 +294,7 @@ export default function FinancialReport() {
               <td>{fmt(devBaselineTotal)}</td>
               <td>👤 {internalProjectTotal}</td>
               <td>🏗️ {contractorProjectCountTotal} ({fmt(contractorDevTotal)})</td>
+              <td>{fmt(partsDevTotal)}</td>
               <td>{fmt(salaryDevTotal)}</td>
               <td style={{ color: '#dc2626' }}>{fmt(devActualTotal)}</td>
               <td style={{ color: '#16a34a' }}>{fmt(devSavingsTotal)}</td>
@@ -279,6 +307,33 @@ export default function FinancialReport() {
           </tbody>
         </table>
       </div>
+
+      {/* OTHER PURCHASES SECTION */}
+      {otherPurchasesTotal > 0 && (
+        <div className="panel" style={{ borderTop: '5px solid #64748b', marginBottom: '20px' }}>
+          <h2 style={{ color: '#64748b', marginTop: 0 }}>🛒 Other Purchases</h2>
+          <table>
+            <thead>
+              <tr style={{ background: '#f8fafc' }}>
+                <th>Month</th>
+                <th>Other Purchases (SAR)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {monthlyData.map(m => (
+                <tr key={'o-' + m.month}>
+                  <td style={{ fontWeight: 'bold' }}>{fmtMonth(m.month)}</td>
+                  <td>{fmt(Number(m.otherPurchases || 0))}</td>
+                </tr>
+              ))}
+              <tr style={{ background: '#e2e8f0', fontWeight: 'bold' }}>
+                <td>TOTAL</td>
+                <td>{fmt(otherPurchasesTotal)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* GRAND TOTAL */}
       <div className="panel" style={{ borderTop: '5px solid #8b5cf6', background: 'linear-gradient(135deg, #faf5ff 0%, #ffffff 100%)' }}>
@@ -302,7 +357,7 @@ export default function FinancialReport() {
               const s = getPctStyle(m.totalSavingsPct);
               return (
                 <tr key={'g-' + m.month}>
-                  <td style={{ fontWeight: 'bold' }}>{m.month}</td>
+                  <td style={{ fontWeight: 'bold' }}>{fmtMonth(m.month)}</td>
                   <td>{fmt(totalBaselineMonth)}</td>
                   <td>{fmt(totalActualMonth)}</td>
                   <td style={{ fontWeight: 'bold', color: '#16a34a' }}>{fmt(totalSavingsMonth)}</td>

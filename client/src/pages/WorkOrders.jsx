@@ -63,7 +63,7 @@ export default function WorkOrders() {
     setForm({
       site: o.site, area: o.area || '', category: o.category, priority: o.priority,
       description: o.description || '', assignedTo: o.assigned_to || '',
-      isContractor: o.is_contractor === 1, contractorName: o.contractor_name || '',
+      isContractor: !!(o.contractor_name && o.contractor_name !== 'Company' && o.contractor_name !== 'Internal'), contractorName: o.contractor_name || '',
       reportedDate: o.reported_date || '', partsUsed: o.parts_used || ''
     });
     setEditing(o);
@@ -276,10 +276,10 @@ export default function WorkOrders() {
                 <td>{o.category}</td>
                 <td>{o.description}</td>
                 <td>
-                  <span className="status-badge" style={{ background: o.is_contractor ? '#fef3c7' : '#dbeafe', color: o.is_contractor ? '#b45309' : '#1e40af' }}>
-                    {o.is_contractor ? 'Contractor' : 'Internal'}
+                  <span className="status-badge" style={{ background: (o.contractor_name && o.contractor_name !== 'Company' && o.contractor_name !== 'Internal') ? '#fef3c7' : '#dbeafe', color: (o.contractor_name && o.contractor_name !== 'Company' && o.contractor_name !== 'Internal') ? '#b45309' : '#1e40af' }}>
+                    {(o.contractor_name && o.contractor_name !== 'Company' && o.contractor_name !== 'Internal') ? 'Contractor' : 'Employee'}
                   </span>
-                  {o.contractor_name && <div style={{ fontSize: '11px', color: '#64748b' }}>{o.contractor_name}</div>}
+                  {o.contractor_name && o.contractor_name !== 'Company' && o.contractor_name !== 'Internal' && <div style={{ fontSize: '11px', color: '#64748b' }}>{o.contractor_name}</div>}
                 </td>
                 <td>
                   <span className={

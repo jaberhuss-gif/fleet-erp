@@ -2380,6 +2380,28 @@ export async function getFinancialReport() {
   const projects = await listProjects();
   const purchases = await listPurchases();
 
+  // Build lookup sets per month for same-month matching
+  function normalizeWO(wo) {
+    return String(wo || '').replace(/[-\s]/g, '').toUpperCase();
+  }
+  function normalizeProj(proj) {
+    return String(proj || '').replace(/[-\s]/g, '').toUpperCase();
+  }
+
+  const woByMonth = {};
+  for (const w of workOrders) {
+    const m = w.month || 'Unknown';
+    if (!woByMonth[m]) woByMonth[m] = new Set();
+    woByMonth[m].add(normalizeWO(w.wo_no));
+  }
+
+  const projByMonth = {};
+  for (const p of projects) {
+    const m = p.month || 'Unknown';
+    if (!projByMonth[m]) projByMonth[m] = new Set();
+    projByMonth[m].add(normalizeProj(p.project_no));
+  }
+
   const months = {};
 
   function bucket(month) {
@@ -2402,6 +2424,7 @@ export async function getFinancialReport() {
         internalProjectCount: 0,
         contractorProjectCount: 0,
         contractorDev: 0,
+        partsDev: 0,
         salaryDev: SALARY_DEV,
         devActual: 0,
         devSavings: 0,
@@ -2428,22 +2451,19 @@ export async function getFinancialReport() {
   for (const w of workOrders) {
     const b = bucket(w.month);
     const cost = Number(w.final_cost || w.contractor_cost || 0);
-    // *** ØªØµØ­ÙŠØ­: Ø§Ø³ØªØ®Ø¯Ø§Ù… contractor_name Ø¨Ø¯Ù„Ø§Ù‹ Ù…Ù† contractor ***
+    // Use contractor_name ONLY — is_contractor is unreliable (always 0 for most rows)
     const contractorName = String(w.contractor_name || "").trim();
-    const isContractor = w.is_contractor === true || w.is_contractor === 't' || w.is_contractor === 1;
 
-    // Ø¥Ø°Ø§ ÙÙŠÙ‡ Ø§Ø³Ù… Ù…Ù‚Ø§ÙˆÙ„ Ø£Ùˆ is_contractor = true = Ø´ØºÙ„ Ù…Ù‚Ø§ÙˆÙ„
+    // Contractor = has a name AND name is not "Company" or "Internal"
     if (
-      (contractorName !== "" &&
-       contractorName.toLowerCase() !== "company" &&
-       contractorName.toLowerCase() !== "internal") ||
-      isContractor
+      contractorName !== "" &&
+      contractorName.toLowerCase() !== "company" &&
+      contractorName.toLowerCase() !== "internal"
     ) {
       b.contractorWOCount++;
       b.contractorWO += cost;
 
-      // ØªÙØµÙŠÙ„ Ø§Ù„Ù…Ù‚Ø§ÙˆÙ„ÙŠÙ† â€” Ø§Ø³ØªØ®Ø¯Ù… Ø§Ù„Ø§Ø³Ù… Ø¥Ø°Ø§ Ù…ÙˆØ¬ÙˆØ¯ØŒ ØºÙŠØ± ÙƒØ°Ù„Ùƒ "Contractor"
-      const name = contractorName || "Contractor";
+      const name = contractorName;
       if (!b.contractorBreakdown[name]) {
         b.contractorBreakdown[name] = {
           woCount: 0, woCost: 0, projectCount: 0, projectCost: 0
@@ -2452,7 +2472,7 @@ export async function getFinancialReport() {
       b.contractorBreakdown[name].woCount++;
       b.contractorBreakdown[name].woCost += cost;
     } else {
-      // Ù…ÙˆØ¸ÙÙ†Ø§ (Ø§Ù„ÙØ§Ø¶ÙŠ Ø£Ùˆ company Ø£Ùˆ internal)
+      // Employee (blank or "Company")
       b.employeeWOCount++;
     }
   }
@@ -2473,7 +2493,6 @@ export async function getFinancialReport() {
       b.contractorProjectCount++;
       b.contractorDev += spent;
 
-      // ØªÙØµÙŠÙ„ Ø§Ù„Ù…Ù‚Ø§ÙˆÙ„ÙŠÙ†
       if (!b.contractorBreakdown[contractorName]) {
         b.contractorBreakdown[contractorName] = {
           woCount: 0, woCost: 0, projectCount: 0, projectCost: 0
@@ -2482,7 +2501,6 @@ export async function getFinancialReport() {
       b.contractorBreakdown[contractorName].projectCount++;
       b.contractorBreakdown[contractorName].projectCost += spent;
     } else {
-      // Ù…Ø´Ø±ÙˆØ¹ Ø¯Ø§Ø®Ù„ÙŠ
       b.internalProjectCount++;
     }
   }
@@ -2494,15 +2512,42 @@ export async function getFinancialReport() {
     const b = bucket(p.month);
     const amount = Number(p.total_cost || 0);
     const type = String(p.type || "").toLowerCase();
+    const purchasedBy = String(p.purchased_by || "").trim().toLowerCase();
+    const refNorm = normalizeWO(p.reference_no || '');
+    const refNormProj = normalizeProj(p.reference_no || '');
+    const pMonth = p.month || 'Unknown';
 
+    // === Work Order / Maintenance purchases ===
     if (
       type.includes("work") ||
       type.includes("order") ||
       type.includes("maintenance")
     ) {
-      b.partsWO += amount;
+      // Same-month rule: only count if the WO exists in THIS month
+      const wosThisMonth = woByMonth[pMonth] || new Set();
+      if (wosThisMonth.has(refNorm)) {
+        // Only Contractor purchases go to partsWO
+        if (purchasedBy === 'contractor') {
+          b.partsWO += amount;
+        }
+        // Company purchases for same-month WOs are not added
+        // (they are internal/employee cost, already counted in employeeWOCount)
+      }
+      // Cross-month purchases are excluded
     }
-    // Ù„Ø§ Ù†Ø¶ÙŠÙ Ù…Ø´ØªØ±ÙŠØ§Øª Ø§Ù„ØªØ·ÙˆÙŠØ± Ù„Ø£Ù† project.spent Ø´Ø§Ù…Ù„ ÙƒÙ„ Ø´ÙŠ
+    // === Development Project purchases ===
+    else if (
+      type.includes("dev") ||
+      type.includes("project") ||
+      type.includes("development")
+    ) {
+      // Same-month rule: only count if the Project exists in THIS month
+      const projsThisMonth = projByMonth[pMonth] || new Set();
+      if (projsThisMonth.has(refNormProj)) {
+        b.partsDev += amount;
+      }
+    }
+    // === Other purchases ===
     else {
       b.otherPurchases += amount;
     }
@@ -2513,7 +2558,7 @@ export async function getFinancialReport() {
   // ==========================
   for (const b of Object.values(months)) {
     b.maintActual = b.contractorWO + b.partsWO + b.salaryMaint;
-    b.devActual = b.contractorDev + b.salaryDev;
+    b.devActual = b.contractorDev + b.partsDev + b.salaryDev;
 
     b.maintSavings = MAINT_BASELINE - b.maintActual;
     b.devSavings = DEV_BASELINE - b.devActual;
@@ -2578,6 +2623,7 @@ export async function getFinancialReport() {
       maintActual: sum("maintActual"),
 
       contractorDev: sum("contractorDev"),
+      partsDev: sum("partsDev"),
       salaryDev: sum("salaryDev"),
       devActual: sum("devActual"),
 

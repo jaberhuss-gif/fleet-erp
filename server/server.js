@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import cors from "cors";
 import { verifyToken, login, listUsers, createUser, deleteUser } from "./auth.js";
 import { requirePermission } from "./rbac.js";
@@ -39,7 +39,7 @@ app.get("/api/health", async (req, res) => res.json({ status: "ok", time: new Da
 // ===== VEHICLES (PostgreSQL Connected) =====
 app.get("/api/vehicles", async (req, res) => {
   try {
-    const vehicles = listVehiclesPG();
+    const vehicles = await listVehiclesPG();
     res.json({ success: true, vehicles });
   } catch (e) {
     console.error("Error fetching vehicles:", e);
@@ -48,17 +48,29 @@ app.get("/api/vehicles", async (req, res) => {
 });
 
 app.get("/api/vehicles/list", async (req, res) => {
-  try { res.json({ success: true, vehicles: listVehiclesPG().map(v => ({ id: v.id, plate: v.plate, driver: v.driver })) }); }
-  catch (e) { res.status(500).json({ success: false, error: e.message }); }
+  try {
+    const vehicles = await listVehiclesPG();
+    res.json({
+      success: true,
+      vehicles: vehicles.map(v => ({
+        id: v.id,
+        plate: v.plate,
+        driver: v.driver
+      }))
+    });
+  } catch (e) {
+    console.error("Error fetching vehicle list:", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 app.get("/api/vehicles/:id", async (req, res) => {
-  try { const v = getVehicleByIdPG(req.params.id); if (!v) return res.status(404).json({ success: false }); res.json({ success: true, vehicle: v }); }
+  try { const v = await getVehicleByIdPG(req.params.id); if (!v) return res.status(404).json({ success: false }); res.json({ success: true, vehicle: v }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.get("/api/vehicles/:id/details", async (req, res) => {
-  try { const v = getVehicleByIdPG(req.params.id); if (!v) return res.status(404).json({ success: false }); res.json({ success: true, vehicle: v, readings: await listReadingsPG(req.params.id), oilChanges: await listOilChangesPG(req.params.id) }); }
+  try { const v = await getVehicleByIdPG(req.params.id); if (!v) return res.status(404).json({ success: false }); res.json({ success: true, vehicle: v, readings: await listReadingsPG(req.params.id), oilChanges: await listOilChangesPG(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
@@ -789,4 +801,7 @@ app.listen(PORT, () => {
   console.log("Building APIs: /api/sites, /api/work-orders, /api/projects, /api/purchases");
   console.log("======================================");
 });
+
+
+
 

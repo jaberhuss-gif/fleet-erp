@@ -2348,10 +2348,32 @@ export async function getMonthlyReport(filters = {}) {
    FINANCIAL REPORT
    ============================================================ */
 
+/* ============================================================
+   FINANCIAL REPORT â€” Corrected Version
+   ============================================================
+   
+   Ø§Ù„Ù…Ù†Ø·Ù‚:
+   - Baseline = Ù…ØªÙˆØ³Ø· Ø¢Ø®Ø± 6 Ø´Ù‡ÙˆØ± (ØªÙƒÙ„ÙØ© Ø§Ù„Ù…Ù‚Ø§ÙˆÙ„ÙŠÙ† Ù‚Ø¨Ù„ Ø§Ù„ØªÙˆØ¸ÙŠÙ â€” Ø¨Ø¯ÙˆÙ† Ø±Ø§ØªØ¨)
+   - Actual = Ø§Ù„ØªÙƒÙ„ÙØ© Ø§Ù„Ø­Ø§Ù„ÙŠØ© Ø´Ø§Ù…Ù„Ø© Ø±Ø§ØªØ¨ Ø§Ù„Ù…ÙˆØ¸ÙÙŠÙ†
+   - Savings = Baseline - Actual
+   
+   Ø§Ù„ØµÙŠØ§Ù†Ø© (Maintenance):
+     maintActual = contractorWO + partsWO + salaryMaint
+   
+   Ø§Ù„ØªØ·ÙˆÙŠØ± (Development):
+     devActual = contractorDev + salaryDev
+     âŒ Ù„Ø§ partsDev â€” project.spent Ø´Ø§Ù…Ù„ ÙƒÙ„ Ø´ÙŠ
+   
+   Ø§Ù„Ø¥Ø¬Ù…Ø§Ù„ÙŠ:
+     totalCost = maintActual + devActual + otherPurchases
+     âŒ Ù„Ø§ Ø¥Ø¶Ø§ÙØ© salary Ù…Ø±Ù‡ Ø«Ø§Ù†ÙŠØ©
+   ============================================================ */
+
 export async function getFinancialReport() {
-  const MAINT_BASELINE = 20577;
-  const DEV_BASELINE = 132551;
-  const SALARY_PER_DEPT = 2200;
+  const MAINT_BASELINE = 20577;   // Ù…ØªÙˆØ³Ø· Ø¢Ø®Ø± 6 Ø´Ù‡ÙˆØ± - ØµÙŠØ§Ù†Ø©
+  const DEV_BASELINE = 132551;    // Ù…ØªÙˆØ³Ø· Ø¢Ø®Ø± 6 Ø´Ù‡ÙˆØ± - ØªØ·ÙˆÙŠØ±
+  const SALARY_MAINT = 2200;      // Ø±Ø§ØªØ¨ Ù‚Ø³Ù… Ø§Ù„ØµÙŠØ§Ù†Ø©
+  const SALARY_DEV = 2200;        // Ø±Ø§ØªØ¨ Ù‚Ø³Ù… Ø§Ù„ØªØ·ÙˆÙŠØ±
 
   const workOrders = await listWorkOrders();
   const projects = await listProjects();
@@ -2361,194 +2383,252 @@ export async function getFinancialReport() {
 
   function bucket(month) {
     const key = month || "Unknown";
-
     if (!months[key]) {
       months[key] = {
         month: key,
-        contractorWO: 0,
-        contractorDev: 0,
-        partsWO: 0,
-        partsDev: 0,
-        otherPurchases: 0,
-        salary: SALARY_PER_DEPT,
-        totalLabor: 0,
-        totalParts: 0,
-        totalCost: 0,
-        maintActual: 0,
-        maintSavings: 0,
-        maintPct: 0,
-        devActual: 0,
-        devSavings: 0,
-        devPct: 0,
-        totalSavings: 0,
-        totalSavingsPct: 0
+
+        // ===== Ø§Ù„ØµÙŠØ§Ù†Ø© (Maintenance) =====
+        employeeWOCount: 0,         // Ø¹Ø¯Ø¯ WO Ù…ÙˆØ¸ÙÙŠÙ†Ø§
+        contractorWOCount: 0,       // Ø¹Ø¯Ø¯ WO Ø§Ù„Ù…Ù‚Ø§ÙˆÙ„ÙŠÙ†
+        contractorWO: 0,            // ØªÙƒÙ„ÙØ© Ù…Ù‚Ø§ÙˆÙ„ÙŠÙ† WO (final_cost)
+        partsWO: 0,                // Ù‚Ø·Ø¹ Ù…Ø´ØªØ±Ø§Ø© Ù„Ù„ØµÙŠØ§Ù†Ø©
+        salaryMaint: SALARY_MAINT, // Ø±Ø§ØªØ¨ Ù‚Ø³Ù… Ø§Ù„ØµÙŠØ§Ù†Ø©
+        maintActual: 0,            // = contractorWO + partsWO + salaryMaint
+        maintSavings: 0,           // = MAINT_BASELINE - maintActual
+        maintPct: 0,               // Ù†Ø³Ø¨Ø© Ø§Ù„ØªÙˆÙÙŠØ±
+
+        // ===== Ø§Ù„ØªØ·ÙˆÙŠØ± (Development) =====
+        internalProjectCount: 0,    // Ø¹Ø¯Ø¯ Ù…Ø´Ø§Ø±ÙŠØ¹ Ø¯Ø§Ø®Ù„ÙŠØ©
+        contractorProjectCount: 0,  // Ø¹Ø¯Ø¯ Ù…Ø´Ø§Ø±ÙŠØ¹ Ø§Ù„Ù…Ù‚Ø§ÙˆÙ„ÙŠÙ†
+        contractorDev: 0,          // ØªÙƒÙ„ÙØ© Ù…Ù‚Ø§ÙˆÙ„ÙŠÙ† Ù…Ø´Ø§Ø±ÙŠØ¹ (project.spent)
+        salaryDev: SALARY_DEV,     // Ø±Ø§ØªØ¨ Ù‚Ø³Ù… Ø§Ù„ØªØ·ÙˆÙŠØ±
+        devActual: 0,             // = contractorDev + salaryDev
+        devSavings: 0,             // = DEV_BASELINE - devActual
+        devPct: 0,                // Ù†Ø³Ø¨Ø© Ø§Ù„ØªÙˆÙÙŠØ±
+
+        // ===== Ù…Ø´ØªØ±ÙŠØ§Øª Ø£Ø®Ø±Ù‰ =====
+        otherPurchases: 0,         // Ù…Ø´ØªØ±ÙŠØ§Øª Ù…Ø§ Ù‡ÙŠ ØµÙŠØ§Ù†Ø© ÙˆÙ„Ø§ ØªØ·ÙˆÙŠØ±
+
+        // ===== Ø§Ù„Ø¥Ø¬Ù…Ø§Ù„ÙŠ =====
+        totalCost: 0,              // = maintActual + devActual + otherPurchases
+        totalSavings: 0,           // = maintSavings + devSavings
+        totalSavingsPct: 0,
+
+        // ===== ØªÙØµÙŠÙ„ Ø§Ù„Ù…Ù‚Ø§ÙˆÙ„ÙŠÙ† =====
+        contractorBreakdown: {}    // { "Al Jodood": { woCount, woCost, projectCount, projectCost } }
       };
     }
-
     return months[key];
   }
 
+  // ==========================
+  // Ù…Ø¹Ø§Ù„Ø¬Ø© Ø£ÙˆØ§Ù…Ø± Ø§Ù„Ø´ØºÙ„ (Work Orders)
+  // ==========================
   for (const w of workOrders) {
     const b = bucket(w.month);
+    const cost = Number(w.final_cost || w.contractor_cost || 0);
+    const contractorName = String(w.contractor || "").trim();
 
-    const contractor =
-      Number(w.contractor_cost || 0);
+    // Ø¥Ø°Ø§ ÙÙŠÙ‡ Ø§Ø³Ù… Ù…Ù‚Ø§ÙˆÙ„ (ØºÙŠØ± ÙØ§Ø¶ÙŠ ÙˆØºÙŠØ± company/internal) = Ø´ØºÙ„ Ù…Ù‚Ø§ÙˆÙ„
+    if (
+      contractorName !== "" &&
+      contractorName.toLowerCase() !== "company" &&
+      contractorName.toLowerCase() !== "internal"
+    ) {
+      b.contractorWOCount++;
+      b.contractorWO += cost;
 
-    const labor =
-      Number(w.labor_cost || 0);
-
-    const parts =
-      Number(w.parts_cost || 0);
-
-    b.contractorWO += contractor;
-    b.totalLabor += labor;
-    b.partsWO += parts;
+      // ØªÙØµÙŠÙ„ Ø§Ù„Ù…Ù‚Ø§ÙˆÙ„ÙŠÙ†
+      if (!b.contractorBreakdown[contractorName]) {
+        b.contractorBreakdown[contractorName] = {
+          woCount: 0, woCost: 0, projectCount: 0, projectCost: 0
+        };
+      }
+      b.contractorBreakdown[contractorName].woCount++;
+      b.contractorBreakdown[contractorName].woCost += cost;
+    } else {
+      // Ù…ÙˆØ¸ÙÙ†Ø§ (Ø§Ù„ÙØ§Ø¶ÙŠ Ø£Ùˆ company)
+      b.employeeWOCount++;
+      // Ø§Ù„ØªÙƒÙ„ÙØ© = 0 Ù„Ø£Ù†Ù‡ Ù…Ø´Ù…ÙˆÙ„ Ø¨Ø§Ù„Ø±Ø§ØªØ¨
+    }
   }
 
+  // ==========================
+  // Ù…Ø¹Ø§Ù„Ø¬Ø© Ø§Ù„Ù…Ø´Ø§Ø±ÙŠØ¹ (Projects)
+  // ==========================
   for (const p of projects) {
     const b = bucket(p.month);
-
-    b.contractorDev +=
-      Number(p.spent || 0);
-  }
-
-  for (const p of purchases) {
-    const b = bucket(p.month);
-
-    const amount =
-      Number(p.total_cost || 0);
-
-    const type =
-      String(p.type || "").toLowerCase();
+    const spent = Number(p.spent || 0);
+    const contractorName = String(p.contractor || "").trim();
 
     if (
-      type.includes("dev") ||
-      type.includes("project")
+      contractorName !== "" &&
+      contractorName.toLowerCase() !== "company" &&
+      contractorName.toLowerCase() !== "internal"
     ) {
-      b.partsDev += amount;
-    } else if (
+      b.contractorProjectCount++;
+      b.contractorDev += spent;
+
+      // ØªÙØµÙŠÙ„ Ø§Ù„Ù…Ù‚Ø§ÙˆÙ„ÙŠÙ†
+      if (!b.contractorBreakdown[contractorName]) {
+        b.contractorBreakdown[contractorName] = {
+          woCount: 0, woCost: 0, projectCount: 0, projectCost: 0
+        };
+      }
+      b.contractorBreakdown[contractorName].projectCount++;
+      b.contractorBreakdown[contractorName].projectCost += spent;
+    } else {
+      // Ù…Ø´Ø±ÙˆØ¹ Ø¯Ø§Ø®Ù„ÙŠ
+      b.internalProjectCount++;
+      // Ø§Ù„ØªÙƒÙ„ÙØ© = 0 Ù„Ø£Ù†Ù‡ Ù…Ø´Ù…ÙˆÙ„ Ø¨Ø§Ù„Ø±Ø§ØªØ¨
+    }
+  }
+
+  // ==========================
+  // Ù…Ø¹Ø§Ù„Ø¬Ø© Ø§Ù„Ù…Ø´ØªØ±ÙŠØ§Øª (Purchases)
+  // ==========================
+  for (const p of purchases) {
+    const b = bucket(p.month);
+    const amount = Number(p.total_cost || 0);
+    const type = String(p.type || "").toLowerCase();
+
+    // ØµÙŠØ§Ù†Ø© â€” Ù‚Ø·Ø¹ ÙˆØ£Ø¬Ø²Ø§Ø¡
+    if (
       type.includes("work") ||
       type.includes("order") ||
       type.includes("maintenance")
     ) {
       b.partsWO += amount;
-    } else {
+    }
+    // âŒ ØªØ·ÙˆÙŠØ± â€” Ù„Ø§ Ù†Ø¶ÙŠÙÙ‡Ø§ Ù‡Ù†Ø§ Ù„Ø£Ù† project.spent Ø´Ø§Ù…Ù„ ÙƒÙ„ Ø´ÙŠ
+    // Ø£ÙŠ Ù…Ø´ØªØ±ÙŠØ§Øª Ù…Ø´Ø±ÙˆØ¹ Ù…Ù†ÙØµÙ„Ø© Ø­Ø·Ù‡Ø§ ÙÙŠ otherPurchases
+    else if (type.includes("dev") || type.includes("project")) {
+      b.otherPurchases += amount; // ØªØ¬Ù†Ø¨ Ø§Ø²Ø¯ÙˆØ§Ø¬ÙŠØ© Ø§Ù„Ø­Ø³Ø§Ø¨
+    }
+    // Ù…Ø´ØªØ±ÙŠØ§Øª Ø£Ø®Ø±Ù‰
+    else {
       b.otherPurchases += amount;
     }
   }
 
+  // ==========================
+  // Ø­Ø³Ø§Ø¨ Ø§Ù„Ø¥Ø¬Ù…Ø§Ù„ÙŠØ§Øª Ù„ÙƒÙ„ Ø´Ù‡Ø±
+  // ==========================
   for (const b of Object.values(months)) {
-    b.totalParts =
-      b.partsWO +
-      b.partsDev +
-      b.otherPurchases;
+    // Ø§Ù„ØµÙŠØ§Ù†Ø©: Ù…Ù‚Ø§ÙˆÙ„ÙŠÙ† + Ù‚Ø·Ø¹ + Ø±Ø§ØªØ¨
+    b.maintActual = b.contractorWO + b.partsWO + b.salaryMaint;
 
-    b.maintActual =
-      b.contractorWO +
-      b.partsWO +
-      b.totalLabor;
+    // Ø§Ù„ØªØ·ÙˆÙŠØ±: Ù…Ù‚Ø§ÙˆÙ„ÙŠÙ† + Ø±Ø§ØªØ¨ (Ø¨Ø¯ÙˆÙ† partsDev)
+    b.devActual = b.contractorDev + b.salaryDev;
 
-    b.devActual =
-      b.contractorDev +
-      b.partsDev;
+    // Ø§Ù„ØªÙˆÙÙŠØ±
+    b.maintSavings = MAINT_BASELINE - b.maintActual;
+    b.devSavings = DEV_BASELINE - b.devActual;
 
-    b.maintSavings =
-      MAINT_BASELINE - b.maintActual;
+    // Ø§Ù„Ø¥Ø¬Ù…Ø§Ù„ÙŠ (Ø¨Ø¯ÙˆÙ† Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ø±Ø§ØªØ¨ Ù…Ø±Ø© Ø«Ø§Ù†ÙŠØ©)
+    b.totalCost = b.maintActual + b.devActual + b.otherPurchases;
+    b.totalSavings = b.maintSavings + b.devSavings;
 
-    b.devSavings =
-      DEV_BASELINE - b.devActual;
+    // Ø§Ù„Ù†Ø³Ø¨
+    b.maintPct = MAINT_BASELINE
+      ? (b.maintSavings / MAINT_BASELINE) * 100
+      : 0;
+    b.devPct = DEV_BASELINE
+      ? (b.devSavings / DEV_BASELINE) * 100
+      : 0;
 
-    b.totalCost =
-      b.maintActual +
-      b.devActual +
-      b.otherPurchases +
-      b.salary;
-
-    b.totalSavings =
-      b.maintSavings +
-      b.devSavings;
-
-    b.maintPct =
-      MAINT_BASELINE
-        ? (b.maintSavings / MAINT_BASELINE) * 100
-        : 0;
-
-    b.devPct =
-      DEV_BASELINE
-        ? (b.devSavings / DEV_BASELINE) * 100
-        : 0;
-
-    const baseline =
-      MAINT_BASELINE +
-      DEV_BASELINE +
-      b.salary;
-
-    b.totalSavingsPct =
-      baseline
-        ? (b.totalSavings / baseline) * 100
-        : 0;
+    const baseline = MAINT_BASELINE + DEV_BASELINE;
+    b.totalSavingsPct = baseline
+      ? (b.totalSavings / baseline) * 100
+      : 0;
   }
 
+  // ==========================
+  // ØªØ±ØªÙŠØ¨ ÙˆØªØ¬Ù…ÙŠØ¹ Ø§Ù„Ù†ØªØ§Ø¦Ø¬
+  // ==========================
   const rows = Object.values(months)
-    .sort((a,b) =>
-      String(a.month).localeCompare(String(b.month))
-    );
+    .sort((a, b) => String(a.month).localeCompare(String(b.month)));
 
   const sum = field =>
-    rows.reduce(
-      (s,r) => s + Number(r[field] || 0),
-      0
-    );
+    rows.reduce((s, r) => s + Number(r[field] || 0), 0);
 
-  const maintenanceTotalBaseline =
-    MAINT_BASELINE * rows.length;
+  const maintenanceTotalBaseline = MAINT_BASELINE * rows.length;
+  const developmentTotalBaseline = DEV_BASELINE * rows.length;
+  const totalSavings = sum("totalSavings");
+  const totalBaseline = maintenanceTotalBaseline + developmentTotalBaseline;
 
-  const developmentTotalBaseline =
-    DEV_BASELINE * rows.length;
-
-  const totalSavings =
-    sum("totalSavings");
-
-  const baseline =
-    maintenanceTotalBaseline +
-    developmentTotalBaseline +
-    sum("salary");
+  // ØªØ¬Ù…ÙŠØ¹ ØªÙØµÙŠÙ„ Ø§Ù„Ù…Ù‚Ø§ÙˆÙ„ÙŠÙ† Ù…Ù† ÙƒÙ„ Ø§Ù„Ø£Ø´Ù‡Ø±
+  const mergedBreakdown = {};
+  for (const r of rows) {
+    for (const [name, info] of Object.entries(r.contractorBreakdown || {})) {
+      if (!mergedBreakdown[name]) {
+        mergedBreakdown[name] = {
+          woCount: 0, woCost: 0, projectCount: 0, projectCost: 0
+        };
+      }
+      mergedBreakdown[name].woCount += info.woCount || 0;
+      mergedBreakdown[name].woCost += info.woCost || 0;
+      mergedBreakdown[name].projectCount += info.projectCount || 0;
+      mergedBreakdown[name].projectCost += info.projectCost || 0;
+    }
+  }
 
   return {
     rows,
 
     grand: {
       monthCount: rows.length,
-      baseline,
+
+      // Baseline
+      baseline: totalBaseline,
       maintenanceBaseline: MAINT_BASELINE,
       developmentBaseline: DEV_BASELINE,
-      contractorWO: sum("contractorWO"),
-      contractorDev: sum("contractorDev"),
-      partsWO: sum("partsWO"),
-      partsDev: sum("partsDev"),
-      salary: sum("salary"),
-      totalCost: sum("totalCost"),
-      maintActual: sum("maintActual"),
-      maintSavings: sum("maintSavings"),
-      devActual: sum("devActual"),
-      devSavings: sum("devSavings"),
-      totalSavings,
-      totalSavingsPct:
-        baseline
-          ? (totalSavings / baseline) * 100
-          : 0,
       maintenanceTotalBaseline,
       developmentTotalBaseline,
+
+      // Actual costs
+      contractorWO: sum("contractorWO"),
+      partsWO: sum("partsWO"),
+      salaryMaint: sum("salaryMaint"),
+      maintActual: sum("maintActual"),
+
+      contractorDev: sum("contractorDev"),
+      salaryDev: sum("salaryDev"),
+      devActual: sum("devActual"),
+
+      otherPurchases: sum("otherPurchases"),
+      totalCost: sum("totalCost"),
+
+      // Savings
+      maintSavings: sum("maintSavings"),
+      devSavings: sum("devSavings"),
+      totalSavings,
+
       maintTotalSavingsPct:
         maintenanceTotalBaseline
-          ? (sum("maintSavings") /
-              maintenanceTotalBaseline) * 100
+          ? (sum("maintSavings") / maintenanceTotalBaseline) * 100
           : 0,
       devTotalSavingsPct:
         developmentTotalBaseline
-          ? (sum("devSavings") /
-              developmentTotalBaseline) * 100
-          : 0
+          ? (sum("devSavings") / developmentTotalBaseline) * 100
+          : 0,
+      totalSavingsPct:
+        totalBaseline
+          ? (totalSavings / totalBaseline) * 100
+          : 0,
+
+      // Counts
+      employeeWOCount: sum("employeeWOCount"),
+      contractorWOCount: sum("contractorWOCount"),
+      totalWOCount: sum("employeeWOCount") + sum("contractorWOCount"),
+
+      internalProjectCount: sum("internalProjectCount"),
+      contractorProjectCount: sum("contractorProjectCount"),
+      totalProjectCount:
+        sum("internalProjectCount") + sum("contractorProjectCount"),
+
+      // Contractor breakdown
+      contractorBreakdown: mergedBreakdown
     }
   };
 }

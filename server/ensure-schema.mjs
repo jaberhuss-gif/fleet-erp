@@ -30,7 +30,6 @@ export async function ensureSchema() {
       ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   `);
 
-  // Preserve existing legacy driver data while making the new API columns usable.
   await query(`
     UPDATE vehicles
     SET driver = COALESCE(NULLIF(driver, ''), driver_name),
@@ -39,7 +38,6 @@ export async function ensureSchema() {
        OR (phone IS NULL OR phone = '')
   `);
 
-  // Keep legacy plate field synchronized where it is still populated.
   await query(`
     UPDATE vehicles
     SET plate_number = COALESCE(NULLIF(plate_number, ''), split_part(COALESCE(plate, ''), ' ', 1)),
@@ -61,5 +59,22 @@ export async function ensureSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(vehicle_id, reminder_date, channel)
     )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS push_tokens (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      platform TEXT NOT NULL DEFAULT 'web',
+      user_agent TEXT,
+      last_seen_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_push_tokens_user_id
+    ON push_tokens(user_id)
   `);
 }

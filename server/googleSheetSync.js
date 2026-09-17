@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 import pg from "pg";
+import { sendWhatsAppTemplate } from "./whatsapp.js";
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -198,7 +199,7 @@ async function ensureReminderTable() {
       vehicle_id BIGINT NOT NULL,
       reminder_date DATE NOT NULL,
       phone TEXT,
-      channel TEXT NOT NULL DEFAULT 'sms',
+      channel TEXT NOT NULL DEFAULT 'whatsapp',
       status TEXT NOT NULL DEFAULT 'sent',
       provider_response TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -209,86 +210,16 @@ async function ensureReminderTable() {
 
 function buildKmReminder(vehicle) {
   const plate = `${vehicle.plate_number || ""} ${vehicle.plate_code || ""}`.trim();
-
-  return `Fleet ERP – Daily KM Reminder\n\nVehicle: ${plate}\nDriver: ${vehicle.driver || "Driver"}\n\nYou have NOT entered today's odometer/KM reading. Please enter the current KM immediately.\n\nIf the daily KM reading is not recorded, responsibility for any engine damage or related issue may be assigned to the responsible driver according to company policy and investigation findings.\n\nPlease record the KM now.\n\n--- اردو ---\n\nآپ نے آج گاڑی کا اوڈومیٹر/KM ریڈنگ درج نہیں کیا۔ براہِ کرم موجودہ KM فوراً درج کریں۔\n\nاگر روزانہ KM ریڈنگ درج نہ کی گئی تو انجن کے کسی نقصان یا متعلقہ خرابی کی صورت میں کمپنی کی پالیسی اور تحقیقات کے مطابق ذمہ داری ڈرائیور پر عائد کی جا سکتی ہے۔\n\nبراہِ کرم ابھی KM درج کریں۔`;
+  return { plate, driver: vehicle.driver || "Driver" };
 }
 
-async function sendSms(phone, message) {
-  if (process.env.TEXTBEE_ENABLED === "true") {
-    const apiKey = process.env.TEXTBEE_API_KEY;
-    const deviceId = process.env.TEXTBEE_DEVICE_ID;
+async function sendMessage(phone, vehicle) {
+  const { plate, driver } = buildKmReminder(vehicle);
 
-    if (!apiKey) {
-      return {
-        sent: false,
-        provider: "textbee-not-configured",
-        response: "TEXTBEE_API_KEY is not configured"
-      };
-    }
-
-    const payload = { recipients: [phone], message };
-    if (deviceId) payload.deviceId = deviceId;
-
-    const response = await fetch(
-      process.env.TEXTBEE_API_URL || "https://api.textbee.dev/api/v1/gateway/send-sms",
-      {
-        method: "POST",
-        headers: {
-          "x-api-key": apiKey,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      }
-    );
-
-    const text = await response.text();
-    if (!response.ok) {
-      throw new Error(`TextBee HTTP ${response.status}: ${text.slice(0, 500)}`);
-    }
-
-    return { sent: true, provider: "textbee", response: text.slice(0, 2000) };
-  }
-
-  if (process.env.TWILIO_ENABLED !== "true") {
-    return {
-      sent: false,
-      provider: "disabled",
-      response: "SMS delivery is disabled until a gateway is configured."
-    };
-  }
-
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_FROM_NUMBER;
-
-  if (!sid || !token || !from) {
-    return {
-      sent: false,
-      provider: "not-configured",
-      response: "Twilio credentials are not configured"
-    };
-  }
-
-  const body = new URLSearchParams({ To: phone, From: from, Body: message });
-  const auth = Buffer.from(`${sid}:${token}`).toString("base64");
-  const response = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${auth}`,
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body
-    }
-  );
-
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`Twilio HTTP ${response.status}: ${text.slice(0, 500)}`);
-  }
-
-  return { sent: true, provider: "twilio", response: text.slice(0, 2000) };
+  return sendWhatsAppTemplate({
+    phone,
+    bodyParameters: [plate, driver]
+  });
 }
 
 async function runDailyKmReminders() {
@@ -326,7 +257,7 @@ async function runDailyKmReminders() {
        FROM km_daily_reminders
        WHERE vehicle_id = $1
          AND reminder_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date
-         AND channel = 'sms'
+         AND channel = 'whatsapp'
        LIMIT 1`,
       [vehicle.id]
     );
@@ -337,7 +268,7 @@ async function runDailyKmReminders() {
     }
 
     try {
-      const delivery = await sendSms(vehicle.phone, buildKmReminder(vehicle));
+      const delivery = await sendMessage(vehicle.phone, vehicle);
 
       if (!delivery.sent) {
         disabled += 1;
@@ -349,13 +280,13 @@ async function runDailyKmReminders() {
         `INSERT INTO km_daily_reminders
           (vehicle_id, reminder_date, phone, channel, status, provider_response)
          VALUES
-          ($1, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date, $2, 'sms', 'sent', $3)
+          ($1, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date, $2, 'whatsapp', 'sent', $3)
          ON CONFLICT (vehicle_id, reminder_date, channel) DO NOTHING`,
         [vehicle.id, vehicle.phone, JSON.stringify(delivery)]
       );
 
       sent += 1;
-      console.log("[KMDailyReminder]", vehicle.plate_number, "sent");
+      console.log("[KMDailyReminder]", vehicle.plate_number, "WhatsApp sent");
     } catch (error) {
       console.error("[KMDailyReminder]", vehicle.plate_number, error.message);
     }

@@ -142,7 +142,7 @@ export default function Notifications() {
               </div>
             )}
 
-            {pushEnabled && (
+            
               <div style={{ padding: '10px 16px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
                 <button onClick={async () => {
                   try {

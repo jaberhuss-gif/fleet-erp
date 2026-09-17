@@ -17,14 +17,49 @@ export default function Notifications() {
   const load = async () => {
     try {
       setLoading(true);
-      const [alerts, lowStock, workOrders, periodic] = await Promise.all([
+      const [alerts, lowStock, workOrders, periodic, vehicles] = await Promise.all([
         api.get('/alerts').then(r => r.data),
         api.get('/inventory/low-stock').then(r => r.data).catch(() => ({ items: [] })),
         api.get('/work-orders?status=Open').then(r => r.data).catch(() => ({ orders: [] })),
-        api.get('/periodic-maintenance/alerts').then(r => r.data).catch(() => ({ overdue: [], dueSoon: [] }))
+        api.get('/periodic-maintenance/alerts').then(r => r.data).catch(() => ({ overdue: [], dueSoon: [] })),
+        api.get('/vehicles').then(r => r.data).catch(() => ({ vehicles: [] }))
       ]);
 
       const notifs = [];
+
+      // Daily odometer compliance:
+      // A vehicle is considered compliant for today when its odometer
+      // was updated today. The vehicle list already exposes meter_updated_at,
+      // so this does not create one API request per vehicle.
+      const vehicleRows = Array.isArray(vehicles?.vehicles)
+        ? vehicles.vehicles
+        : Array.isArray(vehicles)
+          ? vehicles
+          : [];
+
+      const todayKey = new Date().toLocaleDateString('en-CA');
+
+      vehicleRows
+        .filter(v => String(v.status || '').toLowerCase() !== 'inactive')
+        .filter(v => {
+          if (!v.meter_updated_at) return true;
+          const updatedKey = new Date(v.meter_updated_at).toLocaleDateString('en-CA');
+          return updatedKey !== todayKey;
+        })
+        .forEach(v => {
+          const plate = v.plate || `${v.plate_number || ''} ${v.plate_code || ''}`.trim() || `Vehicle #${v.id}`;
+          const driver = v.driver_name || v.driver || 'Unassigned';
+          const phone = v.driver_phone || v.phone || 'No phone recorded';
+
+          notifs.push({
+            id: 'km-missing-' + v.id,
+            type: 'danger',
+            icon: '🚨',
+            title: 'Daily KM Reading Missing',
+            message: `${plate} — Driver: ${driver} — Phone: ${phone} — No odometer reading entered today`,
+            tab: 'fleet-maintenance'
+          });
+        });
 
       // Oil alerts
       if (alerts && alerts.urgent) {
@@ -35,7 +70,7 @@ export default function Notifications() {
             icon: '🔴',
             title: 'Oil Change Overdue',
             message: v.plate + ' — ' + v.sinceOil.toLocaleString() + ' km since oil change',
-            tab: 'maintenance'
+            tab: 'fleet-maintenance'
           });
         });
       }
@@ -48,7 +83,7 @@ export default function Notifications() {
             icon: '🟡',
             title: 'Oil Change Approaching',
             message: v.plate + ' — ' + v.remaining.toLocaleString() + ' km remaining',
-            tab: 'maintenance'
+            tab: 'fleet-maintenance'
           });
         });
       }
@@ -231,7 +266,7 @@ export default function Notifications() {
                       <div style={{ fontSize: '20px' }}>{n.icon}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 'bold', fontSize: '13px', color: c.color }}>{n.title}</div>
-                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
                           {n.message}
                         </div>
                       </div>
@@ -246,5 +281,3 @@ export default function Notifications() {
     </div>
   );
 }
-
-

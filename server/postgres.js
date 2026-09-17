@@ -28,7 +28,7 @@ if (process.env.DATABASE_URL) {
   }
 } else {
   console.warn("DATABASE_URL is not set. PostgreSQL will not be available.");
-  console.warn("Add it in Vercel Settings > Environment Variables");
+  console.warn("Add it in the hosting environment variables.");
 }
 
 export function isPostgresEnabled() {
@@ -76,12 +76,14 @@ export async function closePostgres() {
   }
 }
 
-// Start the legacy Google Sheet vehicle sync after PostgreSQL initialization.
-// The sync service uses the public CSV URL and refreshes every 5 minutes by default.
+// Start the legacy Google Sheet vehicle sync and daily KM reminder service
+// from the same backend process. This keeps the hosting Start Command simple:
+// `node server/server.js`.
+// Twilio delivery remains disabled unless TWILIO_ENABLED=true is explicitly set.
 if (process.env.GOOGLE_SHEET_SYNC_DISABLED !== "true") {
   setTimeout(async () => {
     try {
-      const { startGoogleSheetVehicleSync } = await import("./google-sheet-sync.js");
+      const { startGoogleSheetVehicleSync } = await import("./googleSheetSync.js");
       startGoogleSheetVehicleSync();
     } catch (error) {
       console.error("Failed to start Google Sheet vehicle sync:", error.message);

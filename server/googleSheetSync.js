@@ -93,7 +93,7 @@ export async function syncGoogleSheetVehicles() {
     const add = (sql, value) => { params.push(value); sets.push(sql.replace("?", `$${params.length}`)); };
     if (driver) add("driver = ?", driver);
     if (phone) add("phone = ?", phone);
-    if (km !== null) { add("current_km = ?", km); add("meter_updated_at = CURRENT_TIMESTAMP", undefined); params.pop(); sets[sets.length - 1] = "meter_updated_at = CURRENT_TIMESTAMP"; }
+    if (km !== null) add("current_km = ?", km);
     if (active) add("status = ?", "Active");
     if (sets.length > 1) {
       await pool.query(`UPDATE vehicles SET ${sets.join(", ")} WHERE id = $${params.length + 1}`, [...params, id]);

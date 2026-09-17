@@ -2,7 +2,7 @@
   "name": "fleet-erp-monorepo",
   "version": "1.0.0",
   "scripts": {
-    "start": "node server/boot.js",
+    "start": "node server/server.js",
     "build": "cd client && npm install && npm run build && cd ../server && npm install"
   }
 }

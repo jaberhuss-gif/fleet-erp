@@ -4,13 +4,11 @@ import VehicleMaintenance from './pages/VehicleMaintenance';
 import Vehicles from './pages/Vehicles';
 import VehicleDetails from './pages/VehicleDetails';
 import Tickets from './pages/Tickets';
-
 import Reports from './pages/Reports';
-import BuildingMaintenance from './pages/BuildingMaintenance';
+import OperationsHub from './pages/OperationsHub';
 import Login from './pages/Login';
 import Users from './pages/Users';
 import Drivers from './pages/Drivers';
-import Warehouse from './pages/Warehouse';
 import Notifications from './pages/Notifications';
 import PeriodicMaintenance from './pages/PeriodicMaintenance';
 import AuditLog from './pages/AuditLog';
@@ -21,42 +19,32 @@ import AdvancedReports from './pages/AdvancedReports';
 import api from './api/client';
 
 const ROLE_TABS = {
-  Owner: ['gm', 'vehicles', 'drivers', 'periodic', 'tickets', 'troubleshooter', 'reports', 'building', 'warehouse', 'maintenance', 'users', 'audit', 'backup', 'mytickets', 'advanced-reports'],
-  GM: ['gm'],
+  Owner: ['gm', 'vehicles', 'fleet-maintenance', 'drivers', 'troubleshooter', 'operations', 'tickets', 'reports', 'users', 'audit', 'backup', 'mytickets', 'advanced-reports'],
+  GM: ['gm', 'troubleshooter'],
   Accountant: ['reports', 'advanced-reports'],
-  CampusManager: ['building', 'warehouse', 'troubleshooter'],
-  Driver: ['maintenance', 'troubleshooter', 'mytickets'],
-  FleetSupervisor: ['gm', 'vehicles', 'drivers', 'periodic', 'tickets', 'troubleshooter', 'mytickets', 'maintenance']
+  CampusManager: ['operations', 'troubleshooter'],
+  Driver: ['fleet-maintenance', 'troubleshooter', 'mytickets'],
+  FleetSupervisor: ['gm', 'vehicles', 'fleet-maintenance', 'drivers', 'troubleshooter', 'tickets']
 };
 
 const TAB_LABELS = {
   gm: 'GM Dashboard',
   vehicles: 'Vehicles',
+  'fleet-maintenance': '🚗 Vehicle Maintenance',
   drivers: 'Drivers',
-  periodic: 'Periodic Maintenance',
-  tickets: 'Tickets',
   troubleshooter: '🧠 Troubleshooter',
+  operations: '🛠️ Operations',
+  tickets: 'Tickets',
+  reports: 'Reports',
   mytickets: '📋 My Tickets',
   'advanced-reports': '📊 Advanced Reports',
-
-  reports: 'Reports',
-  building: 'Building Maintenance',
-  warehouse: 'Warehouse',
-  maintenance: 'Vehicle Maintenance',
   users: 'Users',
   audit: 'Audit Log',
   backup: 'Backup'
 };
 
 const writeLog = (user, action, entityType, entityId, details) => {
-  api.post('/audit-log', {
-    userId: user?.id,
-    username: user?.username || 'unknown',
-    action,
-    entityType: entityType || '',
-    entityId: String(entityId || ''),
-    details: details || ''
-  }).catch(() => {});
+  api.post('/audit-log', { userId: user?.id, username: user?.username || 'unknown', action, entityType: entityType || '', entityId: String(entityId || ''), details: details || '' }).catch(() => {});
 };
 
 export default function App() {
@@ -70,8 +58,6 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
-
-  const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
@@ -90,9 +76,7 @@ export default function App() {
   useEffect(() => {
     const handler = (e) => {
       const target = e.detail;
-      if (target && ROLE_TABS[user?.role]?.includes(target)) {
-        setTab(target);
-      }
+      if (target && ROLE_TABS[user?.role]?.includes(target)) setTab(target);
     };
     window.addEventListener('navigate', handler);
     return () => window.removeEventListener('navigate', handler);
@@ -107,27 +91,20 @@ export default function App() {
 
   const handleLogout = () => {
     writeLog(user, 'LOGOUT', 'User', user?.id, 'Signed out');
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setUser(null);
-    setTab('gm');
-    setViewingVehicleId(null);
+    localStorage.removeItem('token'); localStorage.removeItem('user');
+    setUser(null); setTab('gm'); setViewingVehicleId(null);
   };
 
   const handleViewVehicle = (id) => {
-    setViewingVehicleId(id);
-    setTab('vehicle-details');
+    setViewingVehicleId(id); setTab('vehicles');
     writeLog(user, 'VIEW', 'Vehicle', id, 'Viewed vehicle details');
   };
 
-  const handleBackToVehicles = () => {
-    setViewingVehicleId(null);
-    setTab('vehicles');
-  };
+  const handleBackToVehicles = () => { setViewingVehicleId(null); setTab('vehicles'); };
 
   const handleTabChange = (t) => {
     setTab(t);
-    if (t === 'vehicles') setViewingVehicleId(null);
+    if (t !== 'vehicles') setViewingVehicleId(null);
     writeLog(user, 'NAVIGATE', 'Page', t, 'Opened ' + (TAB_LABELS[t] || t));
   };
 
@@ -142,21 +119,13 @@ export default function App() {
         <h1>Fleet ERP</h1>
         <nav className="nav">
           {allowedTabs.map(t => (
-            <button
-              key={t}
-              className={(tab === t || (t === 'vehicles' && tab === 'vehicle-details')) ? 'nav-btn active' : 'nav-btn'}
-              onClick={() => handleTabChange(t)}
-            >
+            <button key={t} className={(tab === t || (t === 'vehicles' && viewingVehicleId)) ? 'nav-btn active' : 'nav-btn'} onClick={() => handleTabChange(t)}>
               {TAB_LABELS[t]}
             </button>
           ))}
         </nav>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'white' }}>
-          <button
-            className="theme-toggle"
-            onClick={toggleTheme}
-            title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
-          >
+          <button className="theme-toggle" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}>
             {theme === 'light' ? '🌙' : '☀️'}
           </button>
           <Notifications />
@@ -164,39 +133,25 @@ export default function App() {
             <div style={{ fontWeight: 'bold' }}>{user.fullName || user.username}</div>
             <div style={{ opacity: 0.7, fontSize: '11px' }}>{user.role}</div>
           </div>
-          <button onClick={handleLogout} style={{ background: '#dc2626', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
-            Logout
-          </button>
+          <button onClick={handleLogout} style={{ background: '#dc2626', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>Logout</button>
         </div>
       </header>
       <main className="main">
         {tab === 'gm' && <GMDashboard />}
         {tab === 'vehicles' && <Vehicles onViewVehicle={handleViewVehicle} />}
+        {tab === 'fleet-maintenance' && <VehicleMaintenance />}
         {tab === 'drivers' && <Drivers />}
-        {tab === 'periodic' && <PeriodicMaintenance />}
-        {tab === 'vehicle-details' && viewingVehicleId && (
-          <VehicleDetails vehicleId={viewingVehicleId} onBack={handleBackToVehicles} />
-        )}
-        {tab === 'tickets' && <Tickets />}
         {tab === 'troubleshooter' && <Troubleshooter />}
+        {tab === 'operations' && <OperationsHub />}
+        {tab === 'tickets' && <Tickets />}
         {tab === 'mytickets' && <MyTickets />}
         {tab === 'advanced-reports' && <AdvancedReports />}
-
         {tab === 'reports' && <Reports />}
-        {tab === 'building' && <BuildingMaintenance />}
-        {tab === 'warehouse' && <Warehouse />}
-        {tab === 'maintenance' && <VehicleMaintenance />}
         {tab === 'users' && <Users />}
         {tab === 'audit' && <AuditLog />}
         {tab === 'backup' && <Backup />}
+        {tab === 'vehicle-details' && viewingVehicleId && <VehicleDetails vehicleId={viewingVehicleId} onBack={handleBackToVehicles} />}
       </main>
     </div>
   );
 }
-
-
-
-
-
-
-

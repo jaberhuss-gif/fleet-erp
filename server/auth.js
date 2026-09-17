@@ -12,10 +12,10 @@ dotenv.config({
   path: path.join(__dirname, ".env")
 });
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || "fleet-erp-default-secret-change-me";
 
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET is missing");
+if (!process.env.JWT_SECRET) {
+  console.warn("⚠️  WARNING: JWT_SECRET is not set. Using default — set it in Vercel Environment Variables for security!");
 }
 
 // ============================================================

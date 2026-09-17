@@ -1,4 +1,4 @@
-﻿import dotenv from "dotenv";
+import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 import pg from "pg";
@@ -15,13 +15,20 @@ dotenv.config({
 let pool = null;
 
 if (process.env.DATABASE_URL) {
-  pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-    max: 10,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000
-  });
+  try {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      max: 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000
+    });
+  } catch (e) {
+    console.error("Failed to create PostgreSQL pool:", e.message);
+  }
+} else {
+  console.warn("DATABASE_URL is not set. PostgreSQL will not be available.");
+  console.warn("Add it in Vercel Settings > Environment Variables");
 }
 
 export function isPostgresEnabled() {

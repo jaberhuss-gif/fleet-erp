@@ -214,8 +214,6 @@ function buildKmReminder(vehicle) {
 }
 
 async function sendSms(phone, message) {
-  // Primary provider: an Android phone using its own SIM through TextBee.
-  // No Twilio account or per-message Twilio charges are required.
   if (process.env.TEXTBEE_ENABLED === "true") {
     const apiKey = process.env.TEXTBEE_API_KEY;
     const deviceId = process.env.TEXTBEE_DEVICE_ID;
@@ -228,11 +226,7 @@ async function sendSms(phone, message) {
       };
     }
 
-    const payload = {
-      recipients: [phone],
-      message
-    };
-
+    const payload = { recipients: [phone], message };
     if (deviceId) payload.deviceId = deviceId;
 
     const response = await fetch(
@@ -255,12 +249,11 @@ async function sendSms(phone, message) {
     return { sent: true, provider: "textbee", response: text.slice(0, 2000) };
   }
 
-  // Legacy fallback kept disabled by default. It can be used later if required.
   if (process.env.TWILIO_ENABLED !== "true") {
     return {
       sent: false,
       provider: "disabled",
-      response: "SMS delivery is disabled. Configure TEXTBEE_ENABLED=true for Android SIM gateway."
+      response: "SMS delivery is disabled until a gateway is configured."
     };
   }
 
@@ -303,15 +296,19 @@ async function runDailyKmReminders() {
 
   await ensureReminderTable();
 
+  // Normalize meter_updated_at to text before casting so this works with
+  // both legacy text schemas and current timestamp schemas. This avoids the
+  // PostgreSQL timezone(unknown,text) error seen in the background worker.
   const result = await pool.query(`
     SELECT id, plate_number, plate_code, driver, phone
     FROM vehicles
     WHERE COALESCE(LOWER(TRIM(status)), '') NOT IN ('inactive', 'sold', 'disposed', 'disabled')
       AND COALESCE(TRIM(phone), '') <> ''
       AND (
-        meter_updated_at IS NULL
-        OR (meter_updated_at AT TIME ZONE 'Asia/Riyadh')::date
-           <> (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date
+        NULLIF(TRIM(meter_updated_at::text), '') IS NULL
+        OR (
+          NULLIF(TRIM(meter_updated_at::text), '')::timestamptz AT TIME ZONE 'Asia/Riyadh'
+        )::date <> (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date
       )
     ORDER BY plate_number, plate_code
   `);

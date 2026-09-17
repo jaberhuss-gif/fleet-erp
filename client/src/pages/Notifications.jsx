@@ -142,7 +142,22 @@ export default function Notifications() {
               </div>
             )}
 
-            {pushEnabled && pushMessage && <div style={{ padding: '8px 16px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#16a34a' }}>{pushMessage}</div>}
+            {pushEnabled && (
+              <div style={{ padding: '10px 16px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                <button onClick={async () => {
+                  try {
+                    setPushMessage('Sending test notification...');
+                    const response = await api.post('/push/test');
+                    setPushMessage(response?.data?.success ? 'Test notification sent.' : 'Could not send test notification.');
+                  } catch (e) {
+                    setPushMessage(e?.response?.data?.error || e?.message || 'Could not send test notification.');
+                  }
+                }} style={{ width: '100%', background: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', padding: '9px 12px', cursor: 'pointer', fontWeight: '600' }}>
+                  🧪 Send Test Push Notification
+                </button>
+                {pushMessage && <div style={{ marginTop: '7px', fontSize: '11px', color: '#64748b' }}>{pushMessage}</div>}
+              </div>
+            )}
 
             {notifications.length === 0 ? (
               <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8' }}><div style={{ fontSize: '32px', marginBottom: '8px' }}>✅</div><div style={{ fontSize: '13px' }}>No notifications</div><div style={{ fontSize: '11px', marginTop: '4px' }}>Everything is up to date</div></div>

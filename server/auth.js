@@ -15,7 +15,7 @@ dotenv.config({
 const JWT_SECRET = process.env.JWT_SECRET || "fleet-erp-default-secret-change-me";
 
 if (!process.env.JWT_SECRET) {
-  console.warn("⚠️  WARNING: JWT_SECRET is not set. Using default — set it in Vercel Environment Variables for security!");
+  console.warn("⚠️ WARNING: JWT_SECRET is not set. Set it in the hosting environment variables for security.");
 }
 
 // ============================================================
@@ -180,3 +180,21 @@ export async function deleteUser(id) {
 
   return result.rowCount > 0;
 }
+
+// ============================================================
+// GLOBAL AUTH MIDDLEWARE COMPATIBILITY
+// server.js already calls requireAuth() directly.
+// Keep this here so authentication is available before routes run.
+// ============================================================
+
+globalThis.requireAuth = function requireAuth(req, res, next) {
+  const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "").trim();
+  const decoded = verifyToken(token);
+
+  if (!decoded) {
+    return res.status(401).json({ success: false, error: "Unauthorized" });
+  }
+
+  req.user = decoded;
+  next();
+};

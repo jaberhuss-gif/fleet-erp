@@ -75,3 +75,16 @@ export async function closePostgres() {
     pool = null;
   }
 }
+
+// Start the legacy Google Sheet vehicle sync after PostgreSQL initialization.
+// The sync service uses the public CSV URL and refreshes every 5 minutes by default.
+if (process.env.GOOGLE_SHEET_SYNC_DISABLED !== "true") {
+  setTimeout(async () => {
+    try {
+      const { startGoogleSheetVehicleSync } = await import("./google-sheet-sync.js");
+      startGoogleSheetVehicleSync();
+    } catch (error) {
+      console.error("Failed to start Google Sheet vehicle sync:", error.message);
+    }
+  }, 1000);
+}

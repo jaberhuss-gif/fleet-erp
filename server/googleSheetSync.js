@@ -214,12 +214,53 @@ function buildKmReminder(vehicle) {
 }
 
 async function sendSms(phone, message) {
-  // Twilio is intentionally OFF until the final project step.
+  // Primary provider: an Android phone using its own SIM through TextBee.
+  // No Twilio account or per-message Twilio charges are required.
+  if (process.env.TEXTBEE_ENABLED === "true") {
+    const apiKey = process.env.TEXTBEE_API_KEY;
+    const deviceId = process.env.TEXTBEE_DEVICE_ID;
+
+    if (!apiKey) {
+      return {
+        sent: false,
+        provider: "textbee-not-configured",
+        response: "TEXTBEE_API_KEY is not configured"
+      };
+    }
+
+    const payload = {
+      recipients: [phone],
+      message
+    };
+
+    if (deviceId) payload.deviceId = deviceId;
+
+    const response = await fetch(
+      process.env.TEXTBEE_API_URL || "https://api.textbee.dev/api/v1/gateway/send-sms",
+      {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`TextBee HTTP ${response.status}: ${text.slice(0, 500)}`);
+    }
+
+    return { sent: true, provider: "textbee", response: text.slice(0, 2000) };
+  }
+
+  // Legacy fallback kept disabled by default. It can be used later if required.
   if (process.env.TWILIO_ENABLED !== "true") {
     return {
       sent: false,
       provider: "disabled",
-      response: "Twilio delivery is disabled until TWILIO_ENABLED=true"
+      response: "SMS delivery is disabled. Configure TEXTBEE_ENABLED=true for Android SIM gateway."
     };
   }
 

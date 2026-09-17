@@ -157,8 +157,11 @@ export default function Vehicles({ onViewVehicle }) {
   return (
     <div>
       <div className="panel">
+        <div style={{ background: 'linear-gradient(135deg, #0f766e, #06b6d4)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Vehicles</h2>
+        </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-          <h2 style={{ margin: 0 }}>Vehicles ({vehicles.length})</h2>
+          
           <div className="btn-row" style={{ margin: 0 }}>
             <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
               {showForm ? 'Cancel' : '+ Add Vehicle'}

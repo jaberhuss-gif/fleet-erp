@@ -147,8 +147,11 @@ export default function Warehouse() {
 
       {subTab === 'inventory' && (
         <div className="panel">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-            <h2 style={{ margin: 0 }}>Inventory ({items.length})</h2>
+          <div style={{ background: 'linear-gradient(135deg, #1e40af, #60a5fa)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Inventory</h2>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+            
             <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "inventory", [{key:"code",label:"Code"},{key:"name",label:"Name"},{key:"category",label:"Category"},{key:"quantity",label:"Quantity"},{key:"unit",label:"Unit"},{key:"min_stock",label:"Min Stock"},{key:"unit_cost",label:"Unit Cost"},{key:"location",label:"Location"},{key:"supplier",label:"Supplier"}])}>Export CSV</button><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
               {showForm ? 'Cancel' : '+ Add Item'}
             </button>
@@ -275,7 +278,9 @@ export default function Warehouse() {
 
       {subTab === 'transactions' && (
         <div className="panel">
-          <h2>Stock Transactions ({transactions.length})</h2>
+          <div style={{ background: 'linear-gradient(135deg, #1e40af, #3b82f6)', padding: '14px 20px', borderRadius: '10px 10px 0 0', color: '#fff' }}>
+            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>Stock Transactions</h2>
+          </div>
           {transactions.length === 0 ? (
             <div className="alert alert-info">No transactions yet.</div>
           ) : (
@@ -311,7 +316,9 @@ export default function Warehouse() {
 
       {subTab === 'low-stock' && (
         <div className="panel">
-          <h2>Low Stock Alerts ({lowStock.length})</h2>
+          <div style={{ background: 'linear-gradient(135deg, #b91c1c, #ef4444)', padding: '14px 20px', borderRadius: '10px 10px 0 0', color: '#fff' }}>
+            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>Low Stock Alerts</h2>
+          </div>
           {lowStock.length === 0 ? (
             <div className="alert alert-success">All items are in stock</div>
           ) : (

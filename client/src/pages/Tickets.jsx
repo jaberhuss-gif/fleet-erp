@@ -73,7 +73,9 @@ export default function Tickets() {
 
       {/* Monthly Breakdown */}
       <div className="panel">
-        <h2>Monthly Breakdown (Last 6 Months)</h2>
+        <div style={{ background: 'linear-gradient(135deg, #b91c1c, #ef4444)', padding: '14px 20px', borderRadius: '10px 10px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>Monthly Breakdown (Last 6 Months)</h2>
+        </div>
         <table>
           <thead>
             <tr>
@@ -104,7 +106,10 @@ export default function Tickets() {
 
       {/* All Tickets */}
       <div className="panel">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><h2>All Tickets ({tickets.length})</h2><button className="print-btn no-print" style={{ marginRight: "8px" }} onClick={() => printContent("Tickets Report", filtered.length + " tickets")}>🖨️ Print</button><button className="btn btn-success" onClick={() => exportToCSV(filtered, "tickets", [{key:"id",label:"ID"},{key:"opened_at",label:"Date"},{key:"plate",label:"Vehicle"},{key:"category",label:"Category"},{key:"description",label:"Description"},{key:"priority",label:"Priority"},{key:"status",label:"Status"}])}>Export CSV</button></div>
+        <div style={{ background: 'linear-gradient(135deg, #dc2626, #f87171)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>All Tickets</h2>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: '12px' }}><button className="print-btn no-print" style={{ marginRight: "8px" }} onClick={() => printContent("Tickets Report", filtered.length + " tickets")}>🖨️ Print</button><button className="btn btn-success" onClick={() => exportToCSV(filtered, "tickets", [{key:"id",label:"ID"},{key:"opened_at",label:"Date"},{key:"plate",label:"Vehicle"},{key:"category",label:"Category"},{key:"description",label:"Description"},{key:"priority",label:"Priority"},{key:"status",label:"Status"}])}>Export CSV</button></div>
 
         {error && <div className="alert alert-error">{error}</div>}
 

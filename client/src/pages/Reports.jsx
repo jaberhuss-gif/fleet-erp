@@ -52,7 +52,10 @@ export default function Reports() {
   return (
     <div>
       <div className="panel">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}><h2 style={{ margin: 0 }}>Monthly Report</h2><button className="print-btn no-print" onClick={() => printContent("Monthly Financial Report", filterYear !== "all" ? "Year: " + filterYear : "")}>🖨️ Print Report</button></div>
+        <div style={{ background: 'linear-gradient(135deg, #6d28d9, #c084fc)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Monthly Report</h2>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", marginTop: '12px' }}><button className="print-btn no-print" onClick={() => printContent("Monthly Financial Report", filterYear !== "all" ? "Year: " + filterYear : "")}>🖨️ Print Report</button></div>
         <p style={{ color: '#64748b', fontSize: '14px' }}>Combined maintenance costs breakdown by month.</p>
 
         {/* Filters */}
@@ -114,7 +117,9 @@ export default function Reports() {
 
       {/* Bar Chart */}
       <div className="panel">
-        <h2>Monthly Breakdown (SAR)</h2>
+        <div style={{ background: 'linear-gradient(135deg, #5b21b6, #8b5cf6)', padding: '14px 20px', borderRadius: '10px 10px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>Monthly Breakdown (SAR)</h2>
+        </div>
         {chartData.length === 0 ? (
           <div className="alert alert-info">No data for selected filters.</div>
         ) : (
@@ -136,7 +141,9 @@ export default function Reports() {
       {/* Line Chart */}
       {chartData.length > 1 && (
         <div className="panel">
-          <h2>Total Trend (SAR)</h2>
+          <div style={{ background: 'linear-gradient(135deg, #4c1d95, #7c3aed)', padding: '14px 20px', borderRadius: '10px 10px 0 0', color: '#fff' }}>
+            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>Total Trend (SAR)</h2>
+          </div>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -152,7 +159,9 @@ export default function Reports() {
 
       {/* Table */}
       <div className="panel">
-        <h2>Detailed Breakdown ({months.length} months)</h2>
+        <div style={{ background: 'linear-gradient(135deg, #4c1d95, #6d28d9)', padding: '14px 20px', borderRadius: '10px 10px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>Detailed Breakdown</h2>
+        </div>
         {months.length === 0 ? (
           <div className="alert alert-info">No data.</div>
         ) : (

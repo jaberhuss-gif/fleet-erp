@@ -63,7 +63,9 @@ export default function ReportIssue() {
   return (
     <div className="form-container">
       <div className="panel">
-        <h2>Report an Issue</h2>
+        <div style={{ background: 'linear-gradient(135deg, #be123c, #fb7185)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Report an Issue</h2>
+        </div>
         <p style={{ color: '#64748b', marginBottom: '16px', fontSize: '14px' }}>
           Select your vehicle, choose the issue type, and describe the problem. Use the voice button to speak.
         </p>

@@ -73,7 +73,9 @@ export default function DriverPortal() {
   return (
     <div className="form-container">
       <div className="panel">
-        <h2>Driver Portal</h2>
+        <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Driver Portal</h2>
+        </div>
         <div className="form-group">
           <label>Select Vehicle</label>
           <select value={selectedId} onChange={e => setSelectedId(e.target.value)}>

@@ -71,8 +71,11 @@ export default function Purchases() {
 
   return (
     <div className="panel">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-        <h2 style={{ margin: 0 }}>Purchases ({purchases.length})</h2>
+      <div style={{ background: 'linear-gradient(135deg, #047857, #34d399)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Purchases</h2>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+        
         <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "purchases", [{key:"purchase_no",label:"PUR #"},{key:"purchase_date",label:"Date"},{key:"type",label:"Type"},{key:"reference_no",label:"Reference"},{key:"item_name",label:"Item"},{key:"quantity",label:"Qty"},{key:"unit_cost",label:"Unit Cost"},{key:"total_cost",label:"Total"},{key:"supplier",label:"Supplier"},{key:"purchased_by",label:"Paid By"}])}>Export CSV</button><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
           {showForm ? 'Cancel' : '+ New Purchase'}
         </button>

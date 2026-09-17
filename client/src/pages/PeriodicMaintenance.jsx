@@ -176,8 +176,11 @@ export default function PeriodicMaintenance() {
       )}
 
       <div className="panel">
+        <div style={{ background: 'linear-gradient(135deg, #115e59, #2dd4bf)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Periodic Maintenance & Inspection</h2>
+        </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-          <h2 style={{ margin: 0 }}>Periodic Maintenance & Inspection</h2>
+          
           <div className="btn-row" style={{ margin: 0 }}>
             <button className="btn btn-warning" style={{ marginRight: '8px' }} onClick={handleGenerate}>⚡ Auto-Generate All</button>
             <button className="btn btn-success" style={{ marginRight: '8px' }} onClick={() => exportToCSV(currentList, 'periodic-maintenance', [{key:"vehicle_plate",label:"Vehicle"},{key:"type",label:"Type"},{key:"scheduled_date",label:"Scheduled"},{key:"completed_date",label:"Completed"},{key:"status",label:"Status"},{key:"technician",label:"Technician"},{key:"cost",label:"Cost"}])}>Export CSV</button>

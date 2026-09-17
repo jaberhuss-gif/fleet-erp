@@ -39,8 +39,11 @@ export default function VehicleDetails({ vehicleId, onBack }) {
       <button className="btn btn-warning" onClick={onBack} style={{ marginBottom: '16px' }}>← Back to Vehicles</button>
 
       <div className="panel">
+        <div style={{ background: 'linear-gradient(135deg, #0f766e, #06b6d4)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>{v.plate}</h2>
+        </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-          <h2 style={{ margin: 0 }}>{v.plate}</h2>
+          
           <span className={'status-badge ' + statusClass} style={{ fontSize: '14px', padding: '6px 14px' }}>{statusText}</span>
         </div>
 
@@ -83,7 +86,9 @@ export default function VehicleDetails({ vehicleId, onBack }) {
 
       {chartReadings.length > 1 && (
         <div className="panel">
-          <h2>Odometer Trend</h2>
+          <div style={{ background: 'linear-gradient(135deg, #0f766e, #14b8a6)', padding: '14px 20px', borderRadius: '10px 10px 0 0', color: '#fff' }}>
+            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>Odometer Trend</h2>
+          </div>
           <div style={{ padding: '20px', background: '#f8fafc', borderRadius: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '150px' }}>
               {chartReadings.map((r, i) => {
@@ -116,7 +121,9 @@ export default function VehicleDetails({ vehicleId, onBack }) {
       )}
 
       <div className="panel">
-        <h2>Readings History ({readings.length})</h2>
+        <div style={{ background: 'linear-gradient(135deg, #115e59, #0d9488)', padding: '14px 20px', borderRadius: '10px 10px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>Readings History</h2>
+        </div>
         {readings.length === 0 ? (
           <div className="alert alert-info">No readings yet.</div>
         ) : (
@@ -145,7 +152,9 @@ export default function VehicleDetails({ vehicleId, onBack }) {
       </div>
 
       <div className="panel">
-        <h2>Oil Changes ({oilChanges.length})</h2>
+        <div style={{ background: 'linear-gradient(135deg, #134e4a, #0f766e)', padding: '14px 20px', borderRadius: '10px 10px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>Oil Changes</h2>
+        </div>
         {oilChanges.length === 0 ? (
           <div className="alert alert-info">No oil changes recorded.</div>
         ) : (

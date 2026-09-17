@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import GMDashboard from './pages/GMDashboard';
+import GMDashboard from './pages/GMDashboardExecutive';
 import VehicleMaintenance from './pages/VehicleMaintenance';
 import Vehicles from './pages/Vehicles';
 import VehicleDetails from './pages/VehicleDetails';
@@ -17,21 +17,21 @@ import MyTickets from './pages/MyTickets';
 import AdvancedReports from './pages/AdvancedReports';
 import api from './api/client';
 
+const OWNER_ONLY_TABS = new Set(['drivers', 'users', 'audit', 'backup']);
 const ROLE_TABS = {
-  Owner: ['gm', 'vehicles', 'fleet-maintenance', 'drivers', 'troubleshooter', 'operations', 'tickets', 'reports', 'users', 'audit', 'backup', 'mytickets', 'advanced-reports'],
+  Owner: ['gm', 'vehicles', 'fleet-maintenance', 'troubleshooter', 'operations', 'tickets', 'reports', 'advanced-reports', 'drivers', 'users', 'audit', 'backup'],
   GM: ['gm', 'troubleshooter'],
   Accountant: ['reports', 'advanced-reports'],
   CampusManager: ['operations', 'troubleshooter'],
   Driver: ['fleet-maintenance', 'troubleshooter', 'mytickets'],
-  FleetSupervisor: ['gm', 'vehicles', 'fleet-maintenance', 'drivers', 'troubleshooter', 'tickets']
+  FleetSupervisor: ['gm', 'vehicles', 'fleet-maintenance', 'troubleshooter', 'tickets']
 };
-
 const TAB_LABELS = {
-  gm: 'GM Dashboard', vehicles: 'Vehicles', 'fleet-maintenance': '🚗 Vehicle Maintenance', drivers: 'Drivers',
+  gm: 'GM Dashboard', vehicles: 'Vehicles', 'fleet-maintenance': '🚗 Vehicle Maintenance',
   troubleshooter: '🧠 Troubleshooter', operations: '🛠️ Operations', tickets: 'Tickets', reports: 'Reports',
-  mytickets: '📋 My Tickets', 'advanced-reports': '📊 Advanced Reports', users: 'Users', audit: 'Audit Log', backup: 'Backup'
+  mytickets: '📋 My Tickets', 'advanced-reports': '📊 Advanced Reports', drivers: 'Drivers', users: 'Users',
+  audit: 'Audit Log', backup: 'Backup'
 };
-
 const writeLog = (user, action, entityType, entityId, details) => {
   api.post('/audit-log', { userId: user?.id, username: user?.username || 'unknown', action, entityType: entityType || '', entityId: String(entityId || ''), details: details || '' }).catch(() => {});
 };
@@ -42,41 +42,33 @@ export default function App() {
   const [viewingVehicleId, setViewingVehicleId] = useState(null);
   const [ready, setReady] = useState(false);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
-
   useEffect(() => { document.documentElement.setAttribute('data-theme', theme); localStorage.setItem('theme', theme); }, [theme]);
-
   useEffect(() => {
     const stored = localStorage.getItem('user'); const token = localStorage.getItem('token');
-    if (stored && token) {
-      try { const u = JSON.parse(stored); setUser(u); setTab((ROLE_TABS[u.role] || ['gm'])[0]); } catch { /* ignore */ }
-    }
+    if (stored && token) { try { const u = JSON.parse(stored); setUser(u); setTab((ROLE_TABS[u.role] || ['gm'])[0]); } catch { /* ignore */ } }
     setReady(true);
   }, []);
-
   useEffect(() => {
-    const handler = (e) => {
-      const target = e.detail;
-      if (target && ROLE_TABS[user?.role]?.includes(target)) setTab(target);
-    };
+    const handler = (e) => { const target = e.detail; if (target && ROLE_TABS[user?.role]?.includes(target)) setTab(target); };
     window.addEventListener('navigate', handler); return () => window.removeEventListener('navigate', handler);
   }, [user]);
-
   const handleLogin = (u) => { setUser(u); setTab((ROLE_TABS[u.role] || ['gm'])[0]); writeLog(u, 'LOGIN', 'User', u.id, 'Signed in as ' + u.role); };
   const handleLogout = () => { writeLog(user, 'LOGOUT', 'User', user?.id, 'Signed out'); localStorage.removeItem('token'); localStorage.removeItem('user'); setUser(null); setTab('gm'); setViewingVehicleId(null); };
   const handleViewVehicle = (id) => { setViewingVehicleId(id); setTab('vehicle-details'); writeLog(user, 'VIEW', 'Vehicle', id, 'Viewed vehicle details'); };
   const handleBackToVehicles = () => { setViewingVehicleId(null); setTab('vehicles'); };
   const handleTabChange = (t) => { setTab(t); if (t !== 'vehicle-details') setViewingVehicleId(null); writeLog(user, 'NAVIGATE', 'Page', t, 'Opened ' + (TAB_LABELS[t] || t)); };
-
   if (!ready) return <div className="loading">Loading...</div>;
   if (!user) return <Login onLogin={handleLogin} />;
   const allowedTabs = ROLE_TABS[user.role] || ['gm'];
-
+  const operationalTabs = allowedTabs.filter(t => !OWNER_ONLY_TABS.has(t));
+  const ownerTabs = allowedTabs.filter(t => OWNER_ONLY_TABS.has(t));
   return (
     <div className="app">
       <header className="header">
         <h1>Fleet ERP</h1>
         <nav className="nav">
-          {allowedTabs.map(t => <button key={t} className={(tab === t || (t === 'vehicles' && tab === 'vehicle-details')) ? 'nav-btn active' : 'nav-btn'} onClick={() => handleTabChange(t)}>{TAB_LABELS[t]}</button>)}
+          {operationalTabs.map(t => <button key={t} className={(tab === t || (t === 'vehicles' && tab === 'vehicle-details')) ? 'nav-btn active' : 'nav-btn'} onClick={() => handleTabChange(t)}>{TAB_LABELS[t]}</button>)}
+          {user.role === 'Owner' && ownerTabs.length > 0 && <span className="owner-only-nav"><span style={{ opacity: 0.55, margin: '0 4px' }}>|</span>{ownerTabs.map(t => <button key={t} className={tab === t ? 'nav-btn active owner-only' : 'nav-btn owner-only'} onClick={() => handleTabChange(t)}>{TAB_LABELS[t]}</button>)}</span>}
         </nav>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'white' }}>
           <button className="theme-toggle" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}>{theme === 'light' ? '🌙' : '☀️'}</button>
@@ -90,16 +82,16 @@ export default function App() {
         {tab === 'vehicles' && <Vehicles onViewVehicle={handleViewVehicle} />}
         {tab === 'vehicle-details' && viewingVehicleId && <VehicleDetails vehicleId={viewingVehicleId} onBack={handleBackToVehicles} />}
         {tab === 'fleet-maintenance' && <VehicleMaintenance />}
-        {tab === 'drivers' && <Drivers />}
         {tab === 'troubleshooter' && <Troubleshooter />}
         {tab === 'operations' && <OperationsHub />}
         {tab === 'tickets' && <Tickets />}
         {tab === 'mytickets' && <MyTickets />}
         {tab === 'advanced-reports' && <AdvancedReports />}
         {tab === 'reports' && <Reports />}
-        {tab === 'users' && <Users />}
-        {tab === 'audit' && <AuditLog />}
-        {tab === 'backup' && <Backup />}
+        {tab === 'drivers' && user.role === 'Owner' && <Drivers />}
+        {tab === 'users' && user.role === 'Owner' && <Users />}
+        {tab === 'audit' && user.role === 'Owner' && <AuditLog />}
+        {tab === 'backup' && user.role === 'Owner' && <Backup />}
       </main>
     </div>
   );

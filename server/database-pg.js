@@ -1113,6 +1113,163 @@ export async function deleteProject(id) {
 }
 
 /* ============================================================
+   PROJECT PURCHASE REQUESTS — OWNER APPROVAL WORKFLOW
+   ============================================================ */
+
+export async function listPurchaseRequests() {
+  const result = await query(`
+    SELECT *
+    FROM purchase_requests
+    ORDER BY created_at DESC, id DESC
+  `);
+  return result.rows;
+}
+
+export async function getPurchaseRequest(id) {
+  const result = await query(
+    `SELECT * FROM purchase_requests WHERE id = $1 LIMIT 1`,
+    [id]
+  );
+  return result.rows[0] || null;
+}
+
+export async function createPurchaseRequest(data = {}) {
+  const quantity = pgNum(data.quantity, 1);
+  const estimatedUnitCost = pgNum(data.estimatedUnitCost ?? data.estimated_unit_cost);
+  const estimatedTotal =
+    data.estimatedTotal !== undefined || data.estimated_total !== undefined
+      ? pgNum(data.estimatedTotal ?? data.estimated_total)
+      : quantity * estimatedUnitCost;
+
+  const result = await query(`
+    INSERT INTO purchase_requests
+    (
+      request_no,
+      requested_by_user_id,
+      requested_by,
+      department,
+      site,
+      project_id,
+      project_no,
+      item_name,
+      quantity,
+      estimated_unit_cost,
+      estimated_total,
+      supplier,
+      purpose,
+      notes,
+      status
+    )
+    VALUES
+    ($1,$2,$3,'Projects',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'Pending')
+    RETURNING *
+  `, [
+    pgStr(data.requestNo ?? data.request_no) || pgGenNo("REQ"),
+    data.requestedByUserId ?? data.requested_by_user_id ?? null,
+    pgStr(data.requestedBy ?? data.requested_by),
+    pgStr(data.site),
+    data.projectId ?? data.project_id ?? null,
+    pgStr(data.projectNo ?? data.project_no),
+    pgStr(data.itemName ?? data.item_name),
+    quantity,
+    estimatedUnitCost,
+    estimatedTotal,
+    pgStr(data.supplier),
+    pgStr(data.purpose),
+    pgStr(data.notes)
+  ]);
+
+  return result.rows[0];
+}
+
+export async function approvePurchaseRequest(id, user = {}, approvalNotes = "") {
+  const current = await getPurchaseRequest(id);
+  if (!current) throw new Error("Purchase request not found");
+  if (current.status !== "Pending") throw new Error("Only Pending requests can be approved");
+
+  const result = await query(`
+    UPDATE purchase_requests
+    SET status = 'Approved',
+        approved_by_user_id = $1,
+        approved_by = $2,
+        approved_at = CURRENT_TIMESTAMP,
+        approval_notes = $3,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = $4
+    RETURNING *
+  `, [
+    user.id ?? null,
+    pgStr(user.fullName ?? user.full_name ?? user.username),
+    pgStr(approvalNotes),
+    id
+  ]);
+
+  return result.rows[0];
+}
+
+export async function rejectPurchaseRequest(id, user = {}, reason = "") {
+  const current = await getPurchaseRequest(id);
+  if (!current) throw new Error("Purchase request not found");
+  if (current.status !== "Pending") throw new Error("Only Pending requests can be rejected");
+
+  const result = await query(`
+    UPDATE purchase_requests
+    SET status = 'Rejected',
+        rejected_by_user_id = $1,
+        rejected_by = $2,
+        rejected_at = CURRENT_TIMESTAMP,
+        rejection_reason = $3,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = $4
+    RETURNING *
+  `, [
+    user.id ?? null,
+    pgStr(user.fullName ?? user.full_name ?? user.username),
+    pgStr(reason),
+    id
+  ]);
+
+  return result.rows[0];
+}
+
+export async function recordPurchaseFromRequest(id, data = {}, user = {}) {
+  const request = await getPurchaseRequest(id);
+  if (!request) throw new Error("Purchase request not found");
+  if (request.status !== "Approved") throw new Error("Purchase can only be recorded after Owner approval");
+  if (request.purchase_id) throw new Error("This request already has a recorded purchase");
+
+  const purchase = await createPurchase({
+    purchaseNo: data.purchaseNo ?? data.purchase_no,
+    type: "Project",
+    referenceNo: request.project_no || request.request_no,
+    itemName: request.item_name,
+    quantity: data.quantity ?? request.quantity,
+    unitCost: data.unitCost ?? data.unit_cost ?? request.estimated_unit_cost,
+    supplier: data.supplier ?? request.supplier,
+    purchasedBy: data.purchasedBy ?? data.purchased_by ?? "Company",
+    purchaseDate: data.purchaseDate ?? data.purchase_date ?? new Date(),
+    notes: data.notes ?? request.notes,
+    requestId: request.id,
+    approvedByUserId: request.approved_by_user_id,
+    approvedBy: request.approved_by,
+    approvedAt: request.approved_at,
+    requestedByUserId: request.requested_by_user_id,
+    requestedBy: request.requested_by
+  });
+
+  const updated = await query(`
+    UPDATE purchase_requests
+    SET status = 'Purchased',
+        purchase_id = $1,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = $2
+    RETURNING *
+  `, [purchase.id, id]);
+
+  return { request: updated.rows[0], purchase };
+}
+
+/* ============================================================
    PURCHASES
    ============================================================ */
 
@@ -1171,10 +1328,16 @@ export async function createPurchase(data = {}) {
       purchase_date,
       month,
       year,
-      notes
+      notes,
+      request_id,
+      approved_by_user_id,
+      approved_by,
+      approved_at,
+      requested_by_user_id,
+      requested_by
     )
     VALUES
-    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
     RETURNING *
   `, [
     pgStr(data.purchaseNo ?? data.purchase_no) || pgGenNo("PUR"),
@@ -1189,7 +1352,13 @@ export async function createPurchase(data = {}) {
     purchaseDate,
     month,
     year,
-    pgStr(data.notes)
+    pgStr(data.notes),
+    data.requestId ?? data.request_id ?? null,
+    data.approvedByUserId ?? data.approved_by_user_id ?? null,
+    pgStr(data.approvedBy ?? data.approved_by),
+    data.approvedAt ?? data.approved_at ?? null,
+    data.requestedByUserId ?? data.requested_by_user_id ?? null,
+    pgStr(data.requestedBy ?? data.requested_by)
   ]);
 
   return result.rows[0];

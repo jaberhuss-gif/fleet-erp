@@ -13,6 +13,7 @@ const SHEET_URL =
   process.env.GOOGLE_SHEET_CSV_URL ||
   "https://docs.google.com/spreadsheets/d/12_WSi8KrHZ9-dtZzrlHmTCI-Jiwg7zDieJ5NU3-lVxY/gviz/tq?tqx=out:csv&gid=146635377";
 const INTERVAL_MS = Math.max(Number(process.env.GOOGLE_SHEET_SYNC_INTERVAL_MS || 5 * 60 * 1000), 60 * 1000);
+const MIN_RECORD_DATE = Date.UTC(2026, 4, 1, -3, 0, 0); // 2026-05-01 00:00 Asia/Riyadh
 const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
@@ -256,8 +257,13 @@ export async function syncGoogleSheetVehicles() {
   for (const values of rows.slice(1)) {
     const plate = String(values[indexes.plate] ?? "").trim();
     if (!plate) continue;
+
     const dateRaw = indexes.date >= 0 ? String(values[indexes.date] ?? "").trim() : "";
     const date = parseSheetDate(dateRaw);
+
+    // Ignore all Records before May 1, 2026. April and earlier are not part of the source period.
+    if (!date || date.getTime() < MIN_RECORD_DATE) continue;
+
     const previous = latestRows.get(plate);
     if (
       !previous ||
@@ -372,6 +378,7 @@ export async function syncGoogleSheetVehicles() {
     unmatched,
     rows: rows.length - 1,
     syncedAt: new Date().toISOString(),
+    sourcePeriodStart: "2026-05-01",
     columns: {
       plate: indexes.plate >= 0 ? headers[indexes.plate] : null,
       driver: indexes.driver >= 0 ? headers[indexes.driver] : null,

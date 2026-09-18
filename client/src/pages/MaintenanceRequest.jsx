@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import api from '../api/client';
 
 const initialForm = {
-  vehicleId: '',
   site: '',
   category: 'General Maintenance',
   priority: 'Medium',
@@ -11,7 +10,6 @@ const initialForm = {
 
 export default function MaintenanceRequest({ user }) {
   const [form, setForm] = useState(initialForm);
-  const [vehicles, setVehicles] = useState([]);
   const [sites, setSites] = useState([]);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -20,15 +18,10 @@ export default function MaintenanceRequest({ user }) {
   const readOnly = user?.role === 'GM';
 
   useEffect(() => {
-    Promise.all([
-      api.get('/vehicles/list'),
-      api.get('/sites')
-    ]).then(([v, s]) => {
-      setVehicles(v.data.vehicles || []);
-      setSites(s.data.sites || []);
-    }).catch(e => {
-      setError(e.response?.data?.error || e.message);
-    }).finally(() => setLoading(false));
+    api.get('/sites')
+      .then(s => setSites(s.data.sites || []))
+      .catch(e => setError(e.response?.data?.error || e.message))
+      .finally(() => setLoading(false));
   }, []);
 
   const submit = async (e) => {
@@ -48,10 +41,12 @@ export default function MaintenanceRequest({ user }) {
 
     try {
       const reportedBy = user?.fullName || user?.username || 'User';
+      const sitePrefix = form.site ? '[Site: ' + form.site + ']\n' : '';
+
       const res = await api.post('/tickets', {
-        vehicleId: form.vehicleId ? Number(form.vehicleId) : null,
+        vehicleId: null,
         category: form.category,
-        description: (form.site ? '[Site: ' + form.site + ']\n' : '') + form.description.trim(),
+        description: sitePrefix + form.description.trim(),
         reportedBy,
         priority: form.priority
       });
@@ -68,9 +63,9 @@ export default function MaintenanceRequest({ user }) {
   return (
     <div className="form-container" style={{ maxWidth: 900 }}>
       <div className="panel" style={{ background: 'linear-gradient(135deg, #0f766e, #0f172a)', color: '#fff', border: 'none' }}>
-        <h1 style={{ margin: 0 }}>📝 Request Maintenance</h1>
+        <h1 style={{ margin: 0 }}>📝 Request Maintenance / Building</h1>
         <p style={{ margin: '8px 0 0', opacity: .9 }}>
-          Submit a maintenance requirement for a site, vehicle or general facility issue.
+          Submit a maintenance requirement for a site, building or general facility issue.
         </p>
       </div>
 
@@ -89,14 +84,6 @@ export default function MaintenanceRequest({ user }) {
           </div>
 
           <div className="form-group">
-            <label>Vehicle</label>
-            <select value={form.vehicleId} onChange={e => setForm({ ...form, vehicleId: e.target.value })} disabled={readOnly}>
-              <option value="">-- General / No vehicle --</option>
-              {vehicles.map(v => <option key={v.id} value={v.id}>{v.plate} - {v.driver}</option>)}
-            </select>
-          </div>
-
-          <div className="form-group">
             <label>Request Type</label>
             <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} disabled={readOnly}>
               <option>General Maintenance</option>
@@ -104,7 +91,6 @@ export default function MaintenanceRequest({ user }) {
               <option>Plumbing</option>
               <option>HVAC / A/C</option>
               <option>Building</option>
-              <option>Vehicle</option>
               <option>Other</option>
             </select>
           </div>
@@ -125,7 +111,7 @@ export default function MaintenanceRequest({ user }) {
           <textarea
             value={form.description}
             onChange={e => setForm({ ...form, description: e.target.value })}
-            placeholder="Describe the maintenance requirement, problem, location or needed action..."
+            placeholder="Describe the building/facility maintenance requirement, problem, location or needed action..."
             rows={6}
             required
             disabled={readOnly}
@@ -136,7 +122,7 @@ export default function MaintenanceRequest({ user }) {
           <button type="submit" className="btn btn-primary" disabled={readOnly}>
             Submit Maintenance Request
           </button>
-          <button type="button" className="btn btn-warning" onClick={() => setForm(initialForm)} disabled={readOnly}>
+          <button type="button" className="btn btn-warning" onClick={() => { setForm(initialForm); setMessage(''); setError(''); }} disabled={readOnly}>
             Clear
           </button>
         </div>

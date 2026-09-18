@@ -111,7 +111,8 @@ export async function reconcileAndNotify() {
       CONCAT(v.plate_number, ' ', COALESCE(v.plate_code, '')) AS vehicle_plate,
       COALESCE(NULLIF(TRIM(d.name), ''), NULLIF(TRIM(v.driver), ''), '') AS driver_name,
       COALESCE(NULLIF(TRIM(d.phone), ''), NULLIF(TRIM(v.phone), ''), '') AS driver_phone,
-      v.meter_updated_at
+      v.meter_updated_at,
+      v.current_km
     FROM vehicles v
     LEFT JOIN drivers d ON d.vehicle_id = v.id
     WHERE COALESCE(LOWER(TRIM(v.status)), '') NOT IN ('inactive', 'sold', 'disposed', 'disabled')
@@ -161,7 +162,8 @@ export async function reconcileAndNotify() {
 
     due.push({
       ...upsert.rows[0],
-      vehicle_plate: v.vehicle_plate
+      vehicle_plate: v.vehicle_plate,
+      current_km: Number(v.current_km || 0)
     });
   }
 
@@ -192,6 +194,7 @@ export async function reconcileAndNotify() {
       n.driver_name,
       n.driver_phone,
       CONCAT(v.plate_number, ' ', COALESCE(v.plate_code, '')) AS vehicle_plate,
+      v.current_km,
       n.owner_notified_at
     FROM km_daily_notifications n
     JOIN vehicles v ON v.id = n.vehicle_id
@@ -209,7 +212,7 @@ export async function reconcileAndNotify() {
         const sendResult = await sendFcmToTokens({
           tokens,
           title: "🚨 Daily KM Compliance",
-          body: `${openToday.rows.length} vehicle(s) have no KM reading today: ${preview}${extra}`,
+          body: `${openToday.rows.length} vehicle(s) have no KM reading by 07:00: ${preview}${extra}`,
           data: {
             type: "daily_km_summary",
             icon: "🚨",
@@ -253,6 +256,7 @@ export async function getKmDailyNotifications() {
       n.driver_user_id,
       n.reminder_date,
       n.status,
+      v.current_km,
       n.first_detected_at,
       n.last_checked_at,
       n.driver_notified_at,

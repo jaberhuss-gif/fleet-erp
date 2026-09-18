@@ -526,6 +526,10 @@ app.get("/api/work-orders/:id", async (req, res) => {
 });
 app.post("/api/work-orders", async (req, res) => {
   try {
+    const scopedSite = userSiteScope(req.user);
+    if (scopedSite && req.body?.site && !matchesSite(req.body.site, scopedSite)) {
+      return res.status(403).json({ success: false, error: "This user is restricted to " + scopedSite + "." });
+    }
     if (req.body?.assignedTo || req.body?.assigned_to) {
       if (req.user?.role !== "Owner") {
         return res.status(403).json({ success: false, error: "Only Owner can issue an assignment order." });
@@ -536,6 +540,10 @@ app.post("/api/work-orders", async (req, res) => {
 });
 app.put("/api/work-orders/:id", async (req, res) => {
   try {
+    const scopedSite = userSiteScope(req.user);
+    if (scopedSite && req.body?.site && !matchesSite(req.body.site, scopedSite)) {
+      return res.status(403).json({ success: false, error: "This user is restricted to " + scopedSite + "." });
+    }
     if (req.body?.assignedTo !== undefined || req.body?.assigned_to !== undefined) {
       if (req.user?.role !== "Owner") {
         return res.status(403).json({ success: false, error: "Only Owner can issue or change an assignment order." });
@@ -567,11 +575,23 @@ app.get("/api/projects/:id", async (req, res) => {
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 app.post("/api/projects", async (req, res) => {
-  try { res.json({ success: true, project: await createProjectPG(req.body) }); }
+  try {
+    const scopedSite = userSiteScope(req.user);
+    if (scopedSite && req.body?.site && !matchesSite(req.body.site, scopedSite)) {
+      return res.status(403).json({ success: false, error: "This user is restricted to " + scopedSite + "." });
+    }
+    res.json({ success: true, project: await createProjectPG(req.body) });
+  }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 app.put("/api/projects/:id", async (req, res) => {
-  try { res.json({ success: true, project: await updateProjectPG(req.params.id, req.body) }); }
+  try {
+    const scopedSite = userSiteScope(req.user);
+    if (scopedSite && req.body?.site && !matchesSite(req.body.site, scopedSite)) {
+      return res.status(403).json({ success: false, error: "This user is restricted to " + scopedSite + "." });
+    }
+    res.json({ success: true, project: await updateProjectPG(req.params.id, req.body) });
+  }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 app.delete("/api/projects/:id", async (req, res) => {

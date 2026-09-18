@@ -32,7 +32,8 @@ export async function login(username, password) {
       role,
       email,
       phone,
-      is_active
+      is_active,
+      site
     FROM users
     WHERE username = $1
       AND is_active = 1
@@ -69,7 +70,8 @@ export async function login(username, password) {
       fullName: user.full_name,
       role: user.role,
       email: user.email,
-      phone: user.phone
+      phone: user.phone,
+      site: user.site || ''
     }
   };
 }
@@ -100,6 +102,7 @@ export async function listUsers() {
       email,
       phone,
       is_active,
+      site,
       created_at
     FROM users
     ORDER BY id
@@ -124,6 +127,7 @@ export async function createUser(data = {}) {
   const role = data.role || "Driver";
   const email = data.email || "";
   const phone = data.phone || "";
+  const site = data.site || "";
 
   const existing = await query(
     `SELECT id FROM users WHERE username = $1 LIMIT 1`,
@@ -144,9 +148,10 @@ export async function createUser(data = {}) {
       role,
       email,
       phone,
+      site,
       is_active
     )
-    VALUES ($1, $2, $3, $4, $5, $6, 1)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
     RETURNING
       id,
       username,
@@ -162,7 +167,8 @@ export async function createUser(data = {}) {
     fullName,
     role,
     email,
-    phone
+    phone,
+    site
   ]);
 
   return result.rows[0];

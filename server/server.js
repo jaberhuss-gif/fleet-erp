@@ -327,7 +327,17 @@ app.put("/api/tickets/:id/close-with-notes", async (req, res) => {
 
 app.get("/api/tickets/by-reporter/:name", async (req, res) => {
   try {
-    const tickets = await listTicketsByReporterPG(req.params.name);
+    const requested = String(req.params.name || "").trim();
+    const ownNames = [
+      String(req.user?.fullName || "").trim(),
+      String(req.user?.username || "").trim()
+    ].filter(Boolean);
+
+    if (req.user?.role !== "Owner" && !ownNames.includes(requested)) {
+      return res.status(403).json({ success: false, error: "You may only view your own tickets." });
+    }
+
+    const tickets = await listTicketsByReporterPG(requested);
     res.json({ success: true, tickets });
   } catch (e) {
     console.error("Error fetching reporter tickets:", e);
@@ -337,7 +347,17 @@ app.get("/api/tickets/by-reporter/:name", async (req, res) => {
 
 app.get("/api/tickets/stats/:name", async (req, res) => {
   try {
-    const stats = await getReporterStatsPG(req.params.name);
+    const requested = String(req.params.name || "").trim();
+    const ownNames = [
+      String(req.user?.fullName || "").trim(),
+      String(req.user?.username || "").trim()
+    ].filter(Boolean);
+
+    if (req.user?.role !== "Owner" && !ownNames.includes(requested)) {
+      return res.status(403).json({ success: false, error: "You may only view your own ticket stats." });
+    }
+
+    const stats = await getReporterStatsPG(requested);
     res.json({ success: true, ...stats });
   } catch (e) {
     console.error("Error fetching reporter stats:", e);

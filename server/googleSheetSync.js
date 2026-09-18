@@ -166,7 +166,9 @@ export async function syncGoogleSheetVehicles() {
   let matched = 0;
   let updated = 0;
   let unmatched = 0;
+  let kmFound = 0;
   let kmUpdated = 0;
+  const samples = [];
 
   for (const values of rows.slice(1)) {
     const plate = String(values[indexes.plate] ?? "").trim();
@@ -175,7 +177,9 @@ export async function syncGoogleSheetVehicles() {
     const code = indexes.code >= 0 ? String(values[indexes.code] ?? "").trim() : "";
     const driver = indexes.driver >= 0 ? String(values[indexes.driver] ?? "").trim() : "";
     const phone = indexes.phone >= 0 ? String(values[indexes.phone] ?? "").trim() : "";
+    const kmRaw = indexes.km >= 0 ? String(values[indexes.km] ?? "").trim() : "";
     const km = indexes.km >= 0 ? cleanKm(values[indexes.km]) : null;
+    if (km !== null) kmFound += 1;
     const active = indexes.active >= 0 ? !isInactive(values[indexes.active]) : null;
 
     // The sheet may provide a combined plate such as "2290 EUA",
@@ -211,6 +215,15 @@ export async function syncGoogleSheetVehicles() {
     }
 
     matched += 1;
+    if (samples.length < 10) {
+      samples.push({
+        plate,
+        kmRaw,
+        kmParsed: km,
+        existingKm: Number(result.rows[0].current_km || 0),
+        matchedDbPlate: `${result.rows[0].plate_number || ""} ${result.rows[0].plate_code || ""}`.trim()
+      });
+    }
     const id = result.rows[0].id;
     const sets = ["updated_at = CURRENT_TIMESTAMP"];
     const params = [];
@@ -245,6 +258,7 @@ export async function syncGoogleSheetVehicles() {
   return {
     matched,
     updated,
+    kmFound,
     kmUpdated,
     unmatched,
     rows: rows.length - 1,
@@ -254,7 +268,8 @@ export async function syncGoogleSheetVehicles() {
       driver: indexes.driver >= 0 ? headers[indexes.driver] : null,
       phone: indexes.phone >= 0 ? headers[indexes.phone] : null,
       km: indexes.km >= 0 ? headers[indexes.km] : null
-    }
+    },
+    samples
   };
 }
 

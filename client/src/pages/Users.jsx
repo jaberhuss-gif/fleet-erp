@@ -8,11 +8,15 @@ export default function Users() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [sites, setSites] = useState([]);
   const [form, setForm] = useState({
-    username: '', password: '', fullName: '', role: 'Driver', email: '', phone: ''
+    username: '', password: '', fullName: '', role: 'Driver', email: '', phone: '', site: ''
   });
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    api.get('/sites').then(r => setSites(r.data.sites || [])).catch(() => {});
+  }, []);
 
   const load = async () => {
     try {
@@ -24,7 +28,7 @@ export default function Users() {
   };
 
   const resetForm = () => {
-    setForm({ username: '', password: '', fullName: '', role: 'Driver', email: '', phone: '' });
+    setForm({ username: '', password: '', fullName: '', role: 'Driver', email: '', phone: '', site: '' });
     setShowForm(false);
   };
 
@@ -105,8 +109,19 @@ export default function Users() {
                 <option value="Driver">🚗 Driver (Vehicle Maintenance)</option>
                 <option value="FleetSupervisor">🔧 Fleet Supervisor</option>
                 <option value="FleetViewer">👀 Fleet Viewer (Vehicle Tickets Only)</option>
+                <option value="SupportManager">👀 Support Manager (Site View Only)</option>
               </select>
             </div>
+            {form.role === 'SupportManager' && (
+              <div className="form-group">
+                <label>Assigned Site *</label>
+                <select value={form.site} onChange={e => setForm({ ...form, site: e.target.value })} required>
+                  <option value="">-- Select site --</option>
+                  {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                </select>
+              </div>
+            )}
+
             <div className="form-group">
               <label>Email</label>
               <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
@@ -132,7 +147,7 @@ export default function Users() {
           <thead>
             <tr>
               <th>ID</th><th>Username</th><th>Full Name</th><th>Role</th>
-              <th>Email</th><th>Phone</th><th>Status</th><th>Action</th>
+              <th>Site</th><th>Email</th><th>Phone</th><th>Status</th><th>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -142,6 +157,7 @@ export default function Users() {
                 <td style={{ fontWeight: 'bold' }}>{u.username}</td>
                 <td>{u.full_name || '-'}</td>
                 <td>{getRoleBadge(u.role)}</td>
+                <td>{u.site || '-'}</td>
                 <td>{u.email || '-'}</td>
                 <td>{u.phone || '-'}</td>
                 <td>

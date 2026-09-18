@@ -12,7 +12,7 @@ import { fileURLToPath } from "url";
 import * as db from "./database-pg.js";
 import { query as pgQuery } from "./postgres.js";
 
-const { listVehicles:listVehiclesPG, getVehicleById:getVehicleByIdPG, createVehicle:createVehiclePG, updateVehicle:updateVehiclePG, deleteVehicle:deleteVehiclePG, deleteAllVehicles:deleteAllVehiclesPG, addReading:addReadingPG, listReadings:listReadingsPG, changeOil:changeOilPG, listOilChanges:listOilChangesPG, createTicket:createTicketPG, listTickets:listTicketsPG, closeTicket:closeTicketPG, deleteAllTickets:deleteAllTicketsPG, acknowledgeTicket:acknowledgeTicketPG, closeTicketWithNotes:closeTicketWithNotesPG, listTicketsByReporter:listTicketsByReporterPG, getReporterStats:getReporterStatsPG, listSites:listSitesPG, getSite:getSitePG, createSite:createSitePG, updateSite:updateSitePG, deleteSite:deleteSitePG, getAlerts:getAlertsPG, importVehicles:importVehiclesPG, listWorkOrders:listWorkOrdersPG, getWorkOrder:getWorkOrderPG, createWorkOrder:createWorkOrderPG, updateWorkOrder:updateWorkOrderPG, closeWorkOrder:closeWorkOrderPG, deleteWorkOrder:deleteWorkOrderPG, listProjects:listProjectsPG, getProject:getProjectPG, createProject:createProjectPG, updateProject:updateProjectPG, deleteProject:deleteProjectPG, listPurchases:listPurchasesPG, createPurchase:createPurchasePG, deletePurchase:deletePurchasePG, listDrivers:listDriversPG, getDriver:getDriverPG, createDriver:createDriverPG, updateDriver:updateDriverPG, deleteDriver:deleteDriverPG, listInventory:listInventoryPG, getInventoryItem:getInventoryItemPG, createInventoryItem:createInventoryItemPG, updateInventoryItem:updateInventoryItemPG, deleteInventoryItem:deleteInventoryItemPG, stockIn:stockInPG, stockOut:stockOutPG, transferStock:transferStockPG, listStockTransactions:listStockTransactionsPG, getLowStockItems:getLowStockItemsPG, listPeriodicMaintenance:listPeriodicMaintenancePG, getPeriodicMaintenance:getPeriodicMaintenancePG, createPeriodicMaintenance:createPeriodicMaintenancePG, updatePeriodicMaintenance:updatePeriodicMaintenancePG, completePeriodicMaintenance:completePeriodicMaintenancePG, deletePeriodicMaintenance:deletePeriodicMaintenancePG, getPeriodicAlerts:getPeriodicAlertsPG, generateScheduledMaintenance:generateScheduledMaintenancePG, logAction:logActionPG, listAuditLog:listAuditLogPG, getAuditStats:getAuditStatsPG, clearAuditLog:clearAuditLogPG, getBuildingDashboard:getBuildingDashboardPG, getDashboard:getDashboardPG, getMonthlyReport:getMonthlyReportPG, getFinancialReport:getFinancialReportPG }=db;
+const { listVehicles:listVehiclesPG, getVehicleById:getVehicleByIdPG, createVehicle:createVehiclePG, updateVehicle:updateVehiclePG, deleteVehicle:deleteVehiclePG, deleteAllVehicles:deleteAllVehiclesPG, addReading:addReadingPG, listReadings:listReadingsPG, changeOil:changeOilPG, listOilChanges:listOilChangesPG, createTicket:createTicketPG, listTickets:listTicketsPG, closeTicket:closeTicketPG, deleteAllTickets:deleteAllTicketsPG, acknowledgeTicket:acknowledgeTicketPG, closeTicketWithNotes:closeTicketWithNotesPG, listTicketsByReporter:listTicketsByReporterPG, getReporterStats:getReporterStatsPG, listSites:listSitesPG, getSite:getSitePG, createSite:createSitePG, updateSite:updateSitePG, deleteSite:deleteSitePG, getAlerts:getAlertsPG, importVehicles:importVehiclesPG, listWorkOrders:listWorkOrdersPG, getWorkOrder:getWorkOrderPG, createWorkOrder:createWorkOrderPG, updateWorkOrder:updateWorkOrderPG, closeWorkOrder:closeWorkOrderPG, deleteWorkOrder:deleteWorkOrderPG, listProjects:listProjectsPG, getProject:getProjectPG, createProject:createProjectPG, updateProject:updateProjectPG, deleteProject:deleteProjectPG, listPurchases:listPurchasesPG, createPurchase:createPurchasePG, deletePurchase:deletePurchasePG, listDrivers:listDriversPG, getDriver:getDriverPG, createDriver:createDriverPG, updateDriver:updateDriverPG, deleteDriver:deleteDriverPG, listInventory:listInventoryPG, getInventoryItem:getInventoryItemPG, createInventoryItem:createInventoryItemPG, updateInventoryItem:updateInventoryItemPG, deleteInventoryItem:deleteInventoryItemPG, stockIn:stockInPG, stockOut:stockOutPG, transferStock:transferStockPG, listStockTransactions:listStockTransactionsPG, getLowStockItems:getLowStockItemsPG, listPeriodicMaintenance:listPeriodicMaintenancePG, getPeriodicMaintenance:getPeriodicMaintenancePG, createPeriodicMaintenance:createPeriodicMaintenancePG, updatePeriodicMaintenance:updatePeriodicMaintenancePG, completePeriodicMaintenance:completePeriodicMaintenancePG, deletePeriodicMaintenance:deletePeriodicMaintenancePG, getPeriodicAlerts:getPeriodicAlertsPG, generateScheduledMaintenance:generateScheduledMaintenancePG, logAction:logActionPG, listAuditLog:listAuditLogPG, getAuditStats:getAuditStatsPG, clearAuditLog:clearAuditLogPG, getBuildingDashboard:getBuildingDashboardPG, getDashboard:getDashboardPG, getMonthlyReport:getMonthlyReportPG, getFinancialReport:getFinancialReportPG, ensurePurchaseRequestsTable:ensurePurchaseRequestsTablePG, listPurchaseRequests:listPurchaseRequestsPG, getPurchaseRequest:getPurchaseRequestPG, createPurchaseRequest:createPurchaseRequestPG, approvePurchaseRequest:approvePurchaseRequestPG, rejectPurchaseRequest:rejectPurchaseRequestPG, recordPurchaseFromRequest:recordPurchaseFromRequestPG }=db;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,12 +28,17 @@ try {
   await pgQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS site TEXT`);
   await pgQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT`);
   await pgQuery(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS department TEXT`);
+  await pgQuery(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS assigned_to_user_id BIGINT`);
+  await pgQuery(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS assigned_to_name TEXT`);
+  await pgQuery(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS assigned_by_user_id BIGINT`);
+  await pgQuery(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ`);
   await pgQuery(`UPDATE tickets
-    SET department = CASE WHEN vehicle_id IS NOT NULL THEN 'Fleet' ELSE 'Support' END
+    SET department = CASE WHEN vehicle_id IS NOT NULL THEN 'Fleet' ELSE 'Building' END
     WHERE department IS NULL OR TRIM(department) = ''`);
   await ensureUserAccessTable();
+  await ensurePurchaseRequestsTablePG();
 } catch (e) {
-  console.error("Access scope schema check failed:", e.message);
+  console.error("Access/purchase workflow schema check failed:", e.message);
 }
 
 // ============================================================
@@ -142,17 +147,17 @@ app.get("/api/alerts", async (req, res) => {
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-// ===== SUPPORT MANAGER - SITE-SCOPED READ-ONLY =====
+// ===== SUPPORT MANAGER - GLOBAL READ-ONLY VIEW =====
+// Support Manager is not site-scoped. Department access is controlled by the
+// per-user View/Work matrix; this legacy page is kept as a compatibility view.
 app.get("/api/support-manager/tickets", async (req, res) => {
-  if (req.user?.role !== "SupportManager") return res.status(403).json({ success: false, error: "Forbidden" });
-  const site = String(req.user?.site || "").trim();
-  if (!site) return res.status(400).json({ success: false, error: "No site assigned to this Support Manager." });
-
   try {
     const result = await pgQuery(`
       SELECT
         t.id,
         t.opened_at,
+        t.department,
+        t.location,
         t.category,
         t.priority,
         t.status,
@@ -162,25 +167,11 @@ app.get("/api/support-manager/tickets", async (req, res) => {
         COALESCE(v.plate_number || ' ' || v.plate_code, '') AS plate
       FROM tickets t
       LEFT JOIN vehicles v ON v.id = t.vehicle_id
-      WHERE
-        t.location = $1
-        OR v.location = $1
-        OR t.description LIKE $2
+      WHERE COALESCE(t.department, 'Building') IN ('Support','Building')
       ORDER BY t.opened_at DESC, t.id DESC
-    `, [site, "[Site: " + site + "]%"]);
+    `);
 
-    const tickets = result.rows.map(t => ({
-      id: t.id,
-      opened_at: t.opened_at,
-      plate: t.plate || "",
-      category: t.category || "",
-      priority: t.priority || "",
-      status: t.status || "",
-      description: t.description || "",
-      reported_by: t.reported_by || "",
-      closed_at: t.closed_at || null
-    }));
-    res.json({ success: true, tickets });
+    res.json({ success: true, tickets: result.rows });
   } catch (e) {
     console.error("SupportManager tickets error:", e);
     res.status(500).json({ success: false, error: e.message });
@@ -188,10 +179,6 @@ app.get("/api/support-manager/tickets", async (req, res) => {
 });
 
 app.get("/api/support-manager/warehouse", async (req, res) => {
-  if (req.user?.role !== "SupportManager") return res.status(403).json({ success: false, error: "Forbidden" });
-  const site = String(req.user?.site || "").trim();
-  if (!site) return res.status(400).json({ success: false, error: "No site assigned to this Support Manager." });
-
   try {
     const result = await pgQuery(`
       SELECT
@@ -205,9 +192,8 @@ app.get("/api/support-manager/warehouse", async (req, res) => {
       FROM warehouse_stock ws
       LEFT JOIN warehouse_locations wl ON wl.code = ws.location_code
       LEFT JOIN inventory i ON i.code = ws.item_code
-      WHERE wl.site = $1
       ORDER BY COALESCE(i.name, ws.item_code), ws.location_code
-    `, [site]);
+    `);
 
     res.json({ success: true, items: result.rows });
   } catch (e) {
@@ -220,22 +206,32 @@ app.get("/api/support-manager/warehouse", async (req, res) => {
 
 app.get("/api/tickets", async (req, res) => {
   try {
-    const tickets = await listTicketsPG(req.query);
+    let tickets = await listTicketsPG(req.query);
 
-    if (req.user?.role === "FleetViewer") {
-      const vehicleTickets = tickets
-        .filter(t => t.vehicle_id !== null && t.vehicle_id !== undefined)
-        .map(t => ({
-          id: t.id,
-          opened_at: t.opened_at,
-          plate: t.plate || "",
-          category: t.category || "",
-          priority: t.priority || "",
-          status: t.status || "",
-          description: t.description || ""
-        }));
+    if (req.user?.role !== "Owner") {
+      const access = await getUserAccess(req.user.id, req.user.role);
+      const departmentModule = {
+        Fleet: "fleet",
+        Building: "building",
+        Support: "support",
+        Projects: "projects",
+        Warehouse: "warehouse"
+      };
 
-      return res.json({ success: true, tickets: vehicleTickets });
+      const canSeeAllTickets = ["GM", "Accountant"].includes(req.user?.role);
+      const visibleDepartments = Object.entries(departmentModule)
+        .filter(([, module]) => access[module]?.can_view)
+        .map(([department]) => department);
+
+      if (!canSeeAllTickets) {
+        tickets = tickets.filter(t =>
+          visibleDepartments.includes(t.department || (t.vehicle_id ? "Fleet" : "Building"))
+        );
+      }
+
+      if (req.user?.role === "FleetViewer") {
+        tickets = tickets.filter(t => (t.department || (t.vehicle_id ? "Fleet" : "Building")) === "Fleet");
+      }
     }
 
     res.json({ success: true, tickets });
@@ -331,7 +327,7 @@ app.post("/api/issues/report", async (req, res) => {
   try {
     const { vehicleId, issueType, category, description, reportedBy, priority, openedAt } = req.body;
     const finalCategory = issueType || category || "Other";
-    const ticket = await createTicketPG({ vehicleId, category: finalCategory, description, reportedBy: reportedBy || "Driver", priority: priority || "Medium", openedAt });
+    const ticket = await createTicketPG({ vehicleId, category: finalCategory, description, reportedBy: reportedBy || "Driver", priority: priority || "Medium", openedAt, department: "Fleet" });
     res.json({ success: true, message: "Ticket created", ticket });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
@@ -447,12 +443,24 @@ app.get("/api/work-orders/:id", async (req, res) => {
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 app.post("/api/work-orders", async (req, res) => {
-  try { res.json({ success: true, order: await createWorkOrderPG(req.body) }); }
-  catch (e) { res.status(400).json({ success: false, error: e.message }); }
+  try {
+    if (req.body?.assignedTo || req.body?.assigned_to) {
+      if (req.user?.role !== "Owner") {
+        return res.status(403).json({ success: false, error: "Only Owner can issue an assignment order." });
+      }
+    }
+    res.json({ success: true, order: await createWorkOrderPG(req.body) });
+  } catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 app.put("/api/work-orders/:id", async (req, res) => {
-  try { res.json({ success: true, order: await updateWorkOrderPG(req.params.id, req.body) }); }
-  catch (e) { res.status(400).json({ success: false, error: e.message }); }
+  try {
+    if (req.body?.assignedTo !== undefined || req.body?.assigned_to !== undefined) {
+      if (req.user?.role !== "Owner") {
+        return res.status(403).json({ success: false, error: "Only Owner can issue or change an assignment order." });
+      }
+    }
+    res.json({ success: true, order: await updateWorkOrderPG(req.params.id, req.body) });
+  } catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 app.put("/api/work-orders/:id/close", async (req, res) => {
   try { res.json({ success: true, order: await closeWorkOrderPG(req.params.id, req.body) }); }
@@ -495,12 +503,115 @@ app.get("/api/purchases", async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 app.post("/api/purchases", async (req, res) => {
-  try { res.json({ success: true, purchase: await createPurchasePG(req.body) }); }
-  catch (e) { res.status(400).json({ success: false, error: e.message }); }
+  try {
+    if (String(req.body?.type || "").toLowerCase() === "project" && !req.body?.requestId && !req.body?.request_id) {
+      return res.status(403).json({ success: false, error: "Project purchases require an approved Purchase Request first." });
+    }
+    res.json({ success: true, purchase: await createPurchasePG(req.body) });
+  } catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 app.delete("/api/purchases/:id", async (req, res) => {
   try { res.json({ success: await deletePurchasePG(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ===== PROJECT PURCHASE REQUESTS =====
+app.get("/api/purchase-requests", async (req, res) => {
+  try {
+    const requests = await listPurchaseRequestsPG();
+    const isOwner = req.user?.role === "Owner";
+    const access = isOwner ? null : await getUserAccess(req.user.id, req.user.role);
+    if (!isOwner) {
+      const canView = access?.purchase_requests?.can_view;
+      if (!canView) return res.status(403).json({ success: false, error: "Forbidden" });
+    }
+    res.json({ success: true, requests });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post("/api/purchase-requests", async (req, res) => {
+  try {
+    const requestedBy = req.user?.fullName || req.user?.username || req.body?.requestedBy || "User";
+    const request = await createPurchaseRequestPG({
+      ...req.body,
+      requestedByUserId: req.user?.id,
+      requestedBy
+    });
+    await logActionPG({
+      userId: req.user?.id,
+      username: req.user?.username,
+      action: "CREATE_PURCHASE_REQUEST",
+      entityType: "PurchaseRequest",
+      entityId: request.id,
+      details: request
+    });
+    res.status(201).json({ success: true, request });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+app.put("/api/purchase-requests/:id/approve", requireRole("Owner"), async (req, res) => {
+  try {
+    const request = await approvePurchaseRequestPG(req.params.id, req.user, req.body?.approvalNotes || "");
+    await logActionPG({
+      userId: req.user?.id,
+      username: req.user?.username,
+      action: "APPROVE_PURCHASE_REQUEST",
+      entityType: "PurchaseRequest",
+      entityId: request.id,
+      details: { requestNo: request.request_no, approvedBy: request.approved_by, approvedAt: request.approved_at, notes: request.approval_notes }
+    });
+    res.json({ success: true, request });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+app.put("/api/purchase-requests/:id/reject", requireRole("Owner"), async (req, res) => {
+  try {
+    const request = await rejectPurchaseRequestPG(req.params.id, req.user, req.body?.reason || "");
+    await logActionPG({
+      userId: req.user?.id,
+      username: req.user?.username,
+      action: "REJECT_PURCHASE_REQUEST",
+      entityType: "PurchaseRequest",
+      entityId: request.id,
+      details: { requestNo: request.request_no, rejectedBy: request.rejected_by, rejectedAt: request.rejected_at, reason: request.rejection_reason }
+    });
+    res.json({ success: true, request });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+app.post("/api/purchase-requests/:id/purchase", async (req, res) => {
+  try {
+    const request = await getPurchaseRequestPG(req.params.id);
+    if (!request) return res.status(404).json({ success: false, error: "Purchase request not found" });
+
+    if (req.user?.role !== "Owner") {
+      const access = await getUserAccess(req.user.id, req.user.role);
+      if (!access?.purchase_requests?.can_work) {
+        return res.status(403).json({ success: false, error: "Purchase recording requires Purchase Request work permission." });
+      }
+    }
+
+    const result = await recordPurchaseFromRequestPG(req.params.id, req.body || {}, req.user);
+    await logActionPG({
+      userId: req.user?.id,
+      username: req.user?.username,
+      action: "RECORD_APPROVED_PURCHASE",
+      entityType: "Purchase",
+      entityId: result.purchase.id,
+      details: { requestId: result.request.id, requestNo: result.request.request_no, approvalBy: result.purchase.approved_by, approvalAt: result.purchase.approved_at, purchase: result.purchase }
+    });
+    res.status(201).json({ success: true, ...result });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
 });
 
 // ===== BUILDING DASHBOARD =====
@@ -532,7 +643,7 @@ app.post("/api/voice/transcript", async (req, res) => {
     for (const [cat, words] of Object.entries(kw)) {
       if (words.some(w => txt.includes(w))) { category = cat; break; }
     }
-    const ticket = await createTicketPG({ vehicleId, category, description: transcript, reportedBy: "Voice", priority: "High" });
+    const ticket = await createTicketPG({ vehicleId, category, description: transcript, reportedBy: "Voice", priority: "High", department: vehicleId ? "Fleet" : "Building" });
     res.json({ success: true, ticket, detectedCategory: category });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
 
@@ -183,7 +183,23 @@ export default function PeriodicMaintenance({ canWork = false }) {
           
           <div className="btn-row" style={{ margin: 0 }}>
             {canWork && <button className="btn btn-warning" style={{ marginRight: '8px' }} onClick={handleGenerate}>⚡ Auto-Generate All</button>}
-            <button className="btn btn-success" style={{ marginRight: '8px' }} onClick={() => exportToCSV(currentList, 'periodic-maintenance', [{key:"vehicle_plate",label:"Vehicle"},{key:"type",label:"Type"},{key:"scheduled_date",label:"Scheduled"},{key:"completed_date",label:"Completed"},{key:"status",label:"Status"},{key:"technician",label:"Technician"},{key:"cost",label:"Cost"}])}>Export CSV</button>
+            <button
+              className="btn btn-success"
+              style={{ marginRight: '8px' }}
+              onClick={() =>
+                exportToCSV(currentList, 'periodic-maintenance', [
+                  { key: 'vehicle_plate', label: 'Vehicle' },
+                  { key: 'type', label: 'Type' },
+                  { key: 'scheduled_date', label: 'Scheduled' },
+                  { key: 'completed_date', label: 'Completed' },
+                  { key: 'status', label: 'Status' },
+                  { key: 'technician', label: 'Technician' },
+                  { key: 'cost', label: 'Cost' }
+                ])
+              }
+            >
+              Export CSV
+            </button>
             {canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
               {showForm ? 'Cancel' : '+ Schedule New'}
             </button>

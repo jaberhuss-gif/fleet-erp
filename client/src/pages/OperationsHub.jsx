@@ -56,8 +56,8 @@ export default function OperationsHub({ access = {}, user }) {
       </div>
 
       {tab === 'maintenance' && <BuildingMaintenance user={user} access={access} />}
-      {tab === 'projects' && <Projects />}
-      {tab === 'warehouse' && <Warehouse />}
+      {tab === 'projects' && <Projects user={user} access={access} />}
+      {tab === 'warehouse' && <Warehouse user={user} access={access} />}
       {tab === 'purchase-requests' && <PurchaseRequests access={access} user={user} />}
     </div>
   );

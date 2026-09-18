@@ -33,6 +33,7 @@ export default function DailyKmGate({ user }) {
 
   const vehicle = status.vehicle;
   const goToFleet = () => {
+    setStatus(null);
     window.dispatchEvent(new CustomEvent('navigate', { detail: 'fleet' }));
   };
 

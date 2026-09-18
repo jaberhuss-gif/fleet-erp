@@ -223,82 +223,13 @@ async function sendMessage(phone, vehicle) {
 }
 
 async function runDailyKmReminders() {
-  if (!pool) throw new Error("DATABASE_URL is not configured");
-
-  await ensureReminderTable();
-
-  // Normalize meter_updated_at to text before casting so this works with
-  // both legacy text schemas and current timestamp schemas. This avoids the
-  // PostgreSQL timezone(unknown,text) error seen in the background worker.
-  const result = await pool.query(`
-    SELECT id, plate_number, plate_code, driver, phone
-    FROM vehicles
-    WHERE COALESCE(LOWER(TRIM(status)), '') NOT IN ('inactive', 'sold', 'disposed', 'disabled')
-      AND COALESCE(TRIM(phone), '') <> ''
-      AND (
-        NULLIF(TRIM(meter_updated_at::text), '') IS NULL
-        OR (
-          NULLIF(TRIM(meter_updated_at::text), '')::timestamptz AT TIME ZONE 'Asia/Riyadh'
-        )::date <> (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date
-      )
-    ORDER BY plate_number, plate_code
-  `);
-
-  let due = 0;
-  let sent = 0;
-  let disabled = 0;
-  let skipped = 0;
-
-  for (const vehicle of result.rows) {
-    due += 1;
-
-    const already = await pool.query(
-      `SELECT id
-       FROM km_daily_reminders
-       WHERE vehicle_id = $1
-         AND reminder_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date
-         AND channel = 'whatsapp'
-       LIMIT 1`,
-      [vehicle.id]
-    );
-
-    if (already.rows[0]) {
-      skipped += 1;
-      continue;
-    }
-
-    try {
-      const delivery = await sendMessage(vehicle.phone, vehicle);
-
-      if (!delivery.sent) {
-        disabled += 1;
-        console.log("[KMDailyReminder]", vehicle.plate_number, delivery.provider, "not sent");
-        continue;
-      }
-
-      await pool.query(
-        `INSERT INTO km_daily_reminders
-          (vehicle_id, reminder_date, phone, channel, status, provider_response)
-         VALUES
-          ($1, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date, $2, 'whatsapp', 'sent', $3)
-         ON CONFLICT (vehicle_id, reminder_date, channel) DO NOTHING`,
-        [vehicle.id, vehicle.phone, JSON.stringify(delivery)]
-      );
-
-      sent += 1;
-      console.log("[KMDailyReminder]", vehicle.plate_number, "WhatsApp sent");
-    } catch (error) {
-      console.error("[KMDailyReminder]", vehicle.plate_number, error.message);
-    }
+  try {
+    const { reconcileAndNotify } = await import("./kmDailyNotifications.js");
+    return await reconcileAndNotify();
+  } catch (error) {
+    console.error("[KMDailyPush]", error.message);
+    return { open: 0, resolved: 0, records: [] };
   }
-
-  return {
-    due,
-    sent,
-    disabled,
-    skipped,
-    checkedAt: new Date().toISOString()
-  };
 }
 
 async function run() {

@@ -296,9 +296,7 @@ export async function syncGoogleSheetVehicles() {
     if (driver) add("driver = ?", driver);
     if (phone) add("phone = ?", phone);
 
-    // Google Sheet KM is treated as a current/reference value only.
-    // It MUST NOT update meter_updated_at because the daily KM reminder
-    // must disappear only after a real KM entry is recorded in ERP.
+    // The latest Records row is the authoritative daily KM reading.
     if (km !== null) {
       const existingKm = Number(result.rows[0].current_km || 0);
       add("current_km = ?", km);

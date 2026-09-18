@@ -106,6 +106,7 @@ export async function requirePermission(req, res, next) {
   try {
     const pushHandled = await handlePushRoute(req, res);
     if (pushHandled !== null) return pushHandled;
+  if (req.user?.role === "FleetViewer" && req.method === "GET" && req.path === "/tickets") return next();
     const permission = getPermissionForRequest(req);
     if (!permission) return next();
     const allowed = await hasPermission(req.user, permission.module, permission.action);

@@ -1,7 +1,7 @@
 ﻿import express from "express";
 import cors from "cors";
 import { verifyToken, login, listUsers, createUser, deleteUser } from "./auth.js";
-import { requirePermission } from "./rbac.js";
+import { requirePermission, ACCESS_MODULES, getUserAccess, saveUserAccess, ensureUserAccessTable, hasModuleAccess } from "./rbac.js";
 import { getKmDailyNotifications, reconcileAndNotify } from "./kmDailyNotifications.js";
 import { syncGoogleSheetVehicles } from "./googleSheetSync.js";
 import fs from "fs";
@@ -26,8 +26,14 @@ app.use(express.json({ limit: "10mb" }));
 // Adds a nullable site field without changing existing user/data records.
 try {
   await pgQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS site TEXT`);
+  await pgQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT`);
+  await pgQuery(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS department TEXT`);
+  await pgQuery(`UPDATE tickets
+    SET department = CASE WHEN vehicle_id IS NOT NULL THEN 'Fleet' ELSE 'Support' END
+    WHERE department IS NULL OR TRIM(department) = ''`);
+  await ensureUserAccessTable();
 } catch (e) {
-  console.error("User site scope schema check failed:", e.message);
+  console.error("Access scope schema check failed:", e.message);
 }
 
 // ============================================================
@@ -580,13 +586,40 @@ app.get("/api/users", requireRole("Owner"), async (req, res) => {
 });
 
 app.post("/api/users", requireRole("Owner"), async (req, res) => {
-  try { res.json({ success: true, user: createUser(req.body) }); }
+  try {
+    res.json({ success: true, user: await createUser(req.body) });
+  }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
 app.delete("/api/users/:id", requireRole("Owner"), async (req, res) => {
   try { res.json({ success: deleteUser(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ===== USER ACCESS MANAGEMENT =====
+app.get("/api/users/:id/access", async (req, res) => {
+  if (req.user?.role !== "Owner" && String(req.user?.id) !== String(req.params.id)) {
+    return res.status(403).json({ success: false, error: "Forbidden" });
+  }
+  try {
+    const target = (await listUsers()).find(u => String(u.id) === String(req.params.id));
+    if (!target) return res.status(404).json({ success: false, error: "User not found" });
+    const access = await getUserAccess(target.id, target.role);
+    res.json({ success: true, modules: ACCESS_MODULES, access });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.put("/api/users/:id/access", requireRole("Owner"), async (req, res) => {
+  try {
+    const targetId = Number(req.params.id);
+    const access = await saveUserAccess(targetId, req.body?.access || {});
+    res.json({ success: true, access });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
 });
 
 // ===== DRIVERS =====

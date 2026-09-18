@@ -21,6 +21,11 @@ messaging.onBackgroundMessage((payload) => {
     body,
     icon: '/favicon.ico',
     badge: '/favicon.ico',
+    requireInteraction: true,
+    renotify: true,
+    silent: false,
+    vibrate: [250, 120, 250, 120, 400],
+    tag: payload?.data?.notification_id || 'fleet-erp-push',
     data: payload?.data || {}
   });
 });

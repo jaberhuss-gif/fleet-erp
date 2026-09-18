@@ -10,15 +10,16 @@ export default function Notifications() {
   const [pushMessage, setPushMessage] = useState('');
 
   useEffect(() => {
-    load();
-
-    // Keep the server-side FCM token current whenever the user opens/uses
-    // Fleet ERP. This is silent when browser permission is already granted.
-    refreshPushNotifications()
-      .then((result) => {
+    // Register/refresh the current FCM token before the first compliance
+    // check. This prevents a race where the server checks for today's
+    // missing KM before the Owner browser token is registered.
+    (async () => {
+      try {
+        const result = await refreshPushNotifications();
         if (result.success) setPushEnabled(true);
-      })
-      .catch(() => {});
+      } catch {}
+      await load();
+    })();
   }, []);
 
   useEffect(() => {

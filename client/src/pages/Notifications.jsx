@@ -157,7 +157,6 @@ export default function Notifications() {
                 </button>
                 {pushMessage && <div style={{ marginTop: '7px', fontSize: '11px', color: '#64748b' }}>{pushMessage}</div>}
               </div>
-            )}
 
             {notifications.length === 0 ? (
               <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8' }}><div style={{ fontSize: '32px', marginBottom: '8px' }}>✅</div><div style={{ fontSize: '13px' }}>No notifications</div><div style={{ fontSize: '11px', marginTop: '4px' }}>Everything is up to date</div></div>

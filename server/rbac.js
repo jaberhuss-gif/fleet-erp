@@ -136,6 +136,14 @@ export async function getUserAccess(userId, role) {
 
   for (const m of ACCESS_MODULES) {
     const explicit = result.rows.find(r => r.module === m.id);
+
+    // Support Manager is a service/ticket viewer and must never receive
+    // Fleet module access. Vehicle Tickets remains a separate module.
+    if (role === "SupportManager" && m.id === "fleet") {
+      access[m.id] = { can_view: false, can_work: false };
+      continue;
+    }
+
     if (explicit) {
       access[m.id] = { can_view: Boolean(explicit.can_view), can_work: Boolean(explicit.can_work) };
       continue;
@@ -150,10 +158,20 @@ export async function getUserAccess(userId, role) {
 }
 
 export async function saveUserAccess(userId, access = {}) {
+  const targetResult = await query(
+    `SELECT role FROM users WHERE id = $1 LIMIT 1`,
+    [userId]
+  );
+  const targetRole = targetResult.rows[0]?.role || null;
+
   for (const module of ACCESS_MODULES.map(m => m.id)) {
     const value = access[module] || {};
-    const canWork = Boolean(value.can_work);
-    const canView = Boolean(value.can_view) || canWork;
+
+    // Hard security rule for Support Manager: Fleet is never granted,
+    // even if an old/stale access row contains Fleet View/Work.
+    const fleetBlocked = targetRole === "SupportManager" && module === "fleet";
+    const canWork = fleetBlocked ? false : Boolean(value.can_work);
+    const canView = fleetBlocked ? false : (Boolean(value.can_view) || canWork);
     await query(
       `INSERT INTO user_access (user_id, module, can_view, can_work)
        VALUES ($1, $2, $3, $4)
@@ -179,6 +197,10 @@ export async function ensureUserAccessTable() {
 export async function hasModuleAccess(user, module, mode = "view") {
   if (!user) return false;
   if (user.role === "Owner") return true;
+
+  // Support Manager can view/manage service tickets as configured, but
+  // cannot open Fleet or perform Fleet operations. Vehicle Tickets is separate.
+  if (user.role === "SupportManager" && module === "fleet") return false;
 
   // Once the Owner has saved an access matrix for a user, that matrix is
   // authoritative. A false value must never fall back to legacy role/user

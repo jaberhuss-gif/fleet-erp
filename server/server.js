@@ -2,7 +2,7 @@
 import cors from "cors";
 import { verifyToken, login, listUsers, createUser, updateUser, deleteUser } from "./auth.js";
 import { requirePermission, ACCESS_MODULES, getUserAccess, saveUserAccess, ensureUserAccessTable, hasModuleAccess } from "./rbac.js";
-import { getKmDailyNotifications, reconcileAndNotify } from "./kmDailyNotifications.js";
+import { getKmDailyNotifications, reconcileAndNotify, getDriverDailyKmStatus } from "./kmDailyNotifications.js";
 import { syncGoogleSheetVehicles } from "./googleSheetSync.js";
 import fs from "fs";
 import path from "path";
@@ -1193,6 +1193,17 @@ app.get("/api/km-daily-notifications", async (req, res) => {
     const result = await getKmDailyNotifications();
     res.json({ success: true, ...result });
   } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ===== DRIVER DAILY KM GATE =====
+app.get("/api/driver/km-status", async (req, res) => {
+  try {
+    const status = await getDriverDailyKmStatus(req.user?.id);
+    res.json({ success: true, status });
+  } catch (e) {
+    console.error("Driver KM status error:", e);
     res.status(500).json({ success: false, error: e.message });
   }
 });

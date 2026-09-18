@@ -58,6 +58,7 @@ export default function GMDashboard() {
   const [tickets, setTickets] = useState([]);
   const [building, setBuilding] = useState(null);
   const [report, setReport] = useState(null);
+  const [kmDaily, setKmDaily] = useState({ records: [], count: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(new Date());
@@ -66,18 +67,20 @@ export default function GMDashboard() {
   const loadAll = useCallback(async () => {
     try {
       setRefreshing(true);
-      const [d, a, t, b, r] = await Promise.all([
+      const [d, a, t, b, r, k] = await Promise.all([
         getDashboard(),
         getAlerts(),
         getTickets(),
         api.get('/building/dashboard').then(x => x.data),
-        api.get('/reports/financial').then(x => x.data)
+        api.get('/reports/financial').then(x => x.data),
+        api.get('/km-daily-notifications').then(x => x.data).catch(() => ({ records: [], count: 0 }))
       ]);
       setData(d);
       setAlerts(a);
       setTickets(t.tickets || []);
       setBuilding(b);
       setReport(r);
+      setKmDaily(k);
       setLastUpdated(new Date());
     } catch (e) {
       setError(e.message || 'Failed to load');
@@ -150,7 +153,7 @@ export default function GMDashboard() {
 
       {/* ═══ CONTENT ═══ */}
       <div className="gm-content">
-        {subTab === 'overview' && <OverviewTab data={data} tickets={tickets} report={report} building={building} grand={grand} reportMonths={reportMonths} />}
+        {subTab === 'overview' && <OverviewTab data={data} tickets={tickets} report={report} building={building} grand={grand} reportMonths={reportMonths} kmDaily={kmDaily} />}
         {subTab === 'vehicles' && <VehiclesTab data={data} alerts={alerts} />}
         {subTab === 'building' && <BuildingTab building={building} />}
         {subTab === 'financial' && <FinancialReport />}
@@ -163,7 +166,7 @@ export default function GMDashboard() {
 /* ═══════════════════════════════════════════
    OVERVIEW TAB
    ═══════════════════════════════════════════ */
-function OverviewTab({ data, tickets, report, building, grand, reportMonths }) {
+function OverviewTab({ data, tickets, report, building, grand, reportMonths, kmDaily }) {
   const total = data.vehicles.total || 1;
   const healthScore = Math.round((data.vehicles.safe / total) * 100);
   const maintSavingsPct = grand.maintTotalSavingsPct || 0;
@@ -190,6 +193,47 @@ function OverviewTab({ data, tickets, report, building, grand, reportMonths }) {
   return (
     <div className="gm-overview">
       <LiveIssues />
+
+      <div className="gm-panel gm-panel-gradient" style={{ marginBottom: '18px' }}>
+        <div className="gm-panel-header">
+          <h2>🚨 Daily KM Compliance</h2>
+          <span className="gm-panel-badge">
+            {kmDaily?.count || 0} open today
+          </span>
+        </div>
+        {(kmDaily?.records || []).length === 0 ? (
+          <div className="gm-no-data" style={{ padding: '24px' }}>
+            ✅ All active vehicles have today's KM reading recorded.
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '10px 12px' }}>Vehicle</th>
+                  <th style={{ textAlign: 'left', padding: '10px 12px' }}>Driver</th>
+                  <th style={{ textAlign: 'left', padding: '10px 12px' }}>Phone</th>
+                  <th style={{ textAlign: 'left', padding: '10px 12px' }}>Status</th>
+                  <th style={{ textAlign: 'left', padding: '10px 12px' }}>Detected</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(kmDaily?.records || []).map(record => (
+                  <tr key={record.id}>
+                    <td style={{ padding: '10px 12px', fontWeight: 700 }}>{record.vehicle_plate || record.vehicle_id}</td>
+                    <td style={{ padding: '10px 12px' }}>{record.driver_name || 'Unassigned'}</td>
+                    <td style={{ padding: '10px 12px' }}>{record.driver_phone || '-'}</td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <span className="status-badge status-urgent">OPEN</span>
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>{record.first_detected_at ? new Date(record.first_detected_at).toLocaleTimeString() : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* ═══ EXECUTIVE KPI BANNER ═══ */}
       <div className="gm-kpi-banner">

@@ -55,7 +55,8 @@ export default function Users() {
       Accountant: { bg: '#f0fdf4', color: '#16a34a' },
       CampusManager: { bg: '#fef3c7', color: '#b45309' },
       Driver: { bg: '#fef2f2', color: '#dc2626' },
-      FleetSupervisor: { bg: '#f0f9ff', color: '#0891b2' }
+      FleetSupervisor: { bg: '#f0f9ff', color: '#0891b2' },
+      FleetViewer: { bg: '#ecfeff', color: '#0e7490' }
     };
     const c = colors[role] || { bg: '#f1f5f9', color: '#64748b' };
     return <span className="status-badge" style={{ background: c.bg, color: c.color }}>{role}</span>;
@@ -103,6 +104,7 @@ export default function Users() {
                 <option value="CampusManager">🏢 Campus Manager (Building)</option>
                 <option value="Driver">🚗 Driver (Vehicle Maintenance)</option>
                 <option value="FleetSupervisor">🔧 Fleet Supervisor</option>
+                <option value="FleetViewer">👀 Fleet Viewer (Vehicle Tickets Only)</option>
               </select>
             </div>
             <div className="form-group">

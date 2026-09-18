@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useRef } from 'react';
 import { getVehiclesList, getIssueTypes, reportIssue } from '../api/client';
 
-export default function ReportIssue() {
+export default function ReportIssue({ canWork = false }) {
   const [vehicles, setVehicles] = useState([]);
   const [types, setTypes] = useState([]);
   const [vehicleId, setVehicleId] = useState('');
@@ -59,6 +59,18 @@ export default function ReportIssue() {
       setVehicleId(''); setIssueType(''); setDescription(''); setPriority('Medium');
     } catch (e) { setError(e.response?.data?.error || e.message); }
   };
+
+  if (!canWork) {
+    return (
+      <div className="form-container">
+        <div className="panel">
+          <div className="alert alert-info">
+            Fleet is view-only for this user. Maintenance issue reporting is disabled.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="form-container">

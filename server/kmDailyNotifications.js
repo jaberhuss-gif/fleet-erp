@@ -98,7 +98,7 @@ async function sendDriverReminder(record) {
   return { sent: result.sent || 0, failed: result.failed || 0 };
 }
 
-async function reconcileAndNotify() {
+export async function reconcileAndNotify() {
   await ensureTable();
   const today = await getTodayKey();
 

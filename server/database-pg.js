@@ -208,6 +208,40 @@ export async function addReading(vehicleId, data = {}) {
     [km, vehicleId]
   );
 
+  // Automatically close the Daily KM card for this vehicle/date as soon
+  // as the driver successfully saves today's reading.
+  try {
+    const todayResult = await query(
+      `SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date AS today`
+    );
+    const today = todayResult.rows[0]?.today;
+    const marker = `DAILY_KM_MISSING|vehicle=${vehicleId}|date=${today}`;
+
+    await query(
+      `UPDATE tickets
+       SET status = 'Closed',
+           closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP),
+           closed_by = COALESCE(closed_by, 'System'),
+           resolution_notes = CASE
+             WHEN COALESCE(resolution_notes, '') = '' THEN $3
+             ELSE resolution_notes
+           END
+       WHERE vehicle_id = $1
+         AND category = 'Daily KM'
+         AND description LIKE $2
+         AND status <> 'Closed'`,
+      [
+        vehicleId,
+        `%${marker}%`,
+        `Today's KM reading was entered successfully: ${km.toLocaleString()} km.`
+      ]
+    );
+  } catch (cardError) {
+    // The KM reading itself is already saved. Do not fail the driver's
+    // submission just because the tracking card could not be closed.
+    console.error("[KMDailyCard] immediate close failed:", cardError.message);
+  }
+
   return getVehicleById(vehicleId);
 }
 

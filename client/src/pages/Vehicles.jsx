@@ -3,7 +3,7 @@ import api from '../api/client';
 import { exportToCSV } from '../api/export';
 import { printContent } from '../api/print';
 
-export default function Vehicles({ onViewVehicle }) {
+export default function Vehicles({ onViewVehicle, canWork = false }) {
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -168,10 +168,10 @@ export default function Vehicles({ onViewVehicle }) {
             </button>
             <label className="btn btn-success" style={{ cursor: 'pointer', margin: 0 }}>
               Import CSV
-              <input type="file" accept=".csv" onChange={handleFileImport} style={{ display: 'none' }} />
+              {canWork && <input type="file" accept=".csv" onChange={handleFileImport} style={{ display: 'none' }} />}
             </label>
             <button className="btn btn-warning" onClick={() => exportToCSV(vehicles, "vehicles", [{key:"plate",label:"Plate"},{key:"driver",label:"Driver"},{key:"phone",label:"Phone"},{key:"location",label:"Location"},{key:"currentKm",label:"Current KM"},{key:"lastOilKm",label:"Last Oil KM"},{key:"sinceOil",label:"Since Oil"},{key:"status",label:"Status"}])}>Export CSV</button>
-            <button className="btn btn-danger" onClick={handleDeleteAll}>Delete All</button>
+            {canWork && <button className="btn btn-danger" onClick={handleDeleteAll}>Delete All</button>}
           </div>
         </div>
 
@@ -238,7 +238,7 @@ export default function Vehicles({ onViewVehicle }) {
               <div className="form-group"><label>Current Odometer (km)</label><input type="number" value={quickKm} onChange={e => setQuickKm(e.target.value)} /></div>
               <div className="form-group"><label>Last Oil Change (km)</label><input type="number" value={quickOilKm} onChange={e => setQuickOilKm(e.target.value)} /></div>
               <div className="btn-row">
-                <button className="btn btn-success" onClick={handleQuickSave}>Save</button>
+                {canWork && <button className="btn btn-success" onClick={handleQuickSave}>Save</button>}
                 <button className="btn btn-warning" onClick={() => setQuickEdit(null)}>Cancel</button>
               </div>
             </div>
@@ -284,7 +284,7 @@ export default function Vehicles({ onViewVehicle }) {
                   <td>
                     <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => onViewVehicle && onViewVehicle(v.id)}>View</button>
                     <button className="btn btn-success" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleQuickEdit(v)}>Reading</button>
-                    <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(v.id)}>Delete</button>
+                    {canWork && <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(v.id)}>Delete</button>}
                   </td>
                 </tr>
               ))}

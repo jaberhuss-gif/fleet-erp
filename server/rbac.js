@@ -169,44 +169,33 @@ export async function hasModuleAccess(user, module, mode = "view") {
   if (!user) return false;
   if (user.role === "Owner") return true;
 
+  // Once the Owner has saved an access matrix for a user, that matrix is
+  // authoritative. A false value must never fall back to legacy role/user
+  // permissions, otherwise manually revoked access can be restored silently.
   const result = await query(
-    `SELECT can_view, can_work FROM user_access
-     WHERE user_id = $1 AND module = $2 LIMIT 1`,
+    `SELECT can_view, can_work
+     FROM user_access
+     WHERE user_id = $1 AND module = $2
+     LIMIT 1`,
     [user.id, module]
   );
 
-  if (result.rows.length > 0) {
-    return mode === "work" ? Boolean(result.rows[0].can_work) : Boolean(result.rows[0].can_view);
+  const configured = await query(
+    `SELECT 1 FROM user_access WHERE user_id = $1 LIMIT 1`,
+    [user.id]
+  );
+
+  if (configured.rows.length > 0) {
+    if (result.rows.length === 0) return false;
+    return mode === "work"
+      ? Boolean(result.rows[0].can_work)
+      : Boolean(result.rows[0].can_view);
   }
 
   const access = await getUserAccess(user.id, user.role);
-  return mode === "work" ? Boolean(access[module]?.can_work) : Boolean(access[module]?.can_view);
-}
-
-async function hasLegacyPermission(user, module, action) {
-  if (!user) return false;
-  if (user.role === "Owner") return true;
-
-  const userPermission = await query(
-    `SELECT 1 FROM user_permissions up
-     JOIN permissions p ON p.id = up.permission_id
-     WHERE up.user_id = $1 AND p.module = $2 AND p.action = $3
-       AND up.allowed = TRUE LIMIT 1`,
-    [user.id, module, action]
-  );
-
-  if (userPermission.rows.length > 0) return true;
-
-  const rolePermission = await query(
-    `SELECT 1 FROM role_permissions rp
-     JOIN roles r ON r.id = rp.role_id
-     JOIN permissions p ON p.id = rp.permission_id
-     WHERE r.name = $1 AND p.module = $2 AND p.action = $3
-       AND rp.allowed = TRUE LIMIT 1`,
-    [user.role, module, action]
-  );
-
-  return rolePermission.rows.length > 0;
+  return mode === "work"
+    ? Boolean(access[module]?.can_work)
+    : Boolean(access[module]?.can_view);
 }
 
 async function handlePushRoute(req, res) {
@@ -262,9 +251,6 @@ export async function requirePermission(req, res, next) {
     const mode = req.method === "GET" ? "view" : "work";
     const accessAllowed = await hasModuleAccess(req.user, permission.module, mode);
     if (accessAllowed) return next();
-
-    const legacyAllowed = await hasLegacyPermission(req.user, permission.module, permission.action);
-    if (legacyAllowed) return next();
 
     return res.status(403).json({
       success: false,

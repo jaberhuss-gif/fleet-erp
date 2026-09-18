@@ -133,6 +133,23 @@ app.get("/api/alerts", async (req, res) => {
 app.get("/api/tickets", async (req, res) => {
   try {
     const tickets = await listTicketsPG(req.query);
+
+    if (req.user?.role === "FleetViewer") {
+      const vehicleTickets = tickets
+        .filter(t => t.vehicle_id !== null && t.vehicle_id !== undefined)
+        .map(t => ({
+          id: t.id,
+          opened_at: t.opened_at,
+          plate: t.plate || "",
+          category: t.category || "",
+          priority: t.priority || "",
+          status: t.status || "",
+          description: t.description || ""
+        }));
+
+      return res.json({ success: true, tickets: vehicleTickets });
+    }
+
     res.json({ success: true, tickets });
   } catch (e) {
     console.error("Error fetching tickets:", e);

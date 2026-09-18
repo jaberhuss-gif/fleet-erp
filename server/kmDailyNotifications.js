@@ -218,10 +218,12 @@ export async function reconcileAndNotify() {
   if (ownerNeedsNotice && openToday.rows.length) {
     try {
       const tokens = await getOwnerTokens();
-      if (tokens.length) {
+      if (!tokens.length) {
+        console.warn("[KMDailyPush] owner notification skipped: primary Owner has no registered push token.");
+      } else {
         const preview = openToday.rows
           .slice(0, 5)
-          .map(r => `${r.vehicle_plate} — ${r.driver_name || "Unassigned"} — current KM: ${Number(r.current_km || 0).toLocaleString()}`)
+          .map(r => `${r.vehicle_plate} — Driver: ${r.driver_name || "Unassigned"} — Phone: ${r.driver_phone || "No phone"} — Current KM: ${Number(r.current_km || 0).toLocaleString()}`)
           .join("; ");
         const extra = openToday.rows.length > 5 ? ` +${openToday.rows.length - 5} more` : "";
         const sendResult = await sendFcmToTokens({
@@ -235,6 +237,13 @@ export async function reconcileAndNotify() {
             url: "/"
           }
         });
+
+        console.log("[KMDailyPush] owner delivery:", JSON.stringify({
+          vehicles: openToday.rows.length,
+          tokens: tokens.length,
+          sent: sendResult.sent || 0,
+          failed: sendResult.failed || 0
+        }));
 
         if (sendResult.sent > 0) {
           await query(

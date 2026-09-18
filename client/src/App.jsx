@@ -235,7 +235,7 @@ export default function App() {
         {tab === 'vehicle-details' && viewingVehicleId && <VehicleDetails vehicleId={viewingVehicleId} onBack={handleBackToVehicles} />}
         {tab === 'troubleshooter' && <Troubleshooter />}
         {tab === 'operations' && <OperationsHub access={access || {}} user={user} />}
-        {tab === 'tickets' && <Tickets />}
+        {tab === 'tickets' && <Tickets user={user} access={access || {}} />}
         {tab === 'mytickets' && <MyTickets />}
         {tab === 'fleet-tickets' && <FleetTicketViewer />}
         {tab === 'advanced-reports' && <AdvancedReports />}

@@ -166,7 +166,8 @@ export default function Users() {
       Driver: ['#fef2f2', '#dc2626'],
       FleetSupervisor: ['#f0f9ff', '#0891b2'],
       FleetViewer: ['#ecfeff', '#0e7490'],
-      SupportManager: ['#f0fdf4', '#15803d']
+      SupportManager: ['#f0fdf4', '#15803d'],
+      SSM: ['#f8fafc', '#475569']
     };
     const [bg, color] = colors[role] || ['#f1f5f9', '#64748b'];
     return <span className="status-badge" style={{ background: bg, color }}>{role}</span>;
@@ -232,6 +233,7 @@ export default function Users() {
                   <option value="FleetSupervisor">🔧 Fleet Supervisor</option>
                   <option value="FleetViewer">👀 Fleet Viewer</option>
                   <option value="SupportManager">👀 Support Manager</option>
+                  <option value="SSM">👀 SSM — Read Only</option>
                 </select>
               </div>
               <div className="form-group">

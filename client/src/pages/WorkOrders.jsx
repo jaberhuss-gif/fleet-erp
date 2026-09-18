@@ -2,7 +2,8 @@
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
 
-export default function WorkOrders({ user }) {
+export default function WorkOrders({ user, access = {} }) {
+  const canWork = user?.role === 'Owner' || !!access?.building?.can_work;
   const [orders, setOrders] = useState([]);
   const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -121,9 +122,9 @@ export default function WorkOrders({ user }) {
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         
-        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "work-orders", [{key:"wo_no",label:"WO #"},{key:"site",label:"Site"},{key:"category",label:"Category"},{key:"description",label:"Description"},{key:"assigned_to",label:"Assigned To"},{key:"status",label:"Status"},{key:"reported_date",label:"Reported"},{key:"completed_date",label:"Completed"},{key:"final_cost",label:"Cost"}])}>Export CSV</button><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
+        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "work-orders", [{key:"wo_no",label:"WO #"},{key:"site",label:"Site"},{key:"category",label:"Category"},{key:"description",label:"Description"},{key:"assigned_to",label:"Assigned To"},{key:"status",label:"Status"},{key:"reported_date",label:"Reported"},{key:"completed_date",label:"Completed"},{key:"final_cost",label:"Cost"}])}>Export CSV</button>{canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
           {showForm ? 'Cancel' : '+ New Work Order'}
-        </button>
+        </button>}
       </div>
 
       {message && <div className="alert alert-success">{message}</div>}
@@ -153,7 +154,7 @@ export default function WorkOrders({ user }) {
         </div>
       </div>
 
-      {showForm && (
+      {showForm && canWork && (
         <form onSubmit={handleSubmit} style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
           <h3>{editing ? 'Edit Work Order' : 'New Work Order'}</h3>
           <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
@@ -233,7 +234,7 @@ export default function WorkOrders({ user }) {
             <div className="form-group"><label>Closing Notes</label><textarea value={closeForm.closingNotes} onChange={e => setCloseForm({ ...closeForm, closingNotes: e.target.value })} rows={2}></textarea></div>
 
             <div className="btn-row">
-              <button className="btn btn-success" onClick={handleCloseSubmit}>Close Work Order</button>
+              {canWork && <button className="btn btn-success" onClick={handleCloseSubmit}>Close Work Order</button>}
               <button className="btn btn-warning" onClick={() => setClosing(null)}>Cancel</button>
             </div>
           </div>
@@ -311,11 +312,11 @@ export default function WorkOrders({ user }) {
                 </td>
                 <td style={{ fontWeight: 'bold' }}>{Number(o.final_cost || 0).toLocaleString()}</td>
                 <td>
-                  {o.status === 'Open' && (
+                  {o.status === 'Open' && canWork && (
                     <button className="btn btn-success" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleClose(o)}>Close</button>
                   )}
-                  <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleEdit(o)}>Edit</button>
-                  <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(o.id)}>Delete</button>
+                  {canWork && <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleEdit(o)}>Edit</button>}
+                  {canWork && <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(o.id)}>Delete</button>}
                 </td>
               </tr>
             ))}

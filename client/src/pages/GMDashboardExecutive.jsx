@@ -1,3 +1,4 @@
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useCallback, useEffect, useState } from 'react';
 import { getAlerts, getDashboard, getTickets } from '../api/client';
 import api from '../api/client';

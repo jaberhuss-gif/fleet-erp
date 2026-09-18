@@ -31,9 +31,14 @@ function phoneDigits(value) {
   return String(value || "").replace(/[^0-9]/g, "");
 }
 
-async function getTodayKey() {
-  const result = await query(`SELECT (CURRENT_TIMESTAMP AT TIME ZONE '${TZ}')::date AS today`);
-  return result.rows[0].today;
+async function getTodayState() {
+  const result = await query(`
+    SELECT
+      (CURRENT_TIMESTAMP AT TIME ZONE '${TZ}')::date AS today,
+      EXTRACT(HOUR FROM (CURRENT_TIMESTAMP AT TIME ZONE '${TZ}'))::int AS hour,
+      EXTRACT(MINUTE FROM (CURRENT_TIMESTAMP AT TIME ZONE '${TZ}'))::int AS minute
+  `);
+  return result.rows[0];
 }
 
 async function getOwnerTokens() {
@@ -86,7 +91,7 @@ async function sendDriverReminder(record) {
   const result = await sendFcmToTokens({
     tokens,
     title: "🚨 Daily KM Reading Required",
-    body: `Vehicle ${record.vehicle_plate || "assigned to you"} — today's KM reading has not been entered. Please open Fleet ERP and enter the odometer reading.`,
+    body: `Vehicle ${record.vehicle_plate || "assigned to you"} — current odometer: ${Number(record.current_km || 0).toLocaleString()} km — no KM reading entered by 07:00. Please open Fleet ERP and enter today's odometer reading.`,
     data: {
       type: "daily_km_missing",
       icon: "🚨",
@@ -101,7 +106,14 @@ async function sendDriverReminder(record) {
 
 export async function reconcileAndNotify() {
   await ensureTable();
-  const today = await getTodayKey();
+  const state = await getTodayState();
+  const today = state.today;
+
+  // The daily deadline is 07:00 Asia/Riyadh. Before 07:00, no vehicle is
+  // considered late and no daily KM warning is created or sent.
+  if (Number(state.hour || 0) < 7) {
+    return { today, open: 0, resolved: 0, records: [], beforeCutoff: true };
+  }
 
   // Reconcile every active vehicle against today's real ERP KM timestamp.
   // Google Sheet values never resolve this record.
@@ -207,7 +219,10 @@ export async function reconcileAndNotify() {
     try {
       const tokens = await getOwnerTokens();
       if (tokens.length) {
-        const preview = openToday.rows.slice(0, 5).map(r => `${r.vehicle_plate} — ${r.driver_name || "Unassigned"}`).join("; ");
+        const preview = openToday.rows
+          .slice(0, 5)
+          .map(r => `${r.vehicle_plate} — ${r.driver_name || "Unassigned"} — current KM: ${Number(r.current_km || 0).toLocaleString()}`)
+          .join("; ");
         const extra = openToday.rows.length > 5 ? ` +${openToday.rows.length - 5} more` : "";
         const sendResult = await sendFcmToTokens({
           tokens,
@@ -245,7 +260,13 @@ export async function reconcileAndNotify() {
 
 export async function getKmDailyNotifications() {
   await ensureTable();
-  const today = await getTodayKey();
+  const state = await getTodayState();
+  const today = state.today;
+
+  if (Number(state.hour || 0) < 7) {
+    return { today, count: 0, records: [], beforeCutoff: true };
+  }
+
   const result = await query(`
     SELECT
       n.id,

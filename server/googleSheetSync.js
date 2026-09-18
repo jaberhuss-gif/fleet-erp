@@ -158,7 +158,7 @@ function parseSheetDate(value) {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
 
-  const parts = raw.split(/\\s+/);
+  const parts = raw.split(" ").filter(Boolean);
   const datePart = parts[0] || "";
   const timePart = parts[1] || "00:00:00";
   const datePieces = datePart.split("/").map(Number);

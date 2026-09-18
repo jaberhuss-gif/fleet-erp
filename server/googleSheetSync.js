@@ -44,7 +44,45 @@ function normalize(value) {
 
 function findIndex(headers, names) {
   const wanted = new Set(names.map(normalize));
-  return headers.findIndex((h) => wanted.has(normalize(h)));
+  const exact = headers.findIndex((h) => wanted.has(normalize(h)));
+  if (exact >= 0) return exact;
+
+  // Google Sheets headers can include units, punctuation, or extra words,
+  // e.g. "Current Odometer Reading (KM)".
+  const normalizedHeaders = headers.map(normalize);
+  for (const name of names) {
+    const n = normalize(name);
+    if (!n) continue;
+    const fuzzy = normalizedHeaders.findIndex((h) => h.includes(n) || n.includes(h));
+    if (fuzzy >= 0) return fuzzy;
+  }
+  return -1;
+}
+
+function findKmIndex(headers) {
+  // Prefer headers that clearly represent the current/latest odometer,
+  // before falling back to a generic KM/odometer/mileage column.
+  const normalizedHeaders = headers.map(normalize);
+
+  const preferredPatterns = [
+    /current.*(km|kilometer|kilometre|odometer|mileage)/,
+    /(km|kilometer|kilometre|odometer|mileage).*current/,
+    /latest.*(km|kilometer|kilometre|odometer|mileage)/,
+    /(odometer|mileage).*(reading|value)/,
+    /(reading|value).*(odometer|mileage)/
+  ];
+
+  for (const pattern of preferredPatterns) {
+    const index = normalizedHeaders.findIndex((h) => pattern.test(h));
+    if (index >= 0) return index;
+  }
+
+  const generic = normalizedHeaders.findIndex((h) =>
+    /(km|kilometer|kilometre|odometer|mileage)/.test(h) &&
+    !/(last|previous|since|remaining|interval|change|service)/.test(h)
+  );
+
+  return generic;
 }
 
 function parseCsv(text) {
@@ -119,6 +157,7 @@ export async function syncGoogleSheetVehicles() {
   const indexes = Object.fromEntries(
     Object.entries(aliases).map(([key, names]) => [key, findIndex(headers, names)])
   );
+  indexes.km = findKmIndex(headers);
 
   if (indexes.plate < 0) {
     throw new Error(`Vehicle/plate column not found. Headers: ${headers.join(", ")}`);
@@ -209,7 +248,13 @@ export async function syncGoogleSheetVehicles() {
     kmUpdated,
     unmatched,
     rows: rows.length - 1,
-    syncedAt: new Date().toISOString()
+    syncedAt: new Date().toISOString(),
+    columns: {
+      plate: indexes.plate >= 0 ? headers[indexes.plate] : null,
+      driver: indexes.driver >= 0 ? headers[indexes.driver] : null,
+      phone: indexes.phone >= 0 ? headers[indexes.phone] : null,
+      km: indexes.km >= 0 ? headers[indexes.km] : null
+    }
   };
 }
 

@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
 import { getVehiclesList, getVehicleDetails, addReading, changeOil } from '../api/client';
 
-export default function DriverPortal() {
+export default function DriverPortal({ canWork = false }) {
   const [vehicles, setVehicles] = useState([]);
   const [selectedId, setSelectedId] = useState('');
   const [details, setDetails] = useState(null);
@@ -105,7 +105,7 @@ export default function DriverPortal() {
             {v.status === 'Urgent Overdue' && <div className="alert alert-error">This vehicle needs an oil change immediately!</div>}
             {v.status === 'Warning' && <div className="alert alert-warning">Oil change approaching. {v.remaining.toLocaleString()} km remaining.</div>}
 
-            <form onSubmit={handleSubmitReading}>
+            {canWork && <form onSubmit={handleSubmitReading}>
               <div className="form-group">
                 <label>Today's Odometer Reading (km)</label>
                 <input type="number" value={reading} onChange={e => setReading(e.target.value)} placeholder={'Must be >= ' + v.currentKm} min={v.currentKm} required />
@@ -114,7 +114,12 @@ export default function DriverPortal() {
                 <button type="submit" className="btn btn-success" disabled={loading}>Save Reading</button>
                 <button type="button" className="btn btn-warning" onClick={handleOilChange}>Oil Changed</button>
               </div>
-            </form>
+            </form>}
+            {!canWork && (
+              <div className="alert alert-info">
+                Fleet is view-only for this user. KM entry and oil-change actions are disabled.
+              </div>
+            )}
           </>
         )}
 

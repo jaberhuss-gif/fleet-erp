@@ -61,7 +61,9 @@ app.get("/api/health", async (req, res) => res.json({ status: "ok", time: new Da
 // ===== VEHICLES (PostgreSQL Connected) =====
 app.get("/api/vehicles", async (req, res) => {
   try {
-    const vehicles = await listVehiclesPG();
+    let vehicles = await listVehiclesPG();
+    const site = userSiteScope(req.user);
+    if (site) vehicles = vehicles.filter(v => matchesSite(v.location, site));
     res.json({ success: true, vehicles });
   } catch (e) {
     console.error("Error fetching vehicles:", e);
@@ -71,7 +73,9 @@ app.get("/api/vehicles", async (req, res) => {
 
 app.get("/api/vehicles/list", async (req, res) => {
   try {
-    const vehicles = await listVehiclesPG();
+    let vehicles = await listVehiclesPG();
+    const site = userSiteScope(req.user);
+    if (site) vehicles = vehicles.filter(v => matchesSite(v.location, site));
     res.json({
       success: true,
       vehicles: vehicles.map(v => ({
@@ -206,7 +210,24 @@ app.get("/api/support-manager/warehouse", async (req, res) => {
 
 app.get("/api/tickets", async (req, res) => {
   try {
-    let tickets = await listTicketsPG(req.query);
+    const ticketFilters = { ...req.query };
+    const userSite = userSiteScope(req.user);
+    if (userSite) ticketFilters.site = userSite;
+
+    let tickets = await listTicketsPG(ticketFilters);
+
+    if (userSite) {
+      // Enforce site scope even when legacy tickets do not carry a clean site field.
+      const vehicles = await listVehiclesPG();
+      const vehicleIdsAtSite = new Set(
+        vehicles.filter(v => matchesSite(v.location, userSite)).map(v => String(v.id))
+      );
+      tickets = tickets.filter(t =>
+        matchesSite(t.location, userSite) ||
+        (t.vehicle_id != null && vehicleIdsAtSite.has(String(t.vehicle_id))) ||
+        String(t.description || "").startsWith("[Site: " + userSite + "]")
+      );
+    }
 
     if (req.user?.role !== "Owner") {
       const access = await getUserAccess(req.user.id, req.user.role);
@@ -393,17 +414,13 @@ app.get("/api/dashboard", async (req, res) => {
 
 app.get("/api/sites", async (req, res) => {
   try {
-    const sites = await listSitesPG();
-    res.json({
-      success: true,
-      sites
-    });
+    let sites = await listSitesPG();
+    const site = userSiteScope(req.user);
+    if (site) sites = sites.filter(s => matchesSite(s.name, site));
+    res.json({ success: true, sites });
   } catch (error) {
     console.error("GET /api/sites:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -486,6 +503,8 @@ app.delete("/api/sites/:id", async (req, res) => {
 app.get("/api/work-orders", async (req, res) => {
   try {
     const filters = { month: req.query.month, year: req.query.year, site: req.query.site, status: req.query.status };
+    const site = userSiteScope(req.user);
+    if (site) filters.site = site;
     res.json({ success: true, orders: await listWorkOrdersPG(filters) });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
@@ -526,6 +545,8 @@ app.delete("/api/work-orders/:id", async (req, res) => {
 app.get("/api/projects", async (req, res) => {
   try {
     const filters = { month: req.query.month, year: req.query.year, site: req.query.site };
+    const site = userSiteScope(req.user);
+    if (site) filters.site = site;
     res.json({ success: true, projects: await listProjectsPG(filters) });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
@@ -550,7 +571,11 @@ app.delete("/api/projects/:id", async (req, res) => {
 app.get("/api/purchases", async (req, res) => {
   try {
     const filters = { month: req.query.month, year: req.query.year, referenceNo: req.query.referenceNo };
-    res.json({ success: true, purchases: await listPurchasesPG(filters) });
+    // Purchase records are governed by the user's site scope through their linked request/project.
+    const site = userSiteScope(req.user);
+    let purchases = await listPurchasesPG(filters);
+    if (site) purchases = purchases.filter(p => matchesSite(p.site, site) || !p.site);
+    res.json({ success: true, purchases });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 app.post("/api/purchases", async (req, res) => {
@@ -597,7 +622,9 @@ app.delete("/api/purchases/:id", async (req, res) => {
 // ===== PROJECT PURCHASE REQUESTS =====
 app.get("/api/purchase-requests", async (req, res) => {
   try {
-    const requests = await listPurchaseRequestsPG();
+    let requests = await listPurchaseRequestsPG();
+    const userSite = userSiteScope(req.user);
+    if (userSite) requests = requests.filter(r => matchesSite(r.site, userSite));
     const isOwner = req.user?.role === "Owner";
     const access = isOwner ? null : await getUserAccess(req.user.id, req.user.role);
     if (!isOwner) {
@@ -613,6 +640,10 @@ app.get("/api/purchase-requests", async (req, res) => {
 app.post("/api/purchase-requests", async (req, res) => {
   try {
     const requestedBy = req.user?.fullName || req.user?.username || req.body?.requestedBy || "User";
+    const userSite = userSiteScope(req.user);
+    if (userSite && req.body?.site && !matchesSite(req.body.site, userSite)) {
+      return res.status(403).json({ success: false, error: "This user is restricted to " + userSite + "." });
+    }
     const request = await createPurchaseRequestPG({
       ...req.body,
       requestedByUserId: req.user?.id,
@@ -757,6 +788,19 @@ function requireAuth(req, res, next) {
   next();
 }
 
+function userHasAllSites(user) {
+  return !user?.site || String(user.site).trim() === "" || String(user.site).trim().toUpperCase() === "ALL";
+}
+
+function userSiteScope(user) {
+  return userHasAllSites(user) ? null : String(user.site).trim();
+}
+
+function matchesSite(value, site) {
+  if (!site) return true;
+  return String(value || "").trim().toLowerCase() === site.toLowerCase();
+}
+
 function requireRole(...allowedRoles) {
   return async (req, res, next) => {
     if (!req.user || !allowedRoles.includes(req.user.role)) {
@@ -852,8 +896,12 @@ app.delete("/api/drivers/:id", async (req, res) => {
 
 // ===== WAREHOUSE =====
 app.get("/api/inventory", async (req, res) => {
-  try { res.json({ success: true, items: await listInventoryPG() }); }
-  catch (e) { res.status(500).json({ success: false, error: e.message }); }
+  try {
+    let items = await listInventoryPG();
+    const site = userSiteScope(req.user);
+    if (site) items = items.filter(i => matchesSite(i.site || i.location, site));
+    res.json({ success: true, items });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.get("/api/inventory/low-stock", async (req, res) => {

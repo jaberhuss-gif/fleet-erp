@@ -195,9 +195,7 @@ export async function updateUser(id, data = {}) {
     [id]
   );
 
-  if (!existing.rows[0]) {
-    throw new Error("User not found");
-  }
+  if (!existing.rows[0]) throw new Error("User not found");
 
   const current = existing.rows[0];
   const fullName = data.fullName ?? data.full_name ?? current.full_name ?? "";
@@ -206,14 +204,9 @@ export async function updateUser(id, data = {}) {
   const phone = data.phone ?? current.phone ?? "";
   const site = data.site ?? current.site ?? "";
   const department = data.department ?? current.department ?? "General";
-
-  let passwordSql = "";
-  const params = [fullName, role, email, phone, site, department];
-  if (data.password && String(data.password).trim()) {
-    params.push(await bcrypt.hash(String(data.password), 10));
-    passwordSql = `, password = $7`;
-  }
-  params.push(id);
+  const password = data.password && String(data.password).trim()
+    ? await bcrypt.hash(String(data.password), 10)
+    : null;
 
   const result = await query(
     `UPDATE users
@@ -222,10 +215,11 @@ export async function updateUser(id, data = {}) {
          email = $3,
          phone = $4,
          site = $5,
-         department = $6${passwordSql}
+         department = $6,
+         password = COALESCE($7, password)
      WHERE id = $8
      RETURNING id, username, full_name, role, email, phone, site, department, is_active, created_at`,
-    params
+    [fullName, role, email, phone, site, department, password, id]
   );
 
   return result.rows[0];

@@ -25,7 +25,12 @@ const aliases = {
   code: ["plate code", "plate_code", "code"],
   driver: ["driver", "driver name", "driver_name", "assigned driver"],
   phone: ["phone", "mobile", "mobile number", "driver phone", "driver mobile", "phone number"],
-  km: ["km", "kilometer", "kilometres", "kilometers", "current km", "current_km", "odometer", "odometer km", "odometer reading"],
+  km: [
+    "km", "kilometer", "kilometre", "kilometres", "kilometers",
+    "current km", "current_km", "current kilometer", "current kilometre",
+    "current odometer", "current odometer km", "odometer", "odometer km",
+    "odometer reading", "latest km", "latest odometer", "mileage", "current mileage"
+  ],
   active: ["active", "status", "vehicle status"]
 };
 

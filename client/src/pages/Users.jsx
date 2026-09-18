@@ -246,7 +246,7 @@ export default function Users() {
                 </select>
               </div>
               <div className="form-group">
-                <label>Site (optional reference only)</label>
+                <label>Site Access Scope</label>
                 <select value={form.site} onChange={e => setForm({...form, site:e.target.value})}>
                   <option value="ALL">All Sites</option>
                   <option value="">-- No site reference --</option>
@@ -353,7 +353,7 @@ export default function Users() {
                 <td>{u.full_name || '-'}</td>
                 <td>{getRoleBadge(u.role)}</td>
                 <td>{u.department || 'General'}</td>
-                <td>{u.site || 'All / not restricted'}</td>
+                <td>{u.site === "ALL" || !u.site ? "All Sites" : u.site}</td>
                 <td>{u.email || '-'}</td>
                 <td>{u.phone || '-'}</td>
                 <td>

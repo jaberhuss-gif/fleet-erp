@@ -1,18 +1,70 @@
-﻿import { query } from "./postgres.js";
+import { query } from "./postgres.js";
 import { sendFcmToTokens } from "./fcm.js";
 
-const METHOD_ACTIONS = { GET: "view", POST: "add", PUT: "edit", PATCH: "edit", DELETE: "delete" };
+const METHOD_ACTIONS = { GET: "view", POST: "edit", PUT: "edit", PATCH: "edit", DELETE: "delete" };
+
+export const ACCESS_MODULES = [
+  { id: "gm", label: "GM Dashboard" },
+  { id: "support", label: "Support & Service" },
+  { id: "operations", label: "Operations" },
+  { id: "warehouse", label: "Warehouse" },
+  { id: "fleet", label: "Fleet" },
+  { id: "fleet_tickets", label: "Vehicle Tickets" },
+  { id: "troubleshooter", label: "Troubleshooter" },
+  { id: "tickets", label: "Tickets" },
+  { id: "mytickets", label: "My Tickets" },
+  { id: "reports", label: "Reports" },
+  { id: "advanced_reports", label: "Advanced Reports" },
+  { id: "drivers", label: "Drivers Management" },
+  { id: "users", label: "Users Management" },
+  { id: "audit", label: "Audit Log" },
+  { id: "backup", label: "Backup" }
+];
+
+const ROLE_ACCESS_PRESETS = {
+  Owner: "all",
+  GM: { gm: ["view"], support: ["view"], troubleshooter: ["view"] },
+  Accountant: { reports: ["view"], advanced_reports: ["view"] },
+  CampusManager: {
+    support: ["view", "work"], operations: ["view", "work"],
+    warehouse: ["view", "work"], troubleshooter: ["view"]
+  },
+  Driver: { fleet: ["view", "work"], mytickets: ["view"], troubleshooter: ["view"] },
+  SupportManager: { support: ["view"], warehouse: ["view"], tickets: ["view"] },
+  FleetSupervisor: {
+    gm: ["view"], fleet: ["view", "work"], tickets: ["view", "work"],
+    troubleshooter: ["view"]
+  },
+  FleetViewer: { fleet_tickets: ["view"] }
+};
 
 function getModuleFromPath(pathname) {
   const parts = pathname.replace(/^\/+/, "").split("/");
   if (parts[0] !== "api") return null;
   const route = parts[1] || "";
   const modules = {
-    vehicles: "vehicles", drivers: "drivers", tickets: "tickets", issues: "tickets", sites: "building",
-    "work-orders": "building", projects: "projects", purchases: "purchases", building: "building",
-    inventory: "warehouse", "stock-transactions": "warehouse", "periodic-maintenance": "periodic",
-    "audit-log": "audit", backup: "backup", users: "users", dashboard: "gm", reports: "reports", "live-issues": "tickets"
+    vehicles: "fleet",
+    drivers: "drivers",
+    tickets: "tickets",
+    issues: "fleet",
+    sites: "support",
+    "work-orders": "operations",
+    projects: "operations",
+    purchases: "operations",
+    building: "operations",
+    inventory: "warehouse",
+    "stock-transactions": "warehouse",
+    "periodic-maintenance": "fleet",
+    "audit-log": "audit",
+    backup: "backup",
+    users: "users",
+    dashboard: "gm",
+    reports: "reports",
+    "advanced-reports": "advanced_reports",
+    "live-issues": "tickets"
   };
+  if (pathname.includes("/tickets/by-reporter/") || pathname.includes("/tickets/stats/")) return "mytickets";
+  if (pathname.startsWith("/api/support-manager/")) return "support";
   return modules[route] || null;
 }
 
@@ -41,18 +93,107 @@ export function getPermissionForRequest(req) {
   return { module, action };
 }
 
-export async function hasPermission(user, module, action) {
+function presetForRole(role) {
+  return ROLE_ACCESS_PRESETS[role] || {};
+}
+
+export async function getUserAccess(userId, role) {
+  if (role === "Owner") {
+    return ACCESS_MODULES.reduce((acc, m) => {
+      acc[m.id] = { can_view: true, can_work: true };
+      return acc;
+    }, {});
+  }
+
+  const result = await query(
+    `SELECT module, can_view, can_work FROM user_access WHERE user_id = $1`,
+    [userId]
+  );
+
+  const access = {};
+  const preset = presetForRole(role);
+
+  for (const m of ACCESS_MODULES) {
+    const explicit = result.rows.find(r => r.module === m.id);
+    if (explicit) {
+      access[m.id] = { can_view: Boolean(explicit.can_view), can_work: Boolean(explicit.can_work) };
+      continue;
+    }
+    const defaults = preset[m.id] || [];
+    access[m.id] = {
+      can_view: defaults.includes("view") || defaults.includes("work"),
+      can_work: defaults.includes("work")
+    };
+  }
+  return access;
+}
+
+export async function saveUserAccess(userId, access = {}) {
+  for (const module of ACCESS_MODULES.map(m => m.id)) {
+    const value = access[module] || {};
+    const canWork = Boolean(value.can_work);
+    const canView = Boolean(value.can_view) || canWork;
+    await query(
+      `INSERT INTO user_access (user_id, module, can_view, can_work)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, module)
+       DO UPDATE SET can_view = EXCLUDED.can_view, can_work = EXCLUDED.can_work`,
+      [userId, module, canView, canWork]
+    );
+  }
+  return getUserAccess(userId, null);
+}
+
+export async function ensureUserAccessTable() {
+  await query(`CREATE TABLE IF NOT EXISTS user_access (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    module TEXT NOT NULL,
+    can_view BOOLEAN NOT NULL DEFAULT FALSE,
+    can_work BOOLEAN NOT NULL DEFAULT FALSE,
+    UNIQUE(user_id, module)
+  )`);
+}
+
+export async function hasModuleAccess(user, module, mode = "view") {
   if (!user) return false;
   if (user.role === "Owner") return true;
+
+  const result = await query(
+    `SELECT can_view, can_work FROM user_access
+     WHERE user_id = $1 AND module = $2 LIMIT 1`,
+    [user.id, module]
+  );
+
+  if (result.rows.length > 0) {
+    return mode === "work" ? Boolean(result.rows[0].can_work) : Boolean(result.rows[0].can_view);
+  }
+
+  const access = await getUserAccess(user.id, user.role);
+  return mode === "work" ? Boolean(access[module]?.can_work) : Boolean(access[module]?.can_view);
+}
+
+async function hasLegacyPermission(user, module, action) {
+  if (!user) return false;
+  if (user.role === "Owner") return true;
+
   const userPermission = await query(`
-    SELECT 1 FROM user_permissions up JOIN permissions p ON p.id = up.permission_id
-    WHERE up.user_id = $1 AND p.module = $2 AND p.action = $3 AND up.allowed = TRUE LIMIT 1
+    SELECT 1 FROM user_permissions up
+    JOIN permissions p ON p.id = up.permission_id
+    WHERE up.user_id = $1 AND p.module = $2 AND p.action = $3
+      AND up.allowed = TRUE LIMIT 1
   `, [user.id, module, action]);
+
   if (userPermission.rows.length > 0) return true;
+
   const rolePermission = await query(`
-    SELECT 1 FROM role_permissions rp JOIN roles r ON r.id = rp.role_id JOIN permissions p ON p.id = rp.permission_id
-    WHERE r.name = $1 AND p.module = $2 AND p.action = $3 AND rp.allowed = TRUE LIMIT 1
+    SELECT 1 FROM role_permissions rp
+    JOIN roles r ON r.id = rp.role_id
+    JOIN permissions p ON p.id = rp.permission_id
+    WHERE r.name = $1 AND p.module = $2 AND p.action = $3
+      AND rp.allowed = TRUE LIMIT 1
   `, [user.role, module, action]);
+
   return rolePermission.rows.length > 0;
 }
 
@@ -92,11 +233,7 @@ async function handlePushRoute(req, res) {
       return res.json({ success: true, ...sendResult });
     } catch (error) {
       console.error("FCM test push error:", error);
-      return res.status(500).json({
-        success: false,
-        error: "FCM test failed",
-        message: error?.message || "Unknown FCM error"
-      });
+      return res.status(500).json({ success: false, error: "FCM test failed", message: error?.message || "Unknown FCM error" });
     }
   }
   return null;
@@ -107,26 +244,29 @@ export async function requirePermission(req, res, next) {
     const pushHandled = await handlePushRoute(req, res);
     if (pushHandled !== null) return pushHandled;
 
-    // Restricted read-only viewer roles: only their dedicated GET endpoints are allowed.
-    if (req.user?.role === "FleetViewer") {
-      if (req.method === "GET" && req.path === "/tickets") return next();
-      return res.status(403).json({ success: false, error: "Forbidden", message: "Fleet Viewer is read-only and limited to vehicle tickets." });
-    }
-
-    if (req.user?.role === "SupportManager") {
-      if (req.method === "GET" && (req.path === "/support-manager/tickets" || req.path === "/support-manager/warehouse")) return next();
-      return res.status(403).json({ success: false, error: "Forbidden", message: "Support Manager is read-only and limited to the assigned site." });
-    }
-
     const permission = getPermissionForRequest(req);
     if (!permission) return next();
-    const allowed = await hasPermission(req.user, permission.module, permission.action);
-    if (allowed) return next();
-    return res.status(403).json({ success: false, error: "Forbidden", message: `You do not have permission to ${permission.action} ${permission.module}.`, required: permission });
+
+    const mode = req.method === "GET" ? "view" : "work";
+    const accessAllowed = await hasModuleAccess(req.user, permission.module, mode);
+    if (accessAllowed) return next();
+
+    const legacyAllowed = await hasLegacyPermission(req.user, permission.module, permission.action);
+    if (legacyAllowed) return next();
+
+    return res.status(403).json({
+      success: false,
+      error: "Forbidden",
+      message: "Access denied: " + mode + " permission required for " + permission.module + ".",
+      required: { module: permission.module, action: mode }
+    });
   } catch (error) {
     console.error("RBAC permission error:", error);
     return res.status(500).json({ success: false, error: "Permission check failed", message: error.message });
   }
 }
 
-export default { getPermissionForRequest, hasPermission, requirePermission };
+export default {
+  ACCESS_MODULES, getPermissionForRequest, getUserAccess, saveUserAccess,
+  ensureUserAccessTable, hasModuleAccess, requirePermission
+};

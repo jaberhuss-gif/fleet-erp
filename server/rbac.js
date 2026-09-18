@@ -106,7 +106,18 @@ export async function requirePermission(req, res, next) {
   try {
     const pushHandled = await handlePushRoute(req, res);
     if (pushHandled !== null) return pushHandled;
-    if (req.user?.role === "FleetViewer" && req.method === "GET" && req.path === "/tickets") return next();
+
+    // Restricted read-only viewer roles: only their dedicated GET endpoints are allowed.
+    if (req.user?.role === "FleetViewer") {
+      if (req.method === "GET" && req.path === "/tickets") return next();
+      return res.status(403).json({ success: false, error: "Forbidden", message: "Fleet Viewer is read-only and limited to vehicle tickets." });
+    }
+
+    if (req.user?.role === "SupportManager") {
+      if (req.method === "GET" && (req.path === "/support-manager/tickets" || req.path === "/support-manager/warehouse")) return next();
+      return res.status(403).json({ success: false, error: "Forbidden", message: "Support Manager is read-only and limited to the assigned site." });
+    }
+
     const permission = getPermissionForRequest(req);
     if (!permission) return next();
     const allowed = await hasPermission(req.user, permission.module, permission.action);

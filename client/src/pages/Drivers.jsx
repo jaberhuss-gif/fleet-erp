@@ -5,21 +5,62 @@ import { printContent } from '../api/print';
 
 export default function Drivers() {
   const [drivers, setDrivers] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [form, setForm] = useState({
+    name: '', phone: '', licenseNo: '', licenseExpiry: '',
+    nationality: '', vehicleId: '', status: 'Active', notes: ''
+  });
 
   useEffect(() => { load(); }, []);
 
   const load = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/drivers');
-      setDrivers(res.data.drivers || []);
+      const [d, v] = await Promise.all([api.get('/drivers'), api.get('/vehicles')]);
+      setDrivers(d.data.drivers || []);
+      setVehicles(v.data.vehicles || []);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
+  };
+
+  const resetForm = () => {
+    setForm({ name: '', phone: '', licenseNo: '', licenseExpiry: '', nationality: '', vehicleId: '', status: 'Active', notes: '' });
+    setEditing(null);
+    setShowForm(false);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setMessage(''); setError('');
+    try {
+      const payload = { ...form, vehicleId: form.vehicleId ? Number(form.vehicleId) : null };
+      if (editing) {
+        await api.put('/drivers/' + editing.id, payload);
+        setMessage('Driver updated');
+      } else {
+        await api.post('/drivers', payload);
+        setMessage('Driver created');
+      }
+      resetForm();
+      load();
+    } catch (e) { setError(e.response?.data?.error || e.message); }
+  };
+
+  const handleEdit = (d) => {
+    setForm({
+      name: d.name || '', phone: d.phone || '', licenseNo: d.license_no || '',
+      licenseExpiry: d.license_expiry || '', nationality: d.nationality || '',
+      vehicleId: d.vehicle_id || '', status: d.status || 'Active', notes: d.notes || ''
+    });
+    setEditing(d);
+    setShowForm(true);
   };
 
   const handleDelete = async (id, name) => {
@@ -63,7 +104,7 @@ export default function Drivers() {
 
       <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px', marginTop: '12px' }}>
         <button className="print-btn no-print" style={{ marginRight: '8px' }} onClick={() => printContent('Drivers Report', drivers.length + ' drivers')}>🖨️ Print</button>
-        <button className="btn btn-success" onClick={() => exportToCSV(filtered, 'drivers', [
+        <button className="btn btn-success" style={{ marginRight: '8px' }} onClick={() => exportToCSV(filtered, 'drivers', [
           {key:'name',label:'Name'},
           {key:'phone',label:'Phone'},
           {key:'license_no',label:'License'},
@@ -72,6 +113,9 @@ export default function Drivers() {
           {key:'vehicle_plate',label:'Vehicle'},
           {key:'status',label:'Status'}
         ])}>Export CSV</button>
+        <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
+          {showForm ? 'Cancel' : '+ Add Driver'}
+        </button>
       </div>
 
       {message && <div className="alert alert-success">{message}</div>}
@@ -94,6 +138,59 @@ export default function Drivers() {
           <div className="sub">Unassigned</div>
         </div>
       </div>
+
+      {showForm && (
+        <form onSubmit={handleSubmit} style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
+          <h3>{editing ? 'Edit Driver' : 'New Driver'}</h3>
+          <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+            <div className="form-group">
+              <label>Name *</label>
+              <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required placeholder="e.g. Ahmed Ali" />
+            </div>
+            <div className="form-group">
+              <label>Phone</label>
+              <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="05xxxxxxxx" />
+            </div>
+            <div className="form-group">
+              <label>License No.</label>
+              <input value={form.licenseNo} onChange={e => setForm({ ...form, licenseNo: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label>License Expiry</label>
+              <input type="date" value={form.licenseExpiry} onChange={e => setForm({ ...form, licenseExpiry: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label>Nationality</label>
+              <input value={form.nationality} onChange={e => setForm({ ...form, nationality: e.target.value })} placeholder="e.g. Pakistani" />
+            </div>
+            <div className="form-group">
+              <label>Vehicle</label>
+              <select value={form.vehicleId} onChange={e => setForm({ ...form, vehicleId: e.target.value })}>
+                <option value="">-- Not assigned --</option>
+                {vehicles.map(v => (
+                  <option key={v.id} value={v.id}>{v.plate} - {v.make} {v.model}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Status</label>
+              <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
+                <option value="Active">Active</option>
+                <option value="On Leave">On Leave</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Notes</label>
+            <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2}></textarea>
+          </div>
+          <div className="btn-row">
+            <button type="submit" className="btn btn-success">{editing ? 'Update' : 'Save'}</button>
+            <button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button>
+          </div>
+        </form>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '16px', background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
         <div className="form-group" style={{ marginBottom: 0 }}>
@@ -153,6 +250,7 @@ export default function Drivers() {
                   </span>
                 </td>
                 <td>
+                  <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleEdit(d)}>Edit</button>
                   <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(d.id, d.name)}>Delete</button>
                 </td>
               </tr>

@@ -179,13 +179,52 @@ export async function reconcileAndNotify() {
       v.meter_updated_at,
       v.current_km
     FROM vehicles v
-    LEFT JOIN drivers d ON d.vehicle_id = v.id
+    JOIN drivers d ON d.vehicle_id = v.id
     WHERE COALESCE(LOWER(TRIM(v.status)), '') NOT IN ('inactive', 'sold', 'disposed', 'disabled')
+      AND COALESCE(NULLIF(TRIM(d.name), ''), '') <> ''
+      AND LOWER(TRIM(d.name)) <> 'unassigned'
     ORDER BY v.plate_number, v.plate_code
   `);
 
   const due = [];
   let resolved = 0;
+
+  // Close any legacy Daily KM records/cards for vehicles that are no longer
+  // assigned to a real driver. The records are retained; they are simply
+  // marked resolved because Daily KM compliance does not apply to unassigned vehicles.
+  const unassigned = await query(`
+    SELECT v.id AS vehicle_id
+    FROM vehicles v
+    LEFT JOIN drivers d ON d.vehicle_id = v.id
+    WHERE COALESCE(LOWER(TRIM(v.status)), '') NOT IN ('inactive', 'sold', 'disposed', 'disabled')
+      AND (
+        d.id IS NULL
+        OR COALESCE(NULLIF(TRIM(d.name), ''), '') = ''
+        OR LOWER(TRIM(d.name)) = 'unassigned'
+      )
+  `);
+
+  for (const row of unassigned.rows) {
+    const closed = await query(`
+      UPDATE km_daily_notifications
+      SET status = 'Resolved',
+          resolved_at = COALESCE(resolved_at, CURRENT_TIMESTAMP),
+          last_checked_at = CURRENT_TIMESTAMP
+      WHERE vehicle_id = $1 AND reminder_date = $2 AND status = 'Open'
+      RETURNING id
+    `, [row.vehicle_id, today]);
+    resolved += closed.rowCount;
+
+    try {
+      await closeDailyKmTicket(
+        row.vehicle_id,
+        today,
+        'Daily KM requirement closed automatically because the vehicle has no assigned driver.'
+      );
+    } catch (error) {
+      console.error("[KMDailyCard] unassigned ticket closure failed:", row.vehicle_id, error.message);
+    }
+  }
 
   for (const v of vehicles.rows) {
     const updatedDateResult = v.meter_updated_at
@@ -366,8 +405,11 @@ export async function getKmDailyNotifications() {
       n.owner_notified_at
     FROM km_daily_notifications n
     JOIN vehicles v ON v.id = n.vehicle_id
+    JOIN drivers d ON d.vehicle_id = v.id
     WHERE n.reminder_date = $1
       AND n.status = 'Open'
+      AND COALESCE(NULLIF(TRIM(d.name), ''), '') <> ''
+      AND LOWER(TRIM(d.name)) <> 'unassigned'
     ORDER BY v.plate_number, v.plate_code
   `, [today]);
 

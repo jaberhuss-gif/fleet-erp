@@ -23,7 +23,7 @@ const EMPTY_PURCHASE = {
 
 export default function PurchaseRequests({ access = {}, user }) {
   const canWork = user?.role === 'Owner' || !!access?.purchase_requests?.can_work;
-  const canApprove = user?.role === 'Owner';
+  const canApprove = user?.role === 'Owner' && String(user?.username || '').toLowerCase() === 'owner';
 
   const [requests, setRequests] = useState([]);
   const [projects, setProjects] = useState([]);

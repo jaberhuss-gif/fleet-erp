@@ -157,7 +157,8 @@ function isInactive(value) {
 function parseSheetDate(value) {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
-  const m = raw.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})(?:\\s+(\\d{1,2}):([0-5]\\d)(?::([0-5]\\d))?)?$/);
+
+  const m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):([0-5]\d)(?::([0-5]\d))?)?$/);
   if (m) {
     const day = Number(m[1]);
     const month = Number(m[2]);
@@ -167,6 +168,7 @@ function parseSheetDate(value) {
     const second = Number(m[6] || 0);
     return new Date(Date.UTC(year, month - 1, day, hour - 3, minute, second));
   }
+
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
@@ -216,7 +218,11 @@ export async function syncGoogleSheetVehicles() {
     const dateRaw = indexes.date >= 0 ? String(values[indexes.date] ?? "").trim() : "";
     const date = parseSheetDate(dateRaw);
     const previous = latestRows.get(plate);
-    if (!previous || (date && (!previous.date || date.getTime() >= previous.date.getTime()))) {
+    if (
+      !previous ||
+      (date && !previous.date) ||
+      (date && previous.date && date.getTime() >= previous.date.getTime())
+    ) {
       latestRows.set(plate, { values, date, dateRaw });
     }
   }

@@ -257,14 +257,15 @@ app.get("/api/tickets", async (req, res) => {
         Projects: "projects",
         Warehouse: "warehouse"
       };
-      if (access?.fleet_tickets?.can_view && !visibleDepartments.includes("Fleet")) {
-        visibleDepartments.push("Fleet");
-      }
 
       const canSeeAllTickets = ["GM", "Accountant"].includes(req.user?.role);
       const visibleDepartments = Object.entries(departmentModule)
         .filter(([, module]) => access[module]?.can_view)
         .map(([department]) => department);
+
+      if (access?.fleet_tickets?.can_view && !visibleDepartments.includes("Fleet")) {
+        visibleDepartments.push("Fleet");
+      }
 
       if (!canSeeAllTickets) {
         tickets = tickets.filter(t =>

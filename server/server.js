@@ -136,6 +136,80 @@ app.get("/api/alerts", async (req, res) => {
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+// ===== SUPPORT MANAGER - SITE-SCOPED READ-ONLY =====
+app.get("/api/support-manager/tickets", async (req, res) => {
+  if (req.user?.role !== "SupportManager") return res.status(403).json({ success: false, error: "Forbidden" });
+  const site = String(req.user?.site || "").trim();
+  if (!site) return res.status(400).json({ success: false, error: "No site assigned to this Support Manager." });
+
+  try {
+    const result = await pgQuery(`
+      SELECT
+        t.id,
+        t.opened_at,
+        t.category,
+        t.priority,
+        t.status,
+        t.description,
+        t.reported_by,
+        t.closed_at,
+        COALESCE(v.plate_number || ' ' || v.plate_code, '') AS plate
+      FROM tickets t
+      LEFT JOIN vehicles v ON v.id = t.vehicle_id
+      WHERE
+        t.location = $1
+        OR v.location = $1
+        OR t.description LIKE $2
+      ORDER BY t.opened_at DESC, t.id DESC
+    `, [site, "[Site: " + site + "]%"]);
+
+    const tickets = result.rows.map(t => ({
+      id: t.id,
+      opened_at: t.opened_at,
+      plate: t.plate || "",
+      category: t.category || "",
+      priority: t.priority || "",
+      status: t.status || "",
+      description: t.description || "",
+      reported_by: t.reported_by || "",
+      closed_at: t.closed_at || null
+    }));
+    res.json({ success: true, tickets });
+  } catch (e) {
+    console.error("SupportManager tickets error:", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get("/api/support-manager/warehouse", async (req, res) => {
+  if (req.user?.role !== "SupportManager") return res.status(403).json({ success: false, error: "Forbidden" });
+  const site = String(req.user?.site || "").trim();
+  if (!site) return res.status(400).json({ success: false, error: "No site assigned to this Support Manager." });
+
+  try {
+    const result = await pgQuery(`
+      SELECT
+        ws.id,
+        ws.item_code,
+        ws.location_code,
+        ws.quantity,
+        ws.min_stock,
+        COALESCE(i.name, ws.item_code) AS name,
+        COALESCE(i.unit, '') AS unit
+      FROM warehouse_stock ws
+      LEFT JOIN warehouse_locations wl ON wl.code = ws.location_code
+      LEFT JOIN inventory i ON i.code = ws.item_code
+      WHERE wl.site = $1
+      ORDER BY COALESCE(i.name, ws.item_code), ws.location_code
+    `, [site]);
+
+    res.json({ success: true, items: result.rows });
+  } catch (e) {
+    console.error("SupportManager warehouse error:", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // ===== TICKETS - POSTGRESQL =====
 
 app.get("/api/tickets", async (req, res) => {

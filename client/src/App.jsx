@@ -118,9 +118,12 @@ export default function App() {
   const canViewModule = (module) => {
     if (user?.role === 'Owner') return true;
 
-    // Support Manager is intentionally isolated from Fleet operations.
-    // Vehicle Tickets remains a separate permission/module.
-    if (user?.role === 'SupportManager' && module === 'fleet') return false;
+    // Support Manager is intentionally isolated from Fleet operations and
+    // Purchase Requests. Vehicle Tickets remains a separate permission/module.
+    if (
+      user?.role === 'SupportManager' &&
+      (module === 'fleet' || module === 'purchase_requests')
+    ) return false;
 
     return !!access?.[module]?.can_view;
   };

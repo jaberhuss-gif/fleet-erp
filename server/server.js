@@ -695,8 +695,11 @@ app.post("/api/purchase-requests", async (req, res) => {
   }
 });
 
-app.put("/api/purchase-requests/:id/approve", requireRole("Owner"), async (req, res) => {
+app.put("/api/purchase-requests/:id/approve", async (req, res) => {
   try {
+    if (req.user?.role !== "Owner" || String(req.user?.username || "").toLowerCase() !== "owner") {
+      return res.status(403).json({ success: false, error: "Only the primary Owner account can approve Purchase Requests." });
+    }
     const request = await approvePurchaseRequestPG(req.params.id, req.user, req.body?.approvalNotes || "");
     await logActionPG({
       userId: req.user?.id,
@@ -712,8 +715,11 @@ app.put("/api/purchase-requests/:id/approve", requireRole("Owner"), async (req, 
   }
 });
 
-app.put("/api/purchase-requests/:id/reject", requireRole("Owner"), async (req, res) => {
+app.put("/api/purchase-requests/:id/reject", async (req, res) => {
   try {
+    if (req.user?.role !== "Owner" || String(req.user?.username || "").toLowerCase() !== "owner") {
+      return res.status(403).json({ success: false, error: "Only the primary Owner account can reject Purchase Requests." });
+    }
     const request = await rejectPurchaseRequestPG(req.params.id, req.user, req.body?.reason || "");
     await logActionPG({
       userId: req.user?.id,

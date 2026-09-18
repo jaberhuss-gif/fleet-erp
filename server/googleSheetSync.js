@@ -506,10 +506,13 @@ export function startGoogleSheetVehicleSync() {
 
   // Guarantee the first daily compliance run happens exactly at 07:00 local time,
   // regardless of when the backend process started.
-  kmSevenAmTimer = setTimeout(() => {
-    run();
-    kmSevenAmTimer = setInterval(run, INTERVAL_MS);
-  }, millisUntilNextSevenAm());
+  const scheduleSevenAmCheck = () => {
+    kmSevenAmTimer = setTimeout(async () => {
+      await run();
+      scheduleSevenAmCheck();
+    }, millisUntilNextSevenAm());
+  };
+  scheduleSevenAmCheck();
 
   // Continue the normal 5-minute sync loop for Google Sheet updates.
   syncTimer = setInterval(run, INTERVAL_MS);

@@ -161,39 +161,47 @@ function parseSheetDate(value) {
   const parts = raw.split(" ").filter(Boolean);
   const datePart = parts[0] || "";
   const timePart = parts[1] || "00:00:00";
-  const datePieces = datePart.split("/").map(Number);
-  const timePieces = timePart.split(":").map(Number);
 
+  const datePieces = datePart.split("/").map(Number);
   if (datePieces.length !== 3 || datePieces.some((n) => !Number.isFinite(n))) {
-    const parsed = new Date(raw);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
+    return null;
   }
 
-  let [first, second, year] = datePieces;
-  const hour = Number.isFinite(timePieces[0]) ? timePieces[0] : 0;
-  const minute = Number.isFinite(timePieces[1]) ? timePieces[1] : 0;
-  const secondValue = Number.isFinite(timePieces[2]) ? timePieces[2] : 0;
+  let first = datePieces[0];
+  let second = datePieces[1];
+  const year = datePieces[2];
 
   let month = first;
   let day = second;
 
-  // Google Sheets normally exports M/D/YYYY.
-  // Support unambiguous D/M/YYYY rows too.
+  // Supports both M/D/YYYY (Google Sheets export) and unambiguous D/M/YYYY.
   if (first > 12 && second <= 12) {
     day = first;
     month = second;
   }
 
+  const timePieces = timePart.split(":").map(Number);
+  const hour = Number.isFinite(timePieces[0]) ? timePieces[0] : 0;
+  const minute = Number.isFinite(timePieces[1]) ? timePieces[1] : 0;
+  const secondValue = Number.isFinite(timePieces[2]) ? timePieces[2] : 0;
+
   if (
+    year < 2000 ||
     month < 1 || month > 12 ||
-    day < 1 || day > 31 ||
-    year < 2000
+    day < 1 || day > 31
   ) {
     return null;
   }
 
-  // Sheet timestamps are Saudi local time (UTC+3).
-  return new Date(Date.UTC(year, month - 1, day, hour - 3, minute, secondValue));
+  // Records are Saudi local time (UTC+3). Convert to UTC for storage/comparison.
+  return new Date(Date.UTC(
+    year,
+    month - 1,
+    day,
+    hour - 3,
+    minute,
+    secondValue
+  ));
 }
 
 export async function syncGoogleSheetVehicles() {
@@ -249,6 +257,9 @@ export async function syncGoogleSheetVehicles() {
       latestRows.set(plate, { values, date, dateRaw });
     }
   }
+
+  const knownVehicleSample = [...latestRows.entries()]
+    .find(([plate]) => plate.toLowerCase() === "2290 eua");
 
   let matched = 0;
   let updated = 0;
@@ -358,7 +369,15 @@ export async function syncGoogleSheetVehicles() {
       km: indexes.km >= 0 ? headers[indexes.km] : null,
       date: indexes.date >= 0 ? headers[indexes.date] : null
     },
-    samples
+    samples,
+    knownVehicleSample: knownVehicleSample
+      ? {
+          plate: knownVehicleSample[0],
+          dateRaw: knownVehicleSample[1].dateRaw,
+          sheetDate: knownVehicleSample[1].date ? knownVehicleSample[1].date.toISOString() : null,
+          kmRaw: knownVehicleSample[1].values[indexes.km] ?? null
+        }
+      : null
   };
 }
 

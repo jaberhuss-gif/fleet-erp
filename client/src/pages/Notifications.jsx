@@ -1,6 +1,6 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../api/client';
-import { enablePushNotifications, subscribeToForegroundMessages } from '../firebase';
+import { enablePushNotifications, refreshPushNotifications, subscribeToForegroundMessages } from '../firebase';
 
 export default function Notifications() {
   const [open, setOpen] = useState(false);
@@ -9,7 +9,17 @@ export default function Notifications() {
   const [pushEnabled, setPushEnabled] = useState(localStorage.getItem('fcm_push_enabled') === 'true');
   const [pushMessage, setPushMessage] = useState('');
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+
+    // Keep the server-side FCM token current whenever the user opens/uses
+    // Fleet ERP. This is silent when browser permission is already granted.
+    refreshPushNotifications()
+      .then((result) => {
+        if (result.success) setPushEnabled(true);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(load, 60000);
@@ -107,7 +117,7 @@ export default function Notifications() {
         return [...pushOnly, ...notifs];
       });
     } catch (e) {
-      // Silent fail, preserving existing notification behavior.
+      console.error('Notification load failed:', e);
     } finally {
       setLoading(false);
     }

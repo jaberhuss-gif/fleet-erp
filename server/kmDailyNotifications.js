@@ -78,6 +78,59 @@ async function getDriverTokens(userId) {
   return result.rows.map(r => r.token).filter(Boolean);
 }
 
+async function ensureDailyKmTicket(record, today) {
+  const marker = `DAILY_KM_MISSING|vehicle=${record.vehicle_id}|date=${today}`;
+
+  const existing = await query(`
+    SELECT id, status FROM tickets
+    WHERE vehicle_id = $1 AND category = 'Daily KM'
+      AND description LIKE $2 AND status IN ('Open', 'Acknowledged')
+    ORDER BY id DESC LIMIT 1
+  `, [record.vehicle_id, `%${marker}%`]);
+
+  if (existing.rows[0]) return existing.rows[0];
+
+  const result = await query(`
+    INSERT INTO tickets
+      (vehicle_id, title, location, category, priority, status,
+       description, reported_by, opened_at, department)
+    VALUES
+      ($1, $2, $3, 'Daily KM', 'High', 'Open', $4, $5,
+       CURRENT_TIMESTAMP, 'Fleet')
+    RETURNING id, status
+  `, [
+    record.vehicle_id,
+    `Daily KM Missing — ${record.vehicle_plate || "Vehicle"}`,
+    record.location || "",
+    `${marker}
+Today's odometer reading has not been entered by 07:00 Asia/Riyadh.
+Driver: ${record.driver_name || "Unassigned"}
+Current KM: ${Number(record.current_km || 0).toLocaleString()}`,
+    record.driver_name || "System"
+  ]);
+
+  return result.rows[0];
+}
+
+async function closeDailyKmTicket(vehicleId, today, resolutionNotes = "") {
+  const marker = `DAILY_KM_MISSING|vehicle=${vehicleId}|date=${today}`;
+
+  await query(`
+    UPDATE tickets
+    SET status = 'Closed',
+        closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP),
+        closed_by = COALESCE(closed_by, 'System'),
+        resolution_notes = CASE
+          WHEN COALESCE(resolution_notes, '') = '' THEN $3
+          ELSE resolution_notes
+        END
+    WHERE vehicle_id = $1
+      AND category = 'Daily KM'
+      AND description LIKE $2
+      AND status <> 'Closed'
+  `, [vehicleId, `%${marker}%`, resolutionNotes]);
+}
+
 async function sendDriverReminder(record) {
   if (!record.driver_user_id) {
     return { sent: 0, reason: "Driver ERP user not matched by phone." };
@@ -150,6 +203,17 @@ export async function reconcileAndNotify() {
         RETURNING id
       `, [v.vehicle_id, today]);
       resolved += closed.rowCount;
+
+      try {
+        await closeDailyKmTicket(
+          v.vehicle_id,
+          today,
+          `Today's KM reading was entered. Current KM: ${Number(v.current_km || 0).toLocaleString()}.`
+        );
+      } catch (error) {
+        console.error("[KMDailyCard] ticket closure failed:", v.vehicle_id, error.message);
+      }
+
       continue;
     }
 
@@ -172,11 +236,20 @@ export async function reconcileAndNotify() {
       RETURNING *
     `, [v.vehicle_id, v.driver_name, v.driver_phone, driverUserId, today]);
 
-    due.push({
+    const dailyRecord = {
       ...upsert.rows[0],
       vehicle_plate: v.vehicle_plate,
-      current_km: Number(v.current_km || 0)
-    });
+      current_km: Number(v.current_km || 0),
+      location: v.location || ""
+    };
+
+    try {
+      await ensureDailyKmTicket(dailyRecord, today);
+    } catch (error) {
+      console.error("[KMDailyCard] ticket creation failed:", v.vehicle_id, error.message);
+    }
+
+    due.push(dailyRecord);
   }
 
   // Send one push per missing driver, once per daily record.

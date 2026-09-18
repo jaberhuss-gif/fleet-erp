@@ -358,8 +358,15 @@ export async function syncGoogleSheetVehicles() {
       const nextKm = Math.max(km, existingKm);
       add("current_km = ?", nextKm);
       if (nextKm !== existingKm) kmUpdated += 1;
+
+      // A vehicle counts as having today's KM only when the KM value itself
+      // is present. The Sheet date alone must never resolve daily KM compliance.
+      if (date) add("meter_updated_at = ?", date.toISOString());
+    } else if (date) {
+      // The latest Sheet row can exist for today while CurrentKM is blank.
+      // Treat that as "no KM entered today" and clear the compliance timestamp.
+      add("meter_updated_at = ?", null);
     }
-    if (date) add("meter_updated_at = ?", date.toISOString());
 
     if (active !== null) add("status = ?", active ? "Active" : "Inactive");
 

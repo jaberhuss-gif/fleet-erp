@@ -60,7 +60,8 @@ export default function Users() {
       CampusManager: { bg: '#fef3c7', color: '#b45309' },
       Driver: { bg: '#fef2f2', color: '#dc2626' },
       FleetSupervisor: { bg: '#f0f9ff', color: '#0891b2' },
-      FleetViewer: { bg: '#ecfeff', color: '#0e7490' }
+      FleetViewer: { bg: '#ecfeff', color: '#0e7490' },
+      SupportManager: { bg: '#f0fdf4', color: '#15803d' }
     };
     const c = colors[role] || { bg: '#f1f5f9', color: '#64748b' };
     return <span className="status-badge" style={{ background: c.bg, color: c.color }}>{role}</span>;
@@ -75,7 +76,7 @@ export default function Users() {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(users, "users", [{key:"id",label:"ID"},{key:"username",label:"Username"},{key:"full_name",label:"Full Name"},{key:"role",label:"Role"},{key:"email",label:"Email"},{key:"phone",label:"Phone"},{key:"is_active",label:"Active"}])}>Export CSV</button><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
+        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(users, "users", [{key:"id",label:"ID"},{key:"username",label:"Username"},{key:"full_name",label:"Full Name"},{key:"role",label:"Role"},{key:"site",label:"Site"},{key:"email",label:"Email"},{key:"phone",label:"Phone"},{key:"is_active",label:"Active"}])}>Export CSV</button><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
           {showForm ? 'Cancel' : '+ Add User'}
         </button>
       </div>

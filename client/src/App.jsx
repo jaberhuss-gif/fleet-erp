@@ -17,6 +17,7 @@ import MyTickets from './pages/MyTickets';
 import FleetTicketViewer from './pages/FleetTicketViewer';
 import AdvancedReports from './pages/AdvancedReports';
 import api from './api/client';
+import DailyKmGate from './components/DailyKmGate';
 
 const OWNER_ONLY_TABS = new Set(['drivers', 'users', 'audit', 'backup']);
 
@@ -235,6 +236,8 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      <DailyKmGate user={user} />
 
       <main className="main">
         {tab === 'gm' && <GMDashboard />}

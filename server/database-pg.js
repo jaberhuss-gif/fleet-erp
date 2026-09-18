@@ -1116,6 +1116,49 @@ export async function deleteProject(id) {
    PROJECT PURCHASE REQUESTS — OWNER APPROVAL WORKFLOW
    ============================================================ */
 
+export async function ensurePurchaseRequestsTable() {
+  await query(`CREATE TABLE IF NOT EXISTS purchase_requests (
+    id BIGSERIAL PRIMARY KEY,
+    request_no TEXT NOT NULL UNIQUE,
+    requested_by_user_id BIGINT,
+    requested_by TEXT,
+    department TEXT NOT NULL DEFAULT 'Projects',
+    site TEXT,
+    project_id BIGINT,
+    project_no TEXT,
+    item_name TEXT NOT NULL,
+    quantity NUMERIC NOT NULL DEFAULT 1,
+    estimated_unit_cost NUMERIC NOT NULL DEFAULT 0,
+    estimated_total NUMERIC NOT NULL DEFAULT 0,
+    supplier TEXT,
+    purpose TEXT,
+    notes TEXT,
+    status TEXT NOT NULL DEFAULT 'Pending',
+    approved_by_user_id BIGINT,
+    approved_by TEXT,
+    approved_at TIMESTAMPTZ,
+    approval_notes TEXT,
+    rejected_by_user_id BIGINT,
+    rejected_by TEXT,
+    rejected_at TIMESTAMPTZ,
+    rejection_reason TEXT,
+    purchase_id BIGINT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS request_id BIGINT`);
+  await query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS approved_by_user_id BIGINT`);
+  await query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS approved_by TEXT`);
+  await query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ`);
+  await query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS requested_by_user_id BIGINT`);
+  await query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS requested_by TEXT`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_purchase_requests_status ON purchase_requests(status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_purchase_requests_project_id ON purchase_requests(project_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_purchases_request_id ON purchases(request_id)`);
+}
+
+
+
 export async function listPurchaseRequests() {
   const result = await query(`
     SELECT *

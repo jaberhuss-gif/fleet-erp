@@ -150,7 +150,7 @@ export default function Notifications() {
                     const response = await api.post('/push/test');
                     setPushMessage(response?.data?.success ? 'Test notification sent.' : 'Could not send test notification.');
                   } catch (e) {
-                    setPushMessage(e?.response?.data?.error || e?.message || 'Could not send test notification.');
+                    setPushMessage(e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Could not send test notification.');
                   }
                 }} style={{ width: '100%', background: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', padding: '9px 12px', cursor: 'pointer', fontWeight: '600' }}>
                   🧪 Send Test Push Notification

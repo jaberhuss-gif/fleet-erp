@@ -79,7 +79,7 @@ export default function Users() {
       role: u.role || 'Driver',
       email: u.email || '',
       phone: u.phone || '',
-      site: u.site || '',
+      site: u.site || 'ALL',
       department: u.department || 'General'
     });
     setShowForm(true);
@@ -272,7 +272,7 @@ export default function Users() {
                       View = can open/read. Work = can add/edit/perform actions. Building access is for all sites.
                     </div>
                   </div>
-                  <div style={{ color:'#475569', fontSize:12 }}>Site is not used as a permission boundary.</div>
+                  <div style={{ color:'#475569', fontSize:12 }}>Site Access Scope can be All Sites or one selected site.</div>
                 </div>
 
                 {accessLoading ? (

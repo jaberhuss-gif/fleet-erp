@@ -2,7 +2,7 @@
 import cors from "cors";
 import { verifyToken, login, listUsers, createUser, deleteUser } from "./auth.js";
 import { requirePermission } from "./rbac.js";
-import { getKmDailyNotifications } from "./kmDailyNotifications.js";
+import { getKmDailyNotifications, reconcileAndNotify } from "./kmDailyNotifications.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -760,6 +760,7 @@ app.get("/api/backup/download/:name", async (req, res) => {
 // ===== DAILY KM NOTIFICATIONS =====
 app.get("/api/km-daily-notifications", async (req, res) => {
   try {
+    await reconcileAndNotify();
     const result = await getKmDailyNotifications();
     res.json({ success: true, ...result });
   } catch (e) {

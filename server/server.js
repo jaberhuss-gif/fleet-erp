@@ -3,6 +3,7 @@ import cors from "cors";
 import { verifyToken, login, listUsers, createUser, deleteUser } from "./auth.js";
 import { requirePermission } from "./rbac.js";
 import { getKmDailyNotifications, reconcileAndNotify } from "./kmDailyNotifications.js";
+import { syncGoogleSheetVehicles } from "./googleSheetSync.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -755,6 +756,17 @@ app.get("/api/backup/download/:name", async (req, res) => {
     if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, error: "Not found" });
     res.download(filePath, name);
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ===== GOOGLE SHEET SYNC =====
+app.post("/api/google-sheet-sync", requireRole("Owner"), async (req, res) => {
+  try {
+    const result = await syncGoogleSheetVehicles();
+    res.json({ success: true, ...result });
+  } catch (e) {
+    console.error("Google Sheet sync error:", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 // ===== DAILY KM NOTIFICATIONS =====

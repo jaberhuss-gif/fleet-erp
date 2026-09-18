@@ -288,8 +288,8 @@ export default function PeriodicMaintenance({ canWork = false }) {
                   <td>{r.technician || '-'}</td>
                   <td>{Number(r.cost || 0).toLocaleString()}</td>
                   <td>
-                    {r.status === 'Pending' && (
-                      {canWork && <button className="btn btn-success" style={{ padding: '5px 10px', fontSize: '11px', marginRight: '4px' }} onClick={() => handleComplete(r)}>Complete</button>}
+                    {r.status === 'Pending' && canWork && (
+                      <button className="btn btn-success" style={{ padding: '5px 10px', fontSize: '11px', marginRight: '4px' }} onClick={() => handleComplete(r)}>Complete</button>
                     )}
                     {canWork && <button className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '11px', marginRight: '4px' }} onClick={() => handleEdit(r)}>Edit</button>}
                     {canWork && <button className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '11px' }} onClick={() => handleDelete(r.id)}>Del</button>}

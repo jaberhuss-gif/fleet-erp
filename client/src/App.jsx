@@ -117,6 +117,11 @@ export default function App() {
 
   const canViewModule = (module) => {
     if (user?.role === 'Owner') return true;
+
+    // Support Manager is intentionally isolated from Fleet operations.
+    // Vehicle Tickets remains a separate permission/module.
+    if (user?.role === 'SupportManager' && module === 'fleet') return false;
+
     return !!access?.[module]?.can_view;
   };
 
@@ -231,7 +236,13 @@ export default function App() {
       <main className="main">
         {tab === 'gm' && <GMDashboard />}
         {tab === 'support-service' && <SupportServiceHub user={user} access={access || {}} />}
-        {tab === 'fleet' && <FleetHub onViewVehicle={handleViewVehicle} />}
+        {tab === 'fleet' && canViewModule('fleet') && (
+          <FleetHub
+            user={user}
+            access={access || {}}
+            onViewVehicle={handleViewVehicle}
+          />
+        )}
         {tab === 'vehicle-details' && viewingVehicleId && <VehicleDetails vehicleId={viewingVehicleId} onBack={handleBackToVehicles} />}
         {tab === 'troubleshooter' && <Troubleshooter />}
         {tab === 'operations' && <OperationsHub access={access || {}} user={user} />}

@@ -48,7 +48,7 @@ function getModuleFromPath(pathname) {
       ? "/" + normalized
       : "/api" + (normalized.startsWith("/") ? normalized : "/" + normalized);
 
-  const parts = fullPath.replace(/^\\/+/, "").split("/");
+  const parts = fullPath.replace(/^\/+/, "").split("/");
   if (parts[0] !== "api") return null;
 
   // Users may read their own access matrix through the protected route;

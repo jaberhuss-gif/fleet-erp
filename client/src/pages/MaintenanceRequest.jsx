@@ -8,14 +8,15 @@ const initialForm = {
   description: ''
 };
 
-export default function MaintenanceRequest({ user }) {
+export default function MaintenanceRequest({ user, access = {} }) {
   const [form, setForm] = useState(initialForm);
   const [sites, setSites] = useState([]);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const readOnly = user?.role === 'GM';
+  const canWork = user?.role === 'Owner' || !!access?.building?.can_work;
+  const readOnly = !canWork;
 
   useEffect(() => {
     api.get('/sites')
@@ -29,8 +30,8 @@ export default function MaintenanceRequest({ user }) {
     setMessage('');
     setError('');
 
-    if (readOnly) {
-      setError('GM access is read-only.');
+    if (!canWork) {
+      setError('View only. Building Work permission is required to submit a maintenance request.');
       return;
     }
 
@@ -40,18 +41,14 @@ export default function MaintenanceRequest({ user }) {
     }
 
     try {
-      const reportedBy = user?.fullName || user?.username || 'User';
-      const sitePrefix = form.site ? '[Site: ' + form.site + ']\n' : '';
-
-      const res = await api.post('/tickets', {
-        vehicleId: null,
+      const res = await api.post('/maintenance-requests', {
+        site: form.site,
         category: form.category,
-        description: sitePrefix + form.description.trim(),
-        reportedBy,
+        description: form.description.trim(),
         priority: form.priority
       });
 
-      setMessage('✅ Maintenance request #' + (res.data.ticket?.id || '') + ' submitted successfully.');
+      setMessage('✅ Maintenance request #' + (res.data.ticket?.id || '') + ' submitted to Owner.');
       setForm(initialForm);
     } catch (e) {
       setError(e.response?.data?.error || e.message);
@@ -62,30 +59,33 @@ export default function MaintenanceRequest({ user }) {
 
   return (
     <div className="form-container" style={{ maxWidth: 900 }}>
-      <div className="panel" style={{ background: 'linear-gradient(135deg, #0f766e, #0f172a)', color: '#fff', border: 'none' }}>
-        <h1 style={{ margin: 0 }}>📝 Request Maintenance / Building</h1>
-        <p style={{ margin: '8px 0 0', opacity: .9 }}>
-          Submit a maintenance requirement for a site, building or general facility issue.
+      <div className="panel" style={{ background:'linear-gradient(135deg,#0f766e,#0f172a)',color:'#fff',border:'none' }}>
+        <h1 style={{ margin:0 }}>📝 Request Maintenance / Building</h1>
+        <p style={{ margin:'8px 0 0',opacity:.9 }}>
+          Submit a building/facility maintenance requirement for any site.
         </p>
       </div>
 
       {message && <div className="alert alert-success">{message}</div>}
       {error && <div className="alert alert-error">{error}</div>}
-      {readOnly && <div className="alert alert-info">GM view is read-only. Maintenance requests cannot be submitted from this role.</div>}
+      {readOnly && (
+        <div className="alert alert-info">
+          View only. You can see the form, but submitting a Building request requires Work permission.
+        </div>
+      )}
 
       <form className="panel" onSubmit={submit}>
-        <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))' }}>
+        <div className="cards-grid" style={{ gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))' }}>
           <div className="form-group">
             <label>Site</label>
-            <select value={form.site} onChange={e => setForm({ ...form, site: e.target.value })} disabled={readOnly}>
+            <select value={form.site} onChange={e => setForm({...form,site:e.target.value})} disabled={readOnly}>
               <option value="">-- Select site --</option>
               {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
             </select>
           </div>
-
           <div className="form-group">
             <label>Request Type</label>
-            <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} disabled={readOnly}>
+            <select value={form.category} onChange={e => setForm({...form,category:e.target.value})} disabled={readOnly}>
               <option>General Maintenance</option>
               <option>Electrical</option>
               <option>Plumbing</option>
@@ -94,10 +94,9 @@ export default function MaintenanceRequest({ user }) {
               <option>Other</option>
             </select>
           </div>
-
           <div className="form-group">
             <label>Priority</label>
-            <select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })} disabled={readOnly}>
+            <select value={form.priority} onChange={e => setForm({...form,priority:e.target.value})} disabled={readOnly}>
               <option>Low</option>
               <option>Medium</option>
               <option>High</option>
@@ -110,8 +109,8 @@ export default function MaintenanceRequest({ user }) {
           <label>Maintenance Requirement *</label>
           <textarea
             value={form.description}
-            onChange={e => setForm({ ...form, description: e.target.value })}
-            placeholder="Describe the building/facility maintenance requirement, problem, location or needed action..."
+            onChange={e => setForm({...form,description:e.target.value})}
+            placeholder="Describe the building/facility requirement, problem location or needed action..."
             rows={6}
             required
             disabled={readOnly}
@@ -122,7 +121,12 @@ export default function MaintenanceRequest({ user }) {
           <button type="submit" className="btn btn-primary" disabled={readOnly}>
             Submit Maintenance Request
           </button>
-          <button type="button" className="btn btn-warning" onClick={() => { setForm(initialForm); setMessage(''); setError(''); }} disabled={readOnly}>
+          <button
+            type="button"
+            className="btn btn-warning"
+            onClick={() => { setForm(initialForm); setMessage(''); setError(''); }}
+            disabled={readOnly}
+          >
             Clear
           </button>
         </div>

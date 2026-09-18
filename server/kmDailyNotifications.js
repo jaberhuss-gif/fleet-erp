@@ -304,6 +304,76 @@ export async function getKmDailyNotifications() {
     records: result.rows
   };
 }
+ 
+export async function getDriverDailyKmStatus(userId) {
+  const userResult = await query(`
+    SELECT id, role, phone, full_name, username
+    FROM users
+    WHERE id = $1
+    LIMIT 1
+  `, [userId]);
+
+  const user = userResult.rows[0];
+  if (!user || user.role !== 'Driver') {
+    return { required: false, reason: 'not_driver' };
+  }
+
+  const phone = phoneDigits(user.phone);
+  const name = String(user.full_name || user.username || '').trim();
+
+  const vehicleResult = await query(`
+    SELECT
+      v.id,
+      CONCAT(v.plate_number, ' ', COALESCE(v.plate_code, '')) AS plate,
+      v.current_km,
+      v.meter_updated_at,
+      d.name AS driver_name,
+      d.phone AS driver_phone
+    FROM vehicles v
+    JOIN drivers d ON d.vehicle_id = v.id
+    WHERE
+      (
+        ($1 <> '' AND regexp_replace(COALESCE(d.phone, ''), '[^0-9]', '', 'g') = $1)
+        OR ($2 <> '' AND LOWER(TRIM(d.name)) = LOWER(TRIM($2)))
+      )
+      AND COALESCE(LOWER(TRIM(v.status)), '') NOT IN ('inactive', 'sold', 'disposed', 'disabled')
+    ORDER BY v.id
+    LIMIT 1
+  `, [phone, name]);
+
+  const vehicle = vehicleResult.rows[0];
+  if (!vehicle) {
+    return { required: false, reason: 'vehicle_not_assigned' };
+  }
+
+  const todayResult = await query(`
+    SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date AS today
+  `);
+  const today = todayResult.rows[0].today;
+
+  const readingResult = await query(`
+    SELECT id, reading_km, reading_date
+    FROM km_records
+    WHERE vehicle_id = $1
+      AND reading_date::date = $2::date
+    ORDER BY id DESC
+    LIMIT 1
+  `, [vehicle.id, today]);
+
+  const hasTodayReading = readingResult.rows.length > 0;
+
+  return {
+    required: !hasTodayReading,
+    today,
+    vehicle: {
+      id: vehicle.id,
+      plate: vehicle.plate,
+      currentKm: Number(vehicle.current_km || 0),
+      meterUpdatedAt: vehicle.meter_updated_at
+    },
+    reading: readingResult.rows[0] || null
+  };
+}
 
 export async function startKmDailyNotificationService() {
   try {

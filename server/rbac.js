@@ -41,11 +41,20 @@ const ROLE_ACCESS_PRESETS = {
 };
 
 function getModuleFromPath(pathname) {
-  const parts = pathname.replace(/^\/+/, "").split("/");
+  const normalized = String(pathname || "").split("?")[0];
+  const fullPath = normalized.startsWith("/api/")
+    ? normalized
+    : normalized.startsWith("api/")
+      ? "/" + normalized
+      : "/api" + (normalized.startsWith("/") ? normalized : "/" + normalized);
+
+  const parts = fullPath.replace(/^\\/+/, "").split("/");
   if (parts[0] !== "api") return null;
+
   // Users may read their own access matrix through the protected route;
   // the route handler itself enforces Owner-or-self access.
-  if (/^\/api\/users\/[^/]+\/access\/?$/.test(pathname)) return null;
+  if (/^\/api\/users\/[^/]+\/access\/?$/.test(fullPath)) return null;
+
   const route = parts[1] || "";
   const modules = {
     vehicles: "fleet",
@@ -70,8 +79,8 @@ function getModuleFromPath(pathname) {
     "advanced-reports": "advanced_reports",
     "live-issues": "tickets"
   };
-  if (pathname.includes("/tickets/by-reporter/") || pathname.includes("/tickets/stats/")) return "mytickets";
-  if (pathname.startsWith("/api/support-manager/")) return "support";
+  if (fullPath.includes("/tickets/by-reporter/") || fullPath.includes("/tickets/stats/")) return "mytickets";
+  if (fullPath.startsWith("/api/support-manager/")) return "support";
   return modules[route] || null;
 }
 

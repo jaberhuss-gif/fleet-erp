@@ -313,8 +313,8 @@ export async function createTicket(data = {}) {
   const result = await query(
     `INSERT INTO tickets
       (vehicle_id, title, location, category, priority, status,
-       description, reported_by, opened_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_TIMESTAMP)
+       description, reported_by, opened_at, department)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_TIMESTAMP,$9)
      RETURNING *`,
     [
       data.vehicleId || null,
@@ -324,7 +324,8 @@ export async function createTicket(data = {}) {
       stringValue(data.priority) || "Medium",
       stringValue(data.status) || "Open",
       stringValue(data.description),
-      stringValue(data.reportedBy || data.reporter)
+      stringValue(data.reportedBy || data.reporter),
+      stringValue(data.department) || (data.vehicleId ? "Fleet" : "Support")
     ]
   );
 
@@ -347,7 +348,12 @@ export async function listTickets(filters = {}) {
 
   if (filters.reportedBy) {
     params.push(filters.reportedBy);
-    sql += ` AND reported_by = $${params.length}`;
+    sql += ` AND reported_by = ${params.length}`;
+  }
+
+  if (filters.department) {
+    params.push(filters.department);
+    sql += ` AND department = ${params.length}`;
   }
 
   sql += ` ORDER BY opened_at DESC, id DESC`;

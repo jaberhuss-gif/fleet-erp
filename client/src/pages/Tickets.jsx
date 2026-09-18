@@ -11,14 +11,19 @@ export default function Tickets({ user, access = {} }) {
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterMonth, setFilterMonth] = useState('all');
+  const [dailyKmOpenCount, setDailyKmOpenCount] = useState(0);
 
   useEffect(() => { load(); }, []);
 
   const load = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/tickets');
-      setTickets(res.data.tickets || []);
+      const [ticketsRes, kmRes] = await Promise.all([
+        api.get('/tickets'),
+        api.get('/km-daily-notifications')
+      ]);
+      setTickets(ticketsRes.data.tickets || []);
+      setDailyKmOpenCount(Number(kmRes.data?.count || 0));
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
@@ -51,6 +56,13 @@ export default function Tickets({ user, access = {} }) {
   // Stats per category
   const catCounts = {};
   tickets.forEach(t => { catCounts[t.category] = (catCounts[t.category] || 0) + 1; });
+
+  // Daily KM is a live operational count: show only OPEN cards for today.
+  // Do not let historical/closed Daily KM tickets inflate this card.
+  if (Object.prototype.hasOwnProperty.call(catCounts, 'Daily KM')) {
+    catCounts['Daily KM'] = dailyKmOpenCount;
+  }
+
   const topCats = Object.entries(catCounts).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
   // Stats per month

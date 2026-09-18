@@ -4,7 +4,7 @@ import VehicleMaintenance from './VehicleMaintenance';
 
 const TABS = [
   { id: 'vehicles', label: '🚗 Vehicles', title: 'Vehicles & Fleet' },
-  { id: 'maintenance', label: '🔧 Vehicle Maintenance', title: 'Vehicle Maintenance & Smart Service' }
+  { id: 'maintenance', label: '🔧 Vehicle Maintenance & Smart Service', title: 'Vehicle Maintenance & Smart Service' }
 ];
 
 export default function FleetHub({ onViewVehicle }) {
@@ -16,7 +16,7 @@ export default function FleetHub({ onViewVehicle }) {
       <div className="panel" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <div>
-            <h1 style={{ margin: 0 }}>Fleet</h1>
+            <h1 style={{ margin: 0 }}>🚗 Fleet</h1>
             <p style={{ margin: '6px 0 0', color: '#64748b' }}>
               Vehicles → Vehicle Maintenance & Smart Service
             </p>

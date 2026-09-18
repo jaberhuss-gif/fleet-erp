@@ -33,7 +33,8 @@ export async function login(username, password) {
       email,
       phone,
       is_active,
-      site
+      site,
+      department
     FROM users
     WHERE username = $1
       AND is_active = 1
@@ -58,7 +59,6 @@ export async function login(username, password) {
       username: user.username,
       role: user.role,
       site: user.site || '',
-      department: user.department || 'General',
       department: user.department || 'General'
     },
     JWT_SECRET,
@@ -74,7 +74,8 @@ export async function login(username, password) {
       role: user.role,
       email: user.email,
       phone: user.phone,
-      site: user.site || ''
+      site: user.site || '',
+      department: user.department || 'General'
     }
   };
 }
@@ -165,6 +166,8 @@ export async function createUser(data = {}) {
       role,
       email,
       phone,
+      site,
+      department,
       is_active,
       created_at
   `, [

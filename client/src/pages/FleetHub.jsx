@@ -1,9 +1,23 @@
 import { useState } from 'react';
 import DriverPortal from './DriverPortal';
+import Vehicles from './Vehicles';
+import VehicleMaintenance from './VehicleMaintenance';
 import ReportIssue from './ReportIssue';
 import SmartReportIssue from './SmartReportIssue';
 
 const FLEET_SECTIONS = [
+  {
+    id: 'vehicles',
+    label: '🚙 Vehicles',
+    title: 'Vehicles',
+    description: 'Fleet vehicles, current KM, driver assignment and vehicle details.'
+  },
+  {
+    id: 'maintenance',
+    label: '🔧 Vehicle Maintenance',
+    title: 'Vehicle Maintenance',
+    description: 'Periodic maintenance, inspections and vehicle service workflow.'
+  },
   {
     id: 'km',
     label: '📏 KM Entry',
@@ -86,6 +100,8 @@ export default function FleetHub({ user, access, onViewVehicle }) {
         <SmartReportIssue canWork={fleetWork} />
       ) : (
         <>
+          {section === 'vehicles' && <Vehicles onViewVehicle={onViewVehicle} canWork={fleetWork} />}
+          {section === 'maintenance' && <VehicleMaintenance canWork={fleetWork} />}
           {section === 'km' && <DriverPortal canWork={fleetWork} />}
           {section === 'issue' && <ReportIssue canWork={fleetWork} />}
         </>

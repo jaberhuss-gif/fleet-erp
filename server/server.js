@@ -91,13 +91,32 @@ app.get("/api/vehicles/list", async (req, res) => {
 });
 
 app.get("/api/vehicles/:id", async (req, res) => {
-  try { const v = await getVehicleByIdPG(req.params.id); if (!v) return res.status(404).json({ success: false }); res.json({ success: true, vehicle: v }); }
-  catch (e) { res.status(500).json({ success: false, error: e.message }); }
+  try {
+    const v = await getVehicleByIdPG(req.params.id);
+    if (!v) return res.status(404).json({ success: false });
+    const site = userSiteScope(req.user);
+    if (site && !matchesSite(v.location, site)) {
+      return res.status(403).json({ success: false, error: "Vehicle is outside your assigned Site scope." });
+    }
+    res.json({ success: true, vehicle: v });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.get("/api/vehicles/:id/details", async (req, res) => {
-  try { const v = await getVehicleByIdPG(req.params.id); if (!v) return res.status(404).json({ success: false }); res.json({ success: true, vehicle: v, readings: await listReadingsPG(req.params.id), oilChanges: await listOilChangesPG(req.params.id) }); }
-  catch (e) { res.status(500).json({ success: false, error: e.message }); }
+  try {
+    const v = await getVehicleByIdPG(req.params.id);
+    if (!v) return res.status(404).json({ success: false });
+    const site = userSiteScope(req.user);
+    if (site && !matchesSite(v.location, site)) {
+      return res.status(403).json({ success: false, error: "Vehicle is outside your assigned Site scope." });
+    }
+    res.json({
+      success: true,
+      vehicle: v,
+      readings: await listReadingsPG(req.params.id),
+      oilChanges: await listOilChangesPG(req.params.id)
+    });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.post("/api/vehicles", async (req, res) => {
@@ -427,24 +446,17 @@ app.get("/api/sites", async (req, res) => {
 app.get("/api/sites/:id", async (req, res) => {
   try {
     const site = await getSitePG(req.params.id);
+    if (!site) return res.status(404).json({ success: false, error: "Site not found" });
 
-    if (!site) {
-      return res.status(404).json({
-        success: false,
-        error: "Site not found"
-      });
+    const userSite = userSiteScope(req.user);
+    if (userSite && !matchesSite(site.name, userSite)) {
+      return res.status(403).json({ success: false, error: "Site is outside your assigned Site scope." });
     }
 
-    res.json({
-      success: true,
-      site
-    });
+    res.json({ success: true, site });
   } catch (error) {
     console.error("GET /api/sites/:id:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

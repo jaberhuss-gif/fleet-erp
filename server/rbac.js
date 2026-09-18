@@ -33,6 +33,7 @@ const ROLE_ACCESS_PRESETS = {
   },
   Driver: { fleet: ["view", "work"], mytickets: ["view"], troubleshooter: ["view"] },
   SupportManager: { support: ["view"], building: ["view"], tickets: ["view"], troubleshooter: ["view"] },
+  SSM: { building: ["view"], tickets: ["view"], fleet_tickets: ["view"], warehouse: ["view"] },
   FleetSupervisor: {
     gm: ["view"], fleet: ["view", "work"], tickets: ["view", "work"],
     building: ["view"], troubleshooter: ["view"]

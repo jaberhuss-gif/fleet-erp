@@ -127,6 +127,7 @@ export async function syncGoogleSheetVehicles() {
   let matched = 0;
   let updated = 0;
   let unmatched = 0;
+  let kmUpdated = 0;
 
   for (const values of rows.slice(1)) {
     const plate = String(values[indexes.plate] ?? "").trim();
@@ -141,7 +142,7 @@ export async function syncGoogleSheetVehicles() {
     // The sheet may provide a combined plate such as "2290 EUA",
     // while ERP stores it as plate_number="2290" and plate_code="EUA".
     // Try both the exact combined value and the split number/code form.
-    const plateParts = plate.split(/\\s+/).filter(Boolean);
+    const plateParts = plate.split(/\s+/).filter(Boolean);
     const combinedPlate = plateParts.join(" ").trim();
     const splitPlateNumber = plateParts[0] || "";
     const splitPlateCode = plateParts.slice(1).join(" ").trim();
@@ -188,7 +189,9 @@ export async function syncGoogleSheetVehicles() {
     // must disappear only after a real KM entry is recorded in ERP.
     if (km !== null) {
       const existingKm = Number(result.rows[0].current_km || 0);
-      add("current_km = ?", Math.max(km, existingKm));
+      const nextKm = Math.max(km, existingKm);
+      add("current_km = ?", nextKm);
+      if (nextKm !== existingKm) kmUpdated += 1;
     }
 
     if (active !== null) add("status = ?", active ? "Active" : "Inactive");
@@ -203,6 +206,7 @@ export async function syncGoogleSheetVehicles() {
   return {
     matched,
     updated,
+    kmUpdated,
     unmatched,
     rows: rows.length - 1,
     syncedAt: new Date().toISOString()

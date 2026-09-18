@@ -91,7 +91,8 @@ async function sendDriverReminder(record) {
       type: "daily_km_missing",
       icon: "🚨",
       tab: "fleet-maintenance",
-      url: "/"
+      url: "/",
+      notification_id: String(record.id)
     }
   });
 

@@ -60,9 +60,19 @@ function findIndex(headers, names) {
 }
 
 function findKmIndex(headers) {
-  // Prefer headers that clearly represent the current/latest odometer,
-  // before falling back to a generic KM/odometer/mileage column.
+  // Handle the exact sheet header "CurrentKM" as well as spacing,
+  // underscores, punctuation, or hidden formatting around it.
   const normalizedHeaders = headers.map(normalize);
+  const compactHeaders = headers.map((h) =>
+    String(h ?? "")
+      .replace(/[\\s_\\-().]/g, "")
+      .toLowerCase()
+  );
+
+  const exactCurrentKm = compactHeaders.findIndex((h) =>
+    h === "currentkm" || h === "currentodometer" || h === "currentmileage"
+  );
+  if (exactCurrentKm >= 0) return exactCurrentKm;
 
   const preferredPatterns = [
     /current.*(km|kilometer|kilometre|odometer|mileage)/,
@@ -158,6 +168,21 @@ export async function syncGoogleSheetVehicles() {
     Object.entries(aliases).map(([key, names]) => [key, findIndex(headers, names)])
   );
   indexes.km = findKmIndex(headers);
+
+  // Known daily-KM sheet layout fallback: CurrentKM is immediately after Location.
+  // Use it only when the header-based detector cannot find a KM column.
+  if (indexes.km < 0 && headers.length >= 5) {
+    const compactHeaders = headers.map((h) =>
+      String(h ?? "")
+        .replace(/[\\s_\\-().]/g, "")
+        .toLowerCase()
+    );
+    const hasDailyKmShape =
+      compactHeaders.includes("lastoilkm") ||
+      compactHeaders.includes("timestamp") ||
+      compactHeaders.includes("datetime");
+    if (hasDailyKmShape) indexes.km = 4;
+  }
 
   if (indexes.plate < 0) {
     throw new Error(`Vehicle/plate column not found. Headers: ${headers.join(", ")}`);

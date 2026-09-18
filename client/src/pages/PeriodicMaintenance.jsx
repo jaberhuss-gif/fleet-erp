@@ -7,7 +7,7 @@ const TYPE_LABELS = {
   'inspection': '🔍 Periodic Inspection'
 };
 
-export default function PeriodicMaintenance() {
+export default function PeriodicMaintenance({ canWork = false }) {
   const [subTab, setSubTab] = useState('all');
   const [records, setRecords] = useState([]);
   const [alerts, setAlerts] = useState({ overdue: [], dueSoon: [] });
@@ -182,9 +182,9 @@ export default function PeriodicMaintenance() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
           
           <div className="btn-row" style={{ margin: 0 }}>
-            <button className="btn btn-warning" style={{ marginRight: '8px' }} onClick={handleGenerate}>⚡ Auto-Generate All</button>
+            {canWork && <button className="btn btn-warning" style={{ marginRight: '8px' }} onClick={handleGenerate}>⚡ Auto-Generate All</button>}
             <button className="btn btn-success" style={{ marginRight: '8px' }} onClick={() => exportToCSV(currentList, 'periodic-maintenance', [{key:"vehicle_plate",label:"Vehicle"},{key:"type",label:"Type"},{key:"scheduled_date",label:"Scheduled"},{key:"completed_date",label:"Completed"},{key:"status",label:"Status"},{key:"technician",label:"Technician"},{key:"cost",label:"Cost"}])}>Export CSV</button>
-            <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
+            {canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
               {showForm ? 'Cancel' : '+ Schedule New'}
             </button>
           </div>
@@ -289,10 +289,10 @@ export default function PeriodicMaintenance() {
                   <td>{Number(r.cost || 0).toLocaleString()}</td>
                   <td>
                     {r.status === 'Pending' && (
-                      <button className="btn btn-success" style={{ padding: '5px 10px', fontSize: '11px', marginRight: '4px' }} onClick={() => handleComplete(r)}>Complete</button>
+                      {canWork && <button className="btn btn-success" style={{ padding: '5px 10px', fontSize: '11px', marginRight: '4px' }} onClick={() => handleComplete(r)}>Complete</button>}
                     )}
-                    <button className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '11px', marginRight: '4px' }} onClick={() => handleEdit(r)}>Edit</button>
-                    <button className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '11px' }} onClick={() => handleDelete(r.id)}>Del</button>
+                    {canWork && <button className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '11px', marginRight: '4px' }} onClick={() => handleEdit(r)}>Edit</button>}
+                    {canWork && <button className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '11px' }} onClick={() => handleDelete(r.id)}>Del</button>}
                   </td>
                 </tr>
               ))}
@@ -314,7 +314,7 @@ export default function PeriodicMaintenance() {
             <div className="form-group"><label>Total Cost (SAR)</label><input type="number" value={completeForm.cost} onChange={e => setCompleteForm({ ...completeForm, cost: Number(e.target.value) })} /></div>
             <div className="form-group"><label>Notes</label><textarea value={completeForm.notes} onChange={e => setCompleteForm({ ...completeForm, notes: e.target.value })} rows={3} placeholder="What was done?"></textarea></div>
             <div className="btn-row">
-              <button className="btn btn-success" onClick={handleCompleteSubmit}>Mark Completed</button>
+              {canWork && <button className="btn btn-success" onClick={handleCompleteSubmit}>Mark Completed</button>}
               <button className="btn btn-warning" onClick={() => setCompleting(null)}>Cancel</button>
             </div>
           </div>

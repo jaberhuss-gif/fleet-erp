@@ -248,7 +248,8 @@ export default function Users() {
               <div className="form-group">
                 <label>Site (optional reference only)</label>
                 <select value={form.site} onChange={e => setForm({...form, site:e.target.value})}>
-                  <option value="">-- No site restriction --</option>
+                  <option value="ALL">All Sites</option>
+                  <option value="">-- No site reference --</option>
                   {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                 </select>
               </div>

@@ -2,6 +2,7 @@
 import cors from "cors";
 import { verifyToken, login, listUsers, createUser, deleteUser } from "./auth.js";
 import { requirePermission } from "./rbac.js";
+import { getKmDailyNotifications } from "./kmDailyNotifications.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -754,6 +755,16 @@ app.get("/api/backup/download/:name", async (req, res) => {
     if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, error: "Not found" });
     res.download(filePath, name);
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ===== DAILY KM NOTIFICATIONS =====
+app.get("/api/km-daily-notifications", async (req, res) => {
+  try {
+    const result = await getKmDailyNotifications();
+    res.json({ success: true, ...result });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 // ===== LIVE ISSUES =====

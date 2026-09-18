@@ -14,6 +14,7 @@ import AuditLog from './pages/AuditLog';
 import Backup from './pages/Backup';
 import Troubleshooter from './pages/Troubleshooter';
 import MyTickets from './pages/MyTickets';
+import FleetTicketViewer from './pages/FleetTicketViewer';
 import AdvancedReports from './pages/AdvancedReports';
 import api from './api/client';
 
@@ -24,12 +25,13 @@ const ROLE_TABS = {
   Accountant: ['reports', 'advanced-reports'],
   CampusManager: ['support-service', 'operations', 'troubleshooter'],
   Driver: ['support-service', 'fleet', 'troubleshooter', 'mytickets'],
-  FleetSupervisor: ['gm', 'support-service', 'fleet', 'troubleshooter', 'tickets']
+  FleetSupervisor: ['gm', 'support-service', 'fleet', 'troubleshooter', 'tickets'],
+  FleetViewer: ['fleet-tickets']
 };
 const TAB_LABELS = {
   gm: 'GM Dashboard', fleet: '🚗 Fleet', operations: '🛠️ Operations',
   troubleshooter: '🧠 Troubleshooter', tickets: 'Tickets', reports: 'Reports',
-  mytickets: '📋 My Tickets', 'advanced-reports': '📊 Advanced Reports',
+  mytickets: '📋 My Tickets', 'fleet-tickets': '🚗 Vehicle Tickets', 'advanced-reports': '📊 Advanced Reports',
   'support-service': '🛠️ Support & Service',
   drivers: '👨‍🔧 Driver', users: 'Users', audit: 'Audit Log', backup: 'Backup'
 };
@@ -73,7 +75,7 @@ export default function App() {
         </nav>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'white' }}>
           <button className="theme-toggle" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}>{theme === 'light' ? '🌙' : '☀️'}</button>
-          <Notifications />
+          {user.role !== 'FleetViewer' && <Notifications />}
           <div style={{ textAlign: 'right', fontSize: '13px' }}><div style={{ fontWeight: 'bold' }}>{user.fullName || user.username}</div><div style={{ opacity: 0.7, fontSize: '11px' }}>{user.role}</div></div>
           <button onClick={handleLogout} style={{ background: '#dc2626', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>Logout</button>
         </div>
@@ -87,6 +89,7 @@ export default function App() {
         {tab === 'operations' && <OperationsHub />}
         {tab === 'tickets' && <Tickets />}
         {tab === 'mytickets' && <MyTickets />}
+        {tab === 'fleet-tickets' && user.role === 'FleetViewer' && <FleetTicketViewer />}
         {tab === 'advanced-reports' && <AdvancedReports />}
         {tab === 'reports' && <Reports />}
         {tab === 'drivers' && user.role === 'Owner' && <Drivers />}

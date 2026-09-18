@@ -50,7 +50,7 @@ export default function SupportServiceHub({ user, access = {} }) {
       </div>
 
       {tab === 'request' && <MaintenanceRequest user={user} access={access} />}
-      {tab === 'warehouse' && <Warehouse />}
+      {tab === 'warehouse' && <Warehouse user={user} access={access} />}
       {tab === 'site' && <Sites />}
     </div>
   );

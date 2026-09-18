@@ -13,6 +13,7 @@ const SHEET_URL =
   process.env.GOOGLE_SHEET_CSV_URL ||
   "https://docs.google.com/spreadsheets/d/12_WSi8KrHZ9-dtZzrlHmTCI-Jiwg7zDieJ5NU3-lVxY/gviz/tq?tqx=out:csv&gid=146635377";
 const INTERVAL_MS = Math.max(Number(process.env.GOOGLE_SHEET_SYNC_INTERVAL_MS || 5 * 60 * 1000), 60 * 1000);
+const RIYADH_OFFSET_MS = 3 * 60 * 60 * 1000;
 const MIN_RECORD_DATE = Date.UTC(2026, 4, 1, -3, 0, 0); // 2026-05-01 00:00 Asia/Riyadh
 const pool = process.env.DATABASE_URL
   ? new Pool({
@@ -361,7 +362,21 @@ export async function syncGoogleSheetVehicles() {
 
       // A vehicle counts as having today's KM only when the KM value itself
       // is present. The Sheet date alone must never resolve daily KM compliance.
-      if (date) add("meter_updated_at = ?", date.toISOString());
+      const existingMeterUpdatedAt = result.rows[0].meter_updated_at
+        ? new Date(result.rows[0].meter_updated_at)
+        : null;
+
+      // Keep a newer ERP reading authoritative. The temporary Google Sheet
+      // source may fill a missing reading, but must never overwrite a newer
+      // ERP timestamp during the transition period.
+      if (
+        date &&
+        (!existingMeterUpdatedAt ||
+          Number.isNaN(existingMeterUpdatedAt.getTime()) ||
+          date.getTime() > existingMeterUpdatedAt.getTime())
+      ) {
+        add("meter_updated_at = ?", date.toISOString());
+      }
     }
 
     if (active !== null) add("status = ?", active ? "Active" : "Inactive");
@@ -461,15 +476,26 @@ let syncTimer = null;
 let kmSevenAmTimer = null;
 
 function millisUntilNextSevenAm() {
-  const now = new Date();
-  const target = new Date(now);
-  target.setHours(7, 0, 0, 0);
+  // Asia/Riyadh is UTC+03:00 year-round. Calculate the next 07:00 in that
+  // fixed-offset local time so the reminder is not affected by Render's host TZ.
+  const now = Date.now();
+  const riyadhNow = new Date(now + RIYADH_OFFSET_MS);
 
-  if (target.getTime() <= now.getTime()) {
-    target.setDate(target.getDate() + 1);
+  const targetUtcLike = Date.UTC(
+    riyadhNow.getUTCFullYear(),
+    riyadhNow.getUTCMonth(),
+    riyadhNow.getUTCDate(),
+    7, 0, 0, 0
+  );
+
+  let delay = targetUtcLike - riyadhNow.getTime();
+  if (delay <= 0) {
+    const tomorrow = new Date(targetUtcLike);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    delay = tomorrow.getTime() - riyadhNow.getTime();
   }
 
-  return target.getTime() - now.getTime();
+  return Math.max(1000, delay);
 }
 
 export function startGoogleSheetVehicleSync() {

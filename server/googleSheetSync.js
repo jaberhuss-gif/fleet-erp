@@ -327,8 +327,9 @@ export async function syncGoogleSheetVehicles() {
     // The latest Records row is the authoritative daily KM reading.
     if (km !== null) {
       const existingKm = Number(result.rows[0].current_km || 0);
-      add("current_km = ?", km);
-      if (km !== existingKm) kmUpdated += 1;
+      const nextKm = Math.max(km, existingKm);
+      add("current_km = ?", nextKm);
+      if (nextKm !== existingKm) kmUpdated += 1;
     }
     if (date) add("meter_updated_at = ?", date.toISOString());
 

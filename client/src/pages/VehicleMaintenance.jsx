@@ -2,7 +2,7 @@
 import PeriodicMaintenance from './PeriodicMaintenance';
 import SmartReportIssue from './SmartReportIssue';
 
-export default function VehicleMaintenance() {
+export default function VehicleMaintenance({ canWork = false }) {
   const [sub, setSub] = useState('maintenance');
 
   return (
@@ -29,8 +29,8 @@ export default function VehicleMaintenance() {
         </button>
       </div>
 
-      {sub === 'maintenance' && <PeriodicMaintenance />}
-      {sub === 'report' && <SmartReportIssue />}
+      {sub === 'maintenance' && <PeriodicMaintenance canWork={canWork} />}
+      {sub === 'report' && <SmartReportIssue canWork={canWork} />}
     </div>
   );
 }

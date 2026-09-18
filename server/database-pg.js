@@ -1152,6 +1152,13 @@ export async function ensurePurchaseRequestsTable() {
   await query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ`);
   await query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS requested_by_user_id BIGINT`);
   await query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS requested_by TEXT`);
+  await query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS site TEXT`);
+  await query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS project_id BIGINT`);
+  await query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS project_no TEXT`);
+  await query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS approval_notes TEXT`);
+  await query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS recorded_by_user_id BIGINT`);
+  await query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS recorded_by TEXT`);
+  await query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS recorded_at TIMESTAMPTZ`);
   await query(`CREATE INDEX IF NOT EXISTS idx_purchase_requests_status ON purchase_requests(status)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_purchase_requests_project_id ON purchase_requests(project_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_purchases_request_id ON purchases(request_id)`);
@@ -1297,7 +1304,14 @@ export async function recordPurchaseFromRequest(id, data = {}, user = {}) {
     approvedBy: request.approved_by,
     approvedAt: request.approved_at,
     requestedByUserId: request.requested_by_user_id,
-    requestedBy: request.requested_by
+    requestedBy: request.requested_by,
+    site: request.site,
+    projectId: request.project_id,
+    projectNo: request.project_no,
+    approvalNotes: request.approval_notes,
+    recordedByUserId: user.id ?? null,
+    recordedBy: user.fullName ?? user.full_name ?? user.username ?? '',
+    recordedAt: new Date()
   });
 
   const updated = await query(`
@@ -1377,10 +1391,17 @@ export async function createPurchase(data = {}) {
       approved_by,
       approved_at,
       requested_by_user_id,
-      requested_by
+      requested_by,
+      site,
+      project_id,
+      project_no,
+      approval_notes,
+      recorded_by_user_id,
+      recorded_by,
+      recorded_at
     )
     VALUES
-    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
     RETURNING *
   `, [
     pgStr(data.purchaseNo ?? data.purchase_no) || pgGenNo("PUR"),
@@ -1401,7 +1422,14 @@ export async function createPurchase(data = {}) {
     pgStr(data.approvedBy ?? data.approved_by),
     data.approvedAt ?? data.approved_at ?? null,
     data.requestedByUserId ?? data.requested_by_user_id ?? null,
-    pgStr(data.requestedBy ?? data.requested_by)
+    pgStr(data.requestedBy ?? data.requested_by),
+    pgStr(data.site),
+    data.projectId ?? data.project_id ?? null,
+    pgStr(data.projectNo ?? data.project_no),
+    pgStr(data.approvalNotes ?? data.approval_notes),
+    data.recordedByUserId ?? data.recorded_by_user_id ?? null,
+    pgStr(data.recordedBy ?? data.recorded_by),
+    data.recordedAt ?? data.recorded_at ?? null
   ]);
 
   return result.rows[0];

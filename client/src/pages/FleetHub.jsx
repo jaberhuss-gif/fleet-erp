@@ -20,9 +20,20 @@ const FLEET_SECTIONS = [
 
 const SMART_LABEL = '🧠 Smart Report Issue';
 
-export default function FleetHub() {
+export default function FleetHub({ user, access, onViewVehicle }) {
+  const fleetView = user?.role === 'Owner' || !!access?.fleet?.can_view;
+  const fleetWork = user?.role === 'Owner' || !!access?.fleet?.can_work;
+
   const [section, setSection] = useState('km');
   const [smartOpen, setSmartOpen] = useState(false);
+
+  if (!fleetView) {
+    return (
+      <div className="alert alert-error">
+        Access denied: Fleet access is not assigned to this user.
+      </div>
+    );
+  }
 
   const current = FLEET_SECTIONS.find(s => s.id === section) || FLEET_SECTIONS[0];
 
@@ -72,11 +83,11 @@ export default function FleetHub() {
       </div>
 
       {smartOpen ? (
-        <SmartReportIssue />
+        <SmartReportIssue canWork={fleetWork} />
       ) : (
         <>
-          {section === 'km' && <DriverPortal />}
-          {section === 'issue' && <ReportIssue />}
+          {section === 'km' && <DriverPortal canWork={fleetWork} />}
+          {section === 'issue' && <ReportIssue canWork={fleetWork} />}
         </>
       )}
     </div>

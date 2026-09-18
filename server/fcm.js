@@ -12,21 +12,31 @@ function getFirebaseApp() {
 
   if (!clientEmail || (!rawPrivateKey && !base64PrivateKey)) return null;
 
-  let privateKey = rawPrivateKey;
+  let privateKey = '';
 
-  if (!privateKey && base64PrivateKey) {
+  // Prefer the single-line Base64 form because some hosts split multiline
+  // PEM values across environment-variable fields.
+  if (base64PrivateKey) {
     try {
-      privateKey = Buffer.from(base64PrivateKey, 'base64').toString('utf8');
-    } catch {
-      return null;
-    }
+      const decoded = Buffer.from(base64PrivateKey, 'base64').toString('utf8');
+      if (decoded.includes('-----BEGIN PRIVATE KEY-----') && decoded.includes('-----END PRIVATE KEY-----')) {
+        privateKey = decoded;
+      }
+    } catch {}
   }
+
+  // Backward compatibility for hosts that still use the multiline form.
+  if (!privateKey && rawPrivateKey) {
+    privateKey = rawPrivateKey.replace(/\\n/g, '\n');
+  }
+
+  if (!privateKey) return null;
 
   return initializeApp({
     credential: cert({
       projectId: PROJECT_ID,
       clientEmail,
-      privateKey: privateKey.replace(/\\n/g, '\n')
+      privateKey
     })
   });
 }

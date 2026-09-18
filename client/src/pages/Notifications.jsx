@@ -57,14 +57,25 @@ export default function Notifications() {
   const load = async () => {
     try {
       setLoading(true);
-      const [alerts, lowStock, workOrders, periodic, vehicles, kmDaily] = await Promise.all([
-        api.get('/alerts').then(r => r.data),
-        api.get('/inventory/low-stock').then(r => r.data).catch(() => ({ items: [] })),
-        api.get('/work-orders?status=Open').then(r => r.data).catch(() => ({ orders: [] })),
-        api.get('/periodic-maintenance/alerts').then(r => r.data).catch(() => ({ overdue: [], dueSoon: [] })),
-        api.get('/vehicles').then(r => r.data).catch(() => ({ vehicles: [] })),
-        api.get('/km-daily-notifications').then(r => r.data).catch(() => ({ records: [], count: 0 }))
+      // Keep each notification source independent. One failing module must
+      // never hide the Daily KM warning.
+      const safe = (promise, fallback) => promise.then(r => r.data).catch(() => fallback);
+
+      const [alerts, lowStock, workOrders, periodic, vehicles] = await Promise.all([
+        safe(api.get('/alerts'), { urgent: [], warning: [] }),
+        safe(api.get('/inventory/low-stock'), { items: [] }),
+        safe(api.get('/work-orders?status=Open'), { orders: [] }),
+        safe(api.get('/periodic-maintenance/alerts'), { overdue: [], dueSoon: [] }),
+        safe(api.get('/vehicles'), { vehicles: [] })
       ]);
+
+      // Daily KM is a critical compliance notification and is fetched
+      // independently so it cannot be suppressed by unrelated API failures.
+      const kmDailyResponse = await safe(
+        api.get('/km-daily-notifications'),
+        { records: [], count: 0 }
+      );
+      const kmDaily = kmDailyResponse;
 
       const notifs = [];
       const vehicleRows = Array.isArray(vehicles?.vehicles) ? vehicles.vehicles : Array.isArray(vehicles) ? vehicles : [];

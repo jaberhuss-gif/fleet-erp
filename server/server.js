@@ -22,6 +22,14 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
+// Safe user scope extension for site-based read-only roles.
+// Adds a nullable site field without changing existing user/data records.
+try {
+  await pgQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS site TEXT`);
+} catch (e) {
+  console.error("User site scope schema check failed:", e.message);
+}
+
 // ============================================================
 // GLOBAL API AUTHENTICATION
 // ============================================================

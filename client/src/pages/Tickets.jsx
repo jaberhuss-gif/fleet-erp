@@ -3,7 +3,7 @@ import api from '../api/client';
 import { exportToCSV } from '../api/export';
 import { printContent } from '../api/print';
 
-export default function Tickets() {
+export default function Tickets({ user, access = {} }) {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -23,7 +23,10 @@ export default function Tickets() {
     finally { setLoading(false); }
   };
 
+  const canWork = user?.role === 'Owner' || !!access?.tickets?.can_work;
+
   const handleClose = async (id) => {
+    if (!canWork) return;
     if (!confirm('Close this ticket?')) return;
     try {
       await api.put('/tickets/' + id + '/close', {});
@@ -192,7 +195,7 @@ export default function Tickets() {
                     </span>
                   </td>
                   <td>
-                    {t.status === 'Open' && (
+                    {t.status === 'Open' && canWork && (
                       <button className="btn btn-success" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleClose(t.id)}>Close</button>
                     )}
                   </td>

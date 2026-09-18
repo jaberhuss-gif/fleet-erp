@@ -32,7 +32,7 @@ const ROLE_ACCESS_PRESETS = {
     warehouse: ["view", "work"], purchase_requests: ["view", "work"], troubleshooter: ["view"]
   },
   Driver: { fleet: ["view", "work"], mytickets: ["view"], troubleshooter: ["view"] },
-  SupportManager: { support: ["view"], building: ["view"], tickets: ["view"], purchase_requests: ["view"], troubleshooter: ["view"] },
+  SupportManager: { support: ["view"], building: ["view"], tickets: ["view"], troubleshooter: ["view"] },
   FleetSupervisor: {
     gm: ["view"], fleet: ["view", "work"], tickets: ["view", "work"],
     building: ["view"], troubleshooter: ["view"]
@@ -138,8 +138,11 @@ export async function getUserAccess(userId, role) {
     const explicit = result.rows.find(r => r.module === m.id);
 
     // Support Manager is a service/ticket viewer and must never receive
-    // Fleet module access. Vehicle Tickets remains a separate module.
-    if (role === "SupportManager" && m.id === "fleet") {
+    // Fleet or Purchase Request access. Vehicle Tickets remains separate.
+    if (
+      role === "SupportManager" &&
+      (m.id === "fleet" || m.id === "purchase_requests")
+    ) {
       access[m.id] = { can_view: false, can_work: false };
       continue;
     }
@@ -167,11 +170,13 @@ export async function saveUserAccess(userId, access = {}) {
   for (const module of ACCESS_MODULES.map(m => m.id)) {
     const value = access[module] || {};
 
-    // Hard security rule for Support Manager: Fleet is never granted,
-    // even if an old/stale access row contains Fleet View/Work.
-    const fleetBlocked = targetRole === "SupportManager" && module === "fleet";
-    const canWork = fleetBlocked ? false : Boolean(value.can_work);
-    const canView = fleetBlocked ? false : (Boolean(value.can_view) || canWork);
+    // Hard security rule for Support Manager: Fleet and Purchase Requests
+    // are never granted, even if old/stale access rows contain access.
+    const blockedForSupportManager =
+      targetRole === "SupportManager" &&
+      (module === "fleet" || module === "purchase_requests");
+    const canWork = blockedForSupportManager ? false : Boolean(value.can_work);
+    const canView = blockedForSupportManager ? false : (Boolean(value.can_view) || canWork);
     await query(
       `INSERT INTO user_access (user_id, module, can_view, can_work)
        VALUES ($1, $2, $3, $4)

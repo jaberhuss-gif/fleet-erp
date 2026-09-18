@@ -1,17 +1,30 @@
-﻿import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
 
+const EMPTY_FORM = {
+  username: '', password: '', fullName: '', role: 'Driver',
+  email: '', phone: '', site: '', department: 'General'
+};
+
+const GROUPS = {
+  'Core / Service': ['gm', 'support', 'tickets', 'mytickets', 'troubleshooter', 'reports', 'advanced_reports'],
+  'Operations Departments': ['building', 'projects', 'warehouse', 'purchase_requests', 'fleet', 'fleet_tickets'],
+  'Owner Administration': ['drivers', 'users', 'audit', 'backup']
+};
+
 export default function Users() {
   const [users, setUsers] = useState([]);
+  const [modules, setModules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [access, setAccess] = useState({});
+  const [accessLoading, setAccessLoading] = useState(false);
   const [sites, setSites] = useState([]);
-  const [form, setForm] = useState({
-    username: '', password: '', fullName: '', role: 'Driver', email: '', phone: '', site: ''
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
 
   useEffect(() => {
     load();
@@ -21,26 +34,87 @@ export default function Users() {
   const load = async () => {
     try {
       setLoading(true);
+      setError('');
       const res = await api.get('/users');
       setUsers(res.data.users || []);
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadAccess = async (user) => {
+    try {
+      setAccessLoading(true);
+      const res = await api.get('/users/' + user.id + '/access');
+      setModules(res.data.modules || []);
+      setAccess(res.data.access || {});
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    } finally {
+      setAccessLoading(false);
+    }
   };
 
   const resetForm = () => {
-    setForm({ username: '', password: '', fullName: '', role: 'Driver', email: '', phone: '', site: '' });
+    setForm({ ...EMPTY_FORM });
     setShowForm(false);
+    setEditing(null);
+  };
+
+  const openAdd = () => {
+    setEditing(null);
+    setForm({ ...EMPTY_FORM });
+    setShowForm(true);
+    setAccess({});
+  };
+
+  const openEdit = async (u) => {
+    setEditing(u);
+    setForm({
+      username: u.username || '',
+      password: '',
+      fullName: u.full_name || '',
+      role: u.role || 'Driver',
+      email: u.email || '',
+      phone: u.phone || '',
+      site: u.site || '',
+      department: u.department || 'General'
+    });
+    setShowForm(true);
+    await loadAccess(u);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage(''); setError('');
+    setMessage('');
+    setError('');
     try {
-      await api.post('/users', form);
-      setMessage('User created: ' + form.username);
-      resetForm();
-      load();
-    } catch (e) { setError(e.response?.data?.error || e.message); }
+      let saved;
+      if (editing) {
+        const payload = { ...form };
+        delete payload.username;
+        if (!payload.password) delete payload.password;
+        const res = await api.put('/users/' + editing.id, payload);
+        saved = res.data.user;
+        if (Object.keys(access).length > 0) {
+          await api.put('/users/' + editing.id + '/access', { access });
+        }
+        setMessage('User updated: ' + saved.username);
+        await loadAccess(saved);
+      } else {
+        const res = await api.post('/users', form);
+        saved = res.data.user;
+        setMessage('User created: ' + saved.username + '. Set View/Work permissions with Edit.');
+      }
+      await load();
+      if (!editing) {
+        setForm({ ...EMPTY_FORM });
+      }
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
   };
 
   const handleDelete = async (id, username) => {
@@ -48,35 +122,81 @@ export default function Users() {
     try {
       await api.delete('/users/' + id);
       setMessage('User deleted');
+      if (String(editing?.id) === String(id)) resetForm();
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
   };
+
+  const toggleAccess = (module, key) => {
+    setAccess(prev => {
+      const current = prev[module] || { can_view: false, can_work: false };
+      if (key === 'can_view') {
+        return {
+          ...prev,
+          [module]: {
+            can_view: !current.can_view,
+            can_work: current.can_view ? false : current.can_work
+          }
+        };
+      }
+      return {
+        ...prev,
+        [module]: {
+          can_view: true,
+          can_work: !current.can_work
+        }
+      };
+    });
+  };
+
+  const accessMap = useMemo(() => {
+    const map = {};
+    modules.forEach(m => { map[m.id] = m; });
+    return map;
+  }, [modules]);
 
   const getRoleBadge = (role) => {
     const colors = {
-      Owner: { bg: '#faf5ff', color: '#8b5cf6' },
-      GM: { bg: '#eff6ff', color: '#1e3a8a' },
-      Accountant: { bg: '#f0fdf4', color: '#16a34a' },
-      CampusManager: { bg: '#fef3c7', color: '#b45309' },
-      Driver: { bg: '#fef2f2', color: '#dc2626' },
-      FleetSupervisor: { bg: '#f0f9ff', color: '#0891b2' },
-      FleetViewer: { bg: '#ecfeff', color: '#0e7490' },
-      SupportManager: { bg: '#f0fdf4', color: '#15803d' }
+      Owner: ['#faf5ff', '#8b5cf6'],
+      GM: ['#eff6ff', '#1e3a8a'],
+      Accountant: ['#f0fdf4', '#16a34a'],
+      CampusManager: ['#fef3c7', '#b45309'],
+      Driver: ['#fef2f2', '#dc2626'],
+      FleetSupervisor: ['#f0f9ff', '#0891b2'],
+      FleetViewer: ['#ecfeff', '#0e7490'],
+      SupportManager: ['#f0fdf4', '#15803d']
     };
-    const c = colors[role] || { bg: '#f1f5f9', color: '#64748b' };
-    return <span className="status-badge" style={{ background: c.bg, color: c.color }}>{role}</span>;
+    const [bg, color] = colors[role] || ['#f1f5f9', '#64748b'];
+    return <span className="status-badge" style={{ background: bg, color }}>{role}</span>;
   };
+
+  const exportRows = users.map(u => ({
+    id: u.id, username: u.username, full_name: u.full_name, role: u.role,
+    department: u.department, site: u.site, email: u.email, phone: u.phone,
+    is_active: u.is_active
+  }));
 
   return (
     <div>
-      {/* Gradient Header */}
       <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #7c3aed 100%)', padding: '28px 24px', borderRadius: '12px', marginBottom: '20px', color: 'white' }}>
         <h2 style={{ margin: 0, fontSize: '24px' }}>👥 Users Management</h2>
-        <p style={{ margin: '6px 0 0', opacity: 0.85, fontSize: '14px' }}>{users.length} registered users</p>
+        <p style={{ margin: '6px 0 0', opacity: 0.9, fontSize: '14px' }}>
+          Roles are templates. The actual access is controlled below for each user.
+        </p>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(users, "users", [{key:"id",label:"ID"},{key:"username",label:"Username"},{key:"full_name",label:"Full Name"},{key:"role",label:"Role"},{key:"site",label:"Site"},{key:"email",label:"Email"},{key:"phone",label:"Phone"},{key:"is_active",label:"Active"}])}>Export CSV</button><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
+        <button
+          className="btn btn-success"
+          onClick={() => exportToCSV(exportRows, 'users', [
+            {key:'id',label:'ID'},{key:'username',label:'Username'},{key:'full_name',label:'Full Name'},
+            {key:'role',label:'Role'},{key:'department',label:'Department'},{key:'site',label:'Site'},
+            {key:'email',label:'Email'},{key:'phone',label:'Phone'},{key:'is_active',label:'Active'}
+          ])}
+        >Export CSV</button>
+        <button className="btn btn-primary" onClick={() => showForm ? resetForm() : openAdd()}>
           {showForm ? 'Cancel' : '+ Add User'}
         </button>
       </div>
@@ -85,58 +205,131 @@ export default function Users() {
       {error && <div className="alert alert-error">{error}</div>}
 
       {showForm && (
-        <form onSubmit={handleSubmit} style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
-          <h3>New User</h3>
-          <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-            <div className="form-group">
-              <label>Username *</label>
-              <input value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} required placeholder="e.g. ahmed" />
-            </div>
-            <div className="form-group">
-              <label>Password *</label>
-              <input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required placeholder="min 6 chars" />
-            </div>
-            <div className="form-group">
-              <label>Full Name</label>
-              <input value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })} placeholder="e.g. Ahmed Ali" />
-            </div>
-            <div className="form-group">
-              <label>Role *</label>
-              <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
-                <option value="Owner">👑 Owner (Full Access)</option>
-                <option value="GM">👔 GM (Dashboard only)</option>
-                <option value="Accountant">💰 Accountant (Reports)</option>
-                <option value="CampusManager">🏢 Campus Manager (Building)</option>
-                <option value="Driver">🚗 Driver (Vehicle Maintenance)</option>
-                <option value="FleetSupervisor">🔧 Fleet Supervisor</option>
-                <option value="FleetViewer">👀 Fleet Viewer (Vehicle Tickets Only)</option>
-                <option value="SupportManager">👀 Support Manager (Site View Only)</option>
-              </select>
-            </div>
-            {form.role === 'SupportManager' && (
+        <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
+          <form onSubmit={handleSubmit}>
+            <h3 style={{ marginTop: 0 }}>{editing ? 'Edit User & Permissions' : 'New User'}</h3>
+            <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))' }}>
               <div className="form-group">
-                <label>Assigned Site *</label>
-                <select value={form.site} onChange={e => setForm({ ...form, site: e.target.value })} required>
-                  <option value="">-- Select site --</option>
+                <label>Username *</label>
+                <input value={form.username} disabled={!!editing} onChange={e => setForm({...form, username:e.target.value})} required />
+              </div>
+              <div className="form-group">
+                <label>{editing ? 'New Password (optional)' : 'Password *'}</label>
+                <input type="password" value={form.password} onChange={e => setForm({...form, password:e.target.value})} required={!editing} placeholder={editing ? 'Leave blank to keep current' : 'min 6 chars'} />
+              </div>
+              <div className="form-group">
+                <label>Full Name</label>
+                <input value={form.fullName} onChange={e => setForm({...form, fullName:e.target.value})} />
+              </div>
+              <div className="form-group">
+                <label>Role / Template *</label>
+                <select value={form.role} onChange={e => setForm({...form, role:e.target.value})}>
+                  <option value="Owner">👑 Owner</option>
+                  <option value="GM">👔 GM</option>
+                  <option value="Accountant">💰 Accountant</option>
+                  <option value="CampusManager">🏢 Campus Manager</option>
+                  <option value="Driver">🚗 Driver</option>
+                  <option value="FleetSupervisor">🔧 Fleet Supervisor</option>
+                  <option value="FleetViewer">👀 Fleet Viewer</option>
+                  <option value="SupportManager">👀 Support Manager</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Department (optional)</label>
+                <select value={form.department} onChange={e => setForm({...form, department:e.target.value})}>
+                  <option value="General">General</option>
+                  <option value="Support">Support & Service</option>
+                  <option value="Building">Building / Maintenance</option>
+                  <option value="Projects">Projects</option>
+                  <option value="Warehouse">Warehouse</option>
+                  <option value="Fleet">Fleet</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Site (optional reference only)</label>
+                <select value={form.site} onChange={e => setForm({...form, site:e.target.value})}>
+                  <option value="">-- No site restriction --</option>
                   {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                 </select>
               </div>
+              <div className="form-group">
+                <label>Email</label>
+                <input type="email" value={form.email} onChange={e => setForm({...form, email:e.target.value})} />
+              </div>
+              <div className="form-group">
+                <label>Phone</label>
+                <input value={form.phone} onChange={e => setForm({...form, phone:e.target.value})} />
+              </div>
+            </div>
+
+            {editing && form.role !== 'Owner' && (
+              <div style={{ marginTop: 18 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap: 12, flexWrap:'wrap' }}>
+                  <div>
+                    <h3 style={{ margin:'0 0 4px' }}>🔐 Access Matrix</h3>
+                    <div style={{ color:'#64748b', fontSize:13 }}>
+                      View = can open/read. Work = can add/edit/perform actions. Building access is for all sites.
+                    </div>
+                  </div>
+                  <div style={{ color:'#475569', fontSize:12 }}>Site is not used as a permission boundary.</div>
+                </div>
+
+                {accessLoading ? (
+                  <div className="loading" style={{ marginTop: 12 }}>Loading permissions...</div>
+                ) : (
+                  <div style={{ display:'grid', gap:14, marginTop:14 }}>
+                    {Object.entries(GROUPS).map(([group, ids]) => (
+                      <div key={group} className="panel" style={{ margin:0, padding:12 }}>
+                        <h4 style={{ margin:'0 0 10px' }}>{group}</h4>
+                        <div style={{ overflowX:'auto' }}>
+                          <table>
+                            <thead>
+                              <tr><th>Section</th><th style={{width:100}}>View</th><th style={{width:100}}>Work</th></tr>
+                            </thead>
+                            <tbody>
+                              {ids.map(id => {
+                                const mod = accessMap[id] || { id, label:id };
+                                const a = access[id] || { can_view:false, can_work:false };
+                                return (
+                                  <tr key={id}>
+                                    <td style={{fontWeight:600}}>{mod.label}</td>
+                                    <td>
+                                      <label style={{display:'inline-flex',alignItems:'center',gap:6}}>
+                                        <input type="checkbox" checked={!!a.can_view} onChange={() => toggleAccess(id,'can_view')} />
+                                        View
+                                      </label>
+                                    </td>
+                                    <td>
+                                      <label style={{display:'inline-flex',alignItems:'center',gap:6}}>
+                                        <input type="checkbox" checked={!!a.can_work} onChange={() => toggleAccess(id,'can_work')} />
+                                        Work
+                                      </label>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
 
-            <div className="form-group">
-              <label>Email</label>
-              <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+            {editing?.role === 'Owner' && (
+              <div className="alert alert-info" style={{ marginTop: 16 }}>
+                Owner always has full system access.
+              </div>
+            )}
+
+            <div className="btn-row" style={{ marginTop: 16 }}>
+              <button type="submit" className="btn btn-success">{editing ? 'Save User & Permissions' : 'Create User'}</button>
+              <button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button>
             </div>
-            <div className="form-group">
-              <label>Phone</label>
-              <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
-            </div>
-          </div>
-          <div className="btn-row">
-            <button type="submit" className="btn btn-success">Create User</button>
-            <button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button>
-          </div>
-        </form>
+          </form>
+        </div>
       )}
 
       {loading ? (
@@ -148,17 +341,18 @@ export default function Users() {
           <thead>
             <tr>
               <th>ID</th><th>Username</th><th>Full Name</th><th>Role</th>
-              <th>Site</th><th>Email</th><th>Phone</th><th>Status</th><th>Action</th>
+              <th>Department</th><th>Site</th><th>Email</th><th>Phone</th><th>Status</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {users.map(u => (
               <tr key={u.id}>
                 <td>#{u.id}</td>
-                <td style={{ fontWeight: 'bold' }}>{u.username}</td>
+                <td style={{fontWeight:'bold'}}>{u.username}</td>
                 <td>{u.full_name || '-'}</td>
                 <td>{getRoleBadge(u.role)}</td>
-                <td>{u.site || '-'}</td>
+                <td>{u.department || 'General'}</td>
+                <td>{u.site || 'All / not restricted'}</td>
                 <td>{u.email || '-'}</td>
                 <td>{u.phone || '-'}</td>
                 <td>
@@ -168,7 +362,10 @@ export default function Users() {
                 </td>
                 <td>
                   {u.username !== 'owner' && (
-                    <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(u.id, u.username)}>Delete</button>
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      <button className="btn btn-primary" style={{padding:'6px 10px',fontSize:12}} onClick={() => openEdit(u)}>Edit</button>
+                      <button className="btn btn-danger" style={{padding:'6px 10px',fontSize:12}} onClick={() => handleDelete(u.id,u.username)}>Delete</button>
+                    </div>
                   )}
                 </td>
               </tr>
@@ -179,4 +376,3 @@ export default function Users() {
     </div>
   );
 }
-

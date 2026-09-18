@@ -7,9 +7,20 @@ function getFirebaseApp() {
   if (getApps().length) return getApps()[0];
 
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  const rawPrivateKey = process.env.FIREBASE_PRIVATE_KEY || '';
+  const base64PrivateKey = process.env.FIREBASE_PRIVATE_KEY_BASE64 || '';
 
-  if (!clientEmail || !privateKey) return null;
+  if (!clientEmail || (!rawPrivateKey && !base64PrivateKey)) return null;
+
+  let privateKey = rawPrivateKey;
+
+  if (!privateKey && base64PrivateKey) {
+    try {
+      privateKey = Buffer.from(base64PrivateKey, 'base64').toString('utf8');
+    } catch {
+      return null;
+    }
+  }
 
   return initializeApp({
     credential: cert({
@@ -21,7 +32,10 @@ function getFirebaseApp() {
 }
 
 export function isFcmConfigured() {
-  return Boolean(process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY);
+  return Boolean(
+    process.env.FIREBASE_CLIENT_EMAIL &&
+    (process.env.FIREBASE_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY_BASE64)
+  );
 }
 
 export async function sendFcmToToken({ token, title, body, data = {} }) {

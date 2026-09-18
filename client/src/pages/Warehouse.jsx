@@ -2,7 +2,8 @@
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
 
-export default function Warehouse() {
+export default function Warehouse({ user, access = {} }) {
+  const canWork = user?.role === 'Owner' || !!access?.warehouse?.can_work;
   const [subTab, setSubTab] = useState('inventory');
   const [items, setItems] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -152,9 +153,9 @@ export default function Warehouse() {
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
             
-            <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "inventory", [{key:"code",label:"Code"},{key:"name",label:"Name"},{key:"category",label:"Category"},{key:"quantity",label:"Quantity"},{key:"unit",label:"Unit"},{key:"min_stock",label:"Min Stock"},{key:"unit_cost",label:"Unit Cost"},{key:"location",label:"Location"},{key:"supplier",label:"Supplier"}])}>Export CSV</button><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
+            <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "inventory", [{key:"code",label:"Code"},{key:"name",label:"Name"},{key:"category",label:"Category"},{key:"quantity",label:"Quantity"},{key:"unit",label:"Unit"},{key:"min_stock",label:"Min Stock"},{key:"unit_cost",label:"Unit Cost"},{key:"location",label:"Location"},{key:"supplier",label:"Supplier"}])}>Export CSV</button>{canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
               {showForm ? 'Cancel' : '+ Add Item'}
-            </button>
+            </button>}
           </div>
 
           <div className="cards-grid" style={{ marginBottom: '20px' }}>
@@ -175,7 +176,7 @@ export default function Warehouse() {
             </div>
           </div>
 
-          {showForm && (
+          {showForm && canWork && (
             <form onSubmit={handleSubmit} style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
               <h3>{editing ? 'Edit Item' : 'New Item'}</h3>
               <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
@@ -262,11 +263,13 @@ export default function Warehouse() {
                     <td>{i.location}</td>
                     <td>{getStockBadge(i)}</td>
                     <td>
-                      <button className="btn btn-success" style={{ padding: '5px 8px', fontSize: '11px', marginRight: '3px' }} onClick={() => openAction('in', i)}>+ In</button>
-                      <button className="btn btn-warning" style={{ padding: '5px 8px', fontSize: '11px', marginRight: '3px' }} onClick={() => openAction('out', i)}>- Out</button>
-                      <button className="btn" style={{ padding: '5px 8px', fontSize: '11px', marginRight: '3px', background: '#8b5cf6', color: 'white' }} onClick={() => openAction('transfer', i)}>⇄</button>
-                      <button className="btn btn-primary" style={{ padding: '5px 8px', fontSize: '11px', marginRight: '3px' }} onClick={() => handleEdit(i)}>Edit</button>
-                      <button className="btn btn-danger" style={{ padding: '5px 8px', fontSize: '11px' }} onClick={() => handleDelete(i.id, i.name)}>Del</button>
+                      {canWork && <>
+                        <button className="btn btn-success" style={{ padding: '5px 8px', fontSize: '11px', marginRight: '3px' }} onClick={() => openAction('in', i)}>+ In</button>
+                        <button className="btn btn-warning" style={{ padding: '5px 8px', fontSize: '11px', marginRight: '3px' }} onClick={() => openAction('out', i)}>- Out</button>
+                        <button className="btn" style={{ padding: '5px 8px', fontSize: '11px', marginRight: '3px', background: '#8b5cf6', color: 'white' }} onClick={() => openAction('transfer', i)}>⇄</button>
+                        <button className="btn btn-primary" style={{ padding: '5px 8px', fontSize: '11px', marginRight: '3px' }} onClick={() => handleEdit(i)}>Edit</button>
+                        <button className="btn btn-danger" style={{ padding: '5px 8px', fontSize: '11px' }} onClick={() => handleDelete(i.id, i.name)}>Del</button>
+                      </>}
                     </td>
                   </tr>
                 ))}
@@ -334,7 +337,7 @@ export default function Warehouse() {
                     <td style={{ color: '#dc2626', fontWeight: 'bold' }}>{i.quantity}</td>
                     <td>{i.min_stock}</td>
                     <td>{i.location}</td>
-                    <td><button className="btn btn-success" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => openAction('in', i)}>Restock</button></td>
+                    <td>{canWork && <button className="btn btn-success" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => openAction('in', i)}>Restock</button>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -372,7 +375,7 @@ export default function Warehouse() {
             <div className="form-group"><label>Notes</label><textarea value={actionForm.notes} onChange={e => setActionForm({ ...actionForm, notes: e.target.value })} rows={2}></textarea></div>
 
             <div className="btn-row">
-              <button className="btn btn-success" onClick={handleActionSubmit}>Confirm</button>
+              {canWork && <button className="btn btn-success" onClick={handleActionSubmit}>Confirm</button>}
               <button className="btn btn-warning" onClick={() => { setActionModal(null); setSelectedItem(null); }}>Cancel</button>
             </div>
           </div>

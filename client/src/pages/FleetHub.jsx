@@ -1,15 +1,35 @@
 import { useState } from 'react';
-import Vehicles from './Vehicles';
-import VehicleMaintenance from './VehicleMaintenance';
+import DriverPortal from './DriverPortal';
+import ReportIssue from './ReportIssue';
+import SmartReportIssue from './SmartReportIssue';
 
-const TABS = [
-  { id: 'vehicles', label: '🚗 Vehicles', title: 'Vehicles & Fleet' },
-  { id: 'maintenance', label: '🔧 Vehicle Maintenance & Smart Service', title: 'Vehicle Maintenance & Smart Service' }
+const FLEET_SECTIONS = [
+  {
+    id: 'km',
+    label: '📏 KM Entry',
+    title: 'KM Entry',
+    description: 'Enter today\'s vehicle odometer reading and review the vehicle status.'
+  },
+  {
+    id: 'issue',
+    label: '🔧 Maintenance Issue Report',
+    title: 'Maintenance Issue Report',
+    description: 'Report a vehicle maintenance problem and create a maintenance ticket.'
+  }
 ];
 
-export default function FleetHub({ onViewVehicle }) {
-  const [tab, setTab] = useState('vehicles');
-  const current = TABS.find(t => t.id === tab) || TABS[0];
+const SMART_LABEL = '🧠 Smart Report Issue';
+
+export default function FleetHub() {
+  const [section, setSection] = useState('km');
+  const [smartOpen, setSmartOpen] = useState(false);
+
+  const current = FLEET_SECTIONS.find(s => s.id === section) || FLEET_SECTIONS[0];
+
+  const changeSection = (next) => {
+    setSection(next);
+    setSmartOpen(false);
+  };
 
   return (
     <div className="hub-page">
@@ -18,26 +38,47 @@ export default function FleetHub({ onViewVehicle }) {
           <div>
             <h1 style={{ margin: 0 }}>🚗 Fleet</h1>
             <p style={{ margin: '6px 0 0', color: '#64748b' }}>
-              Vehicles → Vehicle Maintenance & Smart Service
+              KM Entry and Maintenance Issue Reporting with Smart Report Issue support
             </p>
           </div>
         </div>
       </div>
 
       <div className="sub-nav" style={{ marginBottom: 18 }}>
-        {TABS.map(t => (
-          <button key={t.id} className={tab === t.id ? 'sub-btn active' : 'sub-btn'} onClick={() => setTab(t.id)}>
-            {t.label}
+        {FLEET_SECTIONS.map(item => (
+          <button
+            key={item.id}
+            className={section === item.id ? 'sub-btn active' : 'sub-btn'}
+            onClick={() => changeSection(item.id)}
+          >
+            {item.label}
           </button>
         ))}
       </div>
 
       <div className="panel" style={{ marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>{current.title}</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <h2 style={{ margin: 0 }}>{current.title}</h2>
+            <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: '13px' }}>{current.description}</p>
+          </div>
+          <button
+            className={smartOpen ? 'sub-btn active' : 'sub-btn'}
+            onClick={() => setSmartOpen(v => !v)}
+          >
+            {SMART_LABEL}
+          </button>
+        </div>
       </div>
 
-      {tab === 'vehicles' && <Vehicles onViewVehicle={onViewVehicle} />}
-      {tab === 'maintenance' && <VehicleMaintenance />}
+      {smartOpen ? (
+        <SmartReportIssue />
+      ) : (
+        <>
+          {section === 'km' && <DriverPortal />}
+          {section === 'issue' && <ReportIssue />}
+        </>
+      )}
     </div>
   );
 }

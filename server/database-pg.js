@@ -2401,7 +2401,14 @@ export async function getFinancialReport() {
 
   const projByMonth = {};
   for (const p of projects) {
-    const m = p.month || 'Unknown';
+    const startDateRaw = p.start_date ?? p.startDate ?? "";
+    if (String(startDateRaw).trim() === "") continue;
+
+    const startDate = new Date(startDateRaw);
+    const m = !Number.isNaN(startDate.getTime())
+      ? startDate.toISOString().slice(0, 7)
+      : (p.month || 'Unknown');
+
     if (!projByMonth[m]) projByMonth[m] = new Set();
     projByMonth[m].add(normalizeProj(p.project_no));
   }
@@ -2589,7 +2596,7 @@ export async function getFinancialReport() {
   // Sort and aggregate
   // ==========================
   const rows = Object.values(months)
-    .filter(r => /^\\d{4}-\\d{2}$/.test(String(r.month)))
+    .filter(r => /^\d{4}-\d{2}$/.test(String(r.month)))
     .sort((a, b) => String(a.month).localeCompare(String(b.month)));
 
   const sum = field =>

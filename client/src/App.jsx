@@ -31,7 +31,7 @@ const TAB_LABELS = {
   troubleshooter: '🧠 Troubleshooter', tickets: 'Tickets', reports: 'Reports',
   mytickets: '📋 My Tickets', 'advanced-reports': '📊 Advanced Reports',
   'support-service': '🛠️ Support & Service',
-  drivers: 'Drivers', users: 'Users', audit: 'Audit Log', backup: 'Backup'
+  drivers: '👨‍🔧 Driver', users: 'Users', audit: 'Audit Log', backup: 'Backup'
 };
 const writeLog = (user, action, entityType, entityId, details) => {
   api.post('/audit-log', { userId: user?.id, username: user?.username || 'unknown', action, entityType: entityType || '', entityId: String(entityId || ''), details: details || '' }).catch(() => {});

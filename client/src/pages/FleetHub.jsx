@@ -1,12 +1,10 @@
 import { useState } from 'react';
 import Vehicles from './Vehicles';
 import VehicleMaintenance from './VehicleMaintenance';
-import PeriodicMaintenance from './PeriodicMaintenance';
 
 const TABS = [
   { id: 'vehicles', label: '🚗 Vehicles', title: 'Vehicles & Fleet' },
-  { id: 'maintenance', label: '🔧 Vehicle Maintenance', title: 'Vehicle Maintenance & KM' },
-  { id: 'periodic', label: '📅 Periodic Maintenance', title: 'Periodic Maintenance & Inspection' }
+  { id: 'maintenance', label: '🔧 Vehicle Maintenance', title: 'Vehicle Maintenance & Smart Service' }
 ];
 
 export default function FleetHub({ onViewVehicle }) {
@@ -20,7 +18,7 @@ export default function FleetHub({ onViewVehicle }) {
           <div>
             <h1 style={{ margin: 0 }}>Fleet</h1>
             <p style={{ margin: '6px 0 0', color: '#64748b' }}>
-              Vehicles → Vehicle Maintenance → KM → Periodic Maintenance & Inspection
+              Vehicles → Vehicle Maintenance & Smart Service
             </p>
           </div>
         </div>
@@ -40,7 +38,6 @@ export default function FleetHub({ onViewVehicle }) {
 
       {tab === 'vehicles' && <Vehicles onViewVehicle={onViewVehicle} />}
       {tab === 'maintenance' && <VehicleMaintenance />}
-      {tab === 'periodic' && <PeriodicMaintenance />}
     </div>
   );
 }

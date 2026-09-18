@@ -532,9 +532,37 @@ app.get("/api/purchases", async (req, res) => {
 });
 app.post("/api/purchases", async (req, res) => {
   try {
-    if (String(req.body?.type || "").toLowerCase() === "project" && !req.body?.requestId && !req.body?.request_id) {
-      return res.status(403).json({ success: false, error: "Project purchases require an approved Purchase Request first." });
+    const isProjectPurchase = String(req.body?.type || "").toLowerCase() === "project";
+    const requestId = req.body?.requestId ?? req.body?.request_id;
+
+    if (isProjectPurchase) {
+      if (!requestId) {
+        return res.status(403).json({ success: false, error: "Project purchases require an approved Purchase Request first." });
+      }
+
+      const request = await getPurchaseRequestPG(requestId);
+      if (!request) {
+        return res.status(404).json({ success: false, error: "Purchase Request not found." });
+      }
+      if (request.status !== "Approved") {
+        return res.status(403).json({ success: false, error: "Purchase Request must be Owner-approved before purchase." });
+      }
+      if (request.purchase_id) {
+        return res.status(400).json({ success: false, error: "This Purchase Request already has a recorded purchase." });
+      }
+
+      const result = await recordPurchaseFromRequestPG(requestId, req.body || {}, req.user);
+      await logActionPG({
+        userId: req.user?.id,
+        username: req.user?.username,
+        action: "RECORD_APPROVED_PURCHASE",
+        entityType: "Purchase",
+        entityId: result.purchase.id,
+        details: { requestId: result.request.id, requestNo: result.request.request_no, approvalBy: result.purchase.approved_by, approvalAt: result.purchase.approved_at, purchase: result.purchase }
+      });
+      return res.status(201).json({ success: true, ...result });
     }
+
     res.json({ success: true, purchase: await createPurchasePG(req.body) });
   } catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });

@@ -310,11 +310,23 @@ export async function listOilChanges(vehicleId) {
 // ============================================================
 
 export async function createTicket(data = {}) {
+  const ownerResult = await query(
+    `SELECT id, full_name, username
+     FROM users
+     WHERE role = 'Owner' AND is_active = 1
+     ORDER BY id ASC
+     LIMIT 1`
+  );
+  const owner = ownerResult.rows[0] || null;
+  const department = stringValue(data.department) || (data.vehicleId ? "Fleet" : "Support");
+
   const result = await query(
     `INSERT INTO tickets
       (vehicle_id, title, location, category, priority, status,
-       description, reported_by, opened_at, department)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_TIMESTAMP,$9)
+       description, reported_by, opened_at, department,
+       assigned_to_user_id, assigned_to_name, assigned_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_TIMESTAMP,$9,$10,$11,
+             CASE WHEN $10 IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END)
      RETURNING *`,
     [
       data.vehicleId || null,
@@ -325,7 +337,9 @@ export async function createTicket(data = {}) {
       stringValue(data.status) || "Open",
       stringValue(data.description),
       stringValue(data.reportedBy || data.reporter),
-      stringValue(data.department) || (data.vehicleId ? "Fleet" : "Support")
+      department,
+      owner?.id ?? null,
+      owner ? stringValue(owner.full_name || owner.username) : null
     ]
   );
 

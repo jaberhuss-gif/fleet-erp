@@ -96,9 +96,10 @@ function getSpecialAction(pathname, method) {
 }
 
 export function getPermissionForRequest(req) {
-  const module = getModuleFromPath(req.path);
+  const pathname = String(req.originalUrl || req.path || "").split("?")[0];
+  const module = getModuleFromPath(pathname);
   if (!module) return null;
-  const action = getSpecialAction(req.path, req.method);
+  const action = getSpecialAction(pathname, req.method);
   if (!action) return null;
   return { module, action };
 }

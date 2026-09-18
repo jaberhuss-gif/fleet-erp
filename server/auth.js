@@ -56,7 +56,8 @@ export async function login(username, password) {
     {
       id: user.id,
       username: user.username,
-      role: user.role
+      role: user.role,
+      site: user.site || ''
     },
     JWT_SECRET,
     { expiresIn: "7d" }

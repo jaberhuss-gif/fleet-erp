@@ -57,31 +57,32 @@ export default function Notifications() {
   const load = async () => {
     try {
       setLoading(true);
-      const [alerts, lowStock, workOrders, periodic, vehicles] = await Promise.all([
+      const [alerts, lowStock, workOrders, periodic, vehicles, kmDaily] = await Promise.all([
         api.get('/alerts').then(r => r.data),
         api.get('/inventory/low-stock').then(r => r.data).catch(() => ({ items: [] })),
         api.get('/work-orders?status=Open').then(r => r.data).catch(() => ({ orders: [] })),
         api.get('/periodic-maintenance/alerts').then(r => r.data).catch(() => ({ overdue: [], dueSoon: [] })),
-        api.get('/vehicles').then(r => r.data).catch(() => ({ vehicles: [] }))
+        api.get('/vehicles').then(r => r.data).catch(() => ({ vehicles: [] })),
+        api.get('/km-daily-notifications').then(r => r.data).catch(() => ({ records: [], count: 0 }))
       ]);
 
       const notifs = [];
       const vehicleRows = Array.isArray(vehicles?.vehicles) ? vehicles.vehicles : Array.isArray(vehicles) ? vehicles : [];
       const todayKey = new Date().toLocaleDateString('en-CA');
 
-      vehicleRows
-        .filter(v => String(v.status || '').toLowerCase() !== 'inactive')
-        .filter(v => {
-          if (!v.meter_updated_at) return true;
-          const updatedKey = new Date(v.meter_updated_at).toLocaleDateString('en-CA');
-          return updatedKey !== todayKey;
-        })
-        .forEach(v => {
-          const plate = v.plate || `${v.plate_number || ''} ${v.plate_code || ''}`.trim() || `Vehicle #${v.id}`;
-          const driver = v.driver_name || v.driver || 'Unassigned';
-          const phone = v.driver_phone || v.phone || 'No phone recorded';
-          notifs.push({ id: 'km-missing-' + v.id, type: 'danger', icon: '🚨', title: 'Daily KM Reading Missing', message: `${plate} — Driver: ${driver} — Phone: ${phone} — No odometer reading entered today`, tab: 'fleet-maintenance' });
+      (kmDaily?.records || []).forEach(n => {
+        const plate = n.vehicle_plate || `Vehicle #${n.vehicle_id}`;
+        const driver = n.driver_name || 'Unassigned';
+        const phone = n.driver_phone || 'No phone recorded';
+        notifs.push({
+          id: 'km-daily-' + n.id,
+          type: 'danger',
+          icon: '🚨',
+          title: 'Daily KM Reading Missing',
+          message: `${plate} — Driver: ${driver} — Phone: ${phone} — No odometer reading entered today`,
+          tab: 'fleet-maintenance'
         });
+      });
 
       if (alerts?.urgent) alerts.urgent.slice(0, 10).forEach(v => notifs.push({ id: 'oil-' + v.id, type: 'danger', icon: '🔴', title: 'Oil Change Overdue', message: v.plate + ' — ' + v.sinceOil.toLocaleString() + ' km since oil change', tab: 'fleet-maintenance' }));
       if (alerts?.warning) alerts.warning.slice(0, 5).forEach(v => notifs.push({ id: 'warn-' + v.id, type: 'warning', icon: '🟡', title: 'Oil Change Approaching', message: v.plate + ' — ' + v.remaining.toLocaleString() + ' km remaining', tab: 'fleet-maintenance' }));

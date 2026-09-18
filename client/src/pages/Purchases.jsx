@@ -110,7 +110,6 @@ export default function Purchases() {
             <div className="form-group"><label>Type</label>
               <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
                 <option value="Work Order">Work Order</option>
-                <option value="Project">Project</option>
                 <option value="General">General</option>
                 <option value="Inventory">Inventory</option>
               </select>
@@ -129,6 +128,11 @@ export default function Purchases() {
             <div className="form-group"><label>Purchase Date</label><input type="date" value={form.purchaseDate} onChange={e => setForm({ ...form, purchaseDate: e.target.value })} /></div>
           </div>
           <div className="form-group"><label>Notes</label><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2}></textarea></div>
+          {form.type === 'Project' && (
+            <div className="alert alert-info">
+              Project purchases must be recorded through an approved Purchase Request.
+            </div>
+          )}
           <div className="btn-row">
             <button type="submit" className="btn btn-success">Save Purchase</button>
             <button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button>
@@ -175,7 +179,7 @@ export default function Purchases() {
             <tr>
               <th>PUR #</th><th>Date</th><th>Type</th><th>Reference</th>
               <th>Item</th><th>Qty</th><th>Unit Cost</th><th>Total</th>
-              <th>Supplier</th><th>Paid By</th><th>Action</th>
+              <th>Supplier</th><th>Paid By</th><th>Approval</th><th>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -194,6 +198,19 @@ export default function Purchases() {
                   <span className="status-badge" style={{ background: p.purchased_by === 'Contractor' ? '#fef3c7' : '#dbeafe', color: p.purchased_by === 'Contractor' ? '#b45309' : '#1e40af' }}>
                     {p.purchased_by}
                   </span>
+                </td>
+                <td>
+                  {p.request_id ? (
+                    <div>
+                      <strong>Request #{p.request_id}</strong>
+                      <div style={{fontSize:11,color:'#64748b'}}>
+                        {p.approved_by ? 'Approved by ' + p.approved_by : 'Approved'}
+                      </div>
+                      <div style={{fontSize:11,color:'#64748b'}}>
+                        {p.approved_at ? String(p.approved_at).slice(0,10) : ''}
+                      </div>
+                    </div>
+                  ) : '-'}
                 </td>
                 <td>
                   <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(p.id)}>Delete</button>

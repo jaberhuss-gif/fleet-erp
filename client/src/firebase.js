@@ -31,10 +31,24 @@ export async function enablePushNotifications() {
     return { success: false, message: 'Notification permission was not granted.' };
   }
 
-  const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+  const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+    updateViaCache: 'none'
+  });
+
+  // Firebase needs the worker to be ACTIVE before PushManager.subscribe() runs.
+  // A newly registered worker can still be installing/waiting at this point.
+  const activeRegistration = await navigator.serviceWorker.ready;
+
+  if (!activeRegistration?.active) {
+    return {
+      success: false,
+      message: 'Firebase messaging service worker is not active yet. Please refresh and try again.'
+    };
+  }
+
   const token = await getToken(messaging, {
     vapidKey: VAPID_KEY,
-    serviceWorkerRegistration: registration
+    serviceWorkerRegistration: activeRegistration
   });
 
   if (!token) {

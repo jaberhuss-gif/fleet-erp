@@ -4,7 +4,7 @@ import { exportToCSV } from '../api/export';
 
 const EMPTY_FORM = {
   username: '', password: '', fullName: '', role: 'Driver',
-  email: '', phone: '', site: '', department: 'General'
+  email: '', phone: '', site: 'ALL', department: 'General'
 };
 
 const GROUPS = {
@@ -104,7 +104,7 @@ export default function Users() {
         setMessage('User updated: ' + saved.username);
         await loadAccess(saved);
       } else {
-        const res = await api.post('/users', form);
+        const res = await api.post('/users', { ...form, site: form.site || 'ALL' });
         saved = res.data.user;
         setMessage('User created: ' + saved.username + '. Set View/Work permissions with Edit.');
       }

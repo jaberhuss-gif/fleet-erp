@@ -2485,7 +2485,15 @@ export async function getFinancialReport() {
   // Projects
   // ==========================
   for (const p of projects) {
-    const b = bucket(p.month);
+    const startDateRaw = p.start_date ?? p.startDate ?? "";
+    if (String(startDateRaw).trim() === "") continue;
+
+    const startDate = new Date(startDateRaw);
+    const derivedMonth = !Number.isNaN(startDate.getTime())
+      ? startDate.toISOString().slice(0, 7)
+      : (p.month || "Unknown");
+
+    const b = bucket(derivedMonth);
     const spent = Number(p.spent || 0);
     const contractorName = String(p.contractor || "").trim();
 
@@ -2581,6 +2589,7 @@ export async function getFinancialReport() {
   // Sort and aggregate
   // ==========================
   const rows = Object.values(months)
+    .filter(r => /^\\d{4}-\\d{2}$/.test(String(r.month)))
     .sort((a, b) => String(a.month).localeCompare(String(b.month)));
 
   const sum = field =>
@@ -2612,6 +2621,11 @@ export async function getFinancialReport() {
 
     grand: {
       monthCount: rows.length,
+
+      // Dashboard aliases
+      totalBaseline,
+      totalActual: sum("maintActual") + sum("devActual"),
+      months: rows,
 
       // Baseline
       baseline: totalBaseline,

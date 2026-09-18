@@ -65,7 +65,7 @@ function findKmIndex(headers) {
   const normalizedHeaders = headers.map(normalize);
   const compactHeaders = headers.map((h) =>
     String(h ?? "")
-      .replace(/[\\s_\\-().]/g, "")
+      .replace(/[\s_().-]/g, "")
       .toLowerCase()
   );
 
@@ -174,7 +174,7 @@ export async function syncGoogleSheetVehicles() {
   if (indexes.km < 0 && headers.length >= 5) {
     const compactHeaders = headers.map((h) =>
       String(h ?? "")
-        .replace(/[\\s_\\-().]/g, "")
+        .replace(/[\s_().-]/g, "")
         .toLowerCase()
     );
     const hasDailyKmShape =

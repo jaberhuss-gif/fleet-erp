@@ -8,7 +8,7 @@ const LANGUAGES = [
   { code: 'ar-SA', label: 'العربية', flag: '🇸🇦' }
 ];
 
-export default function SmartReportIssue() {
+export default function SmartReportIssue({ canWork = false }) {
   const [lang, setLang] = useState(localStorage.getItem('voiceLang') || 'en-US');
   const [vehicleId, setVehicleId] = useState('');
   const [description, setDescription] = useState('');
@@ -22,8 +22,8 @@ export default function SmartReportIssue() {
   const recognitionRef = useRef(null);
 
   useEffect(() => {
-    loadVehicles();
-  }, []);
+    if (canWork) loadVehicles();
+  }, [canWork]);
 
   useEffect(() => {
     localStorage.setItem('voiceLang', lang);
@@ -94,6 +94,10 @@ export default function SmartReportIssue() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!canWork) {
+      setError('Fleet work permission is not assigned to this user.');
+      return;
+    }
     setMessage(''); setError('');
     if (!vehicleId) { setError('Please select a vehicle'); return; }
     if (!description.trim()) { setError('Please describe the issue'); return; }

@@ -51,6 +51,7 @@ function getModuleFromPath(pathname) {
     issues: "fleet",
     sites: "support",
     "work-orders": "building",
+    "maintenance-requests": "building",
     projects: "projects",
     purchases: "purchase_requests",
     "purchase-requests": "purchase_requests",

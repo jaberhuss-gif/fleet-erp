@@ -158,15 +158,37 @@ function parseSheetDate(value) {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
 
-  const m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):([0-5]\d)(?::([0-5]\d))?)?$/);
+  // Google Sheets CSV is returning dates in M/D/YYYY format.
+  // Example: 4/29/2026 or 9/18/2026 05:25:11
+  const m = raw.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})(?:\\s+(\\d{1,2}):([0-5]\\d)(?::([0-5]\\d))?)?$/);
   if (m) {
-    const day = Number(m[1]);
-    const month = Number(m[2]);
+    const first = Number(m[1]);
+    const second = Number(m[2]);
     const year = Number(m[3]);
     const hour = Number(m[4] || 0);
     const minute = Number(m[5] || 0);
-    const second = Number(m[6] || 0);
-    return new Date(Date.UTC(year, month - 1, day, hour - 3, minute, second));
+    const secondValue = Number(m[6] || 0);
+
+    let month = first;
+    let day = second;
+
+    // Support unambiguous D/M/Y rows as well.
+    if (first > 12 && second <= 12) {
+      day = first;
+      month = second;
+    }
+
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+    // Sheet timestamps are treated as Saudi local time (UTC+3).
+    return new Date(Date.UTC(
+      year,
+      month - 1,
+      day,
+      hour - 3,
+      minute,
+      secondValue
+    ));
   }
 
   const parsed = new Date(raw);

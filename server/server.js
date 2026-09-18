@@ -1,6 +1,6 @@
 ﻿import express from "express";
 import cors from "cors";
-import { verifyToken, login, listUsers, createUser, deleteUser } from "./auth.js";
+import { verifyToken, login, listUsers, createUser, updateUser, deleteUser } from "./auth.js";
 import { requirePermission, ACCESS_MODULES, getUserAccess, saveUserAccess, ensureUserAccessTable, hasModuleAccess } from "./rbac.js";
 import { getKmDailyNotifications, reconcileAndNotify } from "./kmDailyNotifications.js";
 import { syncGoogleSheetVehicles } from "./googleSheetSync.js";
@@ -598,6 +598,15 @@ app.delete("/api/users/:id", requireRole("Owner"), async (req, res) => {
 });
 
 // ===== USER ACCESS MANAGEMENT =====
+app.put("/api/users/:id", requireRole("Owner"), async (req, res) => {
+  try {
+    const user = await updateUser(req.params.id, req.body);
+    res.json({ success: true, user });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
 app.get("/api/users/:id/access", async (req, res) => {
   if (req.user?.role !== "Owner" && String(req.user?.id) !== String(req.params.id)) {
     return res.status(403).json({ success: false, error: "Forbidden" });

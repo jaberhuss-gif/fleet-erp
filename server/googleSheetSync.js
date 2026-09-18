@@ -362,10 +362,6 @@ export async function syncGoogleSheetVehicles() {
       // A vehicle counts as having today's KM only when the KM value itself
       // is present. The Sheet date alone must never resolve daily KM compliance.
       if (date) add("meter_updated_at = ?", date.toISOString());
-    } else if (date) {
-      // The latest Sheet row can exist for today while CurrentKM is blank.
-      // Treat that as "no KM entered today" and clear the compliance timestamp.
-      add("meter_updated_at = ?", null);
     }
 
     if (active !== null) add("status = ?", active ? "Active" : "Inactive");
@@ -462,14 +458,37 @@ async function run() {
 }
 
 let syncTimer = null;
+let kmSevenAmTimer = null;
+
+function millisUntilNextSevenAm() {
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(7, 0, 0, 0);
+
+  if (target.getTime() <= now.getTime()) {
+    target.setDate(target.getDate() + 1);
+  }
+
+  return target.getTime() - now.getTime();
+}
 
 export function startGoogleSheetVehicleSync() {
-  if (syncTimer) return;
+  if (syncTimer || kmSevenAmTimer) return;
 
+  // Sync immediately, but reconcileAndNotify itself enforces the 07:00 cutoff.
   run();
+
+  // Guarantee the first daily compliance run happens exactly at 07:00 local time,
+  // regardless of when the backend process started.
+  kmSevenAmTimer = setTimeout(() => {
+    run();
+    kmSevenAmTimer = setInterval(run, INTERVAL_MS);
+  }, millisUntilNextSevenAm());
+
+  // Continue the normal 5-minute sync loop for Google Sheet updates.
   syncTimer = setInterval(run, INTERVAL_MS);
 
   console.log(
-    `Google Sheet vehicle sync and daily KM reminder enabled (${Math.round(INTERVAL_MS / 60000)} min interval)`
+    `Google Sheet vehicle sync and daily KM reminder enabled (${Math.round(INTERVAL_MS / 60000)} min interval; daily cutoff 07:00)`
   );
 }

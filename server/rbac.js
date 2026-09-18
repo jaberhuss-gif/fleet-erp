@@ -6,8 +6,10 @@ const METHOD_ACTIONS = { GET: "view", POST: "edit", PUT: "edit", PATCH: "edit", 
 export const ACCESS_MODULES = [
   { id: "gm", label: "GM Dashboard" },
   { id: "support", label: "Support & Service" },
-  { id: "operations", label: "Operations" },
+  { id: "building", label: "Building / Maintenance" },
+  { id: "projects", label: "Projects" },
   { id: "warehouse", label: "Warehouse" },
+  { id: "purchase_requests", label: "Project Purchase Requests" },
   { id: "fleet", label: "Fleet" },
   { id: "fleet_tickets", label: "Vehicle Tickets" },
   { id: "troubleshooter", label: "Troubleshooter" },
@@ -23,17 +25,17 @@ export const ACCESS_MODULES = [
 
 const ROLE_ACCESS_PRESETS = {
   Owner: "all",
-  GM: { gm: ["view"], support: ["view"], troubleshooter: ["view"] },
-  Accountant: { reports: ["view"], advanced_reports: ["view"] },
+  GM: { gm: ["view"], support: ["view"], building: ["view"], projects: ["view"], warehouse: ["view"], purchase_requests: ["view"], fleet: ["view"], tickets: ["view"], troubleshooter: ["view"], reports: ["view"], advanced_reports: ["view"] },
+  Accountant: { reports: ["view"], advanced_reports: ["view"], tickets: ["view"], purchase_requests: ["view"], building: ["view"], projects: ["view"] },
   CampusManager: {
-    support: ["view", "work"], operations: ["view", "work"],
-    warehouse: ["view", "work"], troubleshooter: ["view"]
+    support: ["view", "work"], building: ["view", "work"], projects: ["view", "work"],
+    warehouse: ["view", "work"], purchase_requests: ["view", "work"], troubleshooter: ["view"]
   },
   Driver: { fleet: ["view", "work"], mytickets: ["view"], troubleshooter: ["view"] },
-  SupportManager: { support: ["view"], warehouse: ["view"], tickets: ["view"] },
+  SupportManager: { support: ["view"], building: ["view"], tickets: ["view"], purchase_requests: ["view"], troubleshooter: ["view"] },
   FleetSupervisor: {
     gm: ["view"], fleet: ["view", "work"], tickets: ["view", "work"],
-    troubleshooter: ["view"]
+    building: ["view"], troubleshooter: ["view"]
   },
   FleetViewer: { fleet_tickets: ["view"] }
 };
@@ -48,10 +50,11 @@ function getModuleFromPath(pathname) {
     tickets: "tickets",
     issues: "fleet",
     sites: "support",
-    "work-orders": "operations",
-    projects: "operations",
-    purchases: "operations",
-    building: "operations",
+    "work-orders": "building",
+    projects: "projects",
+    purchases: "purchase_requests",
+    "purchase-requests": "purchase_requests",
+    building: "building",
     inventory: "warehouse",
     "stock-transactions": "warehouse",
     "periodic-maintenance": "fleet",
@@ -80,6 +83,9 @@ function getSpecialAction(pathname, method) {
   if (pathname.includes("/complete")) return "complete";
   if (pathname.includes("/generate")) return "generate";
   if (pathname.includes("/create")) return "create";
+  if (pathname.includes("/approve")) return "approve";
+  if (pathname.includes("/reject")) return "reject";
+  if (pathname.includes("/purchase")) return "purchase";
   if (pathname.includes("/download")) return "download";
   if (pathname.includes("/clear")) return "clear";
   return METHOD_ACTIONS[method] || null;
@@ -177,22 +183,24 @@ async function hasLegacyPermission(user, module, action) {
   if (!user) return false;
   if (user.role === "Owner") return true;
 
-  const userPermission = await query(`
-    SELECT 1 FROM user_permissions up
-    JOIN permissions p ON p.id = up.permission_id
-    WHERE up.user_id = $1 AND p.module = $2 AND p.action = $3
-      AND up.allowed = TRUE LIMIT 1
-  `, [user.id, module, action]);
+  const userPermission = await query(
+    `SELECT 1 FROM user_permissions up
+     JOIN permissions p ON p.id = up.permission_id
+     WHERE up.user_id = $1 AND p.module = $2 AND p.action = $3
+       AND up.allowed = TRUE LIMIT 1`,
+    [user.id, module, action]
+  );
 
   if (userPermission.rows.length > 0) return true;
 
-  const rolePermission = await query(`
-    SELECT 1 FROM role_permissions rp
-    JOIN roles r ON r.id = rp.role_id
-    JOIN permissions p ON p.id = rp.permission_id
-    WHERE r.name = $1 AND p.module = $2 AND p.action = $3
-      AND rp.allowed = TRUE LIMIT 1
-  `, [user.role, module, action]);
+  const rolePermission = await query(
+    `SELECT 1 FROM role_permissions rp
+     JOIN roles r ON r.id = rp.role_id
+     JOIN permissions p ON p.id = rp.permission_id
+     WHERE r.name = $1 AND p.module = $2 AND p.action = $3
+       AND rp.allowed = TRUE LIMIT 1`,
+    [user.role, module, action]
+  );
 
   return rolePermission.rows.length > 0;
 }

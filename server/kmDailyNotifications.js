@@ -354,7 +354,9 @@ export async function reconcileAndNotify() {
           vehicles: openToday.rows.length,
           tokens: tokens.length,
           sent: sendResult.sent || 0,
-          failed: sendResult.failed || 0
+          failed: sendResult.failed || 0,
+          cleaned: sendResult.cleaned || 0,
+          errors: sendResult.errors || []
         }));
 
         if (sendResult.sent > 0) {

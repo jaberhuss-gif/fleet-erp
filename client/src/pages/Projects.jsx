@@ -2,7 +2,8 @@
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
 
-export default function Projects() {
+export default function Projects({ user, access = {} }) {
+  const canWork = user?.role === 'Owner' || !!access?.projects?.can_work;
   const [projects, setProjects] = useState([]);
   const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -90,9 +91,9 @@ export default function Projects() {
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         
-        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "projects", [{key:"project_no",label:"Project #"},{key:"name",label:"Name"},{key:"site",label:"Site"},{key:"project_type",label:"Type"},{key:"manager",label:"Manager"},{key:"budget",label:"Budget"},{key:"spent",label:"Spent"},{key:"status",label:"Status"}])}>Export CSV</button><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
+        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "projects", [{key:"project_no",label:"Project #"},{key:"name",label:"Name"},{key:"site",label:"Site"},{key:"project_type",label:"Type"},{key:"manager",label:"Manager"},{key:"budget",label:"Budget"},{key:"spent",label:"Spent"},{key:"status",label:"Status"}])}>Export CSV</button>{canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
           {showForm ? 'Cancel' : '+ New Project'}
-        </button>
+        </button>}
       </div>
 
       {message && <div className="alert alert-success">{message}</div>}
@@ -119,7 +120,7 @@ export default function Projects() {
         </div>
       </div>
 
-      {showForm && (
+      {showForm && canWork && (
         <form onSubmit={handleSubmit} style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
           <h3>{editing ? 'Edit Project' : 'New Project'}</h3>
           <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
@@ -225,8 +226,8 @@ export default function Projects() {
                     </span>
                   </td>
                   <td>
-                    <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleEdit(p)}>Edit</button>
-                    <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(p.id)}>Delete</button>
+                    {canWork && <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleEdit(p)}>Edit</button>}
+                    {canWork && <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(p.id)}>Delete</button>}
                   </td>
                 </tr>
               );

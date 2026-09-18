@@ -251,6 +251,34 @@ app.post("/api/tickets", async (req, res) => {
   }
 });
 
+app.post("/api/maintenance-requests", async (req, res) => {
+  try {
+    const reportedBy = req.user?.fullName || req.user?.username || req.body?.reportedBy || "User";
+    const description = req.body?.site
+      ? "[Site: " + String(req.body.site).trim() + "]\n" + String(req.body.description || "").trim()
+      : String(req.body?.description || "").trim();
+
+    if (!description) {
+      return res.status(400).json({ success: false, error: "Maintenance description is required." });
+    }
+
+    const ticket = await createTicketPG({
+      vehicleId: null,
+      location: req.body?.site || null,
+      category: req.body?.category || "General Maintenance",
+      description,
+      reportedBy,
+      priority: req.body?.priority || "Medium",
+      department: "Building"
+    });
+
+    res.status(201).json({ success: true, ticket });
+  } catch (e) {
+    console.error("Error creating maintenance request:", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.put("/api/tickets/:id/close", async (req, res) => {
   try {
     const ticket = await closeTicketPG(req.params.id, req.body);

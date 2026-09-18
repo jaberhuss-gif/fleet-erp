@@ -5,6 +5,7 @@ import VehicleDetails from './pages/VehicleDetails';
 import Tickets from './pages/Tickets';
 import Reports from './pages/Reports';
 import OperationsHub from './pages/OperationsHub';
+import SupportServiceHub from './pages/SupportServiceHub';
 import Login from './pages/Login';
 import Users from './pages/Users';
 import Drivers from './pages/Drivers';
@@ -18,17 +19,18 @@ import api from './api/client';
 
 const OWNER_ONLY_TABS = new Set(['drivers', 'users', 'audit', 'backup']);
 const ROLE_TABS = {
-  Owner: ['gm', 'operations', 'fleet', 'troubleshooter', 'tickets', 'reports', 'advanced-reports', 'drivers', 'users', 'audit', 'backup'],
-  GM: ['gm', 'troubleshooter'],
+  Owner: ['gm', 'support-service', 'operations', 'fleet', 'troubleshooter', 'tickets', 'reports', 'advanced-reports', 'drivers', 'users', 'audit', 'backup'],
+  GM: ['gm', 'support-service', 'troubleshooter'],
   Accountant: ['reports', 'advanced-reports'],
-  CampusManager: ['operations', 'troubleshooter'],
-  Driver: ['fleet', 'troubleshooter', 'mytickets'],
-  FleetSupervisor: ['gm', 'fleet', 'troubleshooter', 'tickets']
+  CampusManager: ['support-service', 'operations', 'troubleshooter'],
+  Driver: ['support-service', 'fleet', 'troubleshooter', 'mytickets'],
+  FleetSupervisor: ['gm', 'support-service', 'fleet', 'troubleshooter', 'tickets']
 };
 const TAB_LABELS = {
   gm: 'GM Dashboard', fleet: '🚗 Fleet', operations: '🛠️ Operations',
   troubleshooter: '🧠 Troubleshooter', tickets: 'Tickets', reports: 'Reports',
   mytickets: '📋 My Tickets', 'advanced-reports': '📊 Advanced Reports',
+  'support-service': '🛠️ Support & Service',
   drivers: 'Drivers', users: 'Users', audit: 'Audit Log', backup: 'Backup'
 };
 const writeLog = (user, action, entityType, entityId, details) => {
@@ -78,6 +80,7 @@ export default function App() {
       </header>
       <main className="main">
         {tab === 'gm' && <GMDashboard />}
+        {tab === 'support-service' && <SupportServiceHub user={user} />}
         {tab === 'fleet' && <FleetHub onViewVehicle={handleViewVehicle} />}
         {tab === 'vehicle-details' && viewingVehicleId && <VehicleDetails vehicleId={viewingVehicleId} onBack={handleBackToVehicles} />}
         {tab === 'troubleshooter' && <Troubleshooter />}

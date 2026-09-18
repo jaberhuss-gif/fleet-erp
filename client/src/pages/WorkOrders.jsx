@@ -2,7 +2,7 @@
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
 
-export default function WorkOrders() {
+export default function WorkOrders({ user }) {
   const [orders, setOrders] = useState([]);
   const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -186,7 +186,18 @@ export default function WorkOrders() {
                 <option value="Urgent">Urgent</option>
               </select>
             </div>
-            <div className="form-group"><label>Assigned To</label><input value={form.assignedTo} onChange={e => setForm({ ...form, assignedTo: e.target.value })} /></div>
+            <div className="form-group">
+              <label>Assigned To</label>
+              <input
+                value={form.assignedTo}
+                onChange={e => setForm({ ...form, assignedTo: e.target.value })}
+                disabled={user?.role !== 'Owner'}
+                placeholder={user?.role === 'Owner' ? 'Only Owner can issue assignment' : 'Owner-only assignment'}
+              />
+              {user?.role !== 'Owner' && (
+                <div style={{fontSize:11,color:'#64748b',marginTop:4}}>Assignment orders can only be issued or changed by Owner.</div>
+              )}
+            </div>
             <div className="form-group"><label>Reported Date</label><input type="date" value={form.reportedDate} onChange={e => setForm({ ...form, reportedDate: e.target.value })} /></div>
             <div className="form-group">
               <label>Executor Type</label>

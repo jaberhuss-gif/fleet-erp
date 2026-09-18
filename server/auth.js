@@ -57,7 +57,9 @@ export async function login(username, password) {
       id: user.id,
       username: user.username,
       role: user.role,
-      site: user.site || ''
+      site: user.site || '',
+      department: user.department || 'General',
+      department: user.department || 'General'
     },
     JWT_SECRET,
     { expiresIn: "7d" }
@@ -104,6 +106,7 @@ export async function listUsers() {
       phone,
       is_active,
       site,
+      department,
       created_at
     FROM users
     ORDER BY id
@@ -129,6 +132,7 @@ export async function createUser(data = {}) {
   const email = data.email || "";
   const phone = data.phone || "";
   const site = data.site || "";
+  const department = data.department || "General";
 
   const existing = await query(
     `SELECT id FROM users WHERE username = $1 LIMIT 1`,
@@ -150,9 +154,10 @@ export async function createUser(data = {}) {
       email,
       phone,
       site,
+      department,
       is_active
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
     RETURNING
       id,
       username,
@@ -169,7 +174,8 @@ export async function createUser(data = {}) {
     role,
     email,
     phone,
-    site
+    site,
+    department
   ]);
 
   return result.rows[0];

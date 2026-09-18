@@ -59,6 +59,7 @@ export default function GMDashboardExecutive() {
   const vehicles = data.vehicles || {};
   const ticketSummary = data.tickets || {};
   const grand = financial?.grand || {};
+  const reportMonths = financial?.months || financial?.rows || [];
   const openTickets = Number(ticketSummary.open || 0);
   const totalTickets = Number(ticketSummary.total || 0);
   const fleetTotal = Number(vehicles.total || 0);
@@ -148,8 +149,30 @@ export default function GMDashboardExecutive() {
             <KPI label="Total Savings" value={money(grand.totalSavings)} tone="green" />
             <KPI label="Savings Rate" value={`${Number(grand.totalSavingsPct || 0).toFixed(1)}%`} tone="green" />
           </div>
-          <div style={{ marginTop: 20, padding: 14, background: '#f8fafc', borderRadius: 10, color: '#475569' }}>
-            Detailed Financial Report remains available through the Reports module. This GM view intentionally shows only executive-level figures.
+          <div style={{ marginTop: 20, background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 20 }}>
+            <h2 style={{ marginTop: 0 }}>📈 Baseline vs Actual by Month</h2>
+            {reportMonths.length ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={reportMonths.map(m => ({
+                  month: m.month,
+                  Baseline: 20577 + 132551,
+                  Actual: Number(m.maintActual || 0) + Number(m.devActual || 0)
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="Baseline" fill="#64748b" radius={[4,4,0,0]} />
+                  <Bar dataKey="Actual" fill="#ef4444" radius={[4,4,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="alert alert-info">No monthly financial data available.</div>
+            )}
+          </div>
+          <div style={{ marginTop: 14, padding: 14, background: '#f8fafc', borderRadius: 10, color: '#475569' }}>
+            Detailed Financial Report remains available through the Reports module. This GM view shows executive figures plus the monthly cost chart.
           </div>
         </div>
       )}

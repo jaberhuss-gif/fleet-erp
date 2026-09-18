@@ -161,47 +161,57 @@ function parseSheetDate(value) {
   const parts = raw.split(" ").filter(Boolean);
   const datePart = parts[0] || "";
   const timePart = parts[1] || "00:00:00";
-
   const datePieces = datePart.split("/").map(Number);
+
   if (datePieces.length !== 3 || datePieces.some((n) => !Number.isFinite(n))) {
     return null;
   }
 
-  let first = datePieces[0];
-  let second = datePieces[1];
+  const first = datePieces[0];
+  const second = datePieces[1];
   const year = datePieces[2];
-
-  let month = first;
-  let day = second;
-
-  // Supports both M/D/YYYY (Google Sheets export) and unambiguous D/M/YYYY.
-  if (first > 12 && second <= 12) {
-    day = first;
-    month = second;
-  }
-
   const timePieces = timePart.split(":").map(Number);
   const hour = Number.isFinite(timePieces[0]) ? timePieces[0] : 0;
   const minute = Number.isFinite(timePieces[1]) ? timePieces[1] : 0;
   const secondValue = Number.isFinite(timePieces[2]) ? timePieces[2] : 0;
 
-  if (
-    year < 2000 ||
-    month < 1 || month > 12 ||
-    day < 1 || day > 31
-  ) {
-    return null;
+  if (year < 2000) return null;
+
+  const now = new Date();
+  const candidates = [];
+
+  // D/M/YYYY candidate
+  if (first >= 1 && first <= 31 && second >= 1 && second <= 12) {
+    candidates.push(new Date(Date.UTC(
+      year, second - 1, first, hour - 3, minute, secondValue
+    )));
   }
 
-  // Records are Saudi local time (UTC+3). Convert to UTC for storage/comparison.
-  return new Date(Date.UTC(
-    year,
-    month - 1,
-    day,
-    hour - 3,
-    minute,
-    secondValue
-  ));
+  // M/D/YYYY candidate
+  if (first >= 1 && first <= 12 && second >= 1 && second <= 31) {
+    candidates.push(new Date(Date.UTC(
+      year, first - 1, second, hour - 3, minute, secondValue
+    )));
+  }
+
+  const valid = candidates.filter((d) =>
+    !Number.isNaN(d.getTime()) &&
+    d.getUTCFullYear() === year
+  );
+
+  if (!valid.length) return null;
+
+  // The Records sheet should not contain future timestamps.
+  // Prefer the latest candidate that is not in the future.
+  const nowMs = now.getTime();
+  const notFuture = valid.filter((d) => d.getTime() <= nowMs + 24 * 60 * 60 * 1000);
+
+  if (notFuture.length) {
+    return notFuture.sort((a, b) => b.getTime() - a.getTime())[0];
+  }
+
+  // Fallback: return the earliest valid interpretation.
+  return valid.sort((a, b) => a.getTime() - b.getTime())[0];
 }
 
 export async function syncGoogleSheetVehicles() {

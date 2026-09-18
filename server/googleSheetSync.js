@@ -138,17 +138,31 @@ export async function syncGoogleSheetVehicles() {
     const km = indexes.km >= 0 ? cleanKm(values[indexes.km]) : null;
     const active = indexes.active >= 0 ? !isInactive(values[indexes.active]) : null;
 
+    // The sheet may provide a combined plate such as "2290 EUA",
+    // while ERP stores it as plate_number="2290" and plate_code="EUA".
+    // Try both the exact combined value and the split number/code form.
+    const plateParts = plate.split(/\\s+/).filter(Boolean);
+    const combinedPlate = plateParts.join(" ").trim();
+    const splitPlateNumber = plateParts[0] || "";
+    const splitPlateCode = plateParts.slice(1).join(" ").trim();
+
     const result = await pool.query(
-      `SELECT id, current_km
+      `SELECT id, current_km, plate_number, plate_code
        FROM vehicles
        WHERE LOWER(TRIM(COALESCE(plate_number, ''))) = LOWER(TRIM($1))
+          OR LOWER(TRIM(CONCAT_WS(' ', NULLIF(TRIM(plate_number), ''), NULLIF(TRIM(plate_code), '')))) = LOWER(TRIM($1))
           OR (
             $2 <> ''
             AND LOWER(TRIM(COALESCE(plate_code, ''))) = LOWER(TRIM($2))
             AND LOWER(TRIM(COALESCE(plate_number, ''))) = LOWER(TRIM($1))
           )
+          OR (
+            $3 <> ''
+            AND LOWER(TRIM(COALESCE(plate_number, ''))) = LOWER(TRIM($3))
+            AND LOWER(TRIM(COALESCE(plate_code, ''))) = LOWER(TRIM($4))
+          )
        LIMIT 1`,
-      [plate, code]
+      [combinedPlate, code, splitPlateNumber, splitPlateCode]
     );
 
     if (!result.rows[0]) {

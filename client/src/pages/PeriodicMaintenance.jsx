@@ -159,86 +159,67 @@ export default function PeriodicMaintenance({ canWork = false }) {
       {message && <div className="alert alert-success">{message}</div>}
       {error && <div className="alert alert-error">{error}</div>}
 
-      {/* Alerts Summary */}
-      {(alerts.overdue.length > 0 || alerts.dueSoon.length > 0) && (
-        <div className="cards-grid" style={{ marginBottom: '20px' }}>
-          <div className="card danger">
-            <h3>🔴 Overdue</h3>
-            <div className="big-number" style={{ color: '#dc2626' }}>{alerts.overdue.length}</div>
-            <div className="sub">Past due date</div>
-          </div>
-          <div className="card warning">
-            <h3>🟡 Due Soon (7 days)</h3>
-            <div className="big-number" style={{ color: '#f59e0b' }}>{alerts.dueSoon.length}</div>
-            <div className="sub">Approaching deadline</div>
-          </div>
-        </div>
-      )}
-
       <div className="panel">
-        <div style={{ background: 'linear-gradient(135deg, #115e59, #2dd4bf)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
-          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Periodic Maintenance & Inspection</h2>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-          
-          <div className="btn-row" style={{ margin: 0 }}>
-            {canWork && <button className="btn btn-warning" style={{ marginRight: '8px' }} onClick={handleGenerate}>⚡ Auto-Generate All</button>}
-            <button
-              className="btn btn-success"
-              style={{ marginRight: '8px' }}
-              onClick={() =>
-                exportToCSV(currentList, 'periodic-maintenance', [
-                  { key: 'vehicle_plate', label: 'Vehicle' },
-                  { key: 'type', label: 'Type' },
-                  { key: 'scheduled_date', label: 'Scheduled' },
-                  { key: 'completed_date', label: 'Completed' },
-                  { key: 'status', label: 'Status' },
-                  { key: 'technician', label: 'Technician' },
-                  { key: 'cost', label: 'Cost' }
-                ])
-              }
-            >
-              Export CSV
-            </button>
-            {canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
-              {showForm ? 'Cancel' : '+ Schedule New'}
-            </button>
-          </div>
+        <h2>Periodic Maintenance & Inspection</h2>
+
+        <div className="btn-row">
+          {canWork && <button className="btn btn-warning" onClick={handleGenerate}>Auto-Generate All</button>}
+          <button className="btn btn-success" onClick={() => exportToCSV(currentList, 'periodic-maintenance', [
+            { key: 'vehicle_plate', label: 'Vehicle' },
+            { key: 'type', label: 'Type' },
+            { key: 'scheduled_date', label: 'Scheduled' },
+            { key: 'completed_date', label: 'Completed' },
+            { key: 'status', label: 'Status' },
+            { key: 'technician', label: 'Technician' },
+            { key: 'cost', label: 'Cost' }
+          ])}>Export CSV</button>
+          {canWork && <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
+            {showForm ? 'Cancel' : '+ Schedule New'}
+          </button>}
         </div>
 
         {showForm && (
-          <form onSubmit={handleSubmit} style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
+          <form onSubmit={handleSubmit}>
             <h3>{editing ? 'Edit Schedule' : 'New Schedule'}</h3>
-            <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+            <div className="cards-grid">
               <div className="form-group">
                 <label>Vehicle *</label>
-                <select value={form.vehicleId} onChange={e => setForm({ ...form, vehicleId: e.target.value })} required>
+                <select value={form.vehicleId} onChange={(e) => setForm({ ...form, vehicleId: e.target.value })} required>
                   <option value="">-- Select Vehicle --</option>
-                  {vehicles.map(v => <option key={v.id} value={v.id}>{v.plate} - {v.driver}</option>)}
+                  {vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate} - {v.driver}</option>)}
                 </select>
               </div>
               <div className="form-group">
                 <label>Type *</label>
-                <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
                   <option value="6_months_general">6-Month General Maintenance</option>
                   <option value="inspection">Periodic Inspection</option>
                 </select>
               </div>
               <div className="form-group">
                 <label>Scheduled Date *</label>
-                <input type="date" value={form.scheduledDate} onChange={e => setForm({ ...form, scheduledDate: e.target.value })} required />
+                <input type="date" value={form.scheduledDate} onChange={(e) => setForm({ ...form, scheduledDate: e.target.value })} required />
               </div>
               <div className="form-group">
                 <label>Status</label>
-                <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                   <option value="Pending">Pending</option>
                   <option value="Completed">Completed</option>
                 </select>
               </div>
-              <div className="form-group"><label>Technician</label><input value={form.technician} onChange={e => setForm({ ...form, technician: e.target.value })} /></div>
-              <div className="form-group"><label>Cost (SAR)</label><input type="number" value={form.cost} onChange={e => setForm({ ...form, cost: Number(e.target.value) })} /></div>
+              <div className="form-group">
+                <label>Technician</label>
+                <input value={form.technician} onChange={(e) => setForm({ ...form, technician: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label>Cost (SAR)</label>
+                <input type="number" value={form.cost} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })} />
+              </div>
             </div>
-            <div className="form-group"><label>Notes</label><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2}></textarea></div>
+            <div className="form-group">
+              <label>Notes</label>
+              <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />
+            </div>
             <div className="btn-row">
               <button type="submit" className="btn btn-success">{editing ? 'Update' : 'Save'}</button>
               <button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button>
@@ -246,56 +227,34 @@ export default function PeriodicMaintenance({ canWork = false }) {
           </form>
         )}
 
-        {/* Filters */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '16px', background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label>Search</label>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Vehicle / Driver" />
-          </div>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label>Vehicle</label>
-            <select value={filterVehicle} onChange={e => setFilterVehicle(e.target.value)}>
-              <option value="all">All Vehicles</option>
-              {vehicles.map(v => <option key={v.id} value={v.id}>{v.plate}</option>)}
-            </select>
-          </div>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label>Type</label>
-            <select value={filterType} onChange={e => setFilterType(e.target.value)}>
-              <option value="all">All Types</option>
-              <option value="6_months_general">6-Month General</option>
-              <option value="inspection">Inspection</option>
-            </select>
-          </div>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label>Status</label>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-              <option value="all">All</option>
-              <option value="Pending">Pending</option>
-              <option value="Completed">Completed</option>
-            </select>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <button className="btn btn-warning" onClick={() => { setSearch(''); setFilterVehicle('all'); setFilterType('all'); setFilterStatus('all'); }} style={{ width: '100%' }}>Clear</button>
-          </div>
+        <div className="filters">
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Vehicle / Driver" />
+          <select value={filterVehicle} onChange={(e) => setFilterVehicle(e.target.value)}>
+            <option value="all">All Vehicles</option>
+            {vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate}</option>)}
+          </select>
+          <select value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+            <option value="all">All Types</option>
+            <option value="6_months_general">6-Month General</option>
+            <option value="inspection">Inspection</option>
+          </select>
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+            <option value="all">All Statuses</option>
+            <option value="Pending">Pending</option>
+            <option value="Completed">Completed</option>
+          </select>
+          <button className="btn btn-warning" onClick={() => { setSearch(''); setFilterVehicle('all'); setFilterType('all'); setFilterStatus('all'); }}>Clear</button>
         </div>
 
-        {loading ? (
-          <div className="loading">Loading...</div>
-        ) : currentList.length === 0 ? (
-          <div className="alert alert-info">No records. Click "Auto-Generate All" to schedule for all vehicles.</div>
-        ) : (
+        {loading ? <div className="loading">Loading...</div> : (
           <table>
             <thead>
-              <tr>
-                <th>Vehicle</th><th>Driver</th><th>Type</th><th>Scheduled</th>
-                <th>Completed</th><th>Status</th><th>Technician</th><th>Cost</th><th>Actions</th>
-              </tr>
+              <tr><th>Vehicle</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Completed</th><th>Status</th><th>Technician</th><th>Cost</th><th>Actions</th></tr>
             </thead>
             <tbody>
-              {currentList.map(r => (
+              {currentList.map((r) => (
                 <tr key={r.id}>
-                  <td style={{ fontWeight: 'bold' }}>{r.vehicle_plate || '-'}</td>
+                  <td>{r.vehicle_plate || '-'}</td>
                   <td>{r.driver_name || '-'}</td>
                   <td>{TYPE_LABELS[r.type] || r.type}</td>
                   <td>{r.scheduled_date}</td>
@@ -304,11 +263,9 @@ export default function PeriodicMaintenance({ canWork = false }) {
                   <td>{r.technician || '-'}</td>
                   <td>{Number(r.cost || 0).toLocaleString()}</td>
                   <td>
-                    {r.status === 'Pending' && canWork && (
-                      <button className="btn btn-success" style={{ padding: '5px 10px', fontSize: '11px', marginRight: '4px' }} onClick={() => handleComplete(r)}>Complete</button>
-                    )}
-                    {canWork && <button className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '11px', marginRight: '4px' }} onClick={() => handleEdit(r)}>Edit</button>}
-                    {canWork && <button className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '11px' }} onClick={() => handleDelete(r.id)}>Del</button>}
+                    {canWork && r.status === 'Pending' && <button className="btn btn-success" onClick={() => handleComplete(r)}>Complete</button>}
+                    {canWork && <button className="btn btn-primary" onClick={() => handleEdit(r)}>Edit</button>}
+                    {canWork && <button className="btn btn-danger" onClick={() => handleDelete(r.id)}>Del</button>}
                   </td>
                 </tr>
               ))}
@@ -317,18 +274,19 @@ export default function PeriodicMaintenance({ canWork = false }) {
         )}
       </div>
 
-      {/* Complete Modal */}
       {completing && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'white', padding: '24px', borderRadius: '10px', maxWidth: '480px', width: '90%' }}>
-            <h3 style={{ marginTop: 0 }}>Complete Maintenance</h3>
-            <p style={{ color: '#64748b', fontSize: '14px' }}>
-              {completing.vehicle_plate} — {TYPE_LABELS[completing.type] || completing.type}
-            </p>
-            <div className="form-group"><label>Completion Date</label><input type="date" value={completeForm.completedDate} onChange={e => setCompleteForm({ ...completeForm, completedDate: e.target.value })} /></div>
-            <div className="form-group"><label>Technician</label><input value={completeForm.technician} onChange={e => setCompleteForm({ ...completeForm, technician: e.target.value })} placeholder="Who performed this?" /></div>
-            <div className="form-group"><label>Total Cost (SAR)</label><input type="number" value={completeForm.cost} onChange={e => setCompleteForm({ ...completeForm, cost: Number(e.target.value) })} /></div>
-            <div className="form-group"><label>Notes</label><textarea value={completeForm.notes} onChange={e => setCompleteForm({ ...completeForm, notes: e.target.value })} rows={3} placeholder="What was done?"></textarea></div>
+        <div className="modal-overlay">
+          <div className="modal">
+            <h3>Complete Maintenance</h3>
+            <p>{completing.vehicle_plate} — {TYPE_LABELS[completing.type] || completing.type}</p>
+            <label>Completion Date</label>
+            <input type="date" value={completeForm.completedDate} onChange={(e) => setCompleteForm({ ...completeForm, completedDate: e.target.value })} />
+            <label>Technician</label>
+            <input value={completeForm.technician} onChange={(e) => setCompleteForm({ ...completeForm, technician: e.target.value })} />
+            <label>Total Cost (SAR)</label>
+            <input type="number" value={completeForm.cost} onChange={(e) => setCompleteForm({ ...completeForm, cost: Number(e.target.value) })} />
+            <label>Notes</label>
+            <textarea value={completeForm.notes} onChange={(e) => setCompleteForm({ ...completeForm, notes: e.target.value })} rows={3} />
             <div className="btn-row">
               {canWork && <button className="btn btn-success" onClick={handleCompleteSubmit}>Mark Completed</button>}
               <button className="btn btn-warning" onClick={() => setCompleting(null)}>Cancel</button>

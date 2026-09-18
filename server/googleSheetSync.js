@@ -306,7 +306,7 @@ export async function syncGoogleSheetVehicles() {
     const splitPlateCode = plateParts.slice(1).join(" ").trim();
 
     const result = await pool.query(
-      `SELECT id, current_km, plate_number, plate_code
+      `SELECT id, current_km, meter_updated_at, plate_number, plate_code
        FROM vehicles
        WHERE LOWER(TRIM(COALESCE(plate_number, ''))) = LOWER(TRIM($1))
           OR LOWER(TRIM(CONCAT_WS(' ', NULLIF(TRIM(plate_number), ''), NULLIF(TRIM(plate_code), '')))) = LOWER(TRIM($1))

@@ -79,7 +79,7 @@ export default function Notifications() {
           type: 'danger',
           icon: '🚨',
           title: 'Daily KM Reading Missing',
-          message: `${plate} — Driver: ${driver} — Phone: ${phone} — No odometer reading entered today`,
+          message: `${plate} — Driver: ${driver} — Phone: ${phone} — Current KM: ${Number(n.current_km || 0).toLocaleString()} — No odometer reading entered by 07:00`,
           tab: 'fleet-maintenance'
         });
       });

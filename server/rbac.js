@@ -82,13 +82,22 @@ async function handlePushRoute(req, res) {
 
   if (req.path === "/push/test" && req.method === "POST") {
     if (req.user?.role !== "Owner") return res.status(403).json({ success: false, error: "Owner only" });
-    const result = await query(`SELECT token FROM push_tokens WHERE user_id = $1 ORDER BY last_seen_at DESC`, [req.user.id]);
-    const sendResult = await sendFcmToTokens({
-      tokens: result.rows.map(row => row.token),
-      title: "Fleet ERP Test", body: "Push notifications are working correctly.",
-      data: { type: "test", icon: "🔔", url: "/" }
-    });
-    return res.json({ success: true, ...sendResult });
+    try {
+      const result = await query(`SELECT token FROM push_tokens WHERE user_id = $1 ORDER BY last_seen_at DESC`, [req.user.id]);
+      const sendResult = await sendFcmToTokens({
+        tokens: result.rows.map(row => row.token),
+        title: "Fleet ERP Test", body: "Push notifications are working correctly.",
+        data: { type: "test", icon: "🔔", url: "/" }
+      });
+      return res.json({ success: true, ...sendResult });
+    } catch (error) {
+      console.error("FCM test push error:", error);
+      return res.status(500).json({
+        success: false,
+        error: "FCM test failed",
+        message: error?.message || "Unknown FCM error"
+      });
+    }
   }
   return null;
 }

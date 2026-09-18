@@ -33,7 +33,8 @@ const aliases = {
     "current odometer", "current odometer km", "odometer", "odometer km",
     "odometer reading", "latest km", "latest odometer", "mileage", "current mileage"
   ],
-  active: ["active", "status", "vehicle status"]
+  active: ["active", "status", "vehicle status"],
+  date: ["date", "datetime", "timestamp", "record date", "date time", "created at"]
 };
 
 function normalize(value) {
@@ -153,6 +154,23 @@ function isInactive(value) {
   return ["inactive", "disabled", "sold", "disposed", "not active", "no"].includes(normalize(value));
 }
 
+function parseSheetDate(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const m = raw.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})(?:\\s+(\\d{1,2}):([0-5]\\d)(?::([0-5]\\d))?)?$/);
+  if (m) {
+    const day = Number(m[1]);
+    const month = Number(m[2]);
+    const year = Number(m[3]);
+    const hour = Number(m[4] || 0);
+    const minute = Number(m[5] || 0);
+    const second = Number(m[6] || 0);
+    return new Date(Date.UTC(year, month - 1, day, hour - 3, minute, second));
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export async function syncGoogleSheetVehicles() {
   if (!pool) throw new Error("DATABASE_URL is not configured");
 
@@ -190,6 +208,19 @@ export async function syncGoogleSheetVehicles() {
     throw new Error(`Vehicle/plate column not found. Headers: ${headers.join(", ")}`);
   }
 
+  // Records contains historical entries. Sync only the newest record for each vehicle.
+  const latestRows = new Map();
+  for (const values of rows.slice(1)) {
+    const plate = String(values[indexes.plate] ?? "").trim();
+    if (!plate) continue;
+    const dateRaw = indexes.date >= 0 ? String(values[indexes.date] ?? "").trim() : "";
+    const date = parseSheetDate(dateRaw);
+    const previous = latestRows.get(plate);
+    if (!previous || (date && (!previous.date || date.getTime() >= previous.date.getTime()))) {
+      latestRows.set(plate, { values, date, dateRaw });
+    }
+  }
+
   let matched = 0;
   let updated = 0;
   let unmatched = 0;
@@ -197,7 +228,7 @@ export async function syncGoogleSheetVehicles() {
   let kmUpdated = 0;
   const samples = [];
 
-  for (const values of rows.slice(1)) {
+  for (const { values, date, dateRaw } of latestRows.values()) {
     const plate = String(values[indexes.plate] ?? "").trim();
     if (!plate) continue;
 
@@ -247,6 +278,8 @@ export async function syncGoogleSheetVehicles() {
         plate,
         kmRaw,
         kmParsed: km,
+        dateRaw,
+        sheetDate: date ? date.toISOString() : null,
         existingKm: Number(result.rows[0].current_km || 0),
         matchedDbPlate: `${result.rows[0].plate_number || ""} ${result.rows[0].plate_code || ""}`.trim()
       });
@@ -268,10 +301,10 @@ export async function syncGoogleSheetVehicles() {
     // must disappear only after a real KM entry is recorded in ERP.
     if (km !== null) {
       const existingKm = Number(result.rows[0].current_km || 0);
-      const nextKm = Math.max(km, existingKm);
-      add("current_km = ?", nextKm);
-      if (nextKm !== existingKm) kmUpdated += 1;
+      add("current_km = ?", km);
+      if (km !== existingKm) kmUpdated += 1;
     }
+    if (date) add("meter_updated_at = ?", date.toISOString());
 
     if (active !== null) add("status = ?", active ? "Active" : "Inactive");
 
@@ -294,7 +327,8 @@ export async function syncGoogleSheetVehicles() {
       plate: indexes.plate >= 0 ? headers[indexes.plate] : null,
       driver: indexes.driver >= 0 ? headers[indexes.driver] : null,
       phone: indexes.phone >= 0 ? headers[indexes.phone] : null,
-      km: indexes.km >= 0 ? headers[indexes.km] : null
+      km: indexes.km >= 0 ? headers[indexes.km] : null,
+      date: indexes.date >= 0 ? headers[indexes.date] : null
     },
     samples
   };

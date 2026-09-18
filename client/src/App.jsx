@@ -34,7 +34,7 @@ const TAB_LABELS = {
   gm: 'GM Dashboard', fleet: '🚗 Fleet', operations: '🛠️ Operations',
   troubleshooter: '🧠 Troubleshooter', tickets: 'Tickets', reports: 'Reports',
   mytickets: '📋 My Tickets', 'fleet-tickets': '🚗 Vehicle Tickets', 'advanced-reports': '📊 Advanced Reports',
-  'support-service': '🛠️ Support & Service',
+  'support-service': '🛠️ Support & Service', 'support-manager': '👀 Support Manager',
   drivers: '👨‍🔧 Driver', users: 'Users', audit: 'Audit Log', backup: 'Backup'
 };
 const writeLog = (user, action, entityType, entityId, details) => {

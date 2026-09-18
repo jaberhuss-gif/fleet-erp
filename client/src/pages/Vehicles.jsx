@@ -163,13 +163,13 @@ export default function Vehicles({ onViewVehicle, canWork = false }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
           
           <div className="btn-row" style={{ margin: 0 }}>
-            <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
+            {canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
               {showForm ? 'Cancel' : '+ Add Vehicle'}
-            </button>
-            <label className="btn btn-success" style={{ cursor: 'pointer', margin: 0 }}>
+            </button>}
+            {canWork && <label className="btn btn-success" style={{ cursor: 'pointer', margin: 0 }}>
               Import CSV
-              {canWork && <input type="file" accept=".csv" onChange={handleFileImport} style={{ display: 'none' }} />}
-            </label>
+              <input type="file" accept=".csv" onChange={handleFileImport} style={{ display: 'none' }} />
+            </label>}
             <button className="btn btn-warning" onClick={() => exportToCSV(vehicles, "vehicles", [{key:"plate",label:"Plate"},{key:"driver",label:"Driver"},{key:"phone",label:"Phone"},{key:"location",label:"Location"},{key:"currentKm",label:"Current KM"},{key:"lastOilKm",label:"Last Oil KM"},{key:"sinceOil",label:"Since Oil"},{key:"status",label:"Status"}])}>Export CSV</button>
             {canWork && <button className="btn btn-danger" onClick={handleDeleteAll}>Delete All</button>}
           </div>
@@ -283,7 +283,7 @@ export default function Vehicles({ onViewVehicle, canWork = false }) {
                   </td>
                   <td>
                     <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => onViewVehicle && onViewVehicle(v.id)}>View</button>
-                    <button className="btn btn-success" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleQuickEdit(v)}>Reading</button>
+                    {canWork && <button className="btn btn-success" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleQuickEdit(v)}>Reading</button>}
                     {canWork && <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(v.id)}>Delete</button>}
                   </td>
                 </tr>

@@ -43,6 +43,9 @@ const ROLE_ACCESS_PRESETS = {
 function getModuleFromPath(pathname) {
   const parts = pathname.replace(/^\/+/, "").split("/");
   if (parts[0] !== "api") return null;
+  // Users may read their own access matrix through the protected route;
+  // the route handler itself enforces Owner-or-self access.
+  if (/^\/api\/users\/[^/]+\/access\/?$/.test(pathname)) return null;
   const route = parts[1] || "";
   const modules = {
     vehicles: "fleet",

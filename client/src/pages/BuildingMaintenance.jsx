@@ -5,7 +5,7 @@ import WorkOrders from './WorkOrders';
 import Projects from './Projects';
 import Purchases from './Purchases';
 
-export default function BuildingMaintenance() {
+export default function BuildingMaintenance({ user, access = {} }) {
   const [sub, setSub] = useState('dashboard');
 
   return (
@@ -20,7 +20,7 @@ export default function BuildingMaintenance() {
 
       {sub === 'dashboard' && <BuildingDashboard />}
       {sub === 'sites' && <Sites />}
-      {sub === 'work-orders' && <WorkOrders />}
+      {sub === 'work-orders' && <WorkOrders user={user} access={access} />}
       {sub === 'projects' && <Projects />}
       {sub === 'purchases' && <Purchases />}
     </div>

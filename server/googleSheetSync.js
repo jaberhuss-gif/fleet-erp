@@ -27,7 +27,7 @@ const aliases = {
   phone: ["phone", "mobile", "mobile number", "driver phone", "driver mobile", "phone number"],
   km: [
     "km", "kilometer", "kilometre", "kilometres", "kilometers",
-    "current km", "current_km", "current kilometer", "current kilometre",
+    "current km", "current_km", "CurrentKM", "currentkm", "current kilometer", "current kilometre",
     "current odometer", "current odometer km", "odometer", "odometer km",
     "odometer reading", "latest km", "latest odometer", "mileage", "current mileage"
   ],

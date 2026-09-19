@@ -416,6 +416,122 @@ export async function syncGoogleSheetVehicles() {
   };
 }
 
+
+export async function getDailyVehicleSubmissionReport(targetDate = null) {
+  if (!pool) throw new Error("DATABASE_URL is not configured");
+
+  // The vehicle list is the fixed operational source of truth.
+  // Driver identity is deliberately NOT used to determine compliance.
+  const vehiclesResult = await pool.query(`
+    SELECT
+      v.id,
+      v.plate_number,
+      v.plate_code,
+      v.driver,
+      v.phone,
+      v.location,
+      v.status
+    FROM vehicles v
+    WHERE COALESCE(LOWER(TRIM(v.status)), '') NOT IN ('inactive', 'sold', 'disposed', 'disabled')
+    ORDER BY v.plate_number, v.plate_code
+  `);
+
+  const response = await fetch(SHEET_URL, {
+    headers: { "User-Agent": "Fleet-ERP-DailyVehicleSubmission/1.0" }
+  });
+  if (!response.ok) throw new Error(`Google Sheet HTTP ${response.status}`);
+
+  const rows = parseCsv(await response.text());
+  if (rows.length < 1) throw new Error("Google Sheet contains no rows");
+
+  const headers = rows[0];
+  const plateIndex = findIndex(headers, aliases.plate);
+  const dateIndex = findIndex(headers, aliases.date);
+
+  if (plateIndex < 0) {
+    throw new Error(`Vehicle/plate column not found. Headers: ${headers.join(", ")}`);
+  }
+  if (dateIndex < 0) {
+    throw new Error(`Date/time column not found. Headers: ${headers.join(", ")}`);
+  }
+
+  const todayRiyadh = () => {
+    const d = new Date(Date.now() + RIYADH_OFFSET_MS);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  };
+
+  const wantedDate = String(targetDate || todayRiyadh()).slice(0, 10);
+
+  const normalizePlateKey = (value) =>
+    String(value || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+
+  const sheetByPlate = new Map();
+
+  // Keep the latest timestamp for each vehicle on the requested date.
+  for (const values of rows.slice(1)) {
+    const plate = String(values[plateIndex] ?? "").trim();
+    const rawDate = String(values[dateIndex] ?? "").trim();
+    if (!plate || !rawDate) continue;
+
+    const parsed = parseSheetDate(rawDate);
+    if (!parsed) continue;
+
+    const localDate = new Date(parsed.getTime() + RIYADH_OFFSET_MS);
+    const sheetDate =
+      `${localDate.getUTCFullYear()}-${String(localDate.getUTCMonth() + 1).padStart(2, "0")}-${String(localDate.getUTCDate()).padStart(2, "0")}`;
+
+    if (sheetDate !== wantedDate) continue;
+
+    const key = normalizePlateKey(plate);
+    const existing = sheetByPlate.get(key);
+    if (!existing || parsed.getTime() > existing.timestampMs) {
+      sheetByPlate.set(key, {
+        sheetPlate: plate,
+        rawDate,
+        timestampMs: parsed.getTime(),
+        timestamp: parsed.toISOString()
+      });
+    }
+  }
+
+  const records = vehiclesResult.rows.map((v) => {
+    const plate = `${v.plate_number || ""} ${v.plate_code || ""}`.trim();
+    const key = normalizePlateKey(plate);
+    const submitted = sheetByPlate.get(key) || null;
+
+    return {
+      vehicleId: v.id,
+      vehicle: plate,
+      driver: v.driver || "",
+      phone: v.phone || "",
+      location: v.location || "",
+      submittedToday: !!submitted,
+      submissionTimestamp: submitted?.timestamp || null,
+      sheetPlate: submitted?.sheetPlate || null,
+      evidenceDateTime: submitted?.rawDate || null,
+      status: submitted ? "Submitted" : "Not Submitted"
+    };
+  });
+
+  const submitted = records.filter(r => r.submittedToday).length;
+  const missing = records.length - submitted;
+
+  return {
+    success: true,
+    reportDate: wantedDate,
+    generatedAt: new Date().toISOString(),
+    source: "Google Sheet",
+    fixedVehicleCount: records.length,
+    expectedVehicleCount: 36,
+    vehicleCountMatchesExpected: records.length === 36,
+    submittedCount: submitted,
+    missingCount: missing,
+    submissionPercent: records.length ? (submitted / records.length) * 100 : 0,
+    missingVehicles: records.filter(r => !r.submittedToday),
+    records
+  };
+}
+
 async function ensureReminderTable() {
   if (!pool) throw new Error("DATABASE_URL is not configured");
 

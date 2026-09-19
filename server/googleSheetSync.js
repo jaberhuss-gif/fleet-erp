@@ -2,7 +2,6 @@ import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 import pg from "pg";
-import { sendWhatsAppTemplate } from "./whatsapp.js";
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -766,38 +765,6 @@ export async function getDailyVehicleSubmissionReport(targetDate = null) {
     missingVehicles: records.filter(r => !r.submittedToday),
     records
   };
-}
-
-async function ensureReminderTable() {
-  if (!pool) throw new Error("DATABASE_URL is not configured");
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS km_daily_reminders (
-      id BIGSERIAL PRIMARY KEY,
-      vehicle_id BIGINT NOT NULL,
-      reminder_date DATE NOT NULL,
-      phone TEXT,
-      channel TEXT NOT NULL DEFAULT 'whatsapp',
-      status TEXT NOT NULL DEFAULT 'sent',
-      provider_response TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(vehicle_id, reminder_date, channel)
-    )
-  `);
-}
-
-function buildKmReminder(vehicle) {
-  const plate = `${vehicle.plate_number || ""} ${vehicle.plate_code || ""}`.trim();
-  return { plate, driver: vehicle.driver || "Driver" };
-}
-
-async function sendMessage(phone, vehicle) {
-  const { plate, driver } = buildKmReminder(vehicle);
-
-  return sendWhatsAppTemplate({
-    phone,
-    bodyParameters: [plate, driver]
-  });
 }
 
 async function runDailyKmReminders() {

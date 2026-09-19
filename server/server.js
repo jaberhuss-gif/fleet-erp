@@ -3,7 +3,7 @@ import cors from "cors";
 import { verifyToken, login, listUsers, createUser, updateUser, deleteUser } from "./auth.js";
 import { requirePermission, ACCESS_MODULES, getUserAccess, saveUserAccess, ensureUserAccessTable, hasModuleAccess } from "./rbac.js";
 import { getKmDailyNotifications, reconcileAndNotify, getDriverDailyKmStatus } from "./kmDailyNotifications.js";
-import { syncGoogleSheetVehicles } from "./googleSheetSync.js";
+import { syncGoogleSheetVehicles, getDailyVehicleSubmissionReport } from "./googleSheetSync.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -1177,7 +1177,7 @@ app.get("/api/backup/download/:name", async (req, res) => {
 });
 
 // ===== GOOGLE SHEET SYNC =====
-app.post("/api/google-sheet-sync", requireRole("Owner"), async (req, res) => {
+app.get("/api/google-sheet-submission-report", async (req, res) => {\n  try {\n    const result = await getDailyVehicleSubmissionReport(req.query.date || null);\n    res.json(result);\n  } catch (e) {\n    console.error("Daily vehicle submission report failed:", e);\n    res.status(500).json({ success: false, error: e.message });\n  }\n});\n\napp.post("/api/google-sheet-sync", requireRole("Owner"), async (req, res) => {
   try {
     const result = await syncGoogleSheetVehicles();
     res.json({ success: true, ...result });

@@ -4,7 +4,7 @@ import Projects from './Projects';
 import Warehouse from './Warehouse';
 import PurchaseRequests from './PurchaseRequests';
 
-export default function OperationsHub({ access = {}, user }) {
+export default function Maintenance & ProjectsHub({ access = {}, user }) {
   const can = (module, mode = 'view') => user?.role === 'Owner' || !!access?.[module]?.[mode === 'work' ? 'can_work' : 'can_view'];
 
   const tabs = [
@@ -30,7 +30,7 @@ export default function OperationsHub({ access = {}, user }) {
           <div>
             <h1 style={{ margin: 0 }}>Operations</h1>
             <p style={{ margin: '6px 0 0', color: '#64748b' }}>
-              Building, Projects, Warehouse and approved purchase workflow
+              Maintenance, Projects and Warehouse in one workspace
             </p>
           </div>
           <div style={{ fontSize: 13, color: '#64748b' }}>

@@ -455,24 +455,41 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
       [`DAILY_VEHICLE_SUBMISSION|${record.vehicle}|${reportDate}`]
     );
 
-    // Match only the exact vehicle/date ticket, including legacy tickets.
-    // Never use a broad vehicle/date OR condition that can accidentally match
-    // another ticket for the same vehicle.
+    // Match the exact vehicle/date using vehicle_id first, while also
+    // supporting legacy tickets created before the structured title/description
+    // was introduced. This makes reconciliation idempotent across deployments
+    // and prevents one vehicle/day from accumulating duplicate tickets.
     const existing = await client.query(`
-      SELECT id, status, title, description, opened_at
+      SELECT id, status, title, description, opened_at, vehicle_id
       FROM tickets
       WHERE category = $1
         AND status IN ('Open', 'Acknowledged')
         AND (
-          title = $2
-          OR title = 'Daily Vehicle Submission'
-          OR description = $3
-          OR description = $4
-          OR description LIKE $5
+          (
+            vehicle_id = $2
+            AND (
+              title = $3
+              OR title = 'Daily Vehicle Submission'
+              OR description = $4
+              OR description = $5
+              OR description LIKE $6
+            )
+          )
+          OR (
+            vehicle_id IS NULL
+            AND (
+              title = $3
+              OR title = 'Daily Vehicle Submission'
+              OR description = $4
+              OR description = $5
+              OR description LIKE $6
+            )
+          )
         )
       ORDER BY id ASC
     `, [
       DAILY_SUBMISSION_TICKET_CATEGORY,
+      record.vehicleId,
       title,
       legacyDescription,
       `${legacyDescription}.`,
@@ -486,7 +503,8 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
         text.includes(reportDate) &&
         (
           text.includes("Daily Vehicle Submission") ||
-          text.includes("Daily submission missing for")
+          text.includes("Daily submission missing for") ||
+          text.includes("DAILY_VEHICLE_SUBMISSION_MISSING")
         )
       );
     });

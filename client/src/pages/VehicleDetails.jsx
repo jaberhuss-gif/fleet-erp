@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../api/client';
 
-const tabs=['Overview','KM','Maintenance','Oil','Inspection','Documents','Alerts','History'];
+const tabs=['Overview','KM','Maintenance','Oil','Tires','Inspection','Documents','Alerts','History'];
 
 export default function VehicleDetails({vehicleId,onBack}){
  const [data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[tab,setTab]=useState('Overview');
@@ -9,7 +9,7 @@ export default function VehicleDetails({vehicleId,onBack}){
  if(loading)return <div className="loading">Loading Vehicle 360...</div>;
  if(error)return <div className="alert alert-error">{error}</div>;
  if(!data)return <div className="loading">Vehicle not found.</div>;
- const v=data.vehicle,alerts=data.alerts||[],readings=data.readings||[],maintenance=data.maintenance||[],tickets=data.tickets||[],submissions=data.submissions||[],compliance=data.compliance||[];
+ const v=data.vehicle,alerts=data.alerts||[],readings=data.readings||[],maintenance=data.maintenance||[],tickets=data.tickets||[],submissions=data.submissions||[],compliance=data.compliance||[],schedules=data.schedules||[],documents=data.documents||[],tires=data.tires||[];
  const sinceOil=Math.max(0,Number(v.current_km||0)-Number(v.last_oil_km||0)),interval=Number(v.oil_interval_km||5000),remaining=Math.max(0,interval-sinceOil);
  const openAlerts=alerts.filter(a=>a.status!=='Closed'),critical=openAlerts.filter(a=>a.severity==='Critical').length,high=openAlerts.filter(a=>a.severity==='High').length;
  const health=critical?'Critical':high?'Attention':v.status==='Active'?'Operational':'Unavailable';
@@ -40,11 +40,12 @@ export default function VehicleDetails({vehicleId,onBack}){
     <div className="panel"><h2>Compliance</h2><Info label="Inspection Due" value={v.inspection_due_date||'Not recorded'}/><Info label="Registration" value={v.registration_expiry||'Not recorded'}/><Info label="Insurance" value={v.insurance_expiry||'Not recorded'}/><Info label="Last KM Update" value={v.meter_updated_at?String(v.meter_updated_at).slice(0,10):'Not recorded'}/></div>
    </div>}
   {tab==='KM'&&<DataTable rows={readings} columns={['reading_date','reading_km','notes']} headers={['Date','KM','Notes']} empty="No V2 KM readings yet."/>}
-  {tab==='Maintenance'&&<DataTable rows={maintenance} columns={['wo_no','reported_date','category','status','contractor_cost','parts_cost']} headers={['WO','Date','Category','Status','Contractor','Parts']} empty="No maintenance work orders for this vehicle."/>}
+  {tab==='Maintenance'&&<><DataTable rows={maintenance} columns={['wo_no','reported_date','category','status','contractor_cost','parts_cost']} headers={['WO','Date','Category','Status','Contractor','Parts']} empty="No maintenance work orders for this vehicle."/><DataTable rows={schedules} columns={['maintenance_type','next_due_km','next_due_date','status']} headers={['Periodic Service','Next KM','Next Date','Status']} empty="No periodic maintenance schedule recorded."/></>}
   {tab==='Oil'&&<div className="panel"><h2>Oil Service</h2><div className="cards-grid"><div className="card"><h3>Last Oil KM</h3><div className="big-number">{fmt(v.last_oil_km)}</div></div><div className="card"><h3>KM Since Oil</h3><div className="big-number">{fmt(sinceOil)}</div></div><div className="card"><h3>Interval</h3><div className="big-number">{fmt(interval)}</div></div><div className="card"><h3>Remaining</h3><div className="big-number">{fmt(remaining)}</div></div></div><Info label="Last Oil Change Date" value={v.last_oil_change_date||'Not recorded'}/></div>}
-  {tab==='Inspection'&&<div className="panel"><h2>Government & Document Dates</h2><Info label="Last Inspection" value={v.inspection_last_date||'Not recorded'}/><Info label="Inspection Due" value={v.inspection_due_date||'Not recorded'}/><Info label="Registration Expiry" value={v.registration_expiry||'Not recorded'}/><Info label="Insurance Expiry" value={v.insurance_expiry||'Not recorded'}/></div>}
-  {tab==='Documents'&&<div className="panel"><h2>Documents</h2><div className="alert alert-info">Document storage is prepared in V2 workflow. No Legacy documents are copied automatically.</div></div>}
-  {tab==='Alerts'&&<AlertList rows={alerts}/>}
+  {tab==='Documents'&&<DataTable rows={documents} columns={['document_type','document_number','issue_date','expiry_date','file_url']} headers={['Document','Number','Issue','Expiry','File']} empty="No vehicle documents recorded."/>}
+  {tab==='Alerts'&&<AlertList rows={alerts}/>} 
+  {tab==='Tires'&&<DataTable rows={tires} columns={['position','brand','size','serial_number','installed_km','condition','status']} headers={['Position','Brand','Size','Serial','Installed KM','Condition','Status']} empty="No tire records recorded."/>
+  {tab==='Inspection'&&<><div className="panel"><h2>Inspection & Compliance</h2><Info label="Last Inspection" value={v.inspection_last_date||'Not recorded'}/><Info label="Inspection Due" value={v.inspection_due_date||'Not recorded'}/><Info label="Registration Expiry" value={v.registration_expiry||'Not recorded'}/><Info label="Insurance Expiry" value={v.insurance_expiry||'Not recorded'}/></div><DataTable rows={schedules} columns={['maintenance_type','next_due_km','next_due_date','status']} headers={['Periodic Service','Next KM','Next Date','Status']} empty="No periodic schedule."/></>}
   {tab==='History'&&<div className="cards-grid"><DataTable rows={submissions} columns={['submission_date','status','sheet_driver']} headers={['Date','Daily Submission','Driver']} empty="No daily submissions yet."/><DataTable rows={compliance} columns={['compliance_date','status']} headers={['Date','KM Compliance']} empty="No KM compliance records yet."/><DataTable rows={tickets} columns={['opened_at','title','priority','status']} headers={['Opened','Ticket','Priority','Status']} empty="No vehicle tickets yet."/></div>}
  </div>;
 }

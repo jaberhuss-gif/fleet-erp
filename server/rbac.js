@@ -57,6 +57,32 @@ function getModuleFromPath(pathname) {
   if (/^\/api\/users\/[^/]+\/access\/?$/.test(fullPath)) return null;
 
   const route = parts[1] || "";
+
+  // V2 uses /api/v2/<resource>. Keep the same RBAC matrix as the
+  // legacy API instead of allowing an authenticated user to bypass
+  // module permissions simply because the route is versioned.
+  if (route === "v2") {
+    const v2Route = parts[2] || "";
+    const v2Modules = {
+      "fleet-dashboard": "gm",
+      "vehicle-alerts": "fleet",
+      vehicles: "fleet",
+      drivers: "drivers",
+      sites: "support",
+      maintenance: "building",
+      projects: "projects",
+      warehouse: "warehouse",
+      "purchase-requests": "purchase_requests",
+      tickets: "tickets",
+      financial: "reports",
+      "daily-submission": "fleet",
+      "daily-km": "fleet",
+      "daily-exceptions": "fleet",
+      "migration-preview": "backup"
+    };
+    return v2Modules[v2Route] || null;
+  }
+
   const modules = {
     vehicles: "fleet",
     drivers: "drivers",

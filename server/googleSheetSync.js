@@ -438,9 +438,25 @@ function normalizePlateKey(value) {
 
 async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
   const marker = `${DAILY_SUBMISSION_TICKET_MARKER}|vehicle=${record.vehicleId}|date=${reportDate}`;
+  const title = `Daily Vehicle Submission Missing — ${record.vehicle} — ${reportDate}`;
+  const description = `Daily submission missing for ${record.vehicle} on ${reportDate}.`;
 
   const existing = await pool.query(`
     SELECT id, status
+    FROM tickets
+    WHERE vehicle_id = $1
+      AND category = $2
+      AND title = $3
+      AND status IN ('Open', 'Acknowledged')
+    ORDER BY id DESC
+    LIMIT 1
+  `, [record.vehicleId, DAILY_SUBMISSION_TICKET_CATEGORY, title]);
+
+  if (existing.rows[0]) return existing.rows[0];
+
+  // Convert legacy long-description tickets to the new short format.
+  const legacy = await pool.query(`
+    SELECT id
     FROM tickets
     WHERE vehicle_id = $1
       AND category = $2
@@ -450,7 +466,16 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
     LIMIT 1
   `, [record.vehicleId, DAILY_SUBMISSION_TICKET_CATEGORY, `%${marker}%`]);
 
-  if (existing.rows[0]) return existing.rows[0];
+  if (legacy.rows[0]) {
+    await pool.query(`
+      UPDATE tickets
+      SET title = $1,
+          description = $2
+      WHERE id = $3
+    `, [title, description, legacy.rows[0].id]);
+
+    return { id: legacy.rows[0].id, status: "Open" };
+  }
 
   const result = await pool.query(`
     INSERT INTO tickets
@@ -462,15 +487,14 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
     RETURNING id, status
   `, [
     record.vehicleId,
-    `Daily Vehicle Submission Missing — ${record.vehicle}`,
+    title,
     record.location || "",
     DAILY_SUBMISSION_TICKET_CATEGORY,
-    `Daily submission missing for ${record.vehicle} on ${reportDate}.` + "\\n" + marker
+    description
   ]);
 
   return result.rows[0];
 }
-
 async function closeDailyVehicleSubmissionTicket(record, reportDate, evidenceDateTime) {
   const marker = `${DAILY_SUBMISSION_TICKET_MARKER}|vehicle=${record.vehicleId}|date=${reportDate}`;
 

@@ -588,17 +588,33 @@ async function closeDailyVehicleSubmissionTicket(record, reportDate, evidenceDat
     WHERE category = $4
       AND status IN ('Open', 'Acknowledged')
       AND (
-        title = $5
-        OR title = 'Daily Vehicle Submission'
-        OR description = $6
-        OR description = $7
-        OR description LIKE $8
+        (
+          vehicle_id = $5
+          AND (
+            title = $6
+            OR title = 'Daily Vehicle Submission'
+            OR description = $7
+            OR description = $8
+            OR description LIKE $9
+          )
+        )
+        OR (
+          vehicle_id IS NULL
+          AND (
+            title = $6
+            OR title = 'Daily Vehicle Submission'
+            OR description = $7
+            OR description = $8
+            OR description LIKE $9
+          )
+        )
       )
   `, [
     `Google Sheet submission detected for ${record.vehicle} on ${reportDate}. Evidence timestamp: ${evidenceDateTime || "record timestamp available"}.`,
     title,
     `Daily submission received for ${record.vehicle} on ${reportDate}.`,
     DAILY_SUBMISSION_TICKET_CATEGORY,
+    record.vehicleId,
     title,
     legacyDescription,
     `${legacyDescription}.`,

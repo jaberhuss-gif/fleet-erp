@@ -24,6 +24,10 @@ const pool = process.env.DATABASE_URL
     })
   : null;
 
+let runInProgress = false;
+let syncTimer = null;
+let kmSevenAmTimer = null;
+
 const aliases = {
   plate: ["plate", "plate number", "plate_number", "vehicle", "vehicle number", "vehicle no", "vehicle no.", "car plate", "carplate", "registration", "registration number"],
   code: ["plate code", "plate_code", "code"],

@@ -8,9 +8,12 @@ const date=v=>{const x=s(v); return /^\d{4}-\d{2}-\d{2}$/.test(x)?x:null;};
 export async function previewLegacyVehicleMigration(){
  const result=await legacyQuery("SELECT id,plate_number,plate_code,make,model,year,status,location,driver,phone,current_km,last_oil_km,oil_change_interval,last_oil_change_date,meter_updated_at,created_at,updated_at FROM vehicles ORDER BY id");
  const existing=(await v2Query("SELECT legacy_vehicle_id,plate_number,plate_code FROM fleet_erp_v2.vehicles ORDER BY legacy_vehicle_id")).rows;
- const seen=new Set(existing.map(x=>String(x.legacy_vehicle_id)));
- const rows=result.rows.map(v=>({legacyId:v.id,plate:[s(v.plate_number),s(v.plate_code)].filter(Boolean).join(" "),location:s(v.location),driver:s(v.driver),currentKm:n(v.current_km),alreadyMigrated:seen.has(String(v.id))}));
- return {sourceCount:rows.length,alreadyMigrated:rows.filter(x=>x.alreadyMigrated).length,pending:rows.filter(x=>!x.alreadyMigrated).length,rows};
+ const seen=new Set(existing.filter(x=>x.legacy_vehicle_id!=null).map(x=>String(x.legacy_vehicle_id)));
+ const normalizedPlate=v=>[s(v.plate_number),s(v.plate_code).toUpperCase()].filter(Boolean).join(" ").replace(/\\s+/g," ").trim();
+ const plateCounts=new Map();
+ for(const v of result.rows){const k=normalizedPlate(v).toUpperCase();plateCounts.set(k,(plateCounts.get(k)||0)+1);}
+ const rows=result.rows.map(v=>({legacyId:v.id,plate:normalizedPlate(v),location:s(v.location),driver:s(v.driver),currentKm:n(v.current_km),alreadyMigrated:seen.has(String(v.id)),duplicatePlate:(plateCounts.get(normalizedPlate(v).toUpperCase())||0)>1}));
+ return {sourceCount:rows.length,alreadyMigrated:rows.filter(x=>x.alreadyMigrated).length,pending:rows.filter(x=>!x.alreadyMigrated).length,duplicatePlates:rows.filter(x=>x.duplicatePlate).length,rows};
 }
 
 export async function migrateLegacyVehicles(){

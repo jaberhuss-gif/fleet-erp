@@ -27,6 +27,7 @@ export async function refreshVehicleAlerts(){
  const vehicles=(await v2Query(`SELECT v.id,v.plate_number,v.plate_code,v.current_km,v.last_oil_km,v.oil_interval_km,v.inspection_due_date,v.registration_expiry,v.insurance_expiry,v.status FROM fleet_erp_v2.vehicles v`)).rows;
  for(const v of vehicles){
    const today=new Date().toISOString().slice(0,10);
+   const plate=[v.plate_number,v.plate_code].filter(Boolean).join(' ');
    const kmToday=(await v2Query("SELECT 1 FROM fleet_erp_v2.daily_km_compliance WHERE vehicle_id=$1 AND compliance_date=$2 AND status='Submitted' LIMIT 1",[v.id,today])).rows.length>0;
    const subToday=(await v2Query("SELECT 1 FROM fleet_erp_v2.daily_vehicle_submission WHERE vehicle_id=$1 AND submission_date=$2 AND status='Submitted' LIMIT 1",[v.id,today])).rows.length>0;
    if(v.status==='Active' && !kmToday){
@@ -35,7 +36,6 @@ export async function refreshVehicleAlerts(){
    if(v.status==='Active' && !subToday){
      await v2Query(`INSERT INTO fleet_erp_v2.vehicle_alerts(vehicle_id,alert_type,severity,title,message,responsible_role,due_date) VALUES($1,'DAILY_SUBMISSION_MISSING','High','Daily vehicle submission missing',$2,'FleetSupervisor',CURRENT_DATE) ON CONFLICT(vehicle_id,alert_type,alert_date) DO UPDATE SET message=EXCLUDED.message,status=CASE WHEN fleet_erp_v2.vehicle_alerts.status='Closed' THEN 'Open' ELSE fleet_erp_v2.vehicle_alerts.status END,updated_at=CURRENT_TIMESTAMP`,[v.id,plate+' has no Google Sheet daily submission for today.']);
    }
-   const plate=[v.plate_number,v.plate_code].filter(Boolean).join(' ');
    const sinceOil=Number(v.current_km||0)-Number(v.last_oil_km||0);
    if(sinceOil >= Number(v.oil_interval_km||5000)){
      await v2Query(`INSERT INTO fleet_erp_v2.vehicle_alerts(vehicle_id,alert_type,severity,title,message,responsible_role,due_date) VALUES($1,'OIL_OVERDUE','Critical','Oil service overdue',$2,'FleetSupervisor',CURRENT_DATE) ON CONFLICT(vehicle_id,alert_type,alert_date) DO UPDATE SET message=EXCLUDED.message,severity=EXCLUDED.severity,status=CASE WHEN fleet_erp_v2.vehicle_alerts.status='Closed' THEN 'Open' ELSE fleet_erp_v2.vehicle_alerts.status END,updated_at=CURRENT_TIMESTAMP`,[v.id,plate+' has '+Math.max(0,sinceOil).toLocaleString()+' km since the last oil change.']);

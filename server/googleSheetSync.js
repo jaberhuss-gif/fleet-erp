@@ -695,6 +695,15 @@ async function run() {
     console.error("[GoogleSheetSync]", error.message);
   }
 
+  // Reconcile the fixed 36-vehicle daily submission compliance on every
+  // background sync so missing tickets are created automatically and
+  // submitted vehicles close their ticket automatically.
+  try {
+    console.log("[DailyVehicleSubmission]", JSON.stringify(await getDailyVehicleSubmissionReport()));
+  } catch (error) {
+    console.error("[DailyVehicleSubmission]", error.message);
+  }
+
   try {
     console.log("[KMDailyReminder]", JSON.stringify(await runDailyKmReminders()));
   } catch (error) {

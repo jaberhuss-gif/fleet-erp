@@ -25,11 +25,14 @@ app.use(express.json({ limit: "10mb" }));
 // GLOBAL API AUTHENTICATION
 // ============================================================
 app.use("/api", async (req, res, next) => {
-  if (req.path === "/health") return next();
-  if (req.path === "/v2/health") return next();
-  if (req.path === "/v2/migration/vehicles/preview") return next();
-  if (req.path === "/v2/migration/vehicles/run") return next();
-  if (req.path === "/auth/login") return next();
+  const publicApiPaths = new Set([
+    "/api/health",
+    "/api/v2/health",
+    "/api/v2/migration/vehicles/preview",
+    "/api/v2/migration/vehicles/run",
+    "/api/auth/login"
+  ]);
+  if (publicApiPaths.has(req.originalUrl.split("?")[0])) return next();
   return requireAuth(req, res, (err) => {
     if (err) return next(err);
     if (req.user?.role === "GM" && ["POST","PUT","PATCH","DELETE"].includes(req.method)) {

@@ -78,6 +78,7 @@ function getModuleFromPath(pathname) {
       "daily-submission": "fleet",
       "daily-km": "fleet",
       "daily-exceptions": "fleet",
+      "migration": "backup",
       "migration-preview": "backup"
     };
     return v2Modules[v2Route] || null;

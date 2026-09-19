@@ -465,12 +465,7 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
     `Daily Vehicle Submission Missing — ${record.vehicle}`,
     record.location || "",
     DAILY_SUBMISSION_TICKET_CATEGORY,
-    `${marker}
-No Google Sheet submission record was found for this vehicle on ${reportDate}.
-Vehicle: ${record.vehicle}
-Driver reference: ${record.driver || "Unassigned"}
-Phone reference: ${record.phone || "No phone"}
-The ticket will close automatically when a Google Sheet record for this vehicle/date is detected.`
+    `Daily submission missing for ${record.vehicle} on ${reportDate}.` + "\\n" + marker
   ]);
 
   return result.rows[0];

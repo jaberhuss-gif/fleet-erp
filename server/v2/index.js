@@ -2,14 +2,14 @@ import express from "express";
 import {ensureV2Schema,v2Enabled} from "./db.js";
 import {getFinancialReportV2} from "./financial.js";
 import {upsertDailySubmission,upsertDailyKm,createMaintenanceWorkOrder,addMaintenancePart,createProject,addProjectPart,listDailyExceptions} from "./workflow.js";
-import {listVehicles,getVehicle,updateVehicle,recordOilChange,createVehicle,listDrivers,createDriver,listSites,createSite,listProjects,listMaintenance,listWarehouse,seedWarehouseLocations,listPurchaseRequests,createPurchaseRequest,listTickets,createTicket} from "./services.js";
+import {listVehicles,getVehicle,updateVehicle,recordOilChange,createVehicle,listDrivers,createDriver,listSites,createSite,listProjects,listMaintenance,listWarehouse,seedWarehouseLocations,listPurchaseRequests,createPurchaseRequest,listTickets,createTicket,listVehicleAlerts,refreshVehicleAlerts,closeVehicleAlert} from "./services.js";
 import {buildFmmsMigrationPreview} from "./fmms-preview.js";
 export async function mountV2(app){
  if(!v2Enabled()){console.log("[ERP V2] disabled: V2_DATABASE_URL is not configured");return false;}
  await ensureV2Schema();
  const r=express.Router();
  r.get("/health",async(_q,res)=>res.json({success:true,version:"v2"}));
- r.get("/vehicles",async(_q,res)=>{try{res.json({success:true,vehicles:await listVehicles()});}catch(e){res.status(500).json({success:false,error:e.message});}});
+ r.get("/vehicle-alerts",async(_q,res)=>{try{res.json({success:true,alerts:await listVehicleAlerts()});}catch(e){res.status(500).json({success:false,error:e.message});}});\n r.post("/vehicle-alerts/refresh",async(_q,res)=>{try{res.json({success:true,alerts:await refreshVehicleAlerts()});}catch(e){res.status(500).json({success:false,error:e.message});}});\n r.post("/vehicle-alerts/:id/close",async(req,res)=>{try{const alert=await closeVehicleAlert(req.params.id);if(!alert)return res.status(404).json({success:false,error:"Alert not found"});res.json({success:true,alert});}catch(e){res.status(400).json({success:false,error:e.message});}});\n r.get("/vehicles",async(_q,res)=>{try{res.json({success:true,vehicles:await listVehicles()});}catch(e){res.status(500).json({success:false,error:e.message});}});
 r.get("/vehicles/:id",async(req,res)=>{try{const vehicle=await getVehicle(req.params.id);if(!vehicle)return res.status(404).json({success:false,error:"Vehicle not found"});res.json({success:true,vehicle});}catch(e){res.status(500).json({success:false,error:e.message});}});
 r.put("/vehicles/:id",async(req,res)=>{try{const vehicle=await updateVehicle(req.params.id,req.body||{});if(!vehicle)return res.status(404).json({success:false,error:"Vehicle not found"});res.json({success:true,vehicle});}catch(e){res.status(400).json({success:false,error:e.message});}});
 r.post("/vehicles/:id/oil-change",async(req,res)=>{try{const vehicle=await recordOilChange(req.params.id,req.body||{});if(!vehicle)return res.status(404).json({success:false,error:"Vehicle not found"});res.json({success:true,vehicle});}catch(e){res.status(400).json({success:false,error:e.message});}});

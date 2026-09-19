@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import GMDashboard from './pages/GMDashboardExecutive';
 import FleetHub from './pages/FleetHub';
 import VehicleDetails from './pages/VehicleDetails';
+import VehicleAlerts from './pages/VehicleAlerts';
 import Tickets from './pages/Tickets';
 import Reports from './pages/Reports';
 import OperationsHub from './pages/OperationsHub';
@@ -25,6 +26,7 @@ const TAB_MODULES = {
   gm: ['gm'],
   'support-service': ['support'],
   fleet: ['fleet'],
+  'vehicle-alerts': ['fleet'],
   operations: ['building', 'projects', 'warehouse', 'purchase_requests'],
   troubleshooter: ['troubleshooter'],
   tickets: ['tickets'],
@@ -37,6 +39,7 @@ const TAB_MODULES = {
 const TAB_LABELS = {
   gm: 'GM Dashboard',
   fleet: '🚗 Fleet',
+  'vehicle-alerts': '🔔 Alerts',
   operations: '🛠️ Operations',
   troubleshooter: '🧠 Troubleshooter',
   tickets: 'Tickets',
@@ -136,7 +139,7 @@ export default function App() {
   };
 
   const allowedTabs = useMemo(() => {
-    const tabs = ['gm', 'support-service', 'operations', 'fleet', 'troubleshooter', 'tickets', 'mytickets', 'fleet-tickets', 'reports', 'advanced-reports'];
+    const tabs = ['gm', 'support-service', 'operations', 'fleet', 'vehicle-alerts', 'troubleshooter', 'tickets', 'mytickets', 'fleet-tickets', 'reports', 'advanced-reports'];
     const visible = tabs.filter(canViewTab);
     if (user?.role === 'Owner') {
       return [...visible, 'drivers', 'users', 'audit', 'backup'];
@@ -250,6 +253,7 @@ export default function App() {
           />
         )}
         {tab === 'vehicle-details' && viewingVehicleId && <VehicleDetails vehicleId={viewingVehicleId} onBack={handleBackToVehicles} />}
+        {tab === 'vehicle-alerts' && <VehicleAlerts onOpenVehicle={handleViewVehicle} />}
         {tab === 'troubleshooter' && <Troubleshooter />}
         {tab === 'operations' && <OperationsHub access={access || {}} user={user} />}
         {tab === 'tickets' && <Tickets user={user} access={access || {}} />}

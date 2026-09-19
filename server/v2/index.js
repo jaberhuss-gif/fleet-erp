@@ -4,6 +4,7 @@ import {getFinancialReportV2} from "./financial.js";
 import {upsertDailySubmission,upsertDailyKm,createMaintenanceWorkOrder,addMaintenancePart,createProject,addProjectPart,listDailyExceptions} from "./workflow.js";
 import {listVehicles,getVehicle,updateVehicle,recordOilChange,createVehicle,listDrivers,createDriver,listSites,createSite,listProjects,listMaintenance,listWarehouse,seedWarehouseLocations,listPurchaseRequests,createPurchaseRequest,listTickets,createTicket,listVehicleAlerts,refreshVehicleAlerts,closeVehicleAlert,getVehicle360,getFleetDashboard} from "./services.js";
 import {buildFmmsMigrationPreview} from "./fmms-preview.js";
+import {previewLegacyVehicleMigration,migrateLegacyVehicles} from "./legacy-vehicle-migration.js";
 export async function mountV2(app){
  if(!v2Enabled()){console.log("[ERP V2] disabled: V2_DATABASE_URL is not configured");return false;}
  await ensureV2Schema();
@@ -31,6 +32,15 @@ r.post("/vehicles/:id/oil-change",async(req,res)=>{try{const vehicle=await recor
  r.post("/purchase-requests",async(req,res)=>{try{res.json({success:true,request:await createPurchaseRequest(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});
  r.get("/tickets",async(_q,res)=>{try{res.json({success:true,tickets:await listTickets()});}catch(e){res.status(500).json({success:false,error:e.message});}});
  r.post("/tickets",async(req,res)=>{try{res.json({success:true,ticket:await createTicket(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});
+ r.get("/migration/vehicles/preview",async(_q,res)=>{try{res.json({success:true,...await previewLegacyVehicleMigration()});}catch(e){res.status(502).json({success:false,error:e.message});}});
+ r.post("/migration/vehicles/run",async(req,res)=>{
+   try{
+     const key=process.env.V2_MIGRATION_KEY;
+     if(!key || req.get("x-v2-migration-key")!==key) return res.status(403).json({success:false,error:"Migration key required"});
+     if(req.body?.confirm!=="MIGRATE_LEGACY_VEHICLES") return res.status(400).json({success:false,error:"Explicit migration confirmation required"});
+     res.json({success:true,...await migrateLegacyVehicles()});
+   }catch(e){res.status(500).json({success:false,error:e.message});}
+ });
  r.get("/migration-preview",async(_q,res)=>{try{res.json(await buildFmmsMigrationPreview());}catch(e){res.status(502).json({success:false,error:e.message});}});
  r.get("/financial",async(req,res)=>{try{res.json({success:true,...await getFinancialReportV2({from:req.query.from||null,to:req.query.to||null})});}catch(e){res.status(500).json({success:false,error:e.message});}});
  r.post("/daily-submission",async(req,res)=>{try{res.json({success:true,row:await upsertDailySubmission(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});

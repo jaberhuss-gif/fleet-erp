@@ -4,6 +4,7 @@ import Vehicles from './Vehicles';
 import VehicleMaintenance from './VehicleMaintenance';
 import ReportIssue from './ReportIssue';
 import SmartReportIssue from './SmartReportIssue';
+import FleetOverview from './FleetOverview';
 
 const FLEET_SECTIONS = [
   {
@@ -38,7 +39,7 @@ export default function FleetHub({ user, access, onViewVehicle }) {
   const fleetView = user?.role === 'Owner' || !!access?.fleet?.can_view;
   const fleetWork = user?.role === 'Owner' || !!access?.fleet?.can_work;
 
-  const [section, setSection] = useState('km');
+  const [section, setSection] = useState('overview');
   const [smartOpen, setSmartOpen] = useState(false);
 
   if (!fleetView) {
@@ -100,6 +101,7 @@ export default function FleetHub({ user, access, onViewVehicle }) {
         <SmartReportIssue canWork={fleetWork} />
       ) : (
         <>
+          {section === 'overview' && <FleetOverview onViewVehicle={onViewVehicle} />}
           {section === 'vehicles' && <Vehicles onViewVehicle={onViewVehicle} canWork={fleetWork} />}
           {section === 'maintenance' && <VehicleMaintenance canWork={fleetWork} />}
           {section === 'km' && <DriverPortal canWork={fleetWork} />}

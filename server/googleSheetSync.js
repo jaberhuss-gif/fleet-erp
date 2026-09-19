@@ -668,7 +668,7 @@ export async function getDailyVehicleSubmissionReport(targetDate = null) {
     if (fixedByKey.has(rawKey)) return fixedByKey.get(rawKey);
 
     // If the sheet has only the plate number, use the unique fleet number.
-    const numberMatch = rawKey.match(/^\\d+/);
+    const numberMatch = rawKey.match(/^\d+/);
     if (numberMatch) {
       const byNumber = fixedByNumber.get(numberMatch[0]);
       if (byNumber) return byNumber;

@@ -441,131 +441,147 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
   const description = `Daily submission missing for ${record.vehicle} on ${reportDate}.`;
   const legacyDescription = `Daily submission missing for ${record.vehicle} on ${reportDate}`;
 
-  // Reuse ANY existing ticket for the same vehicle/date/category, including
-  // tickets created by older versions that used a generic title or had no marker.
-  // Matching is based on the exact vehicle text + report date so one vehicle/date
-  // can never accumulate multiple Daily Vehicle Submission tickets.
-  const existing = await pool.query(`
-    SELECT id, vehicle_id, status, title, description, opened_at
-    FROM tickets
-    WHERE category = $1
-      AND status IN ('Open', 'Acknowledged')
-      AND (
-        title = $2
-        OR title = 'Daily Vehicle Submission'
-        OR description LIKE $3
-        OR description LIKE $4
-        OR description LIKE $5
-      )
-    ORDER BY id ASC
-  `, [
-    DAILY_SUBMISSION_TICKET_CATEGORY,
-    title,
-    `%${legacyDescription}%`,
-    `%${record.vehicle}%`,
-    `%${reportDate}%`
-  ]);
-
-  const matching = existing.rows.filter((ticket) => {
-    const text = `${ticket.title || ""} ${ticket.description || ""}`;
-    return (
-      text.includes(record.vehicle) &&
-      text.includes(reportDate) &&
-      (
-        text.includes("Daily Vehicle Submission") ||
-        text.includes("Daily submission missing for")
-      )
+  // Serialize reconciliation for this exact vehicle/date. The background timer
+  // has a process lock, but the HTTP report endpoint can also be called directly,
+  // so the database advisory lock is required to prevent duplicate INSERTs.
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      "SELECT pg_advisory_xact_lock(hashtext($1))",
+      [`DAILY_VEHICLE_SUBMISSION|${record.vehicle}|${reportDate}`]
     );
-  });
 
-  if (matching.length > 0) {
-    const primary = matching[0];
+    // Match only the exact vehicle/date ticket, including legacy tickets.
+    // Never use a broad vehicle/date OR condition that can accidentally match
+    // another ticket for the same vehicle.
+    const existing = await client.query(`
+      SELECT id, status, title, description, opened_at
+      FROM tickets
+      WHERE category = $1
+        AND status IN ('Open', 'Acknowledged')
+        AND (
+          title = $2
+          OR title = 'Daily Vehicle Submission'
+          OR description = $3
+          OR description = $4
+          OR description LIKE $5
+        )
+      ORDER BY id ASC
+    `, [
+      DAILY_SUBMISSION_TICKET_CATEGORY,
+      title,
+      legacyDescription,
+      `${legacyDescription}.`,
+      `%DAILY_VEHICLE_SUBMISSION_MISSING%date=${reportDate}%`
+    ]);
 
-    // Normalize the surviving ticket to the clean current format.
-    await pool.query(`
-      UPDATE tickets
-      SET title = $1,
-          description = $2
-      WHERE id = $3
-    `, [title, description, primary.id]);
+    const matching = existing.rows.filter((ticket) => {
+      const text = `${ticket.title || ""} ${ticket.description || ""}`;
+      return (
+        text.includes(record.vehicle) &&
+        text.includes(reportDate) &&
+        (
+          text.includes("Daily Vehicle Submission") ||
+          text.includes("Daily submission missing for")
+        )
+      );
+    });
 
-    // Consolidate any duplicate open tickets without deleting history.
-    for (const duplicate of matching.slice(1)) {
-      await pool.query(`
+    if (matching.length > 0) {
+      const primary = matching[0];
+
+      await client.query(`
         UPDATE tickets
-        SET status = 'Closed',
-            closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP),
-            closed_by = COALESCE(closed_by, 'System'),
-            resolution_notes = CASE
-              WHEN COALESCE(resolution_notes, '') = '' THEN
-                'Duplicate Daily Vehicle Submission ticket consolidated automatically.'
-              ELSE resolution_notes
-            END
-        WHERE id = $1
-          AND status <> 'Closed'
-      `, [duplicate.id]);
+        SET title = $1,
+            description = $2
+        WHERE id = $3
+      `, [title, description, primary.id]);
+
+      // If old duplicate open tickets already exist, keep their history but
+      // close only the extras. The primary ticket remains Open.
+      for (const duplicate of matching.slice(1)) {
+        await client.query(`
+          UPDATE tickets
+          SET status = 'Closed',
+              closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP),
+              closed_by = COALESCE(closed_by, 'System'),
+              resolution_notes = CASE
+                WHEN COALESCE(resolution_notes, '') = '' THEN
+                  'Duplicate Daily Vehicle Submission ticket consolidated automatically.'
+                ELSE resolution_notes
+              END
+          WHERE id = $1
+            AND status <> 'Closed'
+        `, [duplicate.id]);
+      }
+
+      await client.query("COMMIT");
+      return { id: primary.id, status: "Open" };
     }
 
-    return { id: primary.id, status: primary.status };
+    const result = await client.query(`
+      INSERT INTO tickets
+        (vehicle_id, title, location, category, priority, status,
+         description, reported_by, opened_at, department)
+      VALUES
+        ($1, $2, $3, $4, 'High', 'Open', $5, 'System',
+         CURRENT_TIMESTAMP, 'Fleet')
+      RETURNING id, status
+    `, [
+      record.vehicleId,
+      title,
+      record.location || "",
+      DAILY_SUBMISSION_TICKET_CATEGORY,
+      description
+    ]);
+
+    await client.query("COMMIT");
+    return result.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
-
-  const result = await pool.query(`
-    INSERT INTO tickets
-      (vehicle_id, title, location, category, priority, status,
-       description, reported_by, opened_at, department)
-    VALUES
-      ($1, $2, $3, $4, 'High', 'Open', $5, 'System',
-       CURRENT_TIMESTAMP, 'Fleet')
-    RETURNING id, status
-  `, [
-    record.vehicleId,
-    title,
-    record.location || "",
-    DAILY_SUBMISSION_TICKET_CATEGORY,
-    description
-  ]);
-
-  return result.rows[0];
 }
+
 async function closeDailyVehicleSubmissionTicket(record, reportDate, evidenceDateTime) {
   const title = `Daily Vehicle Submission Missing — ${record.vehicle} — ${reportDate}`;
+  const legacyDescription = `Daily submission missing for ${record.vehicle} on ${reportDate}`;
 
-  // Close every open ticket matching this exact vehicle/date/category,
-  // including legacy tickets with the old generic title/description.
+  // Only a positive Google Sheet submission for this exact vehicle/date can
+  // close the ticket. KM values, driver records, vehicle_id, or other dates
+  // must never close a Daily Vehicle Submission ticket.
   await pool.query(`
     UPDATE tickets
     SET status = 'Closed',
         closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP),
         closed_by = COALESCE(closed_by, 'System'),
         resolution_notes = CASE
-          WHEN COALESCE(resolution_notes, '') = '' THEN $3
+          WHEN COALESCE(resolution_notes, '') = '' THEN $1
           ELSE resolution_notes
         END,
-        title = $4,
-        description = $5
-    WHERE category = $2
-      AND status <> 'Closed'
+        title = $2,
+        description = $3
+    WHERE category = $4
+      AND status IN ('Open', 'Acknowledged')
       AND (
-        title = $6
+        title = $5
         OR title = 'Daily Vehicle Submission'
-        OR description LIKE $7
+        OR description = $6
+        OR description = $7
         OR description LIKE $8
       )
-      AND (
-        title LIKE $9
-        OR description LIKE $10
-      )
   `, [
-    record.vehicleId,
-    DAILY_SUBMISSION_TICKET_CATEGORY,
     `Google Sheet submission detected for ${record.vehicle} on ${reportDate}. Evidence timestamp: ${evidenceDateTime || "record timestamp available"}.`,
     title,
     `Daily submission received for ${record.vehicle} on ${reportDate}.`,
+    DAILY_SUBMISSION_TICKET_CATEGORY,
     title,
-    `%DAILY_VEHICLE_SUBMISSION_MISSING|vehicle=${record.vehicleId}|date=${reportDate}%`,
-    `%Daily submission missing for ${record.vehicle} on ${reportDate}%`,
-    `%${record.vehicle}%`,
-    `%${record.vehicle}%`
+    legacyDescription,
+    `${legacyDescription}.`,
+    `%DAILY_VEHICLE_SUBMISSION_MISSING%date=${reportDate}%`
   ]);
 }
 export async function getDailyVehicleSubmissionReport(targetDate = null) {

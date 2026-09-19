@@ -63,3 +63,16 @@ export async function getVehicle360(id){
  ]);
  return {vehicle,readings:readings.rows,alerts:alerts.rows,submissions:submissions.rows,compliance:compliance.rows,maintenance:maintenance.rows,tickets:tickets.rows};
 }
+
+export async function getFleetDashboard(date){
+ const d=date||new Date().toISOString().slice(0,10);
+ const [tot,km,sub,alerts,maint,tickets]=await Promise.all([
+  v2Query("SELECT COUNT(*)::int total,COUNT(*) FILTER(WHERE status='Active')::int active,COUNT(*) FILTER(WHERE status <> 'Active')::int unavailable FROM fleet_erp_v2.vehicles"),
+  v2Query("SELECT COUNT(*)::int submitted FROM fleet_erp_v2.daily_km_compliance WHERE compliance_date=$1 AND status='Submitted'",[d]),
+  v2Query("SELECT COUNT(*)::int submitted FROM fleet_erp_v2.daily_vehicle_submission WHERE submission_date=$1 AND status='Submitted'",[d]),
+  v2Query("SELECT COUNT(*)::int total,COUNT(*) FILTER(WHERE severity='Critical')::int critical,COUNT(*) FILTER(WHERE severity='High')::int high FROM fleet_erp_v2.vehicle_alerts WHERE status <> 'Closed'"),
+  v2Query("SELECT COUNT(*)::int total FROM fleet_erp_v2.maintenance_work_orders WHERE status <> 'Closed'"),
+  v2Query("SELECT COUNT(*)::int total FROM fleet_erp_v2.tickets WHERE status <> 'Closed'")
+ ]);
+ return {date:d,vehicles:tot.rows[0],kmCompliance:km.rows[0],dailySubmission:sub.rows[0],alerts:alerts.rows[0],openMaintenance:maint.rows[0].total,openTickets:tickets.rows[0].total};
+}

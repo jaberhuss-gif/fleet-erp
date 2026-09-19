@@ -10,6 +10,9 @@ export async function mountV2(app){
  const r=express.Router();
  r.get("/health",async(_q,res)=>res.json({success:true,version:"v2"}));
  r.get("/vehicles",async(_q,res)=>{try{res.json({success:true,vehicles:await listVehicles()});}catch(e){res.status(500).json({success:false,error:e.message});}});
+r.get("/vehicles/:id",async(req,res)=>{try{const vehicle=await getVehicle(req.params.id);if(!vehicle)return res.status(404).json({success:false,error:"Vehicle not found"});res.json({success:true,vehicle});}catch(e){res.status(500).json({success:false,error:e.message});}});
+r.put("/vehicles/:id",async(req,res)=>{try{const vehicle=await updateVehicle(req.params.id,req.body||{});if(!vehicle)return res.status(404).json({success:false,error:"Vehicle not found"});res.json({success:true,vehicle});}catch(e){res.status(400).json({success:false,error:e.message});}});
+r.post("/vehicles/:id/oil-change",async(req,res)=>{try{const vehicle=await recordOilChange(req.params.id,req.body||{});if(!vehicle)return res.status(404).json({success:false,error:"Vehicle not found"});res.json({success:true,vehicle});}catch(e){res.status(400).json({success:false,error:e.message});}});
  r.post("/vehicles",async(req,res)=>{try{res.json({success:true,vehicle:await createVehicle(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});
  r.get("/drivers",async(_q,res)=>{try{res.json({success:true,drivers:await listDrivers()});}catch(e){res.status(500).json({success:false,error:e.message});}});
  r.post("/drivers",async(req,res)=>{try{res.json({success:true,driver:await createDriver(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});

@@ -32,7 +32,7 @@ r.post("/vehicles/:id/oil-change",async(req,res)=>{try{const vehicle=await recor
  r.post("/purchase-requests",async(req,res)=>{try{res.json({success:true,request:await createPurchaseRequest(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});
  r.get("/tickets",async(_q,res)=>{try{res.json({success:true,tickets:await listTickets()});}catch(e){res.status(500).json({success:false,error:e.message});}});
  r.post("/tickets",async(req,res)=>{try{res.json({success:true,ticket:await createTicket(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});
- r.get("/migration/vehicles/preview",async(_q,res)=>{try{res.json({success:true,...await previewLegacyVehicleMigration()});}catch(e){res.status(502).json({success:false,error:e.message});}});
+ r.get("/migration/vehicles/preview",async(req,res)=>{try{const key=process.env.V2_MIGRATION_KEY;if(!key || req.get("x-v2-migration-key")!==key)return res.status(403).json({success:false,error:"Migration key required"});res.json({success:true,...await previewLegacyVehicleMigration()});}catch(e){res.status(502).json({success:false,error:e.message});}});
  r.post("/migration/vehicles/run",async(req,res)=>{
    try{
      const key=process.env.V2_MIGRATION_KEY;

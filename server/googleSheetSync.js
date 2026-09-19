@@ -440,41 +440,76 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
   const marker = `${DAILY_SUBMISSION_TICKET_MARKER}|vehicle=${record.vehicleId}|date=${reportDate}`;
   const title = `Daily Vehicle Submission Missing — ${record.vehicle} — ${reportDate}`;
   const description = `Daily submission missing for ${record.vehicle} on ${reportDate}.`;
+  const legacyDescription = `Daily submission missing for ${record.vehicle} on ${reportDate}`;
 
+  // Find ANY existing open ticket for this vehicle/date in this category.
+  // This prevents duplicate tickets when an older ticket has the legacy title
+  // or a clean description without the internal marker.
   const existing = await pool.query(`
-    SELECT id, status
+    SELECT id, status, title, description, opened_at
     FROM tickets
     WHERE vehicle_id = $1
       AND category = $2
-      AND title = $3
       AND status IN ('Open', 'Acknowledged')
-    ORDER BY id DESC
-    LIMIT 1
-  `, [record.vehicleId, DAILY_SUBMISSION_TICKET_CATEGORY, title]);
+      AND (
+        title = $3
+        OR title = 'Daily Vehicle Submission'
+        OR description LIKE $4
+        OR description LIKE $5
+        OR description LIKE $6
+      )
+    ORDER BY id ASC
+  `, [
+    record.vehicleId,
+    DAILY_SUBMISSION_TICKET_CATEGORY,
+    title,
+    `%${legacyDescription}%`,
+    `%${marker}%`,
+    `%2026-09-19%`
+  ]);
 
-  if (existing.rows[0]) return existing.rows[0];
+  // The final date condition above is intentionally broad only for legacy
+  // records; verify the requested date in the returned title/description
+  // before reusing a ticket.
+  const matching = existing.rows.filter((ticket) => {
+    const text = `${ticket.title || ""} ${ticket.description || ""}`;
+    return (
+      text.includes(title) ||
+      text.includes(legacyDescription) ||
+      text.includes(marker) ||
+      text.includes(reportDate)
+    );
+  });
 
-  // Convert legacy long-description tickets to the new short format.
-  const legacy = await pool.query(`
-    SELECT id
-    FROM tickets
-    WHERE vehicle_id = $1
-      AND category = $2
-      AND description LIKE $3
-      AND status IN ('Open', 'Acknowledged')
-    ORDER BY id DESC
-    LIMIT 1
-  `, [record.vehicleId, DAILY_SUBMISSION_TICKET_CATEGORY, `%${marker}%`]);
+  if (matching.length > 0) {
+    const primary = matching[0];
 
-  if (legacy.rows[0]) {
     await pool.query(`
       UPDATE tickets
       SET title = $1,
           description = $2
       WHERE id = $3
-    `, [title, description, legacy.rows[0].id]);
+    `, [title, description, primary.id]);
 
-    return { id: legacy.rows[0].id, status: "Open" };
+    // If older duplicate tickets already exist, keep their history but close
+    // the duplicates instead of deleting any data.
+    for (const duplicate of matching.slice(1)) {
+      await pool.query(`
+        UPDATE tickets
+        SET status = 'Closed',
+            closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP),
+            closed_by = COALESCE(closed_by, 'System'),
+            resolution_notes = CASE
+              WHEN COALESCE(resolution_notes, '') = '' THEN
+                'Duplicate Daily Vehicle Submission ticket consolidated automatically.'
+              ELSE resolution_notes
+            END
+        WHERE id = $1
+          AND status <> 'Closed'
+      `, [duplicate.id]);
+    }
+
+    return { id: primary.id, status: "Open" };
   }
 
   const result = await pool.query(`

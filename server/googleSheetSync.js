@@ -456,7 +456,6 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
         OR title = 'Daily Vehicle Submission'
         OR description LIKE $4
         OR description LIKE $5
-        OR description LIKE $6
       )
     ORDER BY id ASC
   `, [
@@ -464,13 +463,11 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
     DAILY_SUBMISSION_TICKET_CATEGORY,
     title,
     `%${legacyDescription}%`,
-    `%${marker}%`,
-    `%2026-09-19%`
+    `%${marker}%`
   ]);
 
-  // The final date condition above is intentionally broad only for legacy
-  // records; verify the requested date in the returned title/description
-  // before reusing a ticket.
+  // Verify the requested date from the title/description before reusing a
+  // legacy ticket, so tickets from previous dates are never reused.
   const matching = existing.rows.filter((ticket) => {
     const text = `${ticket.title || ""} ${ticket.description || ""}`;
     return (

@@ -20,7 +20,8 @@ export async function v2Transaction(fn){
   catch(e){await client.query("ROLLBACK").catch(()=>{});throw e;}finally{client.release();}
 }
 export async function ensureV2Schema(){
-  const sql=fs.readFileSync(path.join(__dirname,"schema.sql"),"utf8");
-  await v2Query(sql);
+  // Schema changes are managed by explicit migrations, not on every server startup.
+  // This function only verifies that the V2 schema is reachable.
+  await v2Query("SELECT 1 FROM fleet_erp_v2.financial_settings WHERE id = 1");
   return true;
 }

@@ -155,6 +155,14 @@ CREATE TABLE IF NOT EXISTS financial_settings (
  development_salary_monthly NUMERIC(14,2) NOT NULL DEFAULT 2200, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 INSERT INTO financial_settings(id) VALUES(1) ON CONFLICT(id) DO NOTHING;
+CREATE TABLE IF NOT EXISTS vehicle_alerts (
+ id BIGSERIAL PRIMARY KEY, vehicle_id BIGINT NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+ alert_type TEXT NOT NULL, severity TEXT NOT NULL CHECK (severity IN ('Critical','High','Medium','Low')),
+ title TEXT NOT NULL, message TEXT NOT NULL, alert_date DATE NOT NULL DEFAULT CURRENT_DATE,
+ responsible_role TEXT, status TEXT NOT NULL DEFAULT 'Open' CHECK (status IN ('Open','Acknowledged','Closed')),
+ due_date DATE, closed_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(vehicle_id,alert_type,alert_date)
+);
 CREATE TABLE IF NOT EXISTS audit_logs (
  id BIGSERIAL PRIMARY KEY, user_id BIGINT REFERENCES users(id), action TEXT NOT NULL,
  entity_type TEXT, entity_id TEXT, details TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP

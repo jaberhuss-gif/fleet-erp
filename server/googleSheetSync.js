@@ -496,7 +496,7 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
   return result.rows[0];
 }
 async function closeDailyVehicleSubmissionTicket(record, reportDate, evidenceDateTime) {
-  const marker = `${DAILY_SUBMISSION_TICKET_MARKER}|vehicle=${record.vehicleId}|date=${reportDate}`;
+  const title = `Daily Vehicle Submission Missing — ${record.vehicle} — ${reportDate}`;
 
   await pool.query(`
     UPDATE tickets
@@ -506,19 +506,24 @@ async function closeDailyVehicleSubmissionTicket(record, reportDate, evidenceDat
         resolution_notes = CASE
           WHEN COALESCE(resolution_notes, '') = '' THEN $3
           ELSE resolution_notes
-        END
+        END,
+        description = $4
     WHERE vehicle_id = $1
       AND category = $2
-      AND description LIKE $4
+      AND (
+        title = $5
+        OR description LIKE $6
+      )
       AND status <> 'Closed'
   `, [
     record.vehicleId,
     DAILY_SUBMISSION_TICKET_CATEGORY,
     `Google Sheet submission detected for ${record.vehicle} on ${reportDate}. Evidence timestamp: ${evidenceDateTime || "record timestamp available"}.`,
-    `%${marker}%`
+    `Daily submission received for ${record.vehicle} on ${reportDate}.`,
+    title,
+    `%${DAILY_SUBMISSION_TICKET_MARKER}|vehicle=${record.vehicleId}|date=${reportDate}%`
   ]);
 }
-
 export async function getDailyVehicleSubmissionReport(targetDate = null) {
   if (!pool) throw new Error("DATABASE_URL is not configured");
 

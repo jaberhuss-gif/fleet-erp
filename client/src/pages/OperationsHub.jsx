@@ -4,7 +4,7 @@ import Projects from './Projects';
 import Warehouse from './Warehouse';
 import PurchaseRequests from './PurchaseRequests';
 
-export default function Maintenance & ProjectsHub({ access = {}, user }) {
+export default function OperationsHub({ access = {}, user }) {
   const can = (module, mode = 'view') => user?.role === 'Owner' || !!access?.[module]?.[mode === 'work' ? 'can_work' : 'can_view'];
 
   const tabs = [

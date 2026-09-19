@@ -65,6 +65,11 @@ export default function Tickets({ user, access = {} }) {
 
   const topCats = Object.entries(catCounts).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
+  const formatDescription = (value) => String(value || '')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '')
+    .trim();
+
   // Stats per month
   const monthCounts = {};
   tickets.forEach(t => {
@@ -190,7 +195,7 @@ export default function Tickets({ user, access = {} }) {
                   <td>{String(t.opened_at || '').slice(0, 10)}</td>
                   <td style={{ fontWeight: 'bold' }}>{t.plate || '-'}</td>
                   <td>{t.category}</td>
-                  <td>{t.description}</td>
+                  <td style={{ whiteSpace: 'pre-line', minWidth: '280px', maxWidth: '520px' }}>{formatDescription(t.description)}</td>
                   <td>
                     <span className={
                       'status-badge ' +

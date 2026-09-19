@@ -641,6 +641,40 @@ export async function getDailyVehicleSubmissionReport(targetDate = null) {
   const wantedDate = String(targetDate || todayRiyadh()).slice(0, 10);
   const sheetByPlate = new Map();
 
+  // Resolve Google Sheet plate text to the fixed 36-vehicle identity.
+  // The sheet contains known formatting variants such as:
+  //   1738
+  //   3296(DER)
+  //   4481JUA / 4481 JUL
+  // Vehicle number is unique in the operational fleet, so a number-only
+  // value can safely resolve to its fixed vehicle.
+  const fixedByKey = new Map();
+  const fixedByNumber = new Map();
+
+  for (const [number, code] of FIXED_DAILY_SUBMISSION_VEHICLES) {
+    const fixedKey = normalizePlateKey(`${number} ${code}`);
+    fixedByKey.set(fixedKey, fixedKey);
+    fixedByNumber.set(normalizePlateKey(number), fixedKey);
+  }
+
+  function resolveSheetVehicleKey(value) {
+    const rawKey = normalizePlateKey(value);
+    if (!rawKey) return null;
+
+    // Exact match first.
+    if (fixedByKey.has(rawKey)) return fixedByKey.get(rawKey);
+
+    // If the sheet has only the plate number, use the unique fleet number.
+    const numberMatch = rawKey.match(/^\\d+/);
+    if (numberMatch) {
+      const byNumber = fixedByNumber.get(numberMatch[0]);
+      if (byNumber) return byNumber;
+    }
+
+    // Also support a plate code typo while preserving the unique plate number.
+    return null;
+  }
+
   // Keep the latest timestamp for each fixed vehicle on the requested date.
   for (const values of rows.slice(1)) {
     const plate = String(values[plateIndex] ?? "").trim();
@@ -656,8 +690,8 @@ export async function getDailyVehicleSubmissionReport(targetDate = null) {
 
     if (sheetDate !== wantedDate) continue;
 
-    const key = normalizePlateKey(plate);
-    if (!plateKeys.includes(key)) continue;
+    const key = resolveSheetVehicleKey(plate);
+    if (!key) continue;
 
     const existing = sheetByPlate.get(key);
     if (!existing || parsed.getTime() > existing.timestampMs) {

@@ -53,15 +53,18 @@ export async function closeVehicleAlert(id){return (await v2Query(`UPDATE fleet_
 
 export async function getVehicle360(id){
  const vehicle=await getVehicle(id); if(!vehicle)return null;
- const [readings,alerts,submissions,compliance,maintenance,tickets]=await Promise.all([
+ const [readings,alerts,submissions,compliance,maintenance,tickets,schedules,documents,tires]=await Promise.all([
   v2Query("SELECT * FROM fleet_erp_v2.km_readings WHERE vehicle_id=$1 ORDER BY reading_date DESC,id DESC LIMIT 60",[id]),
   v2Query("SELECT * FROM fleet_erp_v2.vehicle_alerts WHERE vehicle_id=$1 ORDER BY CASE severity WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END,created_at DESC",[id]),
   v2Query("SELECT * FROM fleet_erp_v2.daily_vehicle_submission WHERE vehicle_id=$1 ORDER BY submission_date DESC LIMIT 30",[id]),
   v2Query("SELECT * FROM fleet_erp_v2.daily_km_compliance WHERE vehicle_id=$1 ORDER BY compliance_date DESC LIMIT 30",[id]),
   v2Query("SELECT w.*,COALESCE((SELECT SUM(mp.total_price) FROM fleet_erp_v2.maintenance_parts mp WHERE mp.work_order_id=w.id),0) parts_cost FROM fleet_erp_v2.maintenance_work_orders w WHERE w.vehicle_id=$1 ORDER BY w.reported_date DESC,w.id DESC LIMIT 50",[id]),
-  v2Query("SELECT * FROM fleet_erp_v2.tickets WHERE vehicle_id=$1 ORDER BY opened_at DESC LIMIT 50",[id])
+  v2Query("SELECT * FROM fleet_erp_v2.tickets WHERE vehicle_id=$1 ORDER BY opened_at DESC LIMIT 50",[id]),
+  v2Query("SELECT * FROM fleet_erp_v2.vehicle_maintenance_schedules WHERE vehicle_id=$1 ORDER BY next_due_date NULLS LAST,next_due_km NULLS LAST",[id]),
+  v2Query("SELECT * FROM fleet_erp_v2.vehicle_documents WHERE vehicle_id=$1 ORDER BY expiry_date NULLS LAST",[id]),
+  v2Query("SELECT * FROM fleet_erp_v2.vehicle_tires WHERE vehicle_id=$1 ORDER BY position",[id])
  ]);
- return {vehicle,readings:readings.rows,alerts:alerts.rows,submissions:submissions.rows,compliance:compliance.rows,maintenance:maintenance.rows,tickets:tickets.rows};
+ return {vehicle,readings:readings.rows,alerts:alerts.rows,submissions:submissions.rows,compliance:compliance.rows,maintenance:maintenance.rows,tickets:tickets.rows,schedules:schedules.rows,documents:documents.rows,tires:tires.rows};
 }
 
 export async function getFleetDashboard(date){

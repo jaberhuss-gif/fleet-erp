@@ -519,9 +519,8 @@ export async function getDailyVehicleSubmissionReport(targetDate = null) {
       v.location,
       v.status
     FROM vehicles v
-    WHERE normalize_plate_placeholder IS NOT NULL
     ORDER BY v.plate_number, v.plate_code
-  `.replace("normalize_plate_placeholder IS NOT NULL", "v.id IS NOT NULL"));
+  `);
 
   const dbByPlate = new Map();
   for (const v of vehicleResult.rows) {

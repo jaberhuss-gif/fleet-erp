@@ -3,6 +3,7 @@ import {ensureV2Schema,v2Enabled} from "./db.js";
 import {getFinancialReportV2} from "./financial.js";
 import {upsertDailySubmission,upsertDailyKm,createMaintenanceWorkOrder,addMaintenancePart,createProject,addProjectPart,listDailyExceptions} from "./workflow.js";
 import {listVehicles,createVehicle,listDrivers,createDriver,listSites,createSite,listProjects,listMaintenance,listWarehouse,seedWarehouseLocations,listPurchaseRequests,createPurchaseRequest,listTickets,createTicket} from "./services.js";
+import {buildFmmsMigrationPreview} from "./fmms-preview.js";
 export async function mountV2(app){
  if(!v2Enabled()){console.log("[ERP V2] disabled: V2_DATABASE_URL is not configured");return false;}
  await ensureV2Schema();
@@ -22,6 +23,7 @@ export async function mountV2(app){
  r.post("/purchase-requests",async(req,res)=>{try{res.json({success:true,request:await createPurchaseRequest(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});
  r.get("/tickets",async(_q,res)=>{try{res.json({success:true,tickets:await listTickets()});}catch(e){res.status(500).json({success:false,error:e.message});}});
  r.post("/tickets",async(req,res)=>{try{res.json({success:true,ticket:await createTicket(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});
+ r.get("/migration-preview",async(_q,res)=>{try{res.json(await buildFmmsMigrationPreview());}catch(e){res.status(502).json({success:false,error:e.message});}});
  r.get("/financial",async(req,res)=>{try{res.json({success:true,...await getFinancialReportV2({from:req.query.from||null,to:req.query.to||null})});}catch(e){res.status(500).json({success:false,error:e.message});}});
  r.post("/daily-submission",async(req,res)=>{try{res.json({success:true,row:await upsertDailySubmission(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});
  r.post("/daily-km",async(req,res)=>{try{res.json({success:true,row:await upsertDailyKm(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});

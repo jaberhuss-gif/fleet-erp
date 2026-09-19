@@ -50,3 +50,16 @@ export async function refreshVehicleAlerts(){
 }
 
 export async function closeVehicleAlert(id){return (await v2Query(`UPDATE fleet_erp_v2.vehicle_alerts SET status='Closed',closed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING *`,[id])).rows[0]||null;}
+
+export async function getVehicle360(id){
+ const vehicle=await getVehicle(id); if(!vehicle)return null;
+ const [readings,alerts,submissions,compliance,maintenance,tickets]=await Promise.all([
+  v2Query("SELECT * FROM fleet_erp_v2.km_readings WHERE vehicle_id=$1 ORDER BY reading_date DESC,id DESC LIMIT 60",[id]),
+  v2Query("SELECT * FROM fleet_erp_v2.vehicle_alerts WHERE vehicle_id=$1 ORDER BY CASE severity WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END,created_at DESC",[id]),
+  v2Query("SELECT * FROM fleet_erp_v2.daily_vehicle_submission WHERE vehicle_id=$1 ORDER BY submission_date DESC LIMIT 30",[id]),
+  v2Query("SELECT * FROM fleet_erp_v2.daily_km_compliance WHERE vehicle_id=$1 ORDER BY compliance_date DESC LIMIT 30",[id]),
+  v2Query("SELECT w.*,COALESCE((SELECT SUM(mp.total_price) FROM fleet_erp_v2.maintenance_parts mp WHERE mp.work_order_id=w.id),0) parts_cost FROM fleet_erp_v2.maintenance_work_orders w WHERE w.vehicle_id=$1 ORDER BY w.reported_date DESC,w.id DESC LIMIT 50",[id]),
+  v2Query("SELECT * FROM fleet_erp_v2.tickets WHERE vehicle_id=$1 ORDER BY opened_at DESC LIMIT 50",[id])
+ ]);
+ return {vehicle,readings:readings.rows,alerts:alerts.rows,submissions:submissions.rows,compliance:compliance.rows,maintenance:maintenance.rows,tickets:tickets.rows};
+}

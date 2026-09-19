@@ -27,6 +27,8 @@ app.use(express.json({ limit: "10mb" }));
 app.use("/api", async (req, res, next) => {
   if (req.path === "/health") return next();
   if (req.path === "/v2/health") return next();
+  if (req.path === "/v2/migration/vehicles/preview") return next();
+  if (req.path === "/v2/migration/vehicles/run") return next();
   if (req.path === "/auth/login") return next();
   return requireAuth(req, res, (err) => {
     if (err) return next(err);

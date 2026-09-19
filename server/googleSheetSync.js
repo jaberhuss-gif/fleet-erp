@@ -417,12 +417,99 @@ export async function syncGoogleSheetVehicles() {
 }
 
 
+const FIXED_DAILY_SUBMISSION_VEHICLES = [
+  ["1357", "JER"], ["1369", "JER"], ["1543", "BUA"], ["1560", "EHR"],
+  ["1706", "BUA"], ["1709", "BUA"], ["1712", "BUA"], ["1713", "BUA"],
+  ["1715", "BUA"], ["1716", "BUA"], ["1722", "BUA"], ["1737", "BUA"],
+  ["1738", "BUA"], ["2110", "EUA"], ["2158", "EUA"], ["2287", "EUA"],
+  ["2290", "EUA"], ["2295", "EUA"], ["2344", "EUA"], ["2349", "EUA"],
+  ["2687", "EUA"], ["3296", "DER"], ["4430", "JUA"], ["4431", "JUA"],
+  ["4435", "JUA"], ["4463", "JUA"], ["4479", "JUA"], ["4481", "JUA"],
+  ["4532", "LUA"], ["4533", "LUA"], ["4534", "LUA"], ["4538", "LUA"],
+  ["4541", "LUA"], ["4980", "JUA"], ["5456", "TKA"], ["6183", "ZUA"]
+];
+
+const DAILY_SUBMISSION_TICKET_CATEGORY = "Daily Vehicle Submission";
+const DAILY_SUBMISSION_TICKET_MARKER = "DAILY_VEHICLE_SUBMISSION_MISSING";
+
+function normalizePlateKey(value) {
+  return String(value || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+}
+
+async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
+  const marker = `${DAILY_SUBMISSION_TICKET_MARKER}|vehicle=${record.vehicleId}|date=${reportDate}`;
+
+  const existing = await pool.query(`
+    SELECT id, status
+    FROM tickets
+    WHERE vehicle_id = $1
+      AND category = $2
+      AND description LIKE $3
+      AND status IN ('Open', 'Acknowledged')
+    ORDER BY id DESC
+    LIMIT 1
+  `, [record.vehicleId, DAILY_SUBMISSION_TICKET_CATEGORY, `%${marker}%`]);
+
+  if (existing.rows[0]) return existing.rows[0];
+
+  const result = await pool.query(`
+    INSERT INTO tickets
+      (vehicle_id, title, location, category, priority, status,
+       description, reported_by, opened_at, department)
+    VALUES
+      ($1, $2, $3, $4, 'High', 'Open', $5, 'System',
+       CURRENT_TIMESTAMP, 'Fleet')
+    RETURNING id, status
+  `, [
+    record.vehicleId,
+    `Daily Vehicle Submission Missing — ${record.vehicle}`,
+    record.location || "",
+    DAILY_SUBMISSION_TICKET_CATEGORY,
+    `${marker}
+No Google Sheet submission record was found for this vehicle on ${reportDate}.
+Vehicle: ${record.vehicle}
+Driver reference: ${record.driver || "Unassigned"}
+Phone reference: ${record.phone || "No phone"}
+The ticket will close automatically when a Google Sheet record for this vehicle/date is detected.`
+  ]);
+
+  return result.rows[0];
+}
+
+async function closeDailyVehicleSubmissionTicket(record, reportDate, evidenceDateTime) {
+  const marker = `${DAILY_SUBMISSION_TICKET_MARKER}|vehicle=${record.vehicleId}|date=${reportDate}`;
+
+  await pool.query(`
+    UPDATE tickets
+    SET status = 'Closed',
+        closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP),
+        closed_by = COALESCE(closed_by, 'System'),
+        resolution_notes = CASE
+          WHEN COALESCE(resolution_notes, '') = '' THEN $3
+          ELSE resolution_notes
+        END
+    WHERE vehicle_id = $1
+      AND category = $2
+      AND description LIKE $4
+      AND status <> 'Closed'
+  `, [
+    record.vehicleId,
+    DAILY_SUBMISSION_TICKET_CATEGORY,
+    `Google Sheet submission detected for ${record.vehicle} on ${reportDate}. Evidence timestamp: ${evidenceDateTime || "record timestamp available"}.`,
+    `%${marker}%`
+  ]);
+}
+
 export async function getDailyVehicleSubmissionReport(targetDate = null) {
   if (!pool) throw new Error("DATABASE_URL is not configured");
 
-  // The vehicle list is the fixed operational source of truth.
-  // Driver identity is deliberately NOT used to determine compliance.
-  const vehiclesResult = await pool.query(`
+  // Compliance is based ONLY on this fixed operational list of 36 vehicles.
+  // Driver name/phone are reference information only; a driver may use more than one vehicle.
+  const plateKeys = FIXED_DAILY_SUBMISSION_VEHICLES.map(([number, code]) =>
+    normalizePlateKey(`${number} ${code}`)
+  );
+
+  const vehicleResult = await pool.query(`
     SELECT
       v.id,
       v.plate_number,
@@ -432,9 +519,15 @@ export async function getDailyVehicleSubmissionReport(targetDate = null) {
       v.location,
       v.status
     FROM vehicles v
-    WHERE COALESCE(LOWER(TRIM(v.status)), '') NOT IN ('inactive', 'sold', 'disposed', 'disabled')
+    WHERE normalize_plate_placeholder IS NOT NULL
     ORDER BY v.plate_number, v.plate_code
-  `);
+  `.replace("normalize_plate_placeholder IS NOT NULL", "v.id IS NOT NULL"));
+
+  const dbByPlate = new Map();
+  for (const v of vehicleResult.rows) {
+    const key = normalizePlateKey(`${v.plate_number || ""} ${v.plate_code || ""}`);
+    if (!dbByPlate.has(key)) dbByPlate.set(key, v);
+  }
 
   const response = await fetch(SHEET_URL, {
     headers: { "User-Agent": "Fleet-ERP-DailyVehicleSubmission/1.0" }
@@ -447,6 +540,8 @@ export async function getDailyVehicleSubmissionReport(targetDate = null) {
   const headers = rows[0];
   const plateIndex = findIndex(headers, aliases.plate);
   const dateIndex = findIndex(headers, aliases.date);
+  const driverIndex = findIndex(headers, aliases.driver);
+  const phoneIndex = findIndex(headers, aliases.phone);
 
   if (plateIndex < 0) {
     throw new Error(`Vehicle/plate column not found. Headers: ${headers.join(", ")}`);
@@ -461,13 +556,9 @@ export async function getDailyVehicleSubmissionReport(targetDate = null) {
   };
 
   const wantedDate = String(targetDate || todayRiyadh()).slice(0, 10);
-
-  const normalizePlateKey = (value) =>
-    String(value || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-
   const sheetByPlate = new Map();
 
-  // Keep the latest timestamp for each vehicle on the requested date.
+  // Keep the latest timestamp for each fixed vehicle on the requested date.
   for (const values of rows.slice(1)) {
     const plate = String(values[plateIndex] ?? "").trim();
     const rawDate = String(values[dateIndex] ?? "").trim();
@@ -483,35 +574,59 @@ export async function getDailyVehicleSubmissionReport(targetDate = null) {
     if (sheetDate !== wantedDate) continue;
 
     const key = normalizePlateKey(plate);
+    if (!plateKeys.includes(key)) continue;
+
     const existing = sheetByPlate.get(key);
     if (!existing || parsed.getTime() > existing.timestampMs) {
       sheetByPlate.set(key, {
         sheetPlate: plate,
         rawDate,
         timestampMs: parsed.getTime(),
-        timestamp: parsed.toISOString()
+        timestamp: parsed.toISOString(),
+        sheetDriver: driverIndex >= 0 ? String(values[driverIndex] ?? "").trim() : "",
+        sheetPhone: phoneIndex >= 0 ? String(values[phoneIndex] ?? "").trim() : ""
       });
     }
   }
 
-  const records = vehiclesResult.rows.map((v) => {
-    const plate = `${v.plate_number || ""} ${v.plate_code || ""}`.trim();
-    const key = normalizePlateKey(plate);
+  const records = [];
+  for (const [number, code] of FIXED_DAILY_SUBMISSION_VEHICLES) {
+    const vehicle = `${number} ${code}`;
+    const key = normalizePlateKey(vehicle);
+    const v = dbByPlate.get(key);
     const submitted = sheetByPlate.get(key) || null;
 
-    return {
-      vehicleId: v.id,
-      vehicle: plate,
-      driver: v.driver || "",
-      phone: v.phone || "",
-      location: v.location || "",
+    const record = {
+      vehicleId: v?.id || null,
+      vehicle,
+      driver: v?.driver || "",
+      phone: v?.phone || "",
+      location: v?.location || "",
       submittedToday: !!submitted,
       submissionTimestamp: submitted?.timestamp || null,
       sheetPlate: submitted?.sheetPlate || null,
       evidenceDateTime: submitted?.rawDate || null,
-      status: submitted ? "Submitted" : "Not Submitted"
+      sheetDriver: submitted?.sheetDriver || "",
+      sheetPhone: submitted?.sheetPhone || "",
+      databaseVehicleFound: !!v,
+      status: submitted ? "Submitted" : "Not Submitted",
+      ticketStatus: null,
+      ticketId: null
     };
-  });
+
+    // A fixed vehicle missing from the DB is still monitored and reported,
+    // but no ticket can be created without a valid vehicle_id.
+    if (!submitted && v?.id) {
+      const ticket = await ensureDailyVehicleSubmissionTicket(record, wantedDate);
+      record.ticketId = ticket?.id || null;
+      record.ticketStatus = ticket?.status || "Open";
+    } else if (submitted && v?.id) {
+      await closeDailyVehicleSubmissionTicket(record, wantedDate, submitted.rawDate);
+      record.ticketStatus = "Closed";
+    }
+
+    records.push(record);
+  }
 
   const submitted = records.filter(r => r.submittedToday).length;
   const missing = records.length - submitted;
@@ -522,8 +637,8 @@ export async function getDailyVehicleSubmissionReport(targetDate = null) {
     generatedAt: new Date().toISOString(),
     source: "Google Sheet",
     fixedVehicleCount: records.length,
-    expectedVehicleCount: 36,
-    vehicleCountMatchesExpected: records.length === 36,
+    expectedVehicleCount: FIXED_DAILY_SUBMISSION_VEHICLES.length,
+    vehicleCountMatchesExpected: records.length === FIXED_DAILY_SUBMISSION_VEHICLES.length,
     submittedCount: submitted,
     missingCount: missing,
     submissionPercent: records.length ? (submitted / records.length) * 100 : 0,

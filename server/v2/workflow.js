@@ -8,7 +8,14 @@ export async function upsertDailyKm(x){
  return v2Transaction(async c=>{
   const old=await c.query("SELECT current_km FROM fleet_erp_v2.vehicles WHERE id=$1 FOR UPDATE",[x.vehicleId]);
   if(!old.rows[0]) throw new Error("Vehicle not found");
-  if(Number(x.readingKm)<Number(old.rows[0].current_km)) throw new Error("KM reading cannot be lower than current KM");
+  if(Number(x.readingKm)<0 || !Number.isFinite(Number(x.readingKm))){
+   await c.query("INSERT INTO fleet_erp_v2.vehicle_alerts(vehicle_id,alert_type,severity,title,message,responsible_role) VALUES($1,'KM_INVALID','Critical','Invalid KM reading',$2,'FleetSupervisor') ON CONFLICT(vehicle_id,alert_type,alert_date) DO UPDATE SET message=EXCLUDED.message,status='Open',updated_at=CURRENT_TIMESTAMP",[x.vehicleId,"Invalid KM value submitted: "+String(x.readingKm)]);
+   throw new Error("Invalid KM reading");
+  }
+  if(Number(x.readingKm)<Number(old.rows[0].current_km)){
+   await c.query("INSERT INTO fleet_erp_v2.vehicle_alerts(vehicle_id,alert_type,severity,title,message,responsible_role) VALUES($1,'KM_DECREASING','Critical','KM reading decreased',$2,'FleetSupervisor') ON CONFLICT(vehicle_id,alert_type,alert_date) DO UPDATE SET message=EXCLUDED.message,status='Open',updated_at=CURRENT_TIMESTAMP",[x.vehicleId,"Submitted KM "+String(x.readingKm)+" is lower than current KM "+String(old.rows[0].current_km)]);
+   throw new Error("KM reading cannot be lower than current KM");
+  }
   const kr=await c.query("INSERT INTO fleet_erp_v2.km_readings(vehicle_id,reading_km,reading_date,entered_by,notes) VALUES($1,$2,$3,$4,$5) ON CONFLICT(vehicle_id,reading_date) DO UPDATE SET reading_km=EXCLUDED.reading_km,entered_by=EXCLUDED.entered_by,notes=EXCLUDED.notes RETURNING *",[x.vehicleId,x.readingKm,x.date,x.userId||null,s(x.notes)]);
   await c.query("UPDATE fleet_erp_v2.vehicles SET current_km=$1,updated_at=CURRENT_TIMESTAMP WHERE id=$2",[x.readingKm,x.vehicleId]);
   await c.query("INSERT INTO fleet_erp_v2.daily_km_compliance(vehicle_id,compliance_date,reading_id,status) VALUES($1,$2,$3,'Submitted') ON CONFLICT(vehicle_id,compliance_date) DO UPDATE SET reading_id=EXCLUDED.reading_id,status='Submitted'",[x.vehicleId,x.date,kr.rows[0].id]);

@@ -838,6 +838,15 @@ app.get("/api/reports/financial", async (req, res) => {
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+// ===== ERP V2 =====
+if (process.env.ERP_V2_ENABLED === "true") {
+  try {
+    await mountV2(app);
+  } catch (e) {
+    console.error("[ERP V2] startup failed:", e.message);
+  }
+}
+
 app.use(express.static(path.join(__dirname, '../client/dist')));
 app.get('*', async (req, res) => { res.sendFile(path.join(__dirname, '../client/dist/index.html')); });
 

@@ -2,13 +2,14 @@ import express from "express";
 import {ensureV2Schema,v2Enabled} from "./db.js";
 import {getFinancialReportV2} from "./financial.js";
 import {upsertDailySubmission,upsertDailyKm,createMaintenanceWorkOrder,addMaintenancePart,createProject,addProjectPart,listDailyExceptions} from "./workflow.js";
-import {listVehicles,getVehicle,updateVehicle,recordOilChange,createVehicle,listDrivers,createDriver,listSites,createSite,listProjects,listMaintenance,listWarehouse,seedWarehouseLocations,listPurchaseRequests,createPurchaseRequest,listTickets,createTicket,listVehicleAlerts,refreshVehicleAlerts,closeVehicleAlert,getVehicle360} from "./services.js";
+import {listVehicles,getVehicle,updateVehicle,recordOilChange,createVehicle,listDrivers,createDriver,listSites,createSite,listProjects,listMaintenance,listWarehouse,seedWarehouseLocations,listPurchaseRequests,createPurchaseRequest,listTickets,createTicket,listVehicleAlerts,refreshVehicleAlerts,closeVehicleAlert,getVehicle360,getFleetDashboard} from "./services.js";
 import {buildFmmsMigrationPreview} from "./fmms-preview.js";
 export async function mountV2(app){
  if(!v2Enabled()){console.log("[ERP V2] disabled: V2_DATABASE_URL is not configured");return false;}
  await ensureV2Schema();
  const r=express.Router();
  r.get("/health",async(_q,res)=>res.json({success:true,version:"v2"}));
+ r.get("/fleet-dashboard",async(req,res)=>{try{res.json({success:true,...await getFleetDashboard(req.query.date)});}catch(e){res.status(500).json({success:false,error:e.message});}});
  r.get("/vehicle-alerts",async(_q,res)=>{try{res.json({success:true,alerts:await listVehicleAlerts()});}catch(e){res.status(500).json({success:false,error:e.message});}});
  r.post("/vehicle-alerts/refresh",async(_q,res)=>{try{res.json({success:true,alerts:await refreshVehicleAlerts()});}catch(e){res.status(500).json({success:false,error:e.message});}});
  r.post("/vehicle-alerts/:id/close",async(req,res)=>{try{const alert=await closeVehicleAlert(req.params.id);if(!alert)return res.status(404).json({success:false,error:"Alert not found"});res.json({success:true,alert});}catch(e){res.status(400).json({success:false,error:e.message});}});

@@ -265,7 +265,8 @@ export async function hasModuleAccess(user, module, mode = "view") {
 }
 
 async function handlePushRoute(req, res) {
-  if (req.path === "/push/register" && req.method === "POST") {
+  const pushPath = String(req.originalUrl || req.path || "").split("?")[0].replace(/^\/api/, "");
+  if (pushPath === "/push/register" && req.method === "POST") {
     const token = String(req.body?.token || "").trim();
     const platform = String(req.body?.platform || "web").trim() || "web";
     const userAgent = String(req.body?.userAgent || "").slice(0, 2000);
@@ -288,7 +289,7 @@ async function handlePushRoute(req, res) {
     return res.json({ success: true, registered: true, tokenId: result.rows[0]?.id || null });
   }
 
-  if (req.path === "/push/test" && req.method === "POST") {
+  if (pushPath === "/push/test" && req.method === "POST") {
     if (req.user?.role !== "Owner") return res.status(403).json({ success: false, error: "Owner only" });
     try {
       const result = await query(`SELECT token FROM push_tokens WHERE user_id = $1 ORDER BY last_seen_at DESC`, [req.user.id]);

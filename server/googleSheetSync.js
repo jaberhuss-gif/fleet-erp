@@ -437,50 +437,51 @@ function normalizePlateKey(value) {
 }
 
 async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
-  const marker = `${DAILY_SUBMISSION_TICKET_MARKER}|vehicle=${record.vehicleId}|date=${reportDate}`;
   const title = `Daily Vehicle Submission Missing — ${record.vehicle} — ${reportDate}`;
   const description = `Daily submission missing for ${record.vehicle} on ${reportDate}.`;
   const legacyDescription = `Daily submission missing for ${record.vehicle} on ${reportDate}`;
 
-  // Find ANY existing open ticket for this vehicle/date in this category.
-  // This prevents duplicate tickets when an older ticket has the legacy title
-  // or a clean description without the internal marker.
+  // Reuse ANY existing ticket for the same vehicle/date/category, including
+  // tickets created by older versions that used a generic title or had no marker.
+  // Matching is based on the exact vehicle text + report date so one vehicle/date
+  // can never accumulate multiple Daily Vehicle Submission tickets.
   const existing = await pool.query(`
-    SELECT id, status, title, description, opened_at
+    SELECT id, vehicle_id, status, title, description, opened_at
     FROM tickets
-    WHERE vehicle_id = $1
-      AND category = $2
+    WHERE category = $1
       AND status IN ('Open', 'Acknowledged')
       AND (
-        title = $3
+        title = $2
         OR title = 'Daily Vehicle Submission'
+        OR description LIKE $3
         OR description LIKE $4
         OR description LIKE $5
       )
     ORDER BY id ASC
   `, [
-    record.vehicleId,
     DAILY_SUBMISSION_TICKET_CATEGORY,
     title,
     `%${legacyDescription}%`,
-    `%${marker}%`
+    `%${record.vehicle}%`,
+    `%${reportDate}%`
   ]);
 
-  // Verify the requested date from the title/description before reusing a
-  // legacy ticket, so tickets from previous dates are never reused.
   const matching = existing.rows.filter((ticket) => {
     const text = `${ticket.title || ""} ${ticket.description || ""}`;
     return (
-      text.includes(title) ||
-      text.includes(legacyDescription) ||
-      text.includes(marker) ||
-      text.includes(reportDate)
+      text.includes(record.vehicle) &&
+      text.includes(reportDate) &&
+      (
+        text.includes("Daily Vehicle Submission") ||
+        text.includes("Daily submission missing for")
+      )
     );
   });
 
   if (matching.length > 0) {
     const primary = matching[0];
 
+    // Normalize the surviving ticket to the clean current format.
     await pool.query(`
       UPDATE tickets
       SET title = $1,
@@ -488,8 +489,7 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
       WHERE id = $3
     `, [title, description, primary.id]);
 
-    // If older duplicate tickets already exist, keep their history but close
-    // the duplicates instead of deleting any data.
+    // Consolidate any duplicate open tickets without deleting history.
     for (const duplicate of matching.slice(1)) {
       await pool.query(`
         UPDATE tickets
@@ -506,7 +506,7 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
       `, [duplicate.id]);
     }
 
-    return { id: primary.id, status: "Open" };
+    return { id: primary.id, status: primary.status };
   }
 
   const result = await pool.query(`
@@ -530,6 +530,8 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
 async function closeDailyVehicleSubmissionTicket(record, reportDate, evidenceDateTime) {
   const title = `Daily Vehicle Submission Missing — ${record.vehicle} — ${reportDate}`;
 
+  // Close every open ticket matching this exact vehicle/date/category,
+  // including legacy tickets with the old generic title/description.
   await pool.query(`
     UPDATE tickets
     SET status = 'Closed',
@@ -539,21 +541,31 @@ async function closeDailyVehicleSubmissionTicket(record, reportDate, evidenceDat
           WHEN COALESCE(resolution_notes, '') = '' THEN $3
           ELSE resolution_notes
         END,
-        description = $4
-    WHERE vehicle_id = $1
-      AND category = $2
-      AND (
-        title = $5
-        OR description LIKE $6
-      )
+        title = $4,
+        description = $5
+    WHERE category = $2
       AND status <> 'Closed'
+      AND (
+        title = $6
+        OR title = 'Daily Vehicle Submission'
+        OR description LIKE $7
+        OR description LIKE $8
+      )
+      AND (
+        title LIKE $9
+        OR description LIKE $10
+      )
   `, [
     record.vehicleId,
     DAILY_SUBMISSION_TICKET_CATEGORY,
     `Google Sheet submission detected for ${record.vehicle} on ${reportDate}. Evidence timestamp: ${evidenceDateTime || "record timestamp available"}.`,
+    title,
     `Daily submission received for ${record.vehicle} on ${reportDate}.`,
     title,
-    `%${DAILY_SUBMISSION_TICKET_MARKER}|vehicle=${record.vehicleId}|date=${reportDate}%`
+    `%DAILY_VEHICLE_SUBMISSION_MISSING|vehicle=${record.vehicleId}|date=${reportDate}%`,
+    `%Daily submission missing for ${record.vehicle} on ${reportDate}%`,
+    `%${record.vehicle}%`,
+    `%${record.vehicle}%`
   ]);
 }
 export async function getDailyVehicleSubmissionReport(targetDate = null) {

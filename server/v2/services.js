@@ -20,3 +20,33 @@ export async function createPurchaseRequest(x){return (await v2Query("INSERT INT
 
 export async function listTickets(){return (await v2Query("SELECT t.*,v.plate_number,v.plate_code,s.name site_name,u.full_name reporter_name FROM fleet_erp_v2.tickets t LEFT JOIN fleet_erp_v2.vehicles v ON v.id=t.vehicle_id LEFT JOIN fleet_erp_v2.sites s ON s.id=t.site_id LEFT JOIN fleet_erp_v2.users u ON u.id=t.reported_by ORDER BY t.opened_at DESC")).rows;}
 export async function createTicket(x){return (await v2Query("INSERT INTO fleet_erp_v2.tickets(title,category,priority,status,vehicle_id,site_id,reported_by,assigned_to,description) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",[x.title,x.category||"",x.priority||"Medium",x.status||"Open",x.vehicleId||null,x.siteId||null,x.reportedBy||null,x.assignedTo||null,x.description||""])).rows[0];}
+
+export async function listVehicleAlerts(){return (await v2Query(`SELECT a.*,v.plate_number,v.plate_code,v.status vehicle_status,s.name site_name FROM fleet_erp_v2.vehicle_alerts a JOIN fleet_erp_v2.vehicles v ON v.id=a.vehicle_id LEFT JOIN fleet_erp_v2.sites s ON s.id=v.site_id WHERE a.status <> 'Closed' ORDER BY CASE a.severity WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END,a.due_date NULLS LAST,a.created_at DESC`)).rows;}
+
+export async function refreshVehicleAlerts(){
+ const vehicles=(await v2Query(`SELECT v.id,v.plate_number,v.plate_code,v.current_km,v.last_oil_km,v.oil_interval_km,v.inspection_due_date,v.registration_expiry,v.insurance_expiry,v.status FROM fleet_erp_v2.vehicles v`)).rows;
+ for(const v of vehicles){
+   const plate=[v.plate_number,v.plate_code].filter(Boolean).join(' ');
+   const sinceOil=Number(v.current_km||0)-Number(v.last_oil_km||0);
+   if(sinceOil >= Number(v.oil_interval_km||5000)){
+     await v2Query(`INSERT INTO fleet_erp_v2.vehicle_alerts(vehicle_id,alert_type,severity,title,message,responsible_role,due_date) VALUES($1,'OIL_OVERDUE','Critical','Oil service overdue',$2,'FleetSupervisor',CURRENT_DATE) ON CONFLICT(vehicle_id,alert_type,alert_date) DO UPDATE SET message=EXCLUDED.message,severity=EXCLUDED.severity,status=CASE WHEN fleet_erp_v2.vehicle_alerts.status='Closed' THEN 'Open' ELSE fleet_erp_v2.vehicle_alerts.status END,updated_at=CURRENT_TIMESTAMP`,[v.id,plate+' has '+Math.max(0,sinceOil).toLocaleString()+' km since the last oil change.']);
+   } else if(sinceOil >= Math.max(0,Number(v.oil_interval_km||5000)-500)){
+     await v2Query(`INSERT INTO fleet_erp_v2.vehicle_alerts(vehicle_id,alert_type,severity,title,message,responsible_role,due_date) VALUES($1,'OIL_DUE_SOON','High','Oil service due soon',$2,'FleetSupervisor',CURRENT_DATE) ON CONFLICT(vehicle_id,alert_type,alert_date) DO UPDATE SET message=EXCLUDED.message,severity=EXCLUDED.severity,status=CASE WHEN fleet_erp_v2.vehicle_alerts.status='Closed' THEN 'Open' ELSE fleet_erp_v2.vehicle_alerts.status END,updated_at=CURRENT_TIMESTAMP`,[v.id,plate+' is approaching the '+Number(v.oil_interval_km||5000).toLocaleString()+' km oil interval.']);
+   }
+   for(const [field,type,severity,title,role] of [['inspection_due_date','INSPECTION','High','Government inspection due','FleetSupervisor'],['registration_expiry','REGISTRATION','High','Registration expiry approaching','FleetSupervisor'],['insurance_expiry','INSURANCE','High','Insurance expiry approaching','FleetSupervisor']]){
+     const d=v[field]; if(!d) continue;
+     const days=Math.ceil((new Date(d+'T00:00:00Z')-new Date(new Date().toISOString().slice(0,10)+'T00:00:00Z'))/86400000);
+     if(days<=30){
+       const sev=days<0?'Critical':severity;
+       const title2=days<0?title.replace('approaching','expired'):title;
+       await v2Query(`INSERT INTO fleet_erp_v2.vehicle_alerts(vehicle_id,alert_type,severity,title,message,responsible_role,due_date) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(vehicle_id,alert_type,alert_date) DO UPDATE SET message=EXCLUDED.message,severity=EXCLUDED.severity,title=EXCLUDED.title,status=CASE WHEN fleet_erp_v2.vehicle_alerts.status='Closed' THEN 'Open' ELSE fleet_erp_v2.vehicle_alerts.status END,updated_at=CURRENT_TIMESTAMP`,[v.id,type,sev,title2,plate+' date is '+String(d).slice(0,10)+' ('+(days<0?'expired '+Math.abs(days)+' days ago':days+' days remaining')+').',role,d]);
+     }
+   }
+   if(v.status && ['Maintenance','Out of Service','Unavailable'].includes(v.status)){
+     await v2Query(`INSERT INTO fleet_erp_v2.vehicle_alerts(vehicle_id,alert_type,severity,title,message,responsible_role) VALUES($1,'VEHICLE_STATUS','High','Vehicle unavailable',$2,'FleetSupervisor') ON CONFLICT(vehicle_id,alert_type,alert_date) DO UPDATE SET message=EXCLUDED.message,status=CASE WHEN fleet_erp_v2.vehicle_alerts.status='Closed' THEN 'Open' ELSE fleet_erp_v2.vehicle_alerts.status END,updated_at=CURRENT_TIMESTAMP`,[v.id,plate+' is currently marked as '+v.status+'.']);
+   }
+ }
+ return listVehicleAlerts();
+}
+
+export async function closeVehicleAlert(id){return (await v2Query(`UPDATE fleet_erp_v2.vehicle_alerts SET status='Closed',closed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING *`,[id])).rows[0]||null;}

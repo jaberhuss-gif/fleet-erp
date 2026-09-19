@@ -757,33 +757,6 @@ async function runDailyKmReminders() {
 }
 
 async function run() {
-  try {
-    console.log("[GoogleSheetSync]", JSON.stringify(await syncGoogleSheetVehicles()));
-  } catch (error) {
-    console.error("[GoogleSheetSync]", error.message);
-  }
-
-  // Reconcile the fixed 36-vehicle daily submission compliance on every
-  // background sync so missing tickets are created automatically and
-  // submitted vehicles close their ticket automatically.
-  try {
-    console.log("[DailyVehicleSubmission]", JSON.stringify(await getDailyVehicleSubmissionReport()));
-  } catch (error) {
-    console.error("[DailyVehicleSubmission]", error.message);
-  }
-
-  try {
-    console.log("[KMDailyReminder]", JSON.stringify(await runDailyKmReminders()));
-  } catch (error) {
-    console.error("[KMDailyReminder]", error.message);
-  }
-}
-
-let syncTimer = null;
-let kmSevenAmTimer = null;
-let runInProgress = false;
-
-async function run() {
   if (runInProgress) {
     console.log("[GoogleSheetSync] Previous reconciliation is still running; skipping overlapping run.");
     return;

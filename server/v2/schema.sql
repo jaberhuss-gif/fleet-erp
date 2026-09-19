@@ -48,10 +48,15 @@ CREATE TABLE IF NOT EXISTS drivers (
  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS vehicles (
- id BIGSERIAL PRIMARY KEY, plate_number TEXT NOT NULL, plate_code TEXT NOT NULL DEFAULT '',
+ id BIGSERIAL PRIMARY KEY, legacy_vehicle_id BIGINT UNIQUE,
+ plate_number TEXT NOT NULL, plate_code TEXT NOT NULL DEFAULT '',
  make TEXT, model TEXT, year INT, site_id BIGINT REFERENCES sites(id), driver_id BIGINT REFERENCES drivers(id),
+ legacy_location TEXT NOT NULL DEFAULT '', legacy_driver_name TEXT NOT NULL DEFAULT '', legacy_driver_phone TEXT NOT NULL DEFAULT '',
  current_km NUMERIC(12,1) NOT NULL DEFAULT 0, last_oil_km NUMERIC(12,1) NOT NULL DEFAULT 0,
- oil_interval_km INT NOT NULL DEFAULT 5000, status TEXT NOT NULL DEFAULT 'Active',
+ oil_interval_km INT NOT NULL DEFAULT 5000, last_oil_change_date DATE,
+ meter_updated_at TIMESTAMPTZ, inspection_last_date DATE, inspection_due_date DATE,
+ registration_expiry DATE, insurance_expiry DATE,
+ status TEXT NOT NULL DEFAULT 'Active', notes TEXT,
  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
  UNIQUE(plate_number, plate_code)
 );

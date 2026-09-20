@@ -165,6 +165,167 @@ async function sendDriverReminder(record) {
   return { sent: result.sent || 0, failed: result.failed || 0 };
 }
 
+// ============================================================
+// MAINTENANCE DUE CHECK
+// ============================================================
+
+async function ensureMaintenanceTicket(record, reason) {
+  const marker = `MAINTENANCE_DUE|vehicle=${record.vehicle_id}|type=${record.type}|reason=${reason}`;
+
+  const existing = await query(`
+    SELECT id, status FROM tickets
+    WHERE vehicle_id = $1 AND category = 'Maintenance'
+      AND description LIKE $2 AND status IN ('Open', 'Acknowledged')
+    ORDER BY id DESC LIMIT 1
+  `, [record.vehicle_id, `%${marker}%`]);
+
+  if (existing.rows[0]) return existing.rows[0];
+
+  const reasonText = reason === "OVERDUE" ? "is overdue" : "is due soon";
+  const dueInfo = record.next_due_km
+    ? `Due at: ${Number(record.next_due_km).toLocaleString()} km\nCurrent: ${Number(record.current_km).toLocaleString()} km`
+    : `Due date: ${record.scheduled_date}`;
+
+  const result = await query(`
+    INSERT INTO tickets
+      (vehicle_id, title, location, category, priority, status,
+       description, reported_by, opened_at, department)
+    VALUES
+      ($1, $2, $3, 'Maintenance', $4, 'Open', $5, 'System',
+       CURRENT_TIMESTAMP, 'Fleet')
+    RETURNING id, status
+  `, [
+    record.vehicle_id,
+    `Maintenance ${reason === "OVERDUE" ? "Overdue" : "Due Soon"} — ${record.vehicle_plate || "Vehicle"}`,
+    record.location || "",
+    reason === "OVERDUE" ? "High" : "Medium",
+    `${marker}
+Hello ${record.driver_name || "Driver"},
+
+Vehicle ${record.vehicle_plate || "Vehicle"} requires ${record.type_label || record.type}.
+${dueInfo}
+
+Please visit the workshop.
+
+Thank you,
+Fleet Management`
+  ]);
+
+  return result.rows[0];
+}
+
+export async function checkMaintenanceDue() {
+  await ensurePeriodicMaintenanceSchema();
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const rows = await query(`
+    SELECT
+      pm.id AS pm_id,
+      pm.vehicle_id,
+      pm.type,
+      pm.scheduled_date,
+      pm.next_due_km,
+      pm.interval_km,
+      pm.interval_days,
+      pm.last_service_km,
+      pm.last_service_date,
+      pm.notification_sent_at,
+      v.plate_number,
+      v.plate_code,
+      v.driver AS driver_name,
+      v.phone AS driver_phone,
+      v.current_km,
+      v.location
+    FROM periodic_maintenance pm
+    JOIN vehicles v ON v.id = pm.vehicle_id
+    WHERE pm.status = 'Pending'
+    ORDER BY v.plate_number, v.plate_code
+  `);
+
+  const results = { checked: 0, dueSoon: 0, overdue: 0, ticketsCreated: 0 };
+
+  for (const row of rows.rows) {
+    results.checked += 1;
+
+    const vehicle_plate = [row.plate_number, row.plate_code].filter(Boolean).join(" ").trim();
+    const current_km = Number(row.current_km || 0);
+    const next_due_km = row.next_due_km ? Number(row.next_due_km) : null;
+    const scheduled_date = row.scheduled_date ? String(row.scheduled_date).slice(0, 10) : null;
+
+    let reason = null;
+
+    // Check by km (for oil_change)
+    if (next_due_km && current_km > 0) {
+      if (current_km >= next_due_km) {
+        reason = "OVERDUE";
+      } else if (current_km >= next_due_km - 500) {
+        reason = "DUE_SOON";
+      }
+    }
+
+    // Check by date (for 6_months_general, inspection)
+    if (!reason && scheduled_date) {
+      const dueDate = new Date(scheduled_date);
+      const todayDate = new Date(today);
+      const diffDays = Math.floor((dueDate - todayDate) / (1000 * 60 * 60 * 24));
+
+      if (diffDays <= 0) {
+        reason = "OVERDUE";
+      } else if (diffDays <= 7) {
+        reason = "DUE_SOON";
+      }
+    }
+
+    if (!reason) continue;
+
+    if (reason === "OVERDUE") results.overdue += 1;
+    else results.dueSoon += 1;
+
+    // Skip if already notified recently (within 24 hours)
+    if (row.notification_sent_at) {
+      const lastSent = new Date(row.notification_sent_at).getTime();
+      const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+      if (lastSent > dayAgo) continue;
+    }
+
+    const typeLabels = {
+      oil_change: "Oil Change",
+      "6_months_general": "General Maintenance",
+      inspection: "Periodic Inspection"
+    };
+
+    const record = {
+      vehicle_id: row.vehicle_id,
+      vehicle_plate,
+      driver_name: row.driver_name,
+      driver_phone: row.driver_phone,
+      current_km,
+      next_due_km,
+      scheduled_date,
+      type: row.type,
+      type_label: typeLabels[row.type] || row.type,
+      location: row.location
+    };
+
+    try {
+      await ensureMaintenanceTicket(record, reason);
+      results.ticketsCreated += 1;
+
+      await query(
+        `UPDATE periodic_maintenance
+         SET notification_sent_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [row.pm_id]
+      );
+    } catch (err) {
+      console.error(`[MaintenanceCheck] ticket failed for vehicle ${row.vehicle_id}:`, err.message);
+    }
+  }
+
+  return results;
+}
+
 export async function reconcileAndNotify() {
   await ensureTable();
   const state = await getTodayState();

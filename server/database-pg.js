@@ -258,6 +258,58 @@ export async function listReadings(vehicleId) {
   return result.rows;
 }
 
+export async function ensurePeriodicMaintenanceSchema() {
+  await query(`
+    ALTER TABLE periodic_maintenance
+      ADD COLUMN IF NOT EXISTS last_service_km INTEGER,
+      ADD COLUMN IF NOT EXISTS last_service_date DATE,
+      ADD COLUMN IF NOT EXISTS next_due_km INTEGER,
+      ADD COLUMN IF NOT EXISTS interval_km INTEGER DEFAULT 5000,
+      ADD COLUMN IF NOT EXISTS interval_days INTEGER DEFAULT 180,
+      ADD COLUMN IF NOT EXISTS notification_sent_at TIMESTAMPTZ
+  `);
+}
+
+export async function updatePeriodicAfterOilChange(vehicleId, currentKm, oilDate) {
+  // Ensure the schema is up to date
+  await ensurePeriodicMaintenanceSchema();
+
+  const current = await query(
+    `SELECT id FROM periodic_maintenance
+     WHERE vehicle_id = $1 AND type = 'oil_change' AND status = 'Pending'
+     ORDER BY id DESC LIMIT 1`,
+    [vehicleId]
+  );
+
+  const nextDueKm = Number(currentKm) + 5000;
+
+  if (current.rows[0]) {
+    await query(
+      `UPDATE periodic_maintenance
+       SET last_service_km = $1,
+           last_service_date = $2,
+           next_due_km = $3,
+           interval_km = 5000,
+           scheduled_date = $2::date + INTERVAL '180 days',
+           completed_date = $2,
+           status = 'Pending',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4`,
+      [currentKm, oilDate, nextDueKm, current.rows[0].id]
+    );
+  } else {
+    await query(
+      `INSERT INTO periodic_maintenance
+        (vehicle_id, type, scheduled_date, status,
+         last_service_km, last_service_date, next_due_km,
+         interval_km, interval_days)
+       VALUES ($1, 'oil_change', $2::date + INTERVAL '180 days', 'Pending',
+               $3, $2, $4, 5000, 180)`,
+      [vehicleId, oilDate, currentKm, nextDueKm]
+    );
+  }
+}
+
 export async function changeOil(vehicleId, data = {}) {
   const vehicleResult = await query(
     `SELECT * FROM vehicles WHERE id = $1 LIMIT 1`,
@@ -310,6 +362,13 @@ export async function changeOil(vehicleId, data = {}) {
       vehicleId
     ]
   );
+
+  // Update the periodic maintenance entry for oil_change
+  try {
+    await updatePeriodicAfterOilChange(vehicleId, currentKM, oilDate);
+  } catch (err) {
+    console.error("Failed to update periodic_maintenance after oil change:", err.message);
+  }
 
   await query(
     `INSERT INTO km_records
@@ -2212,72 +2271,143 @@ export async function deletePeriodicMaintenance(id) {
 }
 
 export async function getPeriodicAlerts() {
+  // Two independent triggers:
+  //  - date: scheduled_date <= today + 7 days
+  //  - km:   next_due_km is reached (overdue) or within 500 km (due soon)
+  // The same vehicle can trigger both; we dedupe by pm.id.
   const result = await query(`
     SELECT
       pm.*,
       CONCAT(v.plate_number, ' ', v.plate_code) AS vehicle_plate,
-      v.driver AS driver_name
+      v.driver AS driver_name,
+      v.current_km AS current_km
     FROM periodic_maintenance pm
     LEFT JOIN vehicles v
       ON v.id = pm.vehicle_id
     WHERE pm.status = 'Pending'
-      AND pm.scheduled_date <= CURRENT_DATE + INTERVAL '7 days'
-    ORDER BY pm.scheduled_date ASC
+      AND (
+        (pm.scheduled_date IS NOT NULL AND pm.scheduled_date <= CURRENT_DATE + INTERVAL '7 days')
+        OR
+        (pm.next_due_km IS NOT NULL AND v.current_km IS NOT NULL AND v.current_km >= pm.next_due_km - 500)
+      )
+    ORDER BY pm.scheduled_date ASC, pm.id ASC
   `);
 
-  const rows = result.rows;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const overdue = [];
+  const dueSoon = [];
+
+  for (const r of result.rows) {
+    const currentKm = Number(r.current_km || 0);
+    const nextDueKm = r.next_due_km != null ? Number(r.next_due_km) : null;
+
+    let isOverdue = false;
+    let isDueSoon = false;
+
+    // KM-based
+    if (nextDueKm != null && currentKm > 0) {
+      if (currentKm >= nextDueKm) isOverdue = true;
+      else if (currentKm >= nextDueKm - 500) isDueSoon = true;
+    }
+
+    // Date-based
+    if (r.scheduled_date) {
+      const sd = new Date(r.scheduled_date);
+      sd.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((sd.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffDays < 0) isOverdue = true;
+      else if (diffDays <= 7) isDueSoon = true;
+    }
+
+    const enriched = {
+      ...r,
+      current_km: currentKm,
+      next_due_km: nextDueKm,
+      overdue_km: nextDueKm != null ? currentKm - nextDueKm : null
+    };
+
+    if (isOverdue) overdue.push(enriched);
+    else if (isDueSoon) dueSoon.push(enriched);
+  }
+
+  const countByType = (list) => {
+    const out = { total: list.length, oil_change: 0, "6_months_general": 0, inspection: 0, other: 0 };
+    for (const r of list) {
+      const t = r.type;
+      if (t === "oil_change") out.oil_change += 1;
+      else if (t === "6_months_general") out["6_months_general"] += 1;
+      else if (t === "inspection") out.inspection += 1;
+      else out.other += 1;
+    }
+    return out;
+  };
 
   return {
-    overdue: rows.filter(
-      r => new Date(r.scheduled_date) < new Date()
-    ),
-    dueSoon: rows.filter(
-      r => new Date(r.scheduled_date) >= new Date()
-    )
+    overdue,
+    dueSoon,
+    counts: {
+      overdue: countByType(overdue),
+      dueSoon: countByType(dueSoon)
+    }
   };
 }
 
 export async function generateScheduledMaintenance(monthsAhead = 6) {
+  const INTERVALS = {
+    oil_change: { km: 5000, days: null },
+    "6_months_general": { km: null, days: 180 },
+    inspection: { km: null, days: 365 }
+  };
+
   const result = await query(`
-    SELECT id
+    SELECT id, current_km, last_oil_km
     FROM vehicles
     ORDER BY id
   `);
 
   let created = 0;
 
-  const target = new Date();
-  target.setMonth(target.getMonth() + Number(monthsAhead || 6));
-
   for (const vehicle of result.rows) {
-    for (const type of ["6_months_general", "inspection"]) {
-      const exists = await query(`
-        SELECT id
-        FROM periodic_maintenance
-        WHERE vehicle_id = $1
-          AND type = $2
-          AND status = 'Pending'
-        LIMIT 1
-      `, [vehicle.id, type]);
+    for (const [type, interval] of Object.entries(INTERVALS)) {
+      const exists = await query(
+        `SELECT id FROM periodic_maintenance
+         WHERE vehicle_id = $1 AND type = $2 AND status = 'Pending'
+         LIMIT 1`,
+        [vehicle.id, type]
+      );
 
-      if (!exists.rows.length) {
-        await query(`
-          INSERT INTO periodic_maintenance
-          (
-            vehicle_id,
-            type,
-            scheduled_date,
-            status
-          )
-          VALUES ($1,$2,$3,'Pending')
-        `, [
+      if (exists.rows.length) continue;
+
+      let scheduledDate;
+      let nextDueKm = null;
+
+      if (type === "oil_change") {
+        const lastKm = Number(vehicle.last_oil_km || 0) || Number(vehicle.current_km || 0);
+        nextDueKm = lastKm + interval.km;
+        scheduledDate = new Date();
+        scheduledDate.setDate(scheduledDate.getDate() + 60);
+      } else {
+        scheduledDate = new Date();
+        scheduledDate.setDate(scheduledDate.getDate() + interval.days);
+      }
+
+      await query(
+        `INSERT INTO periodic_maintenance
+          (vehicle_id, type, scheduled_date, status, next_due_km, interval_km, interval_days)
+         VALUES ($1, $2, $3, 'Pending', $4, $5, $6)`,
+        [
           vehicle.id,
           type,
-          target.toISOString().slice(0,10)
-        ]);
+          scheduledDate.toISOString().slice(0, 10),
+          nextDueKm,
+          interval.km,
+          interval.days
+        ]
+      );
 
-        created++;
-      }
+      created += 1;
     }
   }
 

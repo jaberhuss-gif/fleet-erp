@@ -48,11 +48,19 @@ export default function Tickets({ user, access = {} }) {
         alert('No phone number found for this driver.');
         return;
       }
-      const msg = 'Hello ' + (info.driverName || 'Driver') + ',\n\n' +
-        'No KM reading recorded today for vehicle ' + (info.vehiclePlate || '') + '.\n' +
-        'Last reading: ' + Number(info.currentKm || 0).toLocaleString() + ' km.\n\n' +
-        'Please record before 7:00 AM.\n\n' +
-        'Thank you,\nFleet Management';
+      const ticket = tickets.find(t => t.id === id);
+      const isMaintenance = ticket?.category === 'Maintenance';
+      const msg = isMaintenance
+        ? 'Hello ' + (info.driverName || 'Driver') + ',\n\n' +
+          'Vehicle ' + (info.vehiclePlate || '') + ' requires maintenance.\n' +
+          'Current: ' + Number(info.currentKm || 0).toLocaleString() + ' km\n\n' +
+          'Please visit the workshop.\n\n' +
+          'Thank you,\nFleet Management'
+        : 'Hello ' + (info.driverName || 'Driver') + ',\n\n' +
+          'No KM reading recorded today for vehicle ' + (info.vehiclePlate || '') + '.\n' +
+          'Last reading: ' + Number(info.currentKm || 0).toLocaleString() + ' km.\n\n' +
+          'Please record before 7:00 AM.\n\n' +
+          'Thank you,\nFleet Management';
       const url = 'https://wa.me/' + info.driverPhone + '?text=' + encodeURIComponent(msg);
       window.open(url, '_blank');
       await api.put('/tickets/' + id + '/log-whatsapp', {});
@@ -236,7 +244,7 @@ export default function Tickets({ user, access = {} }) {
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      {t.status === 'Open' && t.category === 'Daily KM' && user?.role === 'Owner' && (
+                      {t.status === 'Open' && (t.category === 'Daily KM' || t.category === 'Maintenance') && user?.role === 'Owner' && (
                         <button
                           className="btn btn-warning"
                           style={{ padding: '6px 10px', fontSize: '12px', background: '#25D366', borderColor: '#25D366', color: '#fff' }}

@@ -2271,28 +2271,86 @@ export async function deletePeriodicMaintenance(id) {
 }
 
 export async function getPeriodicAlerts() {
+  // Two independent triggers:
+  //  - date: scheduled_date <= today + 7 days
+  //  - km:   next_due_km is reached (overdue) or within 500 km (due soon)
+  // The same vehicle can trigger both; we dedupe by pm.id.
   const result = await query(`
     SELECT
       pm.*,
       CONCAT(v.plate_number, ' ', v.plate_code) AS vehicle_plate,
-      v.driver AS driver_name
+      v.driver AS driver_name,
+      v.current_km AS current_km
     FROM periodic_maintenance pm
     LEFT JOIN vehicles v
       ON v.id = pm.vehicle_id
     WHERE pm.status = 'Pending'
-      AND pm.scheduled_date <= CURRENT_DATE + INTERVAL '7 days'
-    ORDER BY pm.scheduled_date ASC
+      AND (
+        (pm.scheduled_date IS NOT NULL AND pm.scheduled_date <= CURRENT_DATE + INTERVAL '7 days')
+        OR
+        (pm.next_due_km IS NOT NULL AND v.current_km IS NOT NULL AND v.current_km >= pm.next_due_km - 500)
+      )
+    ORDER BY pm.scheduled_date ASC, pm.id ASC
   `);
 
-  const rows = result.rows;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const overdue = [];
+  const dueSoon = [];
+
+  for (const r of result.rows) {
+    const currentKm = Number(r.current_km || 0);
+    const nextDueKm = r.next_due_km != null ? Number(r.next_due_km) : null;
+
+    let isOverdue = false;
+    let isDueSoon = false;
+
+    // KM-based
+    if (nextDueKm != null && currentKm > 0) {
+      if (currentKm >= nextDueKm) isOverdue = true;
+      else if (currentKm >= nextDueKm - 500) isDueSoon = true;
+    }
+
+    // Date-based
+    if (r.scheduled_date) {
+      const sd = new Date(r.scheduled_date);
+      sd.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((sd.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffDays < 0) isOverdue = true;
+      else if (diffDays <= 7) isDueSoon = true;
+    }
+
+    const enriched = {
+      ...r,
+      current_km: currentKm,
+      next_due_km: nextDueKm,
+      overdue_km: nextDueKm != null ? currentKm - nextDueKm : null
+    };
+
+    if (isOverdue) overdue.push(enriched);
+    else if (isDueSoon) dueSoon.push(enriched);
+  }
+
+  const countByType = (list) => {
+    const out = { total: list.length, oil_change: 0, "6_months_general": 0, inspection: 0, other: 0 };
+    for (const r of list) {
+      const t = r.type;
+      if (t === "oil_change") out.oil_change += 1;
+      else if (t === "6_months_general") out["6_months_general"] += 1;
+      else if (t === "inspection") out.inspection += 1;
+      else out.other += 1;
+    }
+    return out;
+  };
 
   return {
-    overdue: rows.filter(
-      r => new Date(r.scheduled_date) < new Date()
-    ),
-    dueSoon: rows.filter(
-      r => new Date(r.scheduled_date) >= new Date()
-    )
+    overdue,
+    dueSoon,
+    counts: {
+      overdue: countByType(overdue),
+      dueSoon: countByType(dueSoon)
+    }
   };
 }
 

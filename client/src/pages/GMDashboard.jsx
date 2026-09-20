@@ -59,6 +59,7 @@ export default function GMDashboard() {
   const [building, setBuilding] = useState(null);
   const [report, setReport] = useState(null);
   const [kmDaily, setKmDaily] = useState({ records: [], count: 0 });
+  const [maintAlerts, setMaintAlerts] = useState({ overdue: [], dueSoon: [], counts: { overdue: { total: 0 }, dueSoon: { total: 0 } } });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(new Date());
@@ -67,13 +68,14 @@ export default function GMDashboard() {
   const loadAll = useCallback(async () => {
     try {
       setRefreshing(true);
-      const [d, a, t, b, r, k] = await Promise.all([
+      const [d, a, t, b, r, k, ma] = await Promise.all([
         getDashboard(),
         getAlerts(),
         getTickets(),
         api.get('/building/dashboard').then(x => x.data),
         api.get('/reports/financial').then(x => x.data),
-        api.get('/km-daily-notifications').then(x => x.data).catch(() => ({ records: [], count: 0 }))
+        api.get('/km-daily-notifications').then(x => x.data).catch(() => ({ records: [], count: 0 })),
+        api.get('/periodic-maintenance/alerts').then(x => x.data).catch(() => ({ overdue: [], dueSoon: [], counts: { overdue: { total: 0 }, dueSoon: { total: 0 } } }))
       ]);
       setData(d);
       setAlerts(a);
@@ -81,6 +83,7 @@ export default function GMDashboard() {
       setBuilding(b);
       setReport(r);
       setKmDaily(k);
+      setMaintAlerts(ma);
       setLastUpdated(new Date());
     } catch (e) {
       setError(e.message || 'Failed to load');
@@ -153,7 +156,7 @@ export default function GMDashboard() {
 
       {/* ═══ CONTENT ═══ */}
       <div className="gm-content">
-        {subTab === 'overview' && <OverviewTab data={data} tickets={tickets} report={report} building={building} grand={grand} reportMonths={reportMonths} kmDaily={kmDaily} />}
+        {subTab === 'overview' && <OverviewTab data={data} tickets={tickets} report={report} building={building} grand={grand} reportMonths={reportMonths} kmDaily={kmDaily} maintAlerts={maintAlerts} />}
         {subTab === 'vehicles' && <VehiclesTab data={data} alerts={alerts} />}
         {subTab === 'building' && <BuildingTab building={building} />}
         {subTab === 'financial' && <FinancialReport />}
@@ -166,7 +169,7 @@ export default function GMDashboard() {
 /* ═══════════════════════════════════════════
    OVERVIEW TAB
    ═══════════════════════════════════════════ */
-function OverviewTab({ data, tickets, report, building, grand, reportMonths, kmDaily }) {
+function OverviewTab({ data, tickets, report, building, grand, reportMonths, kmDaily, maintAlerts }) {
   const total = data.vehicles.total || 1;
   const healthScore = Math.round((data.vehicles.safe / total) * 100);
   const maintSavingsPct = grand.maintTotalSavingsPct || 0;
@@ -231,6 +234,69 @@ function OverviewTab({ data, tickets, report, building, grand, reportMonths, kmD
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </div>
+
+      {/* ==== MAINTENANCE DUE ==== */}
+      <div className="gm-panel gm-panel-gradient" style={{ marginBottom: '18px' }}>
+        <div className="gm-panel-header">
+          <h2>🔧 Maintenance Due</h2>
+          <span className="gm-panel-badge">
+            {(maintAlerts?.counts?.overdue?.total || 0) + (maintAlerts?.counts?.dueSoon?.total || 0)} need attention
+          </span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '14px' }}>
+          <div style={{ background: 'linear-gradient(135deg, #dc2626, #ef4444)', color: '#fff', padding: '14px 18px', borderRadius: '10px' }}>
+            <div style={{ fontSize: '12px', opacity: 0.9 }}>🔴 Overdue</div>
+            <div style={{ fontSize: '28px', fontWeight: '700', margin: '4px 0' }}>{maintAlerts?.counts?.overdue?.total || 0}</div>
+            <div style={{ fontSize: '11px', opacity: 0.85 }}>
+              Oil: {maintAlerts?.counts?.overdue?.oil_change || 0} · Insp: {maintAlerts?.counts?.overdue?.inspection || 0} · Gen: {maintAlerts?.counts?.overdue?.['6_months_general'] || 0}
+            </div>
+          </div>
+
+          <div style={{ background: 'linear-gradient(135deg, #f59e0b, #fbbf24)', color: '#fff', padding: '14px 18px', borderRadius: '10px' }}>
+            <div style={{ fontSize: '12px', opacity: 0.9 }}>🟡 Due Soon</div>
+            <div style={{ fontSize: '28px', fontWeight: '700', margin: '4px 0' }}>{maintAlerts?.counts?.dueSoon?.total || 0}</div>
+            <div style={{ fontSize: '11px', opacity: 0.85 }}>
+              Oil: {maintAlerts?.counts?.dueSoon?.oil_change || 0} · Insp: {maintAlerts?.counts?.dueSoon?.inspection || 0} · Gen: {maintAlerts?.counts?.dueSoon?.['6_months_general'] || 0}
+            </div>
+          </div>
+        </div>
+
+        {(maintAlerts?.overdue || []).length > 0 ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '10px 12px' }}>Vehicle</th>
+                  <th style={{ textAlign: 'left', padding: '10px 12px' }}>Driver</th>
+                  <th style={{ textAlign: 'left', padding: '10px 12px' }}>Type</th>
+                  <th style={{ textAlign: 'right', padding: '10px 12px' }}>Current KM</th>
+                  <th style={{ textAlign: 'right', padding: '10px 12px' }}>Due KM</th>
+                  <th style={{ textAlign: 'right', padding: '10px 12px' }}>Overdue</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(maintAlerts?.overdue || []).slice(0, 10).map((r, idx) => (
+                  <tr key={r.id || idx}>
+                    <td style={{ padding: '10px 12px', fontWeight: 700 }}>{r.vehicle_plate || r.vehicle_id}</td>
+                    <td style={{ padding: '10px 12px' }}>{r.driver_name || 'Unassigned'}</td>
+                    <td style={{ padding: '10px 12px' }}>{r.type === 'oil_change' ? '🛢️ Oil' : r.type === 'inspection' ? '🔍 Inspection' : r.type === '6_months_general' ? '🔧 General' : r.type}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{fmt(r.current_km || 0)}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{r.next_due_km ? fmt(r.next_due_km) : '-'}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#dc2626', fontWeight: 700 }}>
+                      {r.overdue_km != null && r.overdue_km > 0 ? '-' + fmt(r.overdue_km) + ' km' : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="gm-no-data" style={{ padding: '20px' }}>
+            ✅ No overdue maintenance right now.
           </div>
         )}
       </div>

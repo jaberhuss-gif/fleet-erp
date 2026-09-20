@@ -156,6 +156,31 @@ export default function PeriodicMaintenance({ canWork = false }) {
         <button className={subTab === 'completed' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('completed')}>Completed ({subTabData.completed.length})</button>
       </div>
 
+      {/* ===== Stats Cards ===== */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+        <div style={{ background: 'linear-gradient(135deg, #dc2626, #ef4444)', color: '#fff', padding: '16px 20px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(220,38,38,0.3)' }}>
+          <div style={{ fontSize: '13px', opacity: 0.9, marginBottom: '6px' }}>ðŸ”´ Overdue</div>
+          <div style={{ fontSize: '32px', fontWeight: '700', lineHeight: 1 }}>{alerts.counts?.overdue?.total ?? alerts.overdue.length}</div>
+          <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '8px' }}>
+            Oil: {alerts.counts?.overdue?.oil_change ?? 0} Â· Insp: {alerts.counts?.overdue?.inspection ?? 0} Â· Gen: {alerts.counts?.overdue?.['6_months_general'] ?? 0}
+          </div>
+        </div>
+
+        <div style={{ background: 'linear-gradient(135deg, #f59e0b, #fbbf24)', color: '#fff', padding: '16px 20px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(245,158,11,0.3)' }}>
+          <div style={{ fontSize: '13px', opacity: 0.9, marginBottom: '6px' }}>ðŸŸ¡ Due Soon</div>
+          <div style={{ fontSize: '32px', fontWeight: '700', lineHeight: 1 }}>{alerts.counts?.dueSoon?.total ?? alerts.dueSoon.length}</div>
+          <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '8px' }}>
+            Oil: {alerts.counts?.dueSoon?.oil_change ?? 0} Â· Insp: {alerts.counts?.dueSoon?.inspection ?? 0} Â· Gen: {alerts.counts?.dueSoon?.['6_months_general'] ?? 0}
+          </div>
+        </div>
+
+        <div style={{ background: 'linear-gradient(135deg, #16a34a, #22c55e)', color: '#fff', padding: '16px 20px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(22,163,74,0.3)' }}>
+          <div style={{ fontSize: '13px', opacity: 0.9, marginBottom: '6px' }}>ðŸŸ¢ Safe</div>
+          <div style={{ fontSize: '32px', fontWeight: '700', lineHeight: 1 }}>{Math.max(0, records.length - alerts.overdue.length - alerts.dueSoon.length)}</div>
+          <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '8px' }}>Out of {records.length} total records</div>
+        </div>
+      </div>
+
       {message && <div className="alert alert-success">{message}</div>}
       {error && <div className="alert alert-error">{error}</div>}
 

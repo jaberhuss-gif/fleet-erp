@@ -827,25 +827,56 @@ app.get("/api/live-issues", async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-// ===== TICKET FEEDBACK =====
-app.put("/api/tickets/:id/acknowledge", async (req, res) => {
-  try { res.json({ success: true, ticket: acknowledgeTicket(req.params.id, req.body) }); }
-  catch (e) { res.status(400).json({ success: false, error: e.message }); }
+// ===== WHATSAPP FOR DAILY KM TICKETS =====
+app.get("/api/tickets/:id/whatsapp-info", async (req, res) => {
+  try {
+    const ticketResult = await pgQuery(
+      "SELECT id, vehicle_id FROM tickets WHERE id = $1",
+      [req.params.id]
+    );
+    if (!ticketResult.rows[0]) {
+      return res.status(404).json({ success: false, error: "Ticket not found" });
+    }
+
+    const vehicleResult = await pgQuery(
+      "SELECT id, plate_number, plate_code, driver, phone, current_km FROM vehicles WHERE id = $1",
+      [ticketResult.rows[0].vehicle_id]
+    );
+    if (!vehicleResult.rows[0]) {
+      return res.status(404).json({ success: false, error: "Vehicle not found" });
+    }
+
+    const v = vehicleResult.rows[0];
+    const plate = [v.plate_number, v.plate_code].filter(Boolean).join(" ").trim();
+    const phone = String(v.phone || "").replace(/[^0-9]/g, "");
+
+    res.json({
+      success: true,
+      ticketId: ticketResult.rows[0].id,
+      driverName: v.driver || "",
+      driverPhone: phone,
+      vehiclePlate: plate,
+      currentKm: Number(v.current_km || 0)
+    });
+  } catch (e) {
+    console.error("Error fetching WhatsApp info:", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
-app.put("/api/tickets/:id/close-with-notes", async (req, res) => {
-  try { res.json({ success: true, ticket: closeTicketWithNotes(req.params.id, req.body) }); }
-  catch (e) { res.status(400).json({ success: false, error: e.message }); }
-});
-
-app.get("/api/tickets/by-reporter/:name", async (req, res) => {
-  try { res.json({ success: true, tickets: listTicketsByReporter(req.params.name) }); }
-  catch (e) { res.status(500).json({ success: false, error: e.message }); }
-});
-
-app.get("/api/tickets/stats/:name", async (req, res) => {
-  try { res.json({ success: true, ...getReporterStats(req.params.name) }); }
-  catch (e) { res.status(500).json({ success: false, error: e.message }); }
+app.put("/api/tickets/:id/log-whatsapp", requireRole("Owner"), async (req, res) => {
+  try {
+    const userName = req.user?.full_name || req.user?.username || "Owner";
+    const note = "[" + new Date().toISOString() + "] WhatsApp sent by " + userName;
+    await pgQuery(
+      "UPDATE tickets SET resolution_notes = CASE WHEN COALESCE(resolution_notes, '') = '' THEN $1 ELSE resolution_notes || E'\n' || $1 END WHERE id = $2",
+      [note, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (e) {
+    console.error("Error logging WhatsApp:", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 // ===== FINANCIAL REPORT =====

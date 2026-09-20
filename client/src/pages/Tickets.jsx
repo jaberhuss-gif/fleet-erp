@@ -39,6 +39,29 @@ export default function Tickets({ user, access = {} }) {
     } catch (e) { alert('Failed: ' + e.message); }
   };
 
+  const handleWhatsApp = async (id) => {
+    if (user?.role !== 'Owner') return;
+    try {
+      const res = await api.get('/tickets/' + id + '/whatsapp-info');
+      const info = res.data || {};
+      if (!info.driverPhone) {
+        alert('No phone number found for this driver.');
+        return;
+      }
+      const msg = 'Hello ' + (info.driverName || 'Driver') + ',\n\n' +
+        'No KM reading recorded today for vehicle ' + (info.vehiclePlate || '') + '.\n' +
+        'Last reading: ' + Number(info.currentKm || 0).toLocaleString() + ' km.\n\n' +
+        'Please record before 7:00 AM.\n\n' +
+        'Thank you,\nFleet Management';
+      const url = 'https://wa.me/' + info.driverPhone + '?text=' + encodeURIComponent(msg);
+      window.open(url, '_blank');
+      await api.put('/tickets/' + id + '/log-whatsapp', {});
+      load();
+    } catch (e) {
+      alert('WhatsApp failed: ' + e.message);
+    }
+  };
+
   const categories = [...new Set(tickets.map(t => t.category).filter(Boolean))].sort();
   const months = [...new Set(tickets.map(t => String(t.opened_at || '').slice(0, 7)).filter(Boolean))].sort().reverse();
 
@@ -212,9 +235,21 @@ export default function Tickets({ user, access = {} }) {
                     </span>
                   </td>
                   <td>
-                    {t.status === 'Open' && canWork && (
-                      <button className="btn btn-success" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleClose(t.id)}>Close</button>
-                    )}
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {t.status === 'Open' && t.category === 'Daily KM' && user?.role === 'Owner' && (
+                        <button
+                          className="btn btn-warning"
+                          style={{ padding: '6px 10px', fontSize: '12px', background: '#25D366', borderColor: '#25D366', color: '#fff' }}
+                          onClick={() => handleWhatsApp(t.id)}
+                          title="Send WhatsApp reminder"
+                        >
+                          📱 WhatsApp
+                        </button>
+                      )}
+                      {t.status === 'Open' && canWork && (
+                        <button className="btn btn-success" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleClose(t.id)}>Close</button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

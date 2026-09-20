@@ -258,6 +258,58 @@ export async function listReadings(vehicleId) {
   return result.rows;
 }
 
+export async function ensurePeriodicMaintenanceSchema() {
+  await query(`
+    ALTER TABLE periodic_maintenance
+      ADD COLUMN IF NOT EXISTS last_service_km INTEGER,
+      ADD COLUMN IF NOT EXISTS last_service_date DATE,
+      ADD COLUMN IF NOT EXISTS next_due_km INTEGER,
+      ADD COLUMN IF NOT EXISTS interval_km INTEGER DEFAULT 5000,
+      ADD COLUMN IF NOT EXISTS interval_days INTEGER DEFAULT 180,
+      ADD COLUMN IF NOT EXISTS notification_sent_at TIMESTAMPTZ
+  `);
+}
+
+export async function updatePeriodicAfterOilChange(vehicleId, currentKm, oilDate) {
+  // Ensure the schema is up to date
+  await ensurePeriodicMaintenanceSchema();
+
+  const current = await query(
+    `SELECT id FROM periodic_maintenance
+     WHERE vehicle_id = $1 AND type = 'oil_change' AND status = 'Pending'
+     ORDER BY id DESC LIMIT 1`,
+    [vehicleId]
+  );
+
+  const nextDueKm = Number(currentKm) + 5000;
+
+  if (current.rows[0]) {
+    await query(
+      `UPDATE periodic_maintenance
+       SET last_service_km = $1,
+           last_service_date = $2,
+           next_due_km = $3,
+           interval_km = 5000,
+           scheduled_date = $2::date + INTERVAL '180 days',
+           completed_date = $2,
+           status = 'Pending',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4`,
+      [currentKm, oilDate, nextDueKm, current.rows[0].id]
+    );
+  } else {
+    await query(
+      `INSERT INTO periodic_maintenance
+        (vehicle_id, type, scheduled_date, status,
+         last_service_km, last_service_date, next_due_km,
+         interval_km, interval_days)
+       VALUES ($1, 'oil_change', $2::date + INTERVAL '180 days', 'Pending',
+               $3, $2, $4, 5000, 180)`,
+      [vehicleId, oilDate, currentKm, nextDueKm]
+    );
+  }
+}
+
 export async function changeOil(vehicleId, data = {}) {
   const vehicleResult = await query(
     `SELECT * FROM vehicles WHERE id = $1 LIMIT 1`,
@@ -310,6 +362,13 @@ export async function changeOil(vehicleId, data = {}) {
       vehicleId
     ]
   );
+
+  // Update the periodic maintenance entry for oil_change
+  try {
+    await updatePeriodicAfterOilChange(vehicleId, currentKM, oilDate);
+  } catch (err) {
+    console.error("Failed to update periodic_maintenance after oil change:", err.message);
+  }
 
   await query(
     `INSERT INTO km_records

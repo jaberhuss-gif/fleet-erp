@@ -172,8 +172,8 @@ function parseSheetDate(value) {
     return null;
   }
 
-  const first = datePieces[0];
-  const second = datePieces[1];
+  const day = datePieces[0];
+  const month = datePieces[1];
   const year = datePieces[2];
   const timePieces = timePart.split(":").map(Number);
   const hour = Number.isFinite(timePieces[0]) ? timePieces[0] : 0;
@@ -182,41 +182,28 @@ function parseSheetDate(value) {
 
   if (year < 2000) return null;
 
-  const now = new Date();
-  const candidates = [];
+  // The Records sheet uses DD/MM/YYYY for all entries from May 2026 onward.
+  // The previous implementation also tried MM/DD/YYYY and picked the latest
+  // interpretation, which turned some May records into September records and
+  // caused daily KM compliance tickets to fire for vehicles that had already
+  // submitted their reading. We now always interpret the first number as the
+  // day and the second as the month.
+  if (!(day >= 1 && day <= 31)) return null;
+  if (!(month >= 1 && month <= 12)) return null;
 
-  // D/M/YYYY candidate
-  if (first >= 1 && first <= 31 && second >= 1 && second <= 12) {
-    candidates.push(new Date(Date.UTC(
-      year, second - 1, first, hour - 3, minute, secondValue
-    )));
-  }
+  const parsed = new Date(Date.UTC(
+    year,
+    month - 1,
+    day,
+    hour - 3,
+    minute,
+    secondValue
+  ));
 
-  // M/D/YYYY candidate
-  if (first >= 1 && first <= 12 && second >= 1 && second <= 31) {
-    candidates.push(new Date(Date.UTC(
-      year, first - 1, second, hour - 3, minute, secondValue
-    )));
-  }
+  if (Number.isNaN(parsed.getTime())) return null;
+  if (parsed.getUTCFullYear() !== year) return null;
 
-  const valid = candidates.filter((d) =>
-    !Number.isNaN(d.getTime()) &&
-    d.getUTCFullYear() === year
-  );
-
-  if (!valid.length) return null;
-
-  // The Records sheet should not contain future timestamps.
-  // Prefer the latest candidate that is not in the future.
-  const nowMs = now.getTime();
-  const notFuture = valid.filter((d) => d.getTime() <= nowMs + 24 * 60 * 60 * 1000);
-
-  if (notFuture.length) {
-    return notFuture.sort((a, b) => b.getTime() - a.getTime())[0];
-  }
-
-  // Fallback: return the earliest valid interpretation.
-  return valid.sort((a, b) => a.getTime() - b.getTime())[0];
+  return parsed;
 }
 
 export async function syncGoogleSheetVehicles() {

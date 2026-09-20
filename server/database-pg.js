@@ -2297,46 +2297,59 @@ export async function getPeriodicAlerts() {
 }
 
 export async function generateScheduledMaintenance(monthsAhead = 6) {
+  const INTERVALS = {
+    oil_change: { km: 5000, days: null },
+    "6_months_general": { km: null, days: 180 },
+    inspection: { km: null, days: 365 }
+  };
+
   const result = await query(`
-    SELECT id
+    SELECT id, current_km, last_oil_km
     FROM vehicles
     ORDER BY id
   `);
 
   let created = 0;
 
-  const target = new Date();
-  target.setMonth(target.getMonth() + Number(monthsAhead || 6));
-
   for (const vehicle of result.rows) {
-    for (const type of ["6_months_general", "inspection"]) {
-      const exists = await query(`
-        SELECT id
-        FROM periodic_maintenance
-        WHERE vehicle_id = $1
-          AND type = $2
-          AND status = 'Pending'
-        LIMIT 1
-      `, [vehicle.id, type]);
+    for (const [type, interval] of Object.entries(INTERVALS)) {
+      const exists = await query(
+        `SELECT id FROM periodic_maintenance
+         WHERE vehicle_id = $1 AND type = $2 AND status = 'Pending'
+         LIMIT 1`,
+        [vehicle.id, type]
+      );
 
-      if (!exists.rows.length) {
-        await query(`
-          INSERT INTO periodic_maintenance
-          (
-            vehicle_id,
-            type,
-            scheduled_date,
-            status
-          )
-          VALUES ($1,$2,$3,'Pending')
-        `, [
+      if (exists.rows.length) continue;
+
+      let scheduledDate;
+      let nextDueKm = null;
+
+      if (type === "oil_change") {
+        const lastKm = Number(vehicle.last_oil_km || 0) || Number(vehicle.current_km || 0);
+        nextDueKm = lastKm + interval.km;
+        scheduledDate = new Date();
+        scheduledDate.setDate(scheduledDate.getDate() + 60);
+      } else {
+        scheduledDate = new Date();
+        scheduledDate.setDate(scheduledDate.getDate() + interval.days);
+      }
+
+      await query(
+        `INSERT INTO periodic_maintenance
+          (vehicle_id, type, scheduled_date, status, next_due_km, interval_km, interval_days)
+         VALUES ($1, $2, $3, 'Pending', $4, $5, $6)`,
+        [
           vehicle.id,
           type,
-          target.toISOString().slice(0,10)
-        ]);
+          scheduledDate.toISOString().slice(0, 10),
+          nextDueKm,
+          interval.km,
+          interval.days
+        ]
+      );
 
-        created++;
-      }
+      created += 1;
     }
   }
 

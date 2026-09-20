@@ -56,10 +56,13 @@ export default function Reports() {
       <div className="sub-nav" style={{ marginBottom: '16px', display: 'flex', gap: '8px' }}>
         <button className={subTab === 'financial' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('financial')}>📊 Financial Reports</button>
         <button className={subTab === 'fleet' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('fleet')}>🔧 Fleet Maintenance</button>
+        <button className={subTab === 'building' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('building')}>🏢 Building Maintenance</button>
       </div>
 
       {subTab === 'fleet' ? (
         <FleetMaintenanceReport />
+      ) : subTab === 'building' ? (
+        <BuildingMaintenanceReport />
       ) : (
       <>
       <div className="panel">
@@ -417,3 +420,231 @@ function FleetMaintenanceReport() {
   );
 }
 
+
+function BuildingMaintenanceReport() {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [period, setPeriod] = useState('month');
+  const [filterSite, setFilterSite] = useState('all');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterContractor, setFilterContractor] = useState('all');
+
+  useEffect(() => { load(); }, []);
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/work-orders');
+      setOrders(res.data.orders || []);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+
+  const now = new Date();
+  const monthKey = (d) => {
+    const dt = new Date(d);
+    return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+  };
+  const currentMonth = monthKey(now);
+  const currentYear = String(now.getFullYear());
+
+  const last3MonthsKeys = [];
+  for (let i = 0; i < 3; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    last3MonthsKeys.push(monthKey(d));
+  }
+  const last6MonthsKeys = [];
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    last6MonthsKeys.push(monthKey(d));
+  }
+
+  const filteredByPeriod = orders.filter(o => {
+    if (!o.reported_date) return false;
+    const m = o.month || monthKey(o.reported_date);
+    if (period === 'month') return m === currentMonth;
+    if (period === '3months') return last3MonthsKeys.includes(m);
+    if (period === '6months') return last6MonthsKeys.includes(m);
+    if (period === 'year') return o.year === currentYear;
+    return true;
+  });
+
+  const filteredBySite = filterSite === 'all'
+    ? filteredByPeriod
+    : filteredByPeriod.filter(o => o.site === filterSite);
+
+  const filteredByCategory = filterCategory === 'all'
+    ? filteredBySite
+    : filteredBySite.filter(o => o.category === filterCategory);
+
+  const filtered = filterContractor === 'all'
+    ? filteredByCategory
+    : filteredByCategory.filter(o => {
+        const cn = String(o.contractor_name || '').trim();
+        const isContractor = cn !== '' && cn.toLowerCase() !== 'company' && cn.toLowerCase() !== 'internal';
+        return filterContractor === 'contractor' ? isContractor : !isContractor;
+      });
+
+  const totalCost = filtered.reduce((sum, o) => sum + Number(o.final_cost || 0), 0);
+  const totalContractorCost = filtered.reduce((sum, o) => sum + Number(o.contractor_cost || 0), 0);
+  const totalLaborCost = filtered.reduce((sum, o) => sum + Number(o.labor_cost || 0), 0);
+  const totalPartsCost = filtered.reduce((sum, o) => sum + Number(o.parts_cost || 0), 0);
+  const avgCost = filtered.length > 0 ? totalCost / filtered.length : 0;
+
+  const closedCount = filtered.filter(o => String(o.status).toLowerCase() === 'closed').length;
+  const openCount = filtered.length - closedCount;
+
+  const uniqueSites = [...new Set(orders.map(o => o.site).filter(Boolean))].sort();
+  const uniqueCategories = [...new Set(orders.map(o => o.category).filter(Boolean))].sort();
+
+  const categoryMap = {};
+  filtered.forEach(o => {
+    const c = o.category || 'Other';
+    if (!categoryMap[c]) categoryMap[c] = { category: c, count: 0, cost: 0 };
+    categoryMap[c].count += 1;
+    categoryMap[c].cost += Number(o.final_cost || 0);
+  });
+  const categoryData = Object.values(categoryMap).sort((a, b) => b.cost - a.cost);
+
+  if (loading) return <div className="loading">Loading building reports...</div>;
+  if (error) return <div className="alert alert-error">{error}</div>;
+
+  return (
+    <div>
+      <div className="panel">
+        <div style={{ background: 'linear-gradient(135deg, #059669, #10b981)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>🏢 Building Maintenance Report</h2>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginTop: '16px', background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label>Period</label>
+            <select value={period} onChange={e => setPeriod(e.target.value)}>
+              <option value="month">This Month</option>
+              <option value="3months">Last 3 Months</option>
+              <option value="6months">Last 6 Months</option>
+              <option value="year">This Year</option>
+              <option value="all">All Time</option>
+            </select>
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label>Site</label>
+            <select value={filterSite} onChange={e => setFilterSite(e.target.value)}>
+              <option value="all">All Sites</option>
+              {uniqueSites.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label>Category</label>
+            <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+              <option value="all">All Categories</option>
+              {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label>Contractor</label>
+            <select value={filterContractor} onChange={e => setFilterContractor(e.target.value)}>
+              <option value="all">All</option>
+              <option value="internal">Internal Only</option>
+              <option value="contractor">Contractor Only</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="cards-grid" style={{ marginBottom: '20px' }}>
+        <div className="card success">
+          <h3>Total Orders</h3>
+          <div className="big-number" style={{ color: '#16a34a' }}>{filtered.length}</div>
+          <div className="sub">{closedCount} closed · {openCount} open</div>
+        </div>
+        <div className="card">
+          <h3>Total Cost</h3>
+          <div className="big-number" style={{ color: '#1e3a8a' }}>{Number(totalCost).toLocaleString()}</div>
+          <div className="sub">SAR</div>
+        </div>
+        <div className="card warning">
+          <h3>Average Cost</h3>
+          <div className="big-number" style={{ color: '#f59e0b' }}>{Number(avgCost).toLocaleString()}</div>
+          <div className="sub">SAR</div>
+        </div>
+      </div>
+
+      <div className="cards-grid" style={{ marginBottom: '20px' }}>
+        <div className="card">
+          <h3>Contractor Cost</h3>
+          <div className="big-number" style={{ color: '#dc2626' }}>{Number(totalContractorCost).toLocaleString()}</div>
+          <div className="sub">SAR</div>
+        </div>
+        <div className="card">
+          <h3>Labor Cost</h3>
+          <div className="big-number" style={{ color: '#1e3a8a' }}>{Number(totalLaborCost).toLocaleString()}</div>
+          <div className="sub">SAR</div>
+        </div>
+        <div className="card">
+          <h3>Parts Cost</h3>
+          <div className="big-number" style={{ color: '#1e3a8a' }}>{Number(totalPartsCost).toLocaleString()}</div>
+          <div className="sub">SAR</div>
+        </div>
+      </div>
+
+      {categoryData.length > 0 && (
+        <div className="panel" style={{ marginBottom: '20px' }}>
+          <div style={{ background: 'linear-gradient(135deg, #059669, #10b981)', padding: '14px 20px', borderRadius: '10px 10px 0 0', color: '#fff' }}>
+            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>Cost by Category</h2>
+          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={categoryData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="category" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="cost" name="Cost (SAR)" fill="#059669" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <div className="panel">
+        <div style={{ background: 'linear-gradient(135deg, #059669, #10b981)', padding: '14px 20px', borderRadius: '10px 10px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>Work Orders ({filtered.length})</h2>
+        </div>
+        <div style={{ overflowX: 'auto', marginTop: '12px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f1f5f9' }}>
+                <th style={{ textAlign: 'left', padding: '10px 12px' }}>WO No</th>
+                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Date</th>
+                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Site</th>
+                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Category</th>
+                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Description</th>
+                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Status</th>
+                <th style={{ textAlign: 'right', padding: '10px 12px' }}>Cost (SAR)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.slice(0, 100).map(o => (
+                <tr key={o.id}>
+                  <td style={{ padding: '10px 12px', fontWeight: 700 }}>{o.wo_no || '#' + o.id}</td>
+                  <td style={{ padding: '10px 12px' }}>{o.reported_date ? String(o.reported_date).slice(0, 10) : '-'}</td>
+                  <td style={{ padding: '10px 12px' }}>{o.site || '-'}</td>
+                  <td style={{ padding: '10px 12px' }}>{o.category || '-'}</td>
+                  <td style={{ padding: '10px 12px', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.description || '-'}</td>
+                  <td style={{ padding: '10px 12px' }}>{o.status || '-'}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>{Number(o.final_cost || 0).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filtered.length > 100 && (
+            <div style={{ padding: '10px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
+              Showing first 100 of {filtered.length}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -102,10 +102,18 @@ async function ensureDailyKmTicket(record, today) {
     record.vehicle_id,
     `Daily KM Missing — ${record.vehicle_plate || "Vehicle"}`,
     record.location || "",
-    `${marker}
-Today's odometer reading has not been entered by 07:00 Asia/Riyadh.
-Driver: ${record.driver_name || "Unassigned"}
-Current KM: ${Number(record.current_km || 0).toLocaleString()}`,
+    `Hello ${record.driver_name || "Driver"},
+
+No KM reading recorded today for vehicle ${record.vehicle_plate || "Vehicle"}.
+Last reading: ${Number(record.current_km || 0).toLocaleString()} km.
+
+Please record before 7:00 AM.
+
+Thank you,
+Fleet Management
+
+---
+${marker}`,
     record.driver_name || "System"
   ]);
 
@@ -174,15 +182,14 @@ export async function reconcileAndNotify() {
     SELECT
       v.id AS vehicle_id,
       CONCAT(v.plate_number, ' ', COALESCE(v.plate_code, '')) AS vehicle_plate,
-      COALESCE(NULLIF(TRIM(d.name), ''), NULLIF(TRIM(v.driver), ''), '') AS driver_name,
-      COALESCE(NULLIF(TRIM(d.phone), ''), NULLIF(TRIM(v.phone), ''), '') AS driver_phone,
+      COALESCE(NULLIF(TRIM(v.driver), ''), '') AS driver_name,
+      COALESCE(NULLIF(TRIM(v.phone), ''), '') AS driver_phone,
       v.meter_updated_at,
       v.current_km
     FROM vehicles v
-    JOIN drivers d ON d.vehicle_id = v.id
     WHERE COALESCE(LOWER(TRIM(v.status)), '') NOT IN ('inactive', 'sold', 'disposed', 'disabled')
-      AND COALESCE(NULLIF(TRIM(d.name), ''), '') <> ''
-      AND LOWER(TRIM(d.name)) <> 'unassigned'
+      AND COALESCE(NULLIF(TRIM(v.driver), ''), '') <> ''
+      AND LOWER(TRIM(v.driver)) <> 'unassigned'
     ORDER BY v.plate_number, v.plate_code
   `);
 
@@ -195,12 +202,10 @@ export async function reconcileAndNotify() {
   const unassigned = await query(`
     SELECT v.id AS vehicle_id
     FROM vehicles v
-    LEFT JOIN drivers d ON d.vehicle_id = v.id
     WHERE COALESCE(LOWER(TRIM(v.status)), '') NOT IN ('inactive', 'sold', 'disposed', 'disabled')
       AND (
-        d.id IS NULL
-        OR COALESCE(NULLIF(TRIM(d.name), ''), '') = ''
-        OR LOWER(TRIM(d.name)) = 'unassigned'
+        COALESCE(NULLIF(TRIM(v.driver), ''), '') = ''
+        OR LOWER(TRIM(v.driver)) = 'unassigned'
       )
   `);
 
@@ -407,11 +412,10 @@ export async function getKmDailyNotifications() {
       n.owner_notified_at
     FROM km_daily_notifications n
     JOIN vehicles v ON v.id = n.vehicle_id
-    JOIN drivers d ON d.vehicle_id = v.id
     WHERE n.reminder_date = $1
       AND n.status = 'Open'
-      AND COALESCE(NULLIF(TRIM(d.name), ''), '') <> ''
-      AND LOWER(TRIM(d.name)) <> 'unassigned'
+      AND COALESCE(NULLIF(TRIM(v.driver), ''), '') <> ''
+      AND LOWER(TRIM(v.driver)) <> 'unassigned'
     ORDER BY v.plate_number, v.plate_code
   `, [today]);
 
@@ -444,14 +448,13 @@ export async function getDriverDailyKmStatus(userId) {
       CONCAT(v.plate_number, ' ', COALESCE(v.plate_code, '')) AS plate,
       v.current_km,
       v.meter_updated_at,
-      d.name AS driver_name,
-      d.phone AS driver_phone
+      v.driver AS driver_name,
+      v.phone AS driver_phone
     FROM vehicles v
-    JOIN drivers d ON d.vehicle_id = v.id
     WHERE
       (
-        ($1 <> '' AND regexp_replace(COALESCE(d.phone, ''), '[^0-9]', '', 'g') = $1)
-        OR ($2 <> '' AND LOWER(TRIM(d.name)) = LOWER(TRIM($2)))
+        ($1 <> '' AND regexp_replace(COALESCE(v.phone, ''), '[^0-9]', '', 'g') = $1)
+        OR ($2 <> '' AND LOWER(TRIM(v.driver)) = LOWER(TRIM($2)))
       )
       AND COALESCE(LOWER(TRIM(v.status)), '') NOT IN ('inactive', 'sold', 'disposed', 'disabled')
     ORDER BY v.id

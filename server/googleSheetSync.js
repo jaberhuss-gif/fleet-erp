@@ -479,6 +479,11 @@ const FIXED_DAILY_SUBMISSION_VEHICLES = [
   ["4541", "LUA"], ["4980", "JUA"], ["5456", "TKA"], ["6183", "ZUA"]
 ];
 
+// When true, the system will not create new "Daily Vehicle Submission" tickets.
+// We rely on the Daily KM ticket (category = "Daily KM") instead, which already
+// includes the vehicle plate, driver name, driver phone, and the WhatsApp button.
+const DISABLE_DAILY_VEHICLE_SUBMISSION_TICKETS = true;
+
 const DAILY_SUBMISSION_TICKET_CATEGORY = "Daily Vehicle Submission";
 const DAILY_SUBMISSION_TICKET_MARKER = "DAILY_VEHICLE_SUBMISSION_MISSING";
 
@@ -487,6 +492,10 @@ function normalizePlateKey(value) {
 }
 
 async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
+  if (DISABLE_DAILY_VEHICLE_SUBMISSION_TICKETS) {
+    return null;
+  }
+
   const title = `Daily Vehicle Submission Missing — ${record.vehicle} — ${reportDate}`;
   const description = `Daily submission missing for ${record.vehicle} on ${reportDate}.`;
   const legacyDescription = `Daily submission missing for ${record.vehicle} on ${reportDate}`;

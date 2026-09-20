@@ -1,4 +1,4 @@
-import dotenv from "dotenv";
+﻿import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 import pg from "pg";
@@ -13,7 +13,7 @@ const SHEET_URL =
   "https://docs.google.com/spreadsheets/d/12_WSi8KrHZ9-dtZzrlHmTCI-Jiwg7zDieJ5NU3-lVxY/gviz/tq?tqx=out:csv&gid=146635377";
 const INTERVAL_MS = Math.max(Number(process.env.GOOGLE_SHEET_SYNC_INTERVAL_MS || 5 * 60 * 1000), 60 * 1000);
 const RIYADH_OFFSET_MS = 3 * 60 * 60 * 1000;
-const MIN_RECORD_DATE = Date.UTC(2026, 4, 1, -3, 0, 0); // 2026-05-01 00:00 Asia/Riyadh
+const MIN_RECORD_DATE = Date.UTC(2026, 4, 1, -3, 0, 0);
 const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
@@ -55,8 +55,6 @@ function findIndex(headers, names) {
   const exact = headers.findIndex((h) => wanted.has(normalize(h)));
   if (exact >= 0) return exact;
 
-  // Google Sheets headers can include units, punctuation, or extra words,
-  // e.g. "Current Odometer Reading (KM)".
   const normalizedHeaders = headers.map(normalize);
   for (const name of names) {
     const n = normalize(name);
@@ -68,8 +66,6 @@ function findIndex(headers, names) {
 }
 
 function findKmIndex(headers) {
-  // Handle the exact sheet header "CurrentKM" as well as spacing,
-  // underscores, punctuation, or hidden formatting around it.
   const normalizedHeaders = headers.map(normalize);
   const compactHeaders = headers.map((h) =>
     String(h ?? "")
@@ -182,12 +178,6 @@ function parseSheetDate(value) {
 
   if (year < 2000) return null;
 
-  // The Records sheet uses DD/MM/YYYY for all entries from May 2026 onward.
-  // The previous implementation also tried MM/DD/YYYY and picked the latest
-  // interpretation, which turned some May records into September records and
-  // caused daily KM compliance tickets to fire for vehicles that had already
-  // submitted their reading. We now always interpret the first number as the
-  // day and the second as the month.
   if (!(day >= 1 && day <= 31)) return null;
   if (!(month >= 1 && month <= 12)) return null;
 
@@ -308,8 +298,6 @@ export async function syncGoogleSheetVehicles() {
   );
   indexes.km = findKmIndex(headers);
 
-  // Known daily-KM sheet layout fallback: CurrentKM is immediately after Location.
-  // Use it only when the header-based detector cannot find a KM column.
   if (indexes.km < 0 && headers.length >= 5) {
     const compactHeaders = headers.map((h) =>
       String(h ?? "")
@@ -327,7 +315,6 @@ export async function syncGoogleSheetVehicles() {
     throw new Error(`Vehicle/plate column not found. Headers: ${headers.join(", ")}`);
   }
 
-  // Records contains historical entries. Sync only the newest record for each vehicle.
   const latestRows = new Map();
   for (const values of rows.slice(1)) {
     const plate = String(values[indexes.plate] ?? "").trim();
@@ -336,7 +323,6 @@ export async function syncGoogleSheetVehicles() {
     const dateRaw = indexes.date >= 0 ? String(values[indexes.date] ?? "").trim() : "";
     const date = parseSheetDate(dateRaw);
 
-    // Ignore all Records before May 1, 2026. April and earlier are not part of the source period.
     if (!date || date.getTime() < MIN_RECORD_DATE) continue;
 
     const previous = latestRows.get(plate);
@@ -371,9 +357,6 @@ export async function syncGoogleSheetVehicles() {
     if (km !== null) kmFound += 1;
     const active = indexes.active >= 0 ? !isInactive(values[indexes.active]) : null;
 
-    // The sheet may provide a combined plate such as "2290 EUA",
-    // while ERP stores it as plate_number="2290" and plate_code="EUA".
-    // Try both the exact combined value and the split number/code form.
     const plateParts = plate.split(/\s+/).filter(Boolean);
     const combinedPlate = plateParts.join(" ").trim();
     const splitPlateNumber = plateParts[0] || "";
@@ -427,25 +410,12 @@ export async function syncGoogleSheetVehicles() {
     if (driver) add("driver = ?", driver);
     if (phone) add("phone = ?", phone);
 
-    // The latest Records row is the authoritative daily KM reading.
     if (km !== null) {
       const existingKm = Number(result.rows[0].current_km || 0);
       const nextKm = Math.max(km, existingKm);
       add("current_km = ?", nextKm);
       if (nextKm !== existingKm) kmUpdated += 1;
 
-      // A vehicle counts as having today's KM only when the KM value itself
-      // is present. The Sheet date alone must never resolve daily KM compliance.
-      const existingMeterUpdatedAt = result.rows[0].meter_updated_at
-        ? new Date(result.rows[0].meter_updated_at)
-        : null;
-
-      // Always trust the latest Sheet record for the vehicle, regardless of
-      // whether the timestamp is newer than the existing meter_updated_at.
-      // The Sheet is the authoritative source for daily KM compliance, and the
-      // previous "only if newer" rule could leave meter_updated_at stuck on an
-      // older day even though the driver had already submitted a fresh reading.
-      // This caused false DAILY_KM_MISSING tickets.
       if (date) {
         add("meter_updated_at = ?", date.toISOString());
       }
@@ -517,13 +487,10 @@ function normalizePlateKey(value) {
 }
 
 async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
-  const title = `Daily Vehicle Submission Missing â€” ${record.vehicle} â€” ${reportDate}`;
+  const title = `Daily Vehicle Submission Missing — ${record.vehicle} — ${reportDate}`;
   const description = `Daily submission missing for ${record.vehicle} on ${reportDate}.`;
   const legacyDescription = `Daily submission missing for ${record.vehicle} on ${reportDate}`;
 
-  // Serialize reconciliation for this exact vehicle/date. The background timer
-  // has a process lock, but the HTTP report endpoint can also be called directly,
-  // so the database advisory lock is required to prevent duplicate INSERTs.
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -532,10 +499,6 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
       [`DAILY_VEHICLE_SUBMISSION|${record.vehicle}|${reportDate}`]
     );
 
-    // Match the exact vehicle/date using vehicle_id first, while also
-    // supporting legacy tickets created before the structured title/description
-    // was introduced. This makes reconciliation idempotent across deployments
-    // and prevents one vehicle/day from accumulating duplicate tickets.
     const existing = await client.query(`
       SELECT id, status, title, description, opened_at, vehicle_id
       FROM tickets
@@ -596,8 +559,6 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
         WHERE id = $3
       `, [title, description, primary.id]);
 
-      // If old duplicate open tickets already exist, keep their history but
-      // close only the extras. The primary ticket remains Open.
       for (const duplicate of matching.slice(1)) {
         await client.query(`
           UPDATE tickets
@@ -645,12 +606,9 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
 }
 
 async function closeDailyVehicleSubmissionTicket(record, reportDate, evidenceDateTime) {
-  const title = `Daily Vehicle Submission Missing â€” ${record.vehicle} â€” ${reportDate}`;
+  const title = `Daily Vehicle Submission Missing — ${record.vehicle} — ${reportDate}`;
   const legacyDescription = `Daily submission missing for ${record.vehicle} on ${reportDate}`;
 
-  // Only a positive Google Sheet submission for this exact vehicle/date can
-  // close the ticket. KM values, driver records, vehicle_id, or other dates
-  // must never close a Daily Vehicle Submission ticket.
   await pool.query(`
     UPDATE tickets
     SET status = 'Closed',
@@ -698,11 +656,10 @@ async function closeDailyVehicleSubmissionTicket(record, reportDate, evidenceDat
     `%DAILY_VEHICLE_SUBMISSION_MISSING%date=${reportDate}%`
   ]);
 }
+
 export async function getDailyVehicleSubmissionReport(targetDate = null) {
   if (!pool) throw new Error("DATABASE_URL is not configured");
 
-  // Compliance is based ONLY on this fixed operational list of 36 vehicles.
-  // Driver name/phone are reference information only; a driver may use more than one vehicle.
   const plateKeys = FIXED_DAILY_SUBMISSION_VEHICLES.map(([number, code]) =>
     normalizePlateKey(`${number} ${code}`)
   );
@@ -755,13 +712,6 @@ export async function getDailyVehicleSubmissionReport(targetDate = null) {
   const wantedDate = String(targetDate || todayRiyadh()).slice(0, 10);
   const sheetByPlate = new Map();
 
-  // Resolve Google Sheet plate text to the fixed 36-vehicle identity.
-  // The sheet contains known formatting variants such as:
-  //   1738
-  //   3296(DER)
-  //   4481JUA / 4481 JUL
-  // Vehicle number is unique in the operational fleet, so a number-only
-  // value can safely resolve to its fixed vehicle.
   const fixedByKey = new Map();
   const fixedByNumber = new Map();
 
@@ -775,21 +725,17 @@ export async function getDailyVehicleSubmissionReport(targetDate = null) {
     const rawKey = normalizePlateKey(value);
     if (!rawKey) return null;
 
-    // Exact match first.
     if (fixedByKey.has(rawKey)) return fixedByKey.get(rawKey);
 
-    // If the sheet has only the plate number, use the unique fleet number.
     const numberMatch = rawKey.match(/^\d+/);
     if (numberMatch) {
       const byNumber = fixedByNumber.get(numberMatch[0]);
       if (byNumber) return byNumber;
     }
 
-    // Also support a plate code typo while preserving the unique plate number.
     return null;
   }
 
-  // Keep the latest timestamp for each fixed vehicle on the requested date.
   for (const values of rows.slice(1)) {
     const plate = String(values[plateIndex] ?? "").trim();
     const rawDate = String(values[dateIndex] ?? "").trim();
@@ -845,8 +791,6 @@ export async function getDailyVehicleSubmissionReport(targetDate = null) {
       ticketId: null
     };
 
-    // A fixed vehicle missing from the DB is still monitored and reported,
-    // but no ticket can be created without a valid vehicle_id.
     if (!submitted && v?.id) {
       const ticket = await ensureDailyVehicleSubmissionTicket(record, wantedDate);
       record.ticketId = ticket?.id || null;
@@ -909,9 +853,6 @@ async function runOnce() {
     console.error("[GoogleSheetSync]", error.message);
   }
 
-  // Reconcile the fixed 36-vehicle daily submission compliance on every
-  // background sync so missing tickets are created automatically and
-  // submitted vehicles close their ticket automatically.
   try {
     console.log("[DailyVehicleSubmission]", JSON.stringify(await getDailyVehicleSubmissionReport()));
   } catch (error) {
@@ -923,11 +864,16 @@ async function runOnce() {
   } catch (error) {
     console.error("[KMDailyReminder]", error.message);
   }
+
+  try {
+    const { checkMaintenanceDue } = await import("./kmDailyNotifications.js");
+    console.log("[MaintenanceCheck]", JSON.stringify(await checkMaintenanceDue()));
+  } catch (error) {
+    console.error("[MaintenanceCheck]", error.message);
+  }
 }
 
 function millisUntilNextSevenAm() {
-  // Asia/Riyadh is UTC+03:00 year-round. Calculate the next 07:00 in that
-  // fixed-offset local time so the reminder is not affected by Render's host TZ.
   const now = Date.now();
   const riyadhNow = new Date(now + RIYADH_OFFSET_MS);
 
@@ -951,11 +897,8 @@ function millisUntilNextSevenAm() {
 export function startGoogleSheetVehicleSync() {
   if (syncTimer || kmSevenAmTimer) return;
 
-  // Sync immediately, but reconcileAndNotify itself enforces the 07:00 cutoff.
   run();
 
-  // Guarantee the first daily compliance run happens exactly at 07:00 local time,
-  // regardless of when the backend process started.
   const scheduleSevenAmCheck = () => {
     kmSevenAmTimer = setTimeout(async () => {
       await run();
@@ -964,7 +907,6 @@ export function startGoogleSheetVehicleSync() {
   };
   scheduleSevenAmCheck();
 
-  // Continue the normal 5-minute sync loop for Google Sheet updates.
   syncTimer = setInterval(run, INTERVAL_MS);
 
   console.log(

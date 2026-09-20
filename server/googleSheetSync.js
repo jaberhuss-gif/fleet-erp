@@ -206,6 +206,90 @@ function parseSheetDate(value) {
   return parsed;
 }
 
+async function syncKmRecordsToDb(rows, indexes) {
+  if (indexes.plate < 0 || indexes.km < 0 || indexes.date < 0) {
+    return { scanned: 0, inserted: 0, updated: 0, skipped: 0, unmatched: 0 };
+  }
+
+  const kmRecords = new Map();
+
+  for (const values of rows.slice(1)) {
+    const plate = String(values[indexes.plate] || '').trim();
+    const kmRaw = String(values[indexes.km] || '').trim();
+    const dateRaw = String(values[indexes.date] || '').trim();
+    if (!plate || !kmRaw || !dateRaw) continue;
+
+    const km = cleanKm(kmRaw);
+    if (km === null || km <= 0) continue;
+
+    const date = parseSheetDate(dateRaw);
+    if (!date || date.getTime() < MIN_RECORD_DATE) continue;
+
+    const plateParts = plate.split(/\s+/).filter(Boolean);
+    const combinedPlate = plateParts.join(' ').trim();
+    const splitPlateNumber = plateParts[0] || '';
+    const splitPlateCode = plateParts.slice(1).join(' ').trim();
+
+    const key = combinedPlate + '|' + date.toISOString().slice(0, 10);
+    const existing = kmRecords.get(key);
+    if (!existing || km > existing.km) {
+      kmRecords.set(key, {
+        plate: plate,
+        km: km,
+        dateKey: date.toISOString().slice(0, 10),
+        combinedPlate: combinedPlate,
+        splitPlateNumber: splitPlateNumber,
+        splitPlateCode: splitPlateCode
+      });
+    }
+  }
+
+  let inserted = 0;
+  let updated = 0;
+  let skipped = 0;
+  let unmatched = 0;
+
+  for (const record of kmRecords.values()) {
+    const vehicle = await pool.query(
+      "SELECT id FROM vehicles WHERE LOWER(TRIM(COALESCE(plate_number, ''))) = LOWER(TRIM($1)) OR LOWER(TRIM(CONCAT_WS(' ', NULLIF(TRIM(plate_number), ''), NULLIF(TRIM(plate_code), '')))) = LOWER(TRIM($1)) OR ($2 <> '' AND LOWER(TRIM(COALESCE(plate_number, ''))) = LOWER(TRIM($2)) AND LOWER(TRIM(COALESCE(plate_code, ''))) = LOWER(TRIM($3))) LIMIT 1",
+      [record.combinedPlate, record.splitPlateNumber, record.splitPlateCode]
+    );
+
+    if (!vehicle.rows[0]) {
+      unmatched += 1;
+      continue;
+    }
+
+    const vehicleId = vehicle.rows[0].id;
+    const readingDate = record.dateKey;
+
+    const existingRecord = await pool.query(
+      "SELECT id, reading_km FROM km_records WHERE vehicle_id = $1 AND reading_date = $2 LIMIT 1",
+      [vehicleId, readingDate]
+    );
+
+    if (existingRecord.rows[0]) {
+      if (Number(existingRecord.rows[0].reading_km) !== record.km) {
+        await pool.query(
+          "UPDATE km_records SET reading_km = $1 WHERE id = $2",
+          [record.km, existingRecord.rows[0].id]
+        );
+        updated += 1;
+      } else {
+        skipped += 1;
+      }
+    } else {
+      await pool.query(
+        "INSERT INTO km_records (vehicle_id, plate, reading_km, reading_date, is_oil_change, notes, created_at) VALUES ($1, $2, $3, $4, 0, '', CURRENT_TIMESTAMP)",
+        [vehicleId, record.plate, record.km, readingDate]
+      );
+      inserted += 1;
+    }
+  }
+
+  return { scanned: kmRecords.size, inserted: inserted, updated: updated, skipped: skipped, unmatched: unmatched };
+}
+
 export async function syncGoogleSheetVehicles() {
   if (!pool) throw new Error("DATABASE_URL is not configured");
 
@@ -356,15 +440,13 @@ export async function syncGoogleSheetVehicles() {
         ? new Date(result.rows[0].meter_updated_at)
         : null;
 
-      // Keep a newer ERP reading authoritative. The temporary Google Sheet
-      // source may fill a missing reading, but must never overwrite a newer
-      // ERP timestamp during the transition period.
-      if (
-        date &&
-        (!existingMeterUpdatedAt ||
-          Number.isNaN(existingMeterUpdatedAt.getTime()) ||
-          date.getTime() > existingMeterUpdatedAt.getTime())
-      ) {
+      // Always trust the latest Sheet record for the vehicle, regardless of
+      // whether the timestamp is newer than the existing meter_updated_at.
+      // The Sheet is the authoritative source for daily KM compliance, and the
+      // previous "only if newer" rule could leave meter_updated_at stuck on an
+      // older day even though the driver had already submitted a fresh reading.
+      // This caused false DAILY_KM_MISSING tickets.
+      if (date) {
         add("meter_updated_at = ?", date.toISOString());
       }
     }
@@ -378,12 +460,20 @@ export async function syncGoogleSheetVehicles() {
     updated += 1;
   }
 
+  let kmRecordsResult = { scanned: 0, inserted: 0, updated: 0, skipped: 0, unmatched: 0 };
+  try {
+    kmRecordsResult = await syncKmRecordsToDb(rows, indexes);
+  } catch (error) {
+    console.error("[GoogleSheetSync] km_records sync failed:", error.message);
+  }
+
   return {
     matched,
     updated,
     kmFound,
     kmUpdated,
     unmatched,
+    kmRecords: kmRecordsResult,
     rows: rows.length - 1,
     syncedAt: new Date().toISOString(),
     sourcePeriodStart: "2026-05-01",
@@ -427,7 +517,7 @@ function normalizePlateKey(value) {
 }
 
 async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
-  const title = `Daily Vehicle Submission Missing — ${record.vehicle} — ${reportDate}`;
+  const title = `Daily Vehicle Submission Missing â€” ${record.vehicle} â€” ${reportDate}`;
   const description = `Daily submission missing for ${record.vehicle} on ${reportDate}.`;
   const legacyDescription = `Daily submission missing for ${record.vehicle} on ${reportDate}`;
 
@@ -555,7 +645,7 @@ async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
 }
 
 async function closeDailyVehicleSubmissionTicket(record, reportDate, evidenceDateTime) {
-  const title = `Daily Vehicle Submission Missing — ${record.vehicle} — ${reportDate}`;
+  const title = `Daily Vehicle Submission Missing â€” ${record.vehicle} â€” ${reportDate}`;
   const legacyDescription = `Daily submission missing for ${record.vehicle} on ${reportDate}`;
 
   // Only a positive Google Sheet submission for this exact vehicle/date can

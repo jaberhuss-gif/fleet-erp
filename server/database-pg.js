@@ -2717,6 +2717,7 @@ export async function getGeneralMaintenanceReport(filters = {}) {
       COALESCE(contractor_cost, 0) AS contractor_cost,
       COALESCE(labor_cost, 0) AS labor_cost,
       COALESCE(parts_cost, 0) AS parts_cost,
+      performed_by,
       month, year
     FROM work_orders
     WHERE ${where}
@@ -2753,14 +2754,14 @@ export async function getGeneralMaintenanceReport(filters = {}) {
     const m = map.get(month);
     if (!m) continue;
 
-    const external = isExternal(o.contractor_name);
+    const external = Number(o.is_contractor) === 1 || o.is_contractor === true || isExternal(o.contractor_name);
     const finalCost = pgNum(o.final_cost);
     const contractorCost = pgNum(o.contractor_cost);
     const laborCost = pgNum(o.labor_cost);
     const partsCost = pgNum(o.parts_cost);
     const person = external
-      ? pgStr(o.contractor_name, "Unknown Contractor")
-      : pgStr(o.assigned_to, "Company / Internal");
+      ? pgStr(o.performed_by || o.contractor_name, "Unknown Contractor")
+      : pgStr(o.performed_by || o.assigned_to, "Company / Internal");
 
     m.totalWO += 1;
     m.totalAmount += finalCost;

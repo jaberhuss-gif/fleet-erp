@@ -2666,6 +2666,142 @@ export async function getDashboard() {
    MONTHLY REPORT
    ============================================================ */
 
+
+/* ============================================================
+   GENERAL MAINTENANCE MONTHLY REPORT
+   - Work orders only; projects are intentionally excluded.
+   - Month is derived from reported_date using Riyadh calendar date.
+   - Internal/Company = blank, Company, or Internal contractor name.
+   ============================================================ */
+export async function getGeneralMaintenanceReport(filters = {}) {
+  const year = Number(filters.year) || new Date().getFullYear();
+  const site = pgStr(filters.site, "");
+
+  const params = [year];
+  let where = `
+    reported_date >= make_date($1, 1, 1)
+    AND reported_date < make_date($1 + 1, 1, 1)
+  `;
+
+  if (site) {
+    params.push(site);
+    where += ` AND site = ${params.length}`;
+  }
+
+  const result = await query(`
+    SELECT
+      id, wo_no, site, area, category, priority, description,
+      assigned_to, is_contractor, contractor_name, status,
+      reported_date, completed_date,
+      parts_used,
+      COALESCE(final_cost, 0) AS final_cost,
+      COALESCE(contractor_cost, 0) AS contractor_cost,
+      COALESCE(labor_cost, 0) AS labor_cost,
+      COALESCE(parts_cost, 0) AS parts_cost,
+      month, year
+    FROM work_orders
+    WHERE ${where}
+    ORDER BY reported_date ASC, id ASC
+  `, params);
+
+  const orders = result.rows;
+  const isExternal = (name) => {
+    const n = pgStr(name, "").toLowerCase();
+    return n !== "" && n !== "company" && n !== "internal";
+  };
+
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const key = `${year}-${String(i + 1).padStart(2, "0")}`;
+    return {
+      month: key,
+      totalWO: 0,
+      contractorWO: 0,
+      employeeWO: 0,
+      contractorAmount: 0,
+      employeeAmount: 0,
+      partsAmount: 0,
+      totalAmount: 0,
+      contractors: [],
+      employees: []
+    };
+  });
+
+  const map = new Map(months.map(m => [m.month, m]));
+  const people = new Map();
+
+  for (const o of orders) {
+    const month = String(o.reported_date).slice(0, 7);
+    const m = map.get(month);
+    if (!m) continue;
+
+    const external = isExternal(o.contractor_name);
+    const finalCost = pgNum(o.final_cost);
+    const contractorCost = pgNum(o.contractor_cost);
+    const laborCost = pgNum(o.labor_cost);
+    const partsCost = pgNum(o.parts_cost);
+    const person = external
+      ? pgStr(o.contractor_name, "Unknown Contractor")
+      : pgStr(o.assigned_to, "Company / Internal");
+
+    m.totalWO += 1;
+    m.totalAmount += finalCost;
+    m.partsAmount += partsCost;
+
+    if (external) {
+      m.contractorWO += 1;
+      m.contractorAmount += contractorCost || finalCost;
+    } else {
+      m.employeeWO += 1;
+      m.employeeAmount += laborCost;
+    }
+
+    const key = `${month}|${external ? "contractor" : "employee"}|${person}`;
+    if (!people.has(key)) {
+      people.set(key, {
+        month,
+        type: external ? "Contractor" : "Employee",
+        name: person,
+        woCount: 0,
+        amount: 0
+      });
+    }
+    const p = people.get(key);
+    p.woCount += 1;
+    p.amount += external ? (contractorCost || finalCost) : laborCost;
+  }
+
+  for (const p of people.values()) {
+    const m = map.get(p.month);
+    (p.type === "Contractor" ? m.contractors : m.employees).push(p);
+  }
+
+  const activeMonths = months.filter(m => m.totalWO > 0);
+  const totals = months.reduce((a, m) => ({
+    totalWO: a.totalWO + m.totalWO,
+    contractorWO: a.contractorWO + m.contractorWO,
+    employeeWO: a.employeeWO + m.employeeWO,
+    contractorAmount: a.contractorAmount + m.contractorAmount,
+    employeeAmount: a.employeeAmount + m.employeeAmount,
+    partsAmount: a.partsAmount + m.partsAmount,
+    totalAmount: a.totalAmount + m.totalAmount
+  }), {
+    totalWO: 0, contractorWO: 0, employeeWO: 0,
+    contractorAmount: 0, employeeAmount: 0,
+    partsAmount: 0, totalAmount: 0
+  });
+
+  return {
+    year,
+    source: "ERP work_orders",
+    projectsExcluded: true,
+    site: site || null,
+    months,
+    activeMonths,
+    totals,
+    orders
+  };
+}
+
 export async function getMonthlyReport(filters = {}) {
   const workOrders = await listWorkOrders(filters);
   const projects = await listProjects(filters);

@@ -253,6 +253,20 @@ app.get("/api/dashboard", async (req, res) => {
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+// ===== DAILY VEHICLE SUBMISSION REPORT (Google Sheet) =====
+
+app.get("/api/google-sheet-submission-report", async (req, res) => {
+  try {
+    const { getDailyVehicleSubmissionReport } = await import("./googleSheetSync.js");
+    const report = await getDailyVehicleSubmissionReport(req.query.date || null);
+    res.json(report);
+  } catch (error) {
+    console.error("[DailyVehicleSubmission]", error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+
 // ===== SITES =====
 
 app.get("/api/sites", async (req, res) => {

@@ -315,22 +315,25 @@ export async function syncGoogleSheetVehicles() {
     throw new Error(`Vehicle/plate column not found. Headers: ${headers.join(", ")}`);
   }
 
+  // Live vehicle sync uses only the current Riyadh calendar day.
+  // Historical sheet rows remain available but must never overwrite today's live state.
+  const todayRiyadh = () => {
+    const d = new Date(Date.now() + RIYADH_OFFSET_MS);
+    return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
+  };
+  const wantedDate = todayRiyadh();
   const latestRows = new Map();
   for (const values of rows.slice(1)) {
     const plate = String(values[indexes.plate] ?? "").trim();
     if (!plate) continue;
-
     const dateRaw = indexes.date >= 0 ? String(values[indexes.date] ?? "").trim() : "";
     const date = parseSheetDate(dateRaw);
-
-    if (!date || date.getTime() < MIN_RECORD_DATE) continue;
-
+    if (!date) continue;
+    const localDate = new Date(date.getTime() + RIYADH_OFFSET_MS);
+    const sheetDate = localDate.getUTCFullYear() + "-" + String(localDate.getUTCMonth() + 1).padStart(2, "0") + "-" + String(localDate.getUTCDate()).padStart(2, "0");
+    if (sheetDate !== wantedDate) continue;
     const previous = latestRows.get(plate);
-    if (
-      !previous ||
-      (date && !previous.date) ||
-      (date && previous.date && date.getTime() >= previous.date.getTime())
-    ) {
+    if (!previous || date.getTime() >= previous.date.getTime()) {
       latestRows.set(plate, { values, date, dateRaw });
     }
   }
@@ -446,7 +449,9 @@ export async function syncGoogleSheetVehicles() {
     kmRecords: kmRecordsResult,
     rows: rows.length - 1,
     syncedAt: new Date().toISOString(),
-    sourcePeriodStart: "2026-05-01",
+    sourcePeriodStart: wantedDate,
+    sourcePeriodEnd: wantedDate,
+    currentDayOnly: true,
     columns: {
       plate: indexes.plate >= 0 ? headers[indexes.plate] : null,
       driver: indexes.driver >= 0 ? headers[indexes.driver] : null,

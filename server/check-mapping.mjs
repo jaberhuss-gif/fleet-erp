@@ -2,7 +2,7 @@
 import pg from "pg";
 
 const sqlite = new Database("fleet.db", { readonly: true });
-const client = new pg.Client({ connectionString: process.env.DATABASE_URL || "postgresql://neondb_owner:npg_dynmHfhw3O1V@ep-rapid-bread-b1qjr8sh-pooler.c-5.eu-central-1.aws.neon.tech/neondb?sslmode=require" });
+const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await client.connect();
 
 const sqliteVehicles = sqlite.prepare("SELECT id, plate_number, plate_code FROM vehicles ORDER BY id LIMIT 5").all();

@@ -12,10 +12,10 @@ dotenv.config({
   path: path.join(__dirname, ".env")
 });
 
-const JWT_SECRET = process.env.JWT_SECRET || "fleet-erp-default-secret-change-me";
+const JWT_SECRET = String(process.env.JWT_SECRET || "").trim();
 
-if (!process.env.JWT_SECRET) {
-  console.warn("⚠️ WARNING: JWT_SECRET is not set. Set it in the hosting environment variables for security.");
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET is required. Configure it in the hosting environment before starting Fleet ERP.");
 }
 
 // ============================================================
@@ -127,7 +127,10 @@ export async function createUser(data = {}) {
     throw new Error("Username is required");
   }
 
-  const password = data.password || "changeme123";
+  const password = String(data.password || "").trim();
+  if (password.length < 8) {
+    throw new Error("Password is required and must be at least 8 characters");
+  }
   const fullName = data.fullName || "";
   const role = data.role || "Driver";
   const email = data.email || "";
@@ -244,7 +247,7 @@ export async function deleteUser(id) {
 // Keep this here so authentication is available before routes run.
 // ============================================================
 
-globalThis.requireAuth = function requireAuth(req, res, next) {
+export function requireAuth(req, res, next) {
   const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "").trim();
   const decoded = verifyToken(token);
 

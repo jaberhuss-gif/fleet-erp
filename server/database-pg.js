@@ -419,7 +419,7 @@ export async function createTicket(data = {}) {
        description, reported_by, opened_at, department,
        assigned_to_user_id, assigned_to_name, assigned_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_TIMESTAMP,$9,$10,$11,
-             CASE WHEN $10 IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END)
+             CASE WHEN $10::integer IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END)
      RETURNING *`,
     [
       data.vehicleId || null,

@@ -124,31 +124,54 @@ export async function createVehicle(vehicleData = {}) {
   return formatVehicle(result.rows[0]);
 }
 
-export async function updateVehicle(plate, data = {}) {
-  const vehicle = await getVehicleByPlate(plate);
-  if (!vehicle) return { changes: 0 };
+export async function updateVehicle(id, data = {}) {
+  const vehicleResult = await query(
+    `SELECT * FROM vehicles WHERE id = $1 LIMIT 1`,
+    [id]
+  );
+  const vehicleRow = vehicleResult.rows[0];
+  if (!vehicleRow) return { changes: 0 };
 
-  const currentKM = data.currentKM !== undefined || data.km !== undefined ? numberValue(data.currentKM ?? data.km, vehicle.currentKM) : vehicle.currentKM;
-  const lastOilKM = data.lastOilKM !== undefined || data.serviceKm !== undefined ? numberValue(data.lastOilKM ?? data.serviceKm, vehicle.lastOilKM) : vehicle.lastOilKM;
-  const parts = stringValue(plate).split(/\s+/).filter(Boolean);
-  const plateNumber = parts[0] || "";
-  const plateCode = parts.slice(1).join(" ").toUpperCase();
+  const currentKM =
+    data.currentKM !== undefined || data.km !== undefined
+      ? numberValue(data.currentKM ?? data.km, numberValue(vehicleRow.current_km, 0))
+      : numberValue(vehicleRow.current_km, 0);
+
+  const lastOilKM =
+    data.lastOilKM !== undefined || data.serviceKm !== undefined
+      ? numberValue(data.lastOilKM ?? data.serviceKm, numberValue(vehicleRow.last_oil_km, 0))
+      : numberValue(vehicleRow.last_oil_km, 0);
+
+  const oilInterval =
+    data.oilChangeInterval !== undefined && data.oilChangeInterval !== null && data.oilChangeInterval !== ""
+      ? numberValue(data.oilChangeInterval, 5000)
+      : numberValue(vehicleRow.oil_change_interval, 5000);
 
   const result = await query(
-    `UPDATE vehicles SET current_km = $1, last_oil_km = $2, status = $3, location = $4, driver = $5, phone = $6, oil_change_interval = $7, last_oil_change_date = $8, updated_at = CURRENT_TIMESTAMP WHERE plate_number = $9 AND plate_code = $10`,
+    `UPDATE vehicles
+     SET current_km = $1,
+         last_oil_km = $2,
+         status = $3,
+         location = $4,
+         driver = $5,
+         phone = $6,
+         oil_change_interval = $7,
+         last_oil_change_date = $8,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $9`,
     [
       currentKM,
       lastOilKM,
-      data.status ?? data.state ?? vehicle.status,
-      data.location ?? vehicle.location,
-      data.driverName ?? data.driver ?? vehicle.driver_name,
-      data.driverPhone ?? data.phone ?? vehicle.driver_phone,
-      numberValue(data.oilChangeInterval, data.oilChangeInterval),
-      data.lastOilChangeDate ?? vehicle.lastOilChangeDate,
-      plateNumber,
-      plateCode
+      data.status ?? data.state ?? vehicleRow.status,
+      data.location ?? vehicleRow.location ?? "",
+      data.driverName ?? data.driver ?? vehicleRow.driver ?? "",
+      data.driverPhone ?? data.phone ?? vehicleRow.phone ?? "",
+      oilInterval,
+      data.lastOilChangeDate ?? vehicleRow.last_oil_change_date ?? null,
+      id
     ]
   );
+
   return { changes: result.rowCount };
 }
 
@@ -419,7 +442,7 @@ export async function createTicket(data = {}) {
        description, reported_by, opened_at, department,
        assigned_to_user_id, assigned_to_name, assigned_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_TIMESTAMP,$9,$10,$11,
-             CASE WHEN $10::integer IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END)
+             CASE WHEN $10::bigint IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END)
      RETURNING *`,
     [
       data.vehicleId || null,

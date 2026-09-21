@@ -34,7 +34,7 @@ function phoneDigits(value) {
 async function getTodayState() {
   const result = await query(`
     SELECT
-      (CURRENT_TIMESTAMP AT TIME ZONE '${TZ}')::date AS today,
+      (CURRENT_TIMESTAMP AT TIME ZONE '${TZ}')::date::text AS today,
       EXTRACT(HOUR FROM (CURRENT_TIMESTAMP AT TIME ZONE '${TZ}'))::int AS hour,
       EXTRACT(MINUTE FROM (CURRENT_TIMESTAMP AT TIME ZONE '${TZ}'))::int AS minute
   `);
@@ -394,7 +394,7 @@ export async function reconcileAndNotify() {
 
   for (const v of vehicles.rows) {
     const updatedDateResult = v.meter_updated_at
-      ? await query(`SELECT (NULLIF(TRIM($1::text), '')::timestamptz AT TIME ZONE '${TZ}')::date AS reading_date`, [v.meter_updated_at])
+      ? await query(`SELECT (NULLIF(TRIM($1::text), '')::timestamptz AT TIME ZONE '${TZ}')::date::text AS reading_date`, [v.meter_updated_at])
       : { rows: [{ reading_date: null }] };
 
     const readingDate = updatedDateResult.rows[0]?.reading_date;
@@ -628,7 +628,7 @@ export async function getDriverDailyKmStatus(userId) {
   }
 
   const todayResult = await query(`
-    SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date AS today
+    SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date::text AS today
   `);
   const today = todayResult.rows[0].today;
 

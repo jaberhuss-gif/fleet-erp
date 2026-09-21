@@ -1,4 +1,4 @@
-import { query } from "./postgres.js";
+import { query, transaction } from "./postgres.js";
 import { sendFcmToTokens } from "./fcm.js";
 
 const TZ = "Asia/Riyadh";
@@ -81,28 +81,42 @@ async function getDriverTokens(userId) {
 async function ensureDailyKmTicket(record, today) {
   const marker = `DAILY_KM_MISSING|vehicle=${record.vehicle_id}|date=${today}`;
 
-  const existing = await query(`
-    SELECT id, status FROM tickets
-    WHERE vehicle_id = $1 AND category = 'Daily KM'
-      AND description LIKE $2 AND status IN ('Open', 'Acknowledged')
-    ORDER BY id DESC LIMIT 1
-  `, [record.vehicle_id, `%${marker}%`]);
+  // A Daily KM ticket is strictly one ticket per vehicle per Riyadh day.
+  // Keep an existing ticket regardless of status so a manually/system-closed
+  // ticket is never recreated later the same day.
+  // The transaction + advisory lock also prevents duplicates when two service
+  // runs reach the same vehicle concurrently.
+  return transaction(async (client) => {
+    await client.query(
+      `SELECT pg_advisory_xact_lock(hashtext($1))`,
+      [marker]
+    );
 
-  if (existing.rows[0]) return existing.rows[0];
+    const existing = await client.query(`
+      SELECT id, status
+      FROM tickets
+      WHERE vehicle_id = $1
+        AND category = 'Daily KM'
+        AND description LIKE $2
+      ORDER BY id DESC
+      LIMIT 1
+    `, [record.vehicle_id, `%${marker}%`]);
 
-  const result = await query(`
-    INSERT INTO tickets
-      (vehicle_id, title, location, category, priority, status,
-       description, reported_by, opened_at, department)
-    VALUES
-      ($1, $2, $3, 'Daily KM', 'High', 'Open', $4, $5,
-       CURRENT_TIMESTAMP, 'Fleet')
-    RETURNING id, status
-  `, [
-    record.vehicle_id,
-    `Daily KM Missing — ${record.vehicle_plate || "Vehicle"}`,
-    record.location || "",
-    `Hello ${record.driver_name || "Driver"},
+    if (existing.rows[0]) return existing.rows[0];
+
+    const result = await client.query(`
+      INSERT INTO tickets
+        (vehicle_id, title, location, category, priority, status,
+         description, reported_by, opened_at, department)
+      VALUES
+        ($1, $2, $3, 'Daily KM', 'High', 'Open', $4, $5,
+         CURRENT_TIMESTAMP, 'Fleet')
+      RETURNING id, status
+    `, [
+      record.vehicle_id,
+      `Daily KM Missing — ${record.vehicle_plate || "Vehicle"}`,
+      record.location || "",
+      `Hello ${record.driver_name || "Driver"},
 
 No KM reading recorded today for vehicle ${record.vehicle_plate || "Vehicle"}.
 Last reading: ${Number(record.current_km || 0).toLocaleString()} km.
@@ -114,10 +128,11 @@ Fleet Management
 
 ---
 ${marker}`,
-    record.driver_name || "System"
-  ]);
+      record.driver_name || "System"
+    ]);
 
-  return result.rows[0];
+    return result.rows[0];
+  });
 }
 
 async function closeDailyKmTicket(vehicleId, today, resolutionNotes = "") {

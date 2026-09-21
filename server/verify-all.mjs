@@ -1,8 +1,7 @@
 ﻿import pg from "pg";
 
 const client = new pg.Client({
-  connectionString: process.env.DATABASE_URL ||
-    "postgresql://neondb_owner:npg_dynmHfhw3O1V@ep-rapid-bread-b1qjr8sh-pooler.c-5.eu-central-1.aws.neon.tech/neondb?sslmode=require"
+  connectionString: process.env.DATABASE_URL
 });
 await client.connect();
 

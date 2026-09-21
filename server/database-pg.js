@@ -929,10 +929,23 @@ export async function getWorkOrder(id) {
   return result.rows[0] || null;
 }
 
+export async function ensureGeneralMaintenanceSchema() {
+  await query(`
+    ALTER TABLE work_orders
+      ADD COLUMN IF NOT EXISTS performed_by TEXT
+  `);
+}
+
 export async function createWorkOrder(data = {}) {
-  const { month, year } = pgMonthYear(
-    data.reportedDate || new Date()
-  );
+  await ensureGeneralMaintenanceSchema();
+  const reportedDate = data.reportedDate || data.reported_date || new Date();
+  const { month, year } = pgMonthYear(reportedDate);
+  const isContractor = !!data.isContractor || !!data.is_contractor;
+  const contractorName = pgStr(data.contractorName ?? data.contractor_name);
+  const assignedTo = pgStr(data.assignedTo ?? data.assigned_to);
+  const performedBy = pgStr(data.performedBy ?? data.performed_by) || (isContractor ? contractorName : assignedTo);
+  if (isContractor && !contractorName) throw new Error("Contractor name is required");
+  if (!isContractor && !performedBy) throw new Error("Employee / executor name is required");
 
   const result = await query(`
     INSERT INTO work_orders
@@ -946,6 +959,7 @@ export async function createWorkOrder(data = {}) {
       assigned_to,
       is_contractor,
       contractor_name,
+      performed_by,
       status,
       reported_date,
       completed_date,
@@ -959,7 +973,7 @@ export async function createWorkOrder(data = {}) {
       year
     )
     VALUES
-    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
     RETURNING *
   `, [
     pgStr(data.woNo) || pgGenNo("WO"),
@@ -970,7 +984,8 @@ export async function createWorkOrder(data = {}) {
     pgStr(data.description),
     pgStr(data.assignedTo ?? data.assigned_to),
     data.isContractor ? 1 : 0,
-    pgStr(data.contractorName ?? data.contractor_name),
+    contractorName,
+    performedBy,
     pgStr(data.status, "Open"),
     data.reportedDate ?? data.reported_date ?? new Date(),
     data.completedDate ?? data.completed_date ?? null,
@@ -988,6 +1003,7 @@ export async function createWorkOrder(data = {}) {
 }
 
 export async function updateWorkOrder(id, data = {}) {
+  await ensureGeneralMaintenanceSchema();
   const current = await getWorkOrder(id);
 
   if (!current) {
@@ -1006,19 +1022,20 @@ export async function updateWorkOrder(id, data = {}) {
       assigned_to = $7,
       is_contractor = $8,
       contractor_name = $9,
-      status = $10,
-      reported_date = $11,
-      completed_date = $12,
-      final_cost = $13,
-      contractor_cost = $14,
-      labor_cost = $15,
-      parts_cost = $16,
-      closing_notes = $17,
-      parts_used = $18,
-      month = $19,
-      year = $20,
+      performed_by = $10,
+      status = $11,
+      reported_date = $12,
+      completed_date = $13,
+      final_cost = $14,
+      contractor_cost = $15,
+      labor_cost = $16,
+      parts_cost = $17,
+      closing_notes = $18,
+      parts_used = $19,
+      month = $20,
+      year = $21,
       updated_at = CURRENT_TIMESTAMP
-    WHERE id = $21
+    WHERE id = $22
     RETURNING *
   `, [
     data.woNo ?? current.wo_no,
@@ -1032,6 +1049,7 @@ export async function updateWorkOrder(id, data = {}) {
       ? current.is_contractor
       : (data.isContractor ? 1 : 0),
     data.contractorName ?? data.contractor_name ?? current.contractor_name,
+    data.performedBy ?? data.performed_by ?? current.performed_by ?? (data.isContractor || data.is_contractor ? (data.contractorName ?? data.contractor_name ?? current.contractor_name) : (data.assignedTo ?? data.assigned_to ?? current.assigned_to)),
     data.status ?? current.status,
     data.reportedDate ?? data.reported_date ?? current.reported_date,
     data.completedDate ?? data.completed_date ?? current.completed_date,
@@ -1041,8 +1059,8 @@ export async function updateWorkOrder(id, data = {}) {
     data.partsCost ?? data.parts_cost ?? current.parts_cost,
     data.closingNotes ?? data.closing_notes ?? current.closing_notes,
     data.partsUsed ?? data.parts_used ?? current.parts_used,
-    data.month ?? current.month,
-    data.year ?? current.year,
+    (() => { const d = data.reportedDate ?? data.reported_date ?? current.reported_date; return pgMonthYear(d).month; })(),
+    (() => { const d = data.reportedDate ?? data.reported_date ?? current.reported_date; return pgMonthYear(d).year; })(),
     id
   ]);
 
@@ -1050,6 +1068,7 @@ export async function updateWorkOrder(id, data = {}) {
 }
 
 export async function closeWorkOrder(id, data = {}) {
+  await ensureGeneralMaintenanceSchema();
   const result = await query(`
     UPDATE work_orders
     SET

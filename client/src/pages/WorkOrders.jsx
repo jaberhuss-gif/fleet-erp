@@ -18,7 +18,7 @@ export default function WorkOrders({ user, access = {} }) {
   const [form, setForm] = useState({
     site: '', area: '', category: 'General', priority: 'Medium',
     description: '', assignedTo: '', isContractor: false, contractorName: '',
-    reportedDate: '', partsUsed: ''
+    performedBy: '', reportedDate: '', partsUsed: ''
   });
   const [closeForm, setCloseForm] = useState({
     finalCost: 0, contractorCost: 0, laborCost: 0, partsCost: 0, closingNotes: ''
@@ -39,7 +39,7 @@ export default function WorkOrders({ user, access = {} }) {
   const resetForm = () => {
     setForm({ site: '', area: '', category: 'General', priority: 'Medium',
       description: '', assignedTo: '', isContractor: false, contractorName: '',
-      reportedDate: '', partsUsed: '' });
+      performedBy: '', reportedDate: '', partsUsed: '' });
     setEditing(null);
     setShowForm(false);
   };
@@ -65,6 +65,7 @@ export default function WorkOrders({ user, access = {} }) {
       site: o.site, area: o.area || '', category: o.category, priority: o.priority,
       description: o.description || '', assignedTo: o.assigned_to || '',
       isContractor: !!(o.contractor_name && o.contractor_name !== 'Company' && o.contractor_name !== 'Internal'), contractorName: o.contractor_name || '',
+      performedBy: o.performed_by || o.contractor_name || o.assigned_to || '',
       reportedDate: o.reported_date || '', partsUsed: o.parts_used || ''
     });
     setEditing(o);
@@ -208,8 +209,13 @@ export default function WorkOrders({ user, access = {} }) {
               </select>
             </div>
             {form.isContractor && (
-              <div className="form-group"><label>Contractor Name</label><input value={form.contractorName} onChange={e => setForm({ ...form, contractorName: e.target.value })} /></div>
+              <div className="form-group"><label>Contractor Name *</label><input value={form.contractorName} onChange={e => setForm({ ...form, contractorName: e.target.value })} required /></div>
             )}
+            <div className="form-group">
+              <label>Who Worked / Executor *</label>
+              <input value={form.performedBy} onChange={e => setForm({ ...form, performedBy: e.target.value })}
+                placeholder={form.isContractor ? 'Contractor / crew name' : 'Employee name'} required />
+            </div>
           </div>
           <div className="form-group"><label>Description *</label><textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} required></textarea></div>
           <div className="form-group"><label>Parts Used</label><input value={form.partsUsed} onChange={e => setForm({ ...form, partsUsed: e.target.value })} /></div>

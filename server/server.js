@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { verifyToken, login, listUsers, createUser, deleteUser } from "./auth.js";
+import { login, listUsers, createUser, deleteUser, requireAuth } from "./auth.js";
 import { requirePermission } from "./rbac.js";
 import fs from "fs";
 import path from "path";
@@ -29,8 +29,6 @@ app.use("/api", async (req, res, next) => {
   const publicApiPaths = new Set([
     "/api/health",
     "/api/v2/health",
-    "/api/v2/migration/vehicles/preview",
-    "/api/v2/migration/vehicles/run",
     "/api/auth/login"
   ]);
   if (publicApiPaths.has(req.originalUrl.split("?")[0])) return next();
@@ -84,7 +82,7 @@ app.get("/api/vehicles/:id/details", async (req, res) => {
 });
 
 app.post("/api/vehicles", async (req, res) => {
-  try { res.json({ success: true, vehicle: createVehiclePG(req.body) }); }
+  try { res.json({ success: true, vehicle: await createVehiclePG(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
@@ -511,7 +509,7 @@ app.get("/api/users", requireRole("Owner"), async (req, res) => {
 });
 
 app.post("/api/users", requireRole("Owner"), async (req, res) => {
-  try { res.json({ success: true, user: createUser(req.body) }); }
+  try { res.json({ success: true, user: await createUser(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 

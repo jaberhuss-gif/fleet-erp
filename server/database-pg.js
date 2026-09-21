@@ -478,12 +478,12 @@ export async function listTickets(filters = {}) {
 
   if (filters.reportedBy) {
     params.push(filters.reportedBy);
-    sql += ` AND reported_by = ${params.length}`;
+    sql += ` AND reported_by = $${params.length}`;
   }
 
   if (filters.department) {
     params.push(filters.department);
-    sql += ` AND department = ${params.length}`;
+    sql += ` AND department = $${params.length}`;
   }
 
   sql += ` ORDER BY opened_at DESC, id DESC`;
@@ -491,7 +491,6 @@ export async function listTickets(filters = {}) {
   const result = await query(sql, params);
   return result.rows;
 }
-
 export async function closeTicket(id) {
   const result = await query(
     `UPDATE tickets

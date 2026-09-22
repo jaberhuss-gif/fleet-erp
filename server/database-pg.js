@@ -49,6 +49,28 @@ async function syncV2DriverAssignment({ legacyDriverId = null, legacyVehicleId =
   }
 }
 
+async function syncV2KmReading({ plateNumber = "", plateCode = "", km, readingDate, notes = "" } = {}) {
+  if (!v2Enabled() || km == null) return;
+  try {
+    const vehicle = (await v2Query(
+      "SELECT id FROM fleet_erp_v2.vehicles WHERE plate_number=$1 AND plate_code=$2 LIMIT 1",
+      [String(plateNumber || "").trim(), String(plateCode || "").trim().toUpperCase()]
+    )).rows[0];
+    if (!vehicle) return;
+    await v2Query(
+      "INSERT INTO fleet_erp_v2.km_readings(vehicle_id,reading_km,reading_date,notes) VALUES($1,$2,$3,$4) ON CONFLICT(vehicle_id,reading_date) DO UPDATE SET reading_km=GREATEST(fleet_erp_v2.km_readings.reading_km,EXCLUDED.reading_km),notes=EXCLUDED.notes",
+      [vehicle.id, km, readingDate, notes || "ERP KM"]
+    );
+    await v2Query(
+      "UPDATE fleet_erp_v2.vehicles SET current_km=GREATEST(current_km,$1),updated_at=CURRENT_TIMESTAMP WHERE id=$2",
+      [km, vehicle.id]
+    );
+  } catch (err) {
+    console.error("[V2 KM Sync] failed:", err.message);
+    throw new Error("KM was saved locally but V2 synchronization failed: " + err.message);
+  }
+}
+
 function formatVehicle(row) {
   if (!row) return null;
 
@@ -282,6 +304,14 @@ export async function addReading(vehicleId, data = {}) {
      WHERE id = $2`,
     [km, vehicleId]
   );
+
+  await syncV2KmReading({
+    plateNumber: v.plate_number,
+    plateCode: v.plate_code,
+    km,
+    readingDate,
+    notes: stringValue(data.notes)
+  });
 
   // Automatically close the Daily KM card for this vehicle/date as soon
   // as the driver successfully saves today's reading.

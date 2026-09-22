@@ -347,7 +347,12 @@ export async function requirePermission(req, res, next) {
       });
     }
 
-    const accessAllowed = await hasModuleAccess(req.user, permission.module, mode);
+    // Drivers always retain their core Fleet workflow (KM, assigned-vehicle details,
+    // and issue reporting), even if an old/stale user_access row revoked fleet access.
+    // This preserves the Driver role contract while management modules remain configurable.
+    if (req.user?.role === "Driver" && permission.module === "fleet") return next();
+
+  const accessAllowed = await hasModuleAccess(req.user, permission.module, mode);
     if (accessAllowed) return next();
 
     return res.status(403).json({

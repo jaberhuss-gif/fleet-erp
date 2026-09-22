@@ -1,4 +1,5 @@
 ﻿import { query } from "./postgres.js";
+import { v2Query, v2Enabled } from "./v2/db.js";
 import { getMonthlySavingsSheet } from "./googleSheetSync.js";
 
 function numberValue(value, fallback = 0) {
@@ -10,6 +11,42 @@ function numberValue(value, fallback = 0) {
 function stringValue(value, fallback = "") {
   if (value === undefined || value === null) return fallback;
   return String(value).trim();
+}
+
+async function syncV2DriverAssignment({ legacyDriverId = null, legacyVehicleId = null, plateNumber = "", plateCode = "", driverName = "", phone = "", status = "Active", clear = false } = {}) {
+  if (!v2Enabled()) return;
+  try {
+    let vehicle;
+    if (legacyVehicleId != null) {
+      vehicle = (await v2Query("SELECT id, driver_id FROM fleet_erp_v2.vehicles WHERE legacy_vehicle_id = $1 LIMIT 1", [legacyVehicleId])).rows[0];
+    }
+    if (!vehicle && plateNumber) {
+      vehicle = (await v2Query("SELECT id, driver_id FROM fleet_erp_v2.vehicles WHERE plate_number = $1 AND plate_code = $2 LIMIT 1", [String(plateNumber).trim(), String(plateCode || "").trim().toUpperCase()])).rows[0];
+    }
+    if (!vehicle) return;
+    if (clear || !String(driverName || "").trim()) {
+      await v2Query("UPDATE fleet_erp_v2.vehicles SET driver_id = NULL, legacy_driver_name = '', legacy_driver_phone = '', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [vehicle.id]);
+      return;
+    }
+    const name = String(driverName).trim();
+    const mobile = String(phone || "").trim();
+    let driver = null;
+    if (legacyDriverId != null) {
+      driver = (await v2Query("SELECT id FROM fleet_erp_v2.drivers WHERE employee_no = $1 LIMIT 1", ["LEGACY-" + legacyDriverId])).rows[0];
+    }
+    if (!driver) {
+      driver = (await v2Query("SELECT id FROM fleet_erp_v2.drivers WHERE lower(full_name)=lower($1) AND COALESCE(phone,'')=$2 ORDER BY id LIMIT 1", [name, mobile])).rows[0];
+    }
+    if (!driver) {
+      driver = (await v2Query("INSERT INTO fleet_erp_v2.drivers(employee_no,full_name,phone,status) VALUES($1,$2,$3,$4) RETURNING id", [legacyDriverId != null ? "LEGACY-" + legacyDriverId : null, name, mobile, status || "Active"])).rows[0];
+    } else {
+      await v2Query("UPDATE fleet_erp_v2.drivers SET full_name=$1, phone=$2, status=$3 WHERE id=$4", [name, mobile, status || "Active", driver.id]);
+    }
+    await v2Query("UPDATE fleet_erp_v2.vehicles SET driver_id=$1, legacy_driver_name=$2, legacy_driver_phone=$3, updated_at=CURRENT_TIMESTAMP WHERE id=$4", [driver.id, name, mobile, vehicle.id]);
+  } catch (err) {
+    console.error("[V2 Driver Sync] failed:", err.message);
+    throw new Error("Driver assignment was saved locally but V2 synchronization failed: " + err.message);
+  }
 }
 
 function formatVehicle(row) {
@@ -148,6 +185,9 @@ export async function updateVehicle(id, data = {}) {
       ? numberValue(data.oilChangeInterval, 5000)
       : numberValue(vehicleRow.oil_change_interval, 5000);
 
+  const newDriver = data.driverName ?? data.driver ?? vehicleRow.driver ?? "";
+  const newPhone = data.driverPhone ?? data.phone ?? vehicleRow.phone ?? "";
+
   const result = await query(
     `UPDATE vehicles
      SET current_km = $1,
@@ -165,13 +205,24 @@ export async function updateVehicle(id, data = {}) {
       lastOilKM,
       data.status ?? data.state ?? vehicleRow.status,
       data.location ?? vehicleRow.location ?? "",
-      data.driverName ?? data.driver ?? vehicleRow.driver ?? "",
-      data.driverPhone ?? data.phone ?? vehicleRow.phone ?? "",
+      newDriver,
+      newPhone,
       oilInterval,
       data.lastOilChangeDate ?? vehicleRow.last_oil_change_date ?? null,
       id
     ]
   );
+
+  if (result.rowCount) {
+    await syncV2DriverAssignment({
+      legacyVehicleId: id,
+      plateNumber: vehicleRow.plate_number,
+      plateCode: vehicleRow.plate_code,
+      driverName: newDriver,
+      phone: newPhone,
+      clear: !String(newDriver).trim()
+    });
+  }
 
   return { changes: result.rowCount };
 }
@@ -1695,6 +1746,17 @@ export async function createDriver(data = {}) {
           updated_at = CURRENT_TIMESTAMP
       WHERE id = $3
     `, [pgStr(data.name), pgStr(data.phone), vehicleId]);
+
+    const vehicleRow = (await query("SELECT plate_number, plate_code FROM vehicles WHERE id = $1 LIMIT 1", [vehicleId])).rows[0];
+    await syncV2DriverAssignment({
+      legacyDriverId: result.rows[0].id,
+      legacyVehicleId: vehicleId,
+      plateNumber: vehicleRow?.plate_number,
+      plateCode: vehicleRow?.plate_code,
+      driverName: pgStr(data.name),
+      phone: pgStr(data.phone),
+      status: pgStr(data.status, "Active")
+    });
   }
 
   return getDriver(result.rows[0].id);
@@ -1770,20 +1832,49 @@ export async function updateDriver(id, data = {}) {
     ]);
   }
 
+  if (oldVehicleId && oldVehicleId !== newVehicleId) {
+    const oldVehicle = (await query("SELECT plate_number, plate_code FROM vehicles WHERE id = $1 LIMIT 1", [oldVehicleId])).rows[0];
+    await syncV2DriverAssignment({ legacyVehicleId: oldVehicleId, plateNumber: oldVehicle?.plate_number, plateCode: oldVehicle?.plate_code, clear: true });
+  }
+
+  if (newVehicleId) {
+    const newVehicle = (await query("SELECT plate_number, plate_code FROM vehicles WHERE id = $1 LIMIT 1", [newVehicleId])).rows[0];
+    await syncV2DriverAssignment({
+      legacyDriverId: id,
+      legacyVehicleId: newVehicleId,
+      plateNumber: newVehicle?.plate_number,
+      plateCode: newVehicle?.plate_code,
+      driverName: pgStr(data.name ?? current.name),
+      phone: pgStr(data.phone ?? current.phone),
+      status: pgStr(data.status ?? current.status, "Active")
+    });
+  }
+
   return getDriver(id);
 }
 
 export async function deleteDriver(id) {
+  const current = await getDriver(id);
+  if (!current) throw new Error("Driver not found");
+
   const result = await query(
-    `DELETE FROM drivers WHERE id = $1`,
+    `UPDATE drivers
+     SET status = 'Inactive',
+         vehicle_id = NULL,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1`,
     [id]
   );
 
-  if (!result.rowCount) {
-    throw new Error("Driver not found");
+  if (!result.rowCount) throw new Error("Driver not found");
+
+  if (current.vehicle_id) {
+    const oldVehicle = (await query("SELECT plate_number, plate_code FROM vehicles WHERE id = $1 LIMIT 1", [current.vehicle_id])).rows[0];
+    await query("UPDATE vehicles SET driver = '', phone = '', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [current.vehicle_id]);
+    await syncV2DriverAssignment({ legacyVehicleId: current.vehicle_id, plateNumber: oldVehicle?.plate_number, plateCode: oldVehicle?.plate_code, clear: true });
   }
 
-  return { changes: result.rowCount };
+  return { changes: result.rowCount, deactivated: true };
 }
 
 /* ============================================================

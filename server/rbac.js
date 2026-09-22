@@ -69,7 +69,7 @@ function getModuleFromPath(pathname) {
   if (route === "v2") {
     const v2Route = parts[2] || "";
     const v2Modules = {
-      "fleet-dashboard": "gm",
+      "fleet-dashboard": "fleet",
       "vehicle-alerts": "fleet",
       vehicles: "fleet",
       drivers: "drivers",

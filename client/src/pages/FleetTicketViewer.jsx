@@ -38,9 +38,9 @@ export default function FleetTicketViewer({ user }) {
   }), [scoped]);
 
   const filtered = useMemo(() => {
-    if (status === 'open') return tickets.filter(t => t.status === 'Open');
-    if (status === 'closed') return tickets.filter(t => t.status === 'Closed');
-    return tickets;
+    if (status === 'open') return scoped.filter(t => t.status === 'Open');
+    if (status === 'closed') return scoped.filter(t => t.status === 'Closed');
+    return scoped;
   }, [scoped, status]);
 
   const statusStyle = (value) => value === 'Closed'

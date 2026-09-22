@@ -57,6 +57,10 @@ function getModuleFromPath(pathname) {
 
   const route = parts[1] || "";
 
+  // Vehicle tickets are a Fleet-only work area. GET/PUT/PATCH/DELETE are
+  // protected by fleet_tickets; POST remains the controlled Driver report path.
+  if (route === "tickets" && reqMethodForRoute(methodFromPathHint(fullPath))) return null;
+
   // Vehicle master data and periodic vehicle maintenance are Owner-only.
   // Drivers retain the Fleet module for KM entry and issue reporting, but
   // must not receive the Vehicles or Vehicle Maintenance pages/data through

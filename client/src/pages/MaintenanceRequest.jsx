@@ -15,7 +15,7 @@ export default function MaintenanceRequest({ user, access = {} }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const canWork = user?.role === 'Owner' || !!access?.building?.can_work;
+  const canWork = user?.role === 'Owner' || !!access?.support?.can_work;
   const readOnly = !canWork;
 
   useEffect(() => {
@@ -31,7 +31,7 @@ export default function MaintenanceRequest({ user, access = {} }) {
     setError('');
 
     if (!canWork) {
-      setError('View only. Building Work permission is required to submit a maintenance request.');
+      setError('View only. Support & Service Work permission is required to submit a maintenance request.');
       return;
     }
 

@@ -2,6 +2,7 @@
 import path from "path";
 import { fileURLToPath } from "url";
 import pg from "pg";
+import { v2Query, v2Enabled } from "./v2/db.js";
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -153,6 +154,23 @@ function cleanKm(value) {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+async function syncV2Km(plateNumber, plateCode, km, readingDate, meterUpdatedAt = null, lastOilKm = null, lastOilDate = null) {
+  if (!v2Enabled() || km == null) return;
+  const vehicle = (await v2Query(
+    "SELECT id FROM fleet_erp_v2.vehicles WHERE plate_number=$1 AND plate_code=$2 LIMIT 1",
+    [String(plateNumber || "").trim(), String(plateCode || "").trim().toUpperCase()]
+  )).rows[0];
+  if (!vehicle) return;
+  await v2Query(
+    "INSERT INTO fleet_erp_v2.km_readings(vehicle_id,reading_km,reading_date,notes) VALUES($1,$2,$3,$4) ON CONFLICT(vehicle_id,reading_date) DO UPDATE SET reading_km=GREATEST(fleet_erp_v2.km_readings.reading_km,EXCLUDED.reading_km),notes=EXCLUDED.notes",
+    [vehicle.id, km, readingDate, "Google Sheet migration"]
+  );
+  await v2Query(
+    "UPDATE fleet_erp_v2.vehicles SET current_km=GREATEST(current_km,$1), meter_updated_at=COALESCE($2,meter_updated_at), last_oil_km=CASE WHEN $3 IS NOT NULL THEN GREATEST(last_oil_km,$3) ELSE last_oil_km END, last_oil_change_date=CASE WHEN $4 IS NOT NULL AND (last_oil_change_date IS NULL OR $4::date >= last_oil_change_date) THEN $4::date ELSE last_oil_change_date END, updated_at=CURRENT_TIMESTAMP WHERE id=$5",
+    [km, meterUpdatedAt, lastOilKm, lastOilDate, vehicle.id]
+  );
+}
+
 function isInactive(value) {
   return ["inactive", "disabled", "sold", "disposed", "not active", "no"].includes(normalize(value));
 }
@@ -276,6 +294,12 @@ async function syncKmRecordsToDb(rows, indexes) {
         [vehicleId, record.plate, record.km, readingDate]
       );
       inserted += 1;
+    }
+
+    try {
+      await syncV2Km(record.splitPlateNumber, record.splitPlateCode, record.km, readingDate);
+    } catch (error) {
+      console.error("[GoogleSheetSync] V2 KM sync failed:", error.message);
     }
   }
 
@@ -483,9 +507,25 @@ export async function syncGoogleSheetVehicles() {
     }
 
     await pool.query(
-      `UPDATE vehicles SET ${sets.join(", ")} WHERE id = $${params.length + 1}`,
+      `UPDATE vehicles SET ${sets.join(", ")} WHERE id = ${params.length + 1}`,
       [...params, id]
     );
+
+    if (km !== null) {
+      try {
+        await syncV2Km(
+          splitPlateNumber,
+          splitPlateCode,
+          km,
+          date ? date.toISOString().slice(0, 10) : wantedDate,
+          date ? date.toISOString() : null,
+          lastOilKm,
+          oilDateKey || null
+        );
+      } catch (error) {
+        console.error("[GoogleSheetSync] V2 current KM sync failed:", error.message);
+      }
+    }
     updated += 1;
   }
 

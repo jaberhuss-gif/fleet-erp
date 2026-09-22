@@ -338,8 +338,8 @@ export async function requirePermission(req, res, next) {
       pathname === "/api/vehicles/import" ||
       pathname === "/api/v2/vehicles" ||
       /^\/api\/v2\/vehicles\/[^/]+\/360\/?$/.test(pathname) ||
-      pathname === "/api/periodic-maintenance" ||
-      /^\/api\/periodic-maintenance\/[^/]+$/.test(pathname);
+      (pathname === "/api/periodic-maintenance" && ["POST", "DELETE"].includes(req.method)) ||
+      (/^\/api\/periodic-maintenance\/[^/]+$/.test(pathname) && ["PUT", "DELETE"].includes(req.method));
 
     if (ownerOnlyVehicleRoute && req.user?.role !== "Owner") {
       return res.status(403).json({

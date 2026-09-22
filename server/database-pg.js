@@ -2828,131 +2828,104 @@ export async function getGeneralMaintenanceReport(filters = {}) {
 }
 
 export async function getMonthlyReport(filters = {}) {
-  const workOrders = await listWorkOrders(filters);
-  const projects = await listProjects(filters);
-  const purchases = await listPurchases(filters);
+  const year = Number(filters.year) || new Date().getFullYear();
+  const site = pgStr(filters.site, "");
+
+  const start = `${year}-01-01`;
+  const next = `${year + 1}-01-01`;
+  const params = [start, next];
+  const siteClause = site ? ` AND site = $${params.push(site)}` : "";
+
+  // Use the real transaction dates, not cached month/year text fields.
+  // This prevents old/stale September values from appearing in a new month.
+  const wo = await query(`
+    SELECT reported_date, site, final_cost, contractor_name
+    FROM work_orders
+    WHERE reported_date >= $1 AND reported_date < $2${siteClause}
+  `, params);
+
+  const projectParams = [start, next];
+  const projectSiteClause = site ? ` AND site = $${projectParams.push(site)}` : "";
+  const projects = await query(`
+    SELECT start_date, site, spent, contractor
+    FROM projects
+    WHERE start_date >= $1 AND start_date < $2${projectSiteClause}
+  `, projectParams);
+
+  const purchaseParams = [start, next];
+  const purchases = await query(`
+    SELECT purchase_date, total_cost, purchased_by
+    FROM purchases
+    WHERE purchase_date >= $1 AND purchase_date < $2
+  `, purchaseParams);
 
   const months = {};
-
-  function getBucket(month) {
-    const key = month || "Unknown";
-
-    if (!months[key]) {
-      months[key] = {
-        month: key,
-        woCount: 0,
-        woCost: 0,
-        woContractor: 0,
-        woInternal: 0,
-        projCount: 0,
-        projSpent: 0,
-        purCount: 0,
-        purCost: 0,
-        purCompany: 0,
-        purContractor: 0,
-        total: 0
-      };
-    }
-
-    return months[key];
+  for (let i = 1; i <= 12; i++) {
+    const key = `${year}-${String(i).padStart(2, "0")}`;
+    months[key] = {
+      month: key, woCount: 0, woCost: 0, woContractor: 0, woInternal: 0,
+      woContractorCount: 0, woInternalCount: 0,
+      projCount: 0, projSpent: 0, purCount: 0, purCost: 0,
+      purCompany: 0, purContractor: 0, total: 0
+    };
   }
 
-  for (const w of workOrders) {
-    const b = getBucket(w.month);
+  const monthKey = value => value ? String(value).slice(0, 7) : null;
+  const isExternal = value => {
+    const n = String(value || "").trim().toLowerCase();
+    return n !== "" && n !== "company" && n !== "internal";
+  };
 
+  for (const w of wo.rows) {
+    const b = months[monthKey(w.reported_date)];
+    if (!b) continue;
+    const cost = Number(w.final_cost || 0);
     b.woCount++;
-    b.woCost += Number(w.final_cost || 0);
-
-    const cn = String(w.contractor_name || "").trim();
-    if (cn !== "" && cn.toLowerCase() !== "company" && cn.toLowerCase() !== "internal") {
-      b.woContractor++;
+    b.woCost += cost;
+    if (isExternal(w.contractor_name)) {
+      b.woContractor += cost;
+      b.woContractorCount++;
     } else {
-      b.woInternal++;
+      b.woInternal += cost;
+      b.woInternalCount++;
     }
   }
 
-  for (const p of projects) {
-    const b = getBucket(p.month);
-
+  for (const p of projects.rows) {
+    const b = months[monthKey(p.start_date)];
+    if (!b) continue;
     b.projCount++;
     b.projSpent += Number(p.spent || 0);
   }
 
-  for (const p of purchases) {
-    const b = getBucket(p.month);
-
+  for (const p of purchases.rows) {
+    const b = months[monthKey(p.purchase_date)];
+    if (!b) continue;
+    const cost = Number(p.total_cost || 0);
     b.purCount++;
-    b.purCost += Number(p.total_cost || 0);
-
-    if (
-      String(p.purchased_by || "").toLowerCase()
-        .includes("contract")
-    ) {
-      b.purContractor += Number(p.total_cost || 0);
-    } else {
-      b.purCompany += Number(p.total_cost || 0);
-    }
+    b.purCost += cost;
+    if (isExternal(p.purchased_by)) b.purContractor += cost;
+    else b.purCompany += cost;
   }
 
-  const rows = Object.values(months)
-    .sort((a,b) => String(a.month).localeCompare(String(b.month)));
-
+  const rows = Object.values(months);
   for (const row of rows) {
-    row.total =
-      row.woCost +
-      row.projSpent +
-      row.purCost;
+    row.total = row.woCost + row.projSpent + row.purCost;
   }
 
-  const grandTotal =
-    rows.reduce((s,r) => s + r.total, 0);
-
-  const totalWO =
-    rows.reduce((s,r) => s + r.woCost, 0);
-
-  const totalProjects =
-    rows.reduce((s,r) => s + r.projSpent, 0);
-
-  const totalPurchases =
-    rows.reduce((s,r) => s + r.purCost, 0);
-
-  const totalContractor =
-    rows.reduce(
-      (s,r) => s + r.purContractor,
-      0
-    ) +
-    rows.reduce(
-      (s,r) => s + r.woContractor,
-      0
-    );
-
-  const totalInternal =
-    rows.reduce(
-      (s,r) => s + r.purCompany,
-      0
-    ) +
-    rows.reduce(
-      (s,r) => s + r.woInternal,
-      0
-    );
-
-  const total = totalContractor + totalInternal;
-
-  return {
-    rows,
-    summary: {
-      grandTotal,
-      totalWO,
-      totalProjects,
-      totalPurchases,
-      totalContractor,
-      totalInternal,
-      internalPercent:
-        total ? (totalInternal / total) * 100 : 0,
-      contractorPercent:
-        total ? (totalContractor / total) * 100 : 0
-    }
+  const summary = {
+    grandTotal: rows.reduce((s,r) => s + r.total, 0),
+    totalWO: rows.reduce((s,r) => s + r.woCost, 0),
+    totalProjects: rows.reduce((s,r) => s + r.projSpent, 0),
+    totalPurchases: rows.reduce((s,r) => s + r.purCost, 0),
+    totalContractor: rows.reduce((s,r) => s + r.woContractor + r.purContractor, 0),
+    totalInternal: rows.reduce((s,r) => s + r.woInternal + r.purCompany, 0)
   };
+  const total = summary.totalContractor + summary.totalInternal;
+  summary.internalPercent = total ? (summary.totalInternal / total) * 100 : 0;
+  summary.contractorPercent = total ? (summary.totalContractor / total) * 100 : 0;
+
+  return { year, site: site || null, rows, months: rows, summary };
 }
 
 /* ============================================================

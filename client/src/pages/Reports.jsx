@@ -207,7 +207,7 @@ export default function Reports() {
       {/* Table */}
       <div className="panel">
         <div style={{ background: 'linear-gradient(135deg, #4c1d95, #6d28d9)', padding: '14px 20px', borderRadius: '10px 10px 0 0', color: '#fff' }}>
-          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>Detailed Breakdown</h2>
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>Monthly Details</h2>
         </div>
         {months.length === 0 ? (
           <div className="alert alert-info">No data.</div>

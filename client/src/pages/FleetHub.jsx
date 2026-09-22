@@ -5,6 +5,7 @@ import VehicleMaintenance from './VehicleMaintenance';
 import ReportIssue from './ReportIssue';
 import SmartReportIssue from './SmartReportIssue';
 import FleetOverview from './FleetOverview';
+import FleetTicketViewer from './FleetTicketViewer';
 
 const FLEET_SECTIONS = [
   {
@@ -30,6 +31,12 @@ const FLEET_SECTIONS = [
     label: '🔧 Maintenance Issue Report',
     title: 'Maintenance Issue Report',
     description: 'Report a vehicle maintenance problem and create a maintenance ticket.'
+  },
+  {
+    id: 'tickets',
+    label: '🎫 Fleet Tickets',
+    title: 'Fleet Tickets',
+    description: 'Separate vehicle Maintenance and Daily KM tickets.'
   }
 ];
 
@@ -50,9 +57,11 @@ export default function FleetHub({ user, access, onViewVehicle }) {
     );
   }
 
-  const visibleSections = user?.role === 'Owner'
-    ? FLEET_SECTIONS
-    : FLEET_SECTIONS.filter(s => s.id !== 'vehicles' && s.id !== 'maintenance');
+  const visibleSections = FLEET_SECTIONS.filter(s => {
+    if (s.id === 'vehicles' || s.id === 'maintenance') return user?.role === 'Owner';
+    if (s.id === 'tickets') return user?.role === 'Owner' || !!access?.fleet_tickets?.can_view;
+    return true;
+  });
 
   const safeSection = visibleSections.some(s => s.id === section)
     ? section
@@ -115,6 +124,7 @@ export default function FleetHub({ user, access, onViewVehicle }) {
           {safeSection === 'maintenance' && user?.role === 'Owner' && <VehicleMaintenance canWork={fleetWork} />}
           {safeSection === 'km' && <DriverPortal canWork={fleetWork} />}
           {safeSection === 'issue' && <ReportIssue canWork={fleetWork} />}
+          {safeSection === 'tickets' && <FleetTicketViewer user={user} />}
         </>
       )}
     </div>

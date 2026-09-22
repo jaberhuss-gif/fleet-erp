@@ -332,8 +332,10 @@ export async function requirePermission(req, res, next) {
     // /api/vehicles/list and the normal Fleet workflow for KM entry.
     const pathname = String(req.originalUrl || req.path || "").split("?")[0];
     const ownerOnlyVehicleRoute =
-      pathname === "/api/vehicles" ||
-      /^\/api\/vehicles\/[^/]+$/.test(pathname) ||
+      // Vehicle master-data changes are Owner-only.
+      (pathname === "/api/vehicles" && ["POST", "DELETE"].includes(req.method)) ||
+      (/^\/api\/vehicles\/[^/]+$/.test(pathname) && ["PUT", "DELETE"].includes(req.method)) ||
+      pathname === "/api/vehicles/import" ||
       pathname === "/api/v2/vehicles" ||
       /^\/api\/v2\/vehicles\/[^/]+\/360\/?$/.test(pathname) ||
       pathname === "/api/periodic-maintenance" ||

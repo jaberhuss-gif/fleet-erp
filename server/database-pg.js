@@ -2742,8 +2742,9 @@ export async function getGeneralMaintenanceReport(filters = {}) {
     return n !== "" && n !== "company" && n !== "internal";
   };
 
-  const months = Array.from({ length: 12 }, (_, i) => {
-    const key = `${year}-${String(i + 1).padStart(2, "0")}`;
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const monthNumber = i + 7;
+    const key = `${year}-${String(monthNumber).padStart(2, "0")}`;
     return {
       month: key,
       totalWO: 0,

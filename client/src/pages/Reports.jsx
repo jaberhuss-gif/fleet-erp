@@ -230,68 +230,87 @@ function FleetMaintenanceReport() {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [filterType, setFilterType] = useState('all');
 
   useEffect(() => { load(); }, []);
 
   const load = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/periodic-maintenance?status=Completed');
-      setRecords(res.data.records || []);
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
+      // Fleet maintenance is ticket-driven: vehicle Maintenance tickets are
+      // the source of truth for issues such as today's A/C repair. Periodic
+      // service records are merged only for completed scheduled services.
+      const [ticketRes, periodicRes] = await Promise.all([
+        api.get('/tickets'),
+        api.get('/periodic-maintenance?status=Completed')
+      ]);
+      const tickets = (ticketRes.data?.tickets || [])
+        .filter(t => String(t.category || '').toLowerCase() === 'maintenance')
+        .map(t => ({
+          id: 'ticket-' + t.id,
+          date: t.opened_at || t.created_at,
+          vehicle_plate: t.plate || t.vehicle_plate || t.vehicle_id,
+          driver_name: t.driver_name || t.reported_by || '-',
+          type: 'ticket',
+          technician: t.performed_by || t.assigned_to || '-',
+          cost: Number(t.final_cost || t.cost || 0),
+          source: 'Vehicle Ticket',
+          description: t.description || ''
+        }));
+
+      const periodic = (periodicRes.data?.records || []).map(r => ({
+        id: 'periodic-' + r.id,
+        date: r.completed_date || r.created_at,
+        vehicle_plate: r.vehicle_plate || r.vehicle_id,
+        driver_name: r.driver_name || '-',
+        type: r.type || 'scheduled',
+        technician: r.technician || '-',
+        cost: Number(r.cost || 0),
+        source: 'Scheduled Maintenance',
+        description: ''
+      }));
+
+      setRecords([...tickets, ...periodic].filter(r => r.date));
+    } catch (e) {
+      setError(e.response?.data?.error || e.message || 'Failed to load fleet maintenance report');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const start3Months = new Date(now.getFullYear(), now.getMonth() - 3, 1);
-  const start6Months = new Date(now.getFullYear(), now.getMonth() - 6, 1);
-  const startYear = new Date(now.getFullYear(), 0, 1);
-
-  const filteredByPeriod = records.filter(r => {
-    if (!r.completed_date) return false;
-    const d = new Date(r.completed_date);
-    if (period === 'month') return d >= startOfMonth;
-    if (period === '3months') return d >= start3Months;
-    if (period === '6months') return d >= start6Months;
-    if (period === 'year') return d >= startYear;
-    return true;
-  });
-
-  const filtered = filterType === 'all'
-    ? filteredByPeriod
-    : filteredByPeriod.filter(r => r.type === filterType);
-
-  const totalCost = filtered.reduce((sum, r) => sum + Number(r.cost || 0), 0);
-  const avgCost = filtered.length > 0 ? totalCost / filtered.length : 0;
-
-  const byType = {
-    oil_change: filtered.filter(r => r.type === 'oil_change').length,
-    inspection: filtered.filter(r => r.type === 'inspection').length,
-    '6_months_general': filtered.filter(r => r.type === '6_months_general').length
+  const starts = {
+    month: new Date(now.getFullYear(), now.getMonth(), 1),
+    '3months': new Date(now.getFullYear(), now.getMonth() - 2, 1),
+    '6months': new Date(now.getFullYear(), now.getMonth() - 5, 1),
+    year: new Date(now.getFullYear(), 0, 1),
+    all: new Date(2000, 0, 1)
   };
 
-  const monthKey = (d) => {
+  const filtered = records
+    .filter(r => new Date(r.date) >= starts[period])
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const totalCost = filtered.reduce((sum, r) => sum + Number(r.cost || 0), 0);
+  const avgCost = filtered.length ? totalCost / filtered.length : 0;
+  const byType = {
+    tickets: filtered.filter(r => r.type === 'ticket').length,
+    oil_change: filtered.filter(r => r.type === 'oil_change').length,
+    inspection: filtered.filter(r => r.type === 'inspection').length,
+    general: filtered.filter(r => r.type === '6_months_general' || r.type === 'scheduled').length
+  };
+
+  const monthKey = d => {
     const dt = new Date(d);
     return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
   };
-
   const monthlyMap = {};
   filtered.forEach(r => {
-    if (!r.completed_date) return;
-    const k = monthKey(r.completed_date);
+    const k = monthKey(r.date);
     if (!monthlyMap[k]) monthlyMap[k] = { month: k, count: 0, cost: 0 };
     monthlyMap[k].count += 1;
     monthlyMap[k].cost += Number(r.cost || 0);
   });
-  const monthlyData = Object.values(monthlyMap).sort((a, b) => a.month.localeCompare(b.month));
-
-  const typeLabels = {
-    oil_change: '🛢️ Oil Change',
-    inspection: '🔍 Inspection',
-    '6_months_general': '🔧 General'
-  };
+  const monthlyData = Object.values(monthlyMap).sort((a,b) => a.month.localeCompare(b.month));
 
   if (loading) return <div className="loading">Loading fleet reports...</div>;
   if (error) return <div className="alert alert-error">{error}</div>;
@@ -302,9 +321,8 @@ function FleetMaintenanceReport() {
         <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
           <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>🔧 Fleet Maintenance Report</h2>
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginTop: '16px', background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
-          <div className="form-group" style={{ marginBottom: 0 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:10, marginTop:16, background:'#f8fafc', padding:12, borderRadius:8 }}>
+          <div className="form-group" style={{marginBottom:0}}>
             <label>Period</label>
             <select value={period} onChange={e => setPeriod(e.target.value)}>
               <option value="month">This Month</option>
@@ -314,112 +332,53 @@ function FleetMaintenanceReport() {
               <option value="all">All Time</option>
             </select>
           </div>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label>Type</label>
-            <select value={filterType} onChange={e => setFilterType(e.target.value)}>
-              <option value="all">All Types</option>
-              <option value="oil_change">Oil Change</option>
-              <option value="inspection">Inspection</option>
-              <option value="6_months_general">General</option>
-            </select>
-          </div>
         </div>
       </div>
 
-      <div className="cards-grid" style={{ marginBottom: '20px' }}>
-        <div className="card success">
-          <h3>Total Completed</h3>
-          <div className="big-number" style={{ color: '#16a34a' }}>{filtered.length}</div>
-          <div className="sub">Services</div>
-        </div>
-        <div className="card">
-          <h3>Total Cost</h3>
-          <div className="big-number" style={{ color: '#1e3a8a' }}>{Number(totalCost).toLocaleString()}</div>
-          <div className="sub">SAR</div>
-        </div>
-        <div className="card warning">
-          <h3>Average Cost</h3>
-          <div className="big-number" style={{ color: '#f59e0b' }}>{Number(avgCost).toLocaleString()}</div>
-          <div className="sub">SAR</div>
-        </div>
-      </div>
-
-      <div className="cards-grid" style={{ marginBottom: '20px' }}>
-        <div className="card">
-          <h3>🛢️ Oil Change</h3>
-          <div className="big-number" style={{ color: '#1e3a8a' }}>{byType.oil_change}</div>
-          <div className="sub">services</div>
-        </div>
-        <div className="card">
-          <h3>🔍 Inspection</h3>
-          <div className="big-number" style={{ color: '#1e3a8a' }}>{byType.inspection}</div>
-          <div className="sub">services</div>
-        </div>
-        <div className="card">
-          <h3>🔧 General</h3>
-          <div className="big-number" style={{ color: '#1e3a8a' }}>{byType['6_months_general']}</div>
-          <div className="sub">services</div>
-        </div>
+      <div className="cards-grid" style={{marginBottom:20}}>
+        <div className="card success"><h3>Maintenance Records</h3><div className="big-number" style={{color:'#16a34a'}}>{filtered.length}</div><div className="sub">Tickets + scheduled services</div></div>
+        <div className="card"><h3>Total Cost</h3><div className="big-number" style={{color:'#1e3a8a'}}>{totalCost.toLocaleString()}</div><div className="sub">SAR</div></div>
+        <div className="card warning"><h3>Average Cost</h3><div className="big-number" style={{color:'#f59e0b'}}>{avgCost.toLocaleString()}</div><div className="sub">SAR</div></div>
+        <div className="card"><h3>Vehicle Tickets</h3><div className="big-number" style={{color:'#1e3a8a'}}>{byType.tickets}</div><div className="sub">Maintenance issues</div></div>
       </div>
 
       {monthlyData.length > 0 && (
-        <div className="panel" style={{ marginBottom: '20px' }}>
-          <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '14px 20px', borderRadius: '10px 10px 0 0', color: '#fff' }}>
-            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>Monthly Breakdown</h2>
-          </div>
+        <div className="panel" style={{marginBottom:20}}>
+          <h2 style={{marginTop:0}}>Monthly Breakdown</h2>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={monthlyData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="count" name="Services" fill="#1e3a8a" />
-            </BarChart>
+            <BarChart data={monthlyData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="month" /><YAxis /><Tooltip /><Legend /><Bar dataKey="count" name="Maintenance Records" fill="#1e3a8a" /></BarChart>
           </ResponsiveContainer>
         </div>
       )}
 
       <div className="panel">
-        <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '14px 20px', borderRadius: '10px 10px 0 0', color: '#fff' }}>
-          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>Completed Services ({filtered.length})</h2>
-        </div>
-        <div style={{ overflowX: 'auto', marginTop: '12px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#f1f5f9' }}>
-                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Date</th>
-                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Vehicle</th>
-                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Driver</th>
-                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Type</th>
-                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Technician</th>
-                <th style={{ textAlign: 'right', padding: '10px 12px' }}>Cost (SAR)</th>
-              </tr>
-            </thead>
+        <h2 style={{marginTop:0}}>Maintenance Records ({filtered.length})</h2>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <thead><tr style={{background:'#f1f5f9'}}>
+              <th>Date</th><th>Vehicle</th><th>Driver</th><th>Type</th><th>Source</th><th>Technician</th><th>Cost (SAR)</th><th>Description</th>
+            </tr></thead>
             <tbody>
-              {filtered.slice(0, 100).map(r => (
+              {filtered.slice(0,200).map(r => (
                 <tr key={r.id}>
-                  <td style={{ padding: '10px 12px' }}>{r.completed_date ? String(r.completed_date).slice(0, 10) : '-'}</td>
-                  <td style={{ padding: '10px 12px', fontWeight: 700 }}>{r.vehicle_plate || r.vehicle_id}</td>
-                  <td style={{ padding: '10px 12px' }}>{r.driver_name || '-'}</td>
-                  <td style={{ padding: '10px 12px' }}>{typeLabels[r.type] || r.type}</td>
-                  <td style={{ padding: '10px 12px' }}>{r.technician || '-'}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>{Number(r.cost || 0).toLocaleString()}</td>
+                  <td>{String(r.date).slice(0,10)}</td>
+                  <td style={{fontWeight:700}}>{r.vehicle_plate || '-'}</td>
+                  <td>{r.driver_name || '-'}</td>
+                  <td>{r.type === 'ticket' ? '🛠️ Vehicle Issue' : r.type}</td>
+                  <td>{r.source}</td>
+                  <td>{r.technician || '-'}</td>
+                  <td style={{textAlign:'right'}}>{Number(r.cost || 0).toLocaleString()}</td>
+                  <td>{r.description || '-'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {filtered.length > 100 && (
-            <div style={{ padding: '10px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
-              Showing first 100 of {filtered.length}
-            </div>
-          )}
+          {!filtered.length && <div className="alert alert-info" style={{marginTop:12}}>No vehicle maintenance records for the selected period.</div>}
         </div>
       </div>
     </div>
   );
 }
-
 
 function BuildingMaintenanceReport() {
   const now = new Date();

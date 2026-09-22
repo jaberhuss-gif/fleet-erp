@@ -217,11 +217,15 @@ export default function Reports() {
               <tr>
                 <th>Month</th>
                 <th>WO Count</th>
+                <th>Internal WO</th>
+                <th>Contractor WO</th>
                 <th>WO Cost</th>
-                <th>Projects</th>
-                <th>Purchases</th>
-                <th>Contractor</th>
-                <th>Internal</th>
+                <th>Project Count</th>
+                <th>Project Cost</th>
+                <th>Purchase Count</th>
+                <th>Purchase Cost</th>
+                <th>Contractor Cost</th>
+                <th>Internal Cost</th>
                 <th style={{ background: '#dbeafe' }}>Total</th>
               </tr>
             </thead>
@@ -230,8 +234,12 @@ export default function Reports() {
                 <tr key={m.month}>
                   <td style={{ fontWeight: 'bold' }}>{m.month}</td>
                   <td>{m.woCount}</td>
+                  <td>{m.woInternalCount || 0}</td>
+                  <td>{m.woContractorCount || 0}</td>
                   <td>{Number(m.woCost).toLocaleString()}</td>
+                  <td>{m.projCount || 0}</td>
                   <td>{Number(m.projSpent).toLocaleString()}</td>
+                  <td>{m.purCount || 0}</td>
                   <td>{Number(m.purCost).toLocaleString()}</td>
                   <td style={{ color: '#f59e0b' }}>{Number(m.woContractor + m.purContractor).toLocaleString()}</td>
                   <td style={{ color: '#16a34a' }}>{Number(m.woInternal + m.purCompany).toLocaleString()}</td>
@@ -240,9 +248,13 @@ export default function Reports() {
               ))}
               <tr style={{ background: '#f1f5f9', fontWeight: 'bold' }}>
                 <td>TOTAL</td>
-                <td>{months.reduce((s, m) => s + m.woCount, 0)}</td>
+                <td>{months.reduce((x, m) => x + Number(m.woCount || 0), 0)}</td>
+                <td>{months.reduce((x, m) => x + Number(m.woInternalCount || 0), 0)}</td>
+                <td>{months.reduce((x, m) => x + Number(m.woContractorCount || 0), 0)}</td>
                 <td>{Number(s.totalWO || 0).toLocaleString()}</td>
+                <td>{months.reduce((x, m) => x + Number(m.projCount || 0), 0)}</td>
                 <td>{Number(s.totalProjects || 0).toLocaleString()}</td>
+                <td>{months.reduce((x, m) => x + Number(m.purCount || 0), 0)}</td>
                 <td>{Number(s.totalPurchases || 0).toLocaleString()}</td>
                 <td style={{ color: '#f59e0b' }}>{Number(s.totalContractor || 0).toLocaleString()}</td>
                 <td style={{ color: '#16a34a' }}>{Number(s.totalInternal || 0).toLocaleString()}</td>

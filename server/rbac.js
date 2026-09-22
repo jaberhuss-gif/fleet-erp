@@ -28,12 +28,11 @@ const ROLE_ACCESS_PRESETS = {
   GM: { gm: ["view"], support: ["view"], building: ["view"], projects: ["view"], warehouse: ["view"], purchase_requests: ["view"], fleet: ["view"], tickets: ["view"], troubleshooter: ["view"], reports: ["view"], advanced_reports: ["view"] },
   Accountant: { reports: ["view"], advanced_reports: ["view"], tickets: ["view"], purchase_requests: ["view"], building: ["view"], projects: ["view"] },
   CampusManager: {
-    support: ["view", "work"], building: ["view", "work"], projects: ["view", "work"],
-    warehouse: ["view", "work"], purchase_requests: ["view", "work"], troubleshooter: ["view"]
+    support: ["view", "work"], warehouse: ["view", "work"]
   },
   Driver: { fleet: ["view", "work"], mytickets: ["view"], troubleshooter: ["view"] },
-  SupportManager: { support: ["view"], building: ["view"], tickets: ["view"], troubleshooter: ["view"] },
-  SSM: { building: ["view"], tickets: ["view"], fleet_tickets: ["view"], warehouse: ["view"] },
+  SupportManager: { warehouse: ["view"], fleet_tickets: ["view"] },
+  SSM: { warehouse: ["view"], fleet_tickets: ["view"] },
   FleetSupervisor: {
     gm: ["view"], fleet: ["view", "work"], tickets: ["view", "work"],
     building: ["view"], troubleshooter: ["view"]
@@ -96,7 +95,7 @@ function getModuleFromPath(pathname) {
     issues: "fleet",
     sites: "support",
     "work-orders": "building",
-    "maintenance-requests": "building",
+    "maintenance-requests": "support",
     projects: "projects",
     purchases: "purchase_requests",
     "purchase-requests": "purchase_requests",

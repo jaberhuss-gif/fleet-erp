@@ -12,7 +12,7 @@ export default function SupportServiceHub({ user, access = {} }) {
     { id: 'warehouse', label: '📦 Warehouse', title: 'Warehouse & Stock', show: can('warehouse') }
   ].filter(t => t.show);
 
-  const [tab, setTab] = useState(() => tabs[0]?.id || 'site');
+  const [tab, setTab] = useState(() => tabs[0]?.id || 'request');
   const current = tabs.find(t => t.id === tab) || tabs[0];
 
   if (!current) {

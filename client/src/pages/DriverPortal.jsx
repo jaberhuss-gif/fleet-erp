@@ -1,10 +1,9 @@
 ﻿import { useState, useEffect } from 'react';
-import { getVehiclesList, getVehicleByPlate, getVehicleDetails, addReading, changeOil } from '../api/client';
+import { getVehiclesList, getVehicleDetails, addReading, changeOil } from '../api/client';
 
 export default function DriverPortal({ canWork = false }) {
   const [vehicles, setVehicles] = useState([]);
   const [selectedId, setSelectedId] = useState('');
-  const [plateSearch, setPlateSearch] = useState('');
   const [details, setDetails] = useState(null);
   const [reading, setReading] = useState('');
   const [loading, setLoading] = useState(false);
@@ -13,14 +12,24 @@ export default function DriverPortal({ canWork = false }) {
 
   useEffect(() => {
     loadVehicles();
-    const refresh = () => loadVehicles();
+    const refresh = () => {
+      loadVehicles();
+      if (selectedId) loadDetails(selectedId);
+    };
+    const onStorage = (event) => {
+      if (event.key === 'fleet-vehicles-updated-at') refresh();
+    };
+    window.addEventListener('fleet-vehicles-updated', refresh);
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('storage', onStorage);
     return () => {
+      window.removeEventListener('fleet-vehicles-updated', refresh);
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('storage', onStorage);
     };
-  }, []);
+  }, [selectedId]);
 
   useEffect(() => {
     if (selectedId) loadDetails(selectedId);
@@ -47,34 +56,6 @@ export default function DriverPortal({ canWork = false }) {
     } catch (e) {
       console.error('Details error:', e);
       setError('Failed to load vehicle details: ' + (e.response?.data?.error || e.message));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePlateSearch = async (e) => {
-    e.preventDefault();
-    const plate = plateSearch.trim();
-    if (!plate) return;
-    setMessage('');
-    setError('');
-    try {
-      setLoading(true);
-      const res = await getVehicleByPlate(plate);
-      const vehicle = res.vehicle;
-      setSelectedId(String(vehicle.id));
-      // Use the same fresh vehicle object returned by the plate lookup.
-      setDetails({
-        success: true,
-        vehicle,
-        readings: [],
-        oilChanges: []
-      });
-      setPlateSearch('');
-    } catch (e) {
-      setDetails(null);
-      setSelectedId('');
-      setError(e.response?.data?.error || 'Vehicle not found for plate: ' + plate);
     } finally {
       setLoading(false);
     }
@@ -115,18 +96,6 @@ export default function DriverPortal({ canWork = false }) {
         <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
           <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Driver Portal</h2>
         </div>
-        <form onSubmit={handlePlateSearch} style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', marginBottom: '12px' }}>
-          <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-            <label>Search by Plate</label>
-            <input
-              value={plateSearch}
-              onChange={e => setPlateSearch(e.target.value)}
-              placeholder="e.g. 4479 JUA"
-            />
-          </div>
-          <button type="submit" className="btn btn-primary" disabled={loading}>Find Vehicle</button>
-        </form>
-
         <div className="form-group">
           <label>Select Vehicle</label>
           <select value={selectedId} onChange={e => setSelectedId(e.target.value)}>

@@ -10,6 +10,8 @@ export default function Reports() {
   const [error, setError] = useState('');
   const [filterYear, setFilterYear] = useState('2026');
   const [filterSite, setFilterSite] = useState('all');
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [rangeMonths, setRangeMonths] = useState('12');
   const [subTab, setSubTab] = useState('financial');
 
   useEffect(() => { loadSites(); }, []);
@@ -40,7 +42,13 @@ export default function Reports() {
   if (!data) return <div className="loading">No data</div>;
 
   const s = data.summary || {};
-  const months = data.months || [];
+  const allMonths = data.months || [];
+  const monthOptions = allMonths.map(m => m.month);
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const activeMonth = selectedMonth || (monthOptions.includes(currentMonth) ? currentMonth : monthOptions[monthOptions.length - 1]);
+  const rangeCount = Number(rangeMonths) || 12;
+  const activeIndex = Math.max(0, monthOptions.indexOf(activeMonth));
+  const months = allMonths.slice(Math.max(0, activeIndex - rangeCount + 1), activeIndex + 1);
 
   const chartData = months.map(m => ({
     month: m.month,
@@ -87,6 +95,21 @@ export default function Reports() {
             <select value={filterSite} onChange={e => setFilterSite(e.target.value)}>
               <option value="all">All Sites</option>
               {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+            </select>
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label>Report Range</label>
+            <select value={rangeMonths} onChange={e => setRangeMonths(e.target.value)}>
+              <option value="1">Selected Month</option>
+              <option value="3">Last 3 Months</option>
+              <option value="6">Last 6 Months</option>
+              <option value="12">Last 12 Months</option>
+            </select>
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label>Month</label>
+            <select value={activeMonth} onChange={e => setSelectedMonth(e.target.value)}>
+              {monthOptions.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
         </div>

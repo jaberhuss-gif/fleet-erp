@@ -24,7 +24,6 @@ export default function GMDashboardExecutive() {
   const [tickets, setTickets] = useState([]);
   const [building, setBuilding] = useState(null);
   const [financial, setFinancial] = useState(null);
-  const [submissionReport, setSubmissionReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [updated, setUpdated] = useState(null);
@@ -38,14 +37,12 @@ export default function GMDashboardExecutive() {
         getTickets(),
         api.get('/building/dashboard').then(r => r.data),
         api.get('/reports/financial').then(r => r.data),
-        api.get('/google-sheet-submission-report').then(r => r.data).catch(() => null)
       ]);
       setData(dashboard);
       setAlerts(vehicleAlerts);
       setTickets(ticketData?.tickets || []);
       setBuilding(buildingData);
       setFinancial(financialData);
-      setSubmissionReport(submissionData);
       setUpdated(new Date());
     } catch (e) {
       setError(e?.message || 'Unable to load executive dashboard');
@@ -104,62 +101,6 @@ export default function GMDashboardExecutive() {
             <KPI label="Vehicle Alerts" value={openVehicleAlerts} note={`${vehicles.urgent || 0} urgent • ${vehicles.warning || 0} warning`} tone={openVehicleAlerts ? 'red' : 'green'} />
             <KPI label="Total Savings" value={money(grand.totalSavings)} note={`${Number(grand.totalSavingsPct || 0).toFixed(1)}% reported savings`} tone="green" />
             <KPI label="Actual Cost" value={money(grand.totalActual)} note={`Baseline ${money(grand.totalBaseline)}`} />
-          </div>
-
-          <div style={{ background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 20, marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <div>
-                <h2 style={{ margin: 0 }}>📋 Daily Vehicle Submission</h2>
-                <div style={{ color: '#64748b', fontSize: 12, marginTop: 4 }}>
-                  Google Sheet evidence • {submissionReport?.reportDate || 'Today'}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <strong style={{ fontSize: 18 }}>{submissionReport?.submittedCount || 0} / {submissionReport?.fixedVehicleCount || 36}</strong>
-                <span style={{ color: submissionReport?.missingCount ? '#dc2626' : '#059669', fontWeight: 700 }}>
-                  {submissionReport?.missingCount ? `${submissionReport.missingCount} not submitted` : 'All submitted'}
-                </span>
-              </div>
-            </div>
-
-            {submissionReport?.missingCount > 0 && (
-              <div style={{ overflowX: 'auto', marginTop: 14 }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Vehicle</th>
-                      <th>Driver Reference</th>
-                      <th>Phone</th>
-                      <th>Last Evidence Today</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(submissionReport.missingVehicles || []).map(v => (
-                      <tr key={v.vehicleId}>
-                        <td style={{ fontWeight: 700 }}>{v.vehicle}</td>
-                        <td>{v.driver || '-'}</td>
-                        <td>{v.phone || '-'}</td>
-                        <td>-</td>
-                        <td style={{ color: '#dc2626', fontWeight: 700 }}>Not Submitted</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {!submissionReport && (
-              <div style={{ marginTop: 12, color: '#64748b', fontSize: 13 }}>
-                Google Sheet report is temporarily unavailable.
-              </div>
-            )}
-
-            {submissionReport && submissionReport.fixedVehicleCount !== 36 && (
-              <div style={{ marginTop: 12, color: '#b45309', fontWeight: 700, fontSize: 13 }}>
-                Warning: operational vehicle list currently contains {submissionReport.fixedVehicleCount} active vehicles; expected fixed list is 36.
-              </div>
-            )}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 16 }}>

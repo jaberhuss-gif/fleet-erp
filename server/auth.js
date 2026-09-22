@@ -37,7 +37,7 @@ export async function login(username, password) {
       department
     FROM users
     WHERE LOWER(username) = LOWER($1)
-      AND is_active = TRUE
+      AND is_active = 1
     LIMIT 1
   `, [username]);
 

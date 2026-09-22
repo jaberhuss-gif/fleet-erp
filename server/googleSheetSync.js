@@ -39,6 +39,8 @@ const aliases = {
     "odometer reading", "latest km", "latest odometer", "mileage", "current mileage"
   ],
   active: ["active", "status", "vehicle status"],
+  lastOilKm: ["last oil km", "last_oil_km", "last oil change km", "oil change km", "last service km", "last oil mileage"],
+  lastOilDate: ["last oil change date", "last_oil_change_date", "oil change date", "last service date"],
   date: ["date", "datetime", "timestamp", "record date", "date time", "created at"]
 };
 
@@ -382,6 +384,9 @@ export async function syncGoogleSheetVehicles() {
     const phone = indexes.phone >= 0 ? String(values[indexes.phone] ?? "").trim() : "";
     const kmRaw = indexes.km >= 0 ? String(values[indexes.km] ?? "").trim() : "";
     const km = indexes.km >= 0 ? cleanKm(values[indexes.km]) : null;
+    const lastOilKm = indexes.lastOilKm >= 0 ? cleanKm(values[indexes.lastOilKm]) : null;
+    const lastOilDateRaw = indexes.lastOilDate >= 0 ? String(values[indexes.lastOilDate] ?? "").trim() : "";
+    const lastOilDate = lastOilDateRaw ? parseSheetDate(lastOilDateRaw) : null;
     if (km !== null) kmFound += 1;
     const active = indexes.active >= 0 ? !isInactive(values[indexes.active]) : null;
 
@@ -391,7 +396,7 @@ export async function syncGoogleSheetVehicles() {
     const splitPlateCode = plateParts.slice(1).join(" ").trim();
 
     const result = await pool.query(
-      `SELECT id, current_km, meter_updated_at, plate_number, plate_code
+      `SELECT id, current_km, last_oil_km, last_oil_change_date, meter_updated_at, plate_number, plate_code
        FROM vehicles
        WHERE LOWER(TRIM(COALESCE(plate_number, ''))) = LOWER(TRIM($1))
           OR LOWER(TRIM(CONCAT_WS(' ', NULLIF(TRIM(plate_number), ''), NULLIF(TRIM(plate_code), '')))) = LOWER(TRIM($1))
@@ -450,6 +455,33 @@ export async function syncGoogleSheetVehicles() {
       }
     }
 
+    if (lastOilKm !== null) {
+      const existingOilKm = Number(result.rows[0].last_oil_km || 0);
+      const existingOilDate = result.rows[0].last_oil_change_date ? new Date(result.rows[0].last_oil_change_date) : null;
+      const oilDateKey = lastOilDate
+        ? lastOilDate.toISOString().slice(0, 10)
+        : (date ? date.toISOString().slice(0, 10) : null);
+
+      const isNewerOilRecord =
+        !existingOilDate ||
+        (lastOilDate && lastOilDate.getTime() >= existingOilDate.getTime()) ||
+        (!lastOilDate && lastOilKm > existingOilKm);
+
+      if (isNewerOilRecord) {
+        add("last_oil_km = ?", lastOilKm);
+        if (oilDateKey) add("last_oil_change_date = ?", oilDateKey);
+
+        if (oilDateKey) {
+          await pool.query(
+            "INSERT INTO oil_changes (vehicle_id, oil_change_km, oil_change_date, changed_by, notes) " +
+            "SELECT $1, $2, $3, $4, $5 " +
+            "WHERE NOT EXISTS (SELECT 1 FROM oil_changes WHERE vehicle_id = $1 AND oil_change_km = $2 AND oil_change_date::date = $3::date)",
+            [id, lastOilKm, oilDateKey, "Google Sheet Migration", "Imported from Google Sheet; PostgreSQL is the permanent source of truth."]
+          );
+        }
+      }
+    }
+
     await pool.query(
       `UPDATE vehicles SET ${sets.join(", ")} WHERE id = $${params.length + 1}`,
       [...params, id]
@@ -481,7 +513,9 @@ export async function syncGoogleSheetVehicles() {
       driver: indexes.driver >= 0 ? headers[indexes.driver] : null,
       phone: indexes.phone >= 0 ? headers[indexes.phone] : null,
       km: indexes.km >= 0 ? headers[indexes.km] : null,
-      date: indexes.date >= 0 ? headers[indexes.date] : null
+      date: indexes.date >= 0 ? headers[indexes.date] : null,
+      lastOilKm: indexes.lastOilKm >= 0 ? headers[indexes.lastOilKm] : null,
+      lastOilDate: indexes.lastOilDate >= 0 ? headers[indexes.lastOilDate] : null
     },
     samples,
     knownVehicleSample: knownVehicleSample

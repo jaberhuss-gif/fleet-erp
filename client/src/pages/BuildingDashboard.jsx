@@ -11,7 +11,11 @@ export default function BuildingDashboard() {
   const load = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/building/dashboard');
+      const now = new Date();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = String(now.getFullYear());
+      // Dashboard is always current-month only. Historical months belong in Reports.
+      const res = await api.get(`/building/dashboard?month=${year}-${month}&year=${year}`);
       setData(res.data);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -40,7 +44,7 @@ export default function BuildingDashboard() {
           <div className="card">
             <h3>Total Work Orders</h3>
             <div className="big-number" style={{ color: '#1e3a8a' }}>{wo.total || 0}</div>
-            <div className="sub">All time</div>
+            <div className="sub">Current month</div>
           </div>
           <div className="card warning">
             <h3>Open</h3>
@@ -99,7 +103,7 @@ export default function BuildingDashboard() {
           <div className="card">
             <h3>Total Projects</h3>
             <div className="big-number">{proj.total || 0}</div>
-            <div className="sub">All time</div>
+            <div className="sub">Current month</div>
           </div>
           <div className="card">
             <h3>Total Budget</h3>

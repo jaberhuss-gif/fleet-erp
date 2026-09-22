@@ -95,7 +95,7 @@ export default function Reports() {
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>Year</label>
             <select value={filterYear} onChange={e => setFilterYear(e.target.value)}>
-              <option value="all">All Years</option>
+              <option value="all">Current Year</option>
               <option value="2026">2026</option>
               <option value="2025">2025</option>
             </select>

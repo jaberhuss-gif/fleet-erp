@@ -257,7 +257,7 @@ export default function App() {
         {tab === 'vehicle-alerts' && <VehicleAlerts onOpenVehicle={handleViewVehicle} />}
         {tab === 'troubleshooter' && <Troubleshooter />}
         {tab === 'operations' && <OperationsHub access={access || {}} user={user} />}
-        {tab === 'fleet-tickets' && <FleetTicketViewer />}
+        {tab === 'fleet-tickets' && <FleetTicketViewer user={user} />}
         {tab === 'advanced-reports' && <AdvancedReports />}
         {tab === 'reports' && <Reports />}
         {tab === 'drivers' && user.role === 'Owner' && <Drivers />}

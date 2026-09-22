@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../api/client';
 
-export default function FleetTicketViewer() {
+export default function FleetTicketViewer({ user }) {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [type, setType] = useState('maintenance');
   const [status, setStatus] = useState('all');
 
   const load = async () => {
@@ -22,17 +23,24 @@ export default function FleetTicketViewer() {
 
   useEffect(() => { load(); }, []);
 
+  const vehicleTickets = useMemo(() => {
+    const maintenance = tickets.filter(t => String(t.category || '').toLowerCase() === 'maintenance');
+    const km = tickets.filter(t => String(t.category || '').toLowerCase() === 'daily km');
+    return { maintenance, km };
+  }, [tickets]);
+
+  const scoped = type === 'km' ? vehicleTickets.km : vehicleTickets.maintenance;
   const counts = useMemo(() => ({
-    total: tickets.length,
-    open: tickets.filter(t => t.status === 'Open').length,
-    closed: tickets.filter(t => t.status === 'Closed').length
-  }), [tickets]);
+    total: scoped.length,
+    open: scoped.filter(t => t.status === 'Open').length,
+    closed: scoped.filter(t => t.status === 'Closed').length
+  }), [scoped]);
 
   const filtered = useMemo(() => {
     if (status === 'open') return tickets.filter(t => t.status === 'Open');
     if (status === 'closed') return tickets.filter(t => t.status === 'Closed');
     return tickets;
-  }, [tickets, status]);
+  }, [scoped, status]);
 
   const statusStyle = (value) => value === 'Closed'
     ? { background: '#dcfce7', color: '#166534' }
@@ -47,7 +55,7 @@ export default function FleetTicketViewer() {
           <div>
             <h1 style={{ margin: 0 }}>🚗 Vehicle Tickets</h1>
             <p style={{ margin: '6px 0 0', color: '#64748b' }}>
-              Read-only view of vehicle maintenance tickets and their status.
+              Vehicle maintenance and KM tickets are separated. This page is read-only for viewers.
             </p>
           </div>
           <button className="btn btn-primary" onClick={load}>🔄 Refresh</button>
@@ -55,6 +63,11 @@ export default function FleetTicketViewer() {
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+
+      <div style={{ display:'flex', gap:8, marginBottom:18, flexWrap:'wrap' }}>
+        <button className={type === 'maintenance' ? 'btn btn-primary' : 'btn btn-secondary'} onClick={() => {setType('maintenance');setStatus('all');}}>🔧 Maintenance ({vehicleTickets.maintenance.length})</button>
+        {![ 'SupportManager', 'SSM' ].includes(user?.role) && <button className={type === 'km' ? 'btn btn-primary' : 'btn btn-secondary'} onClick={() => {setType('km');setStatus('all');}}>📏 Daily KM ({vehicleTickets.km.length})</button>}
+      </div>
 
       <div className="cards-grid" style={{ marginBottom: 18 }}>
         <div className="card">

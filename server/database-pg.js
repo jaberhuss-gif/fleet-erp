@@ -429,7 +429,7 @@ export async function createTicket(data = {}) {
   const ownerResult = await query(
     `SELECT id, full_name, username
      FROM users
-     WHERE role = 'Owner' AND is_active = 1
+     WHERE role = 'Owner' AND is_active = TRUE
      ORDER BY id ASC
      LIMIT 1`
   );

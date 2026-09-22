@@ -464,6 +464,21 @@ function BuildingMaintenanceReport() {
     contractors: [], employees: []
   };
   const sites = [...new Set((report?.orders || []).map(o => o.site).filter(Boolean))].sort();
+
+  const sheetHeaders = report?.monthlySavingsHeaders || [];
+  const sheetRows = report?.monthlySavingsRows || [];
+  const monthTokens = (() => {
+    const [y, m] = String(selectedMonth || '').split('-').map(Number);
+    if (!y || !m) return [];
+    const names = ['', 'january','february','march','april','may','june','july','august','september','october','november','december'];
+    const short = ['', 'jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+    return [String(selectedMonth), `${y}-${String(m).padStart(2,'0')}`, `${names[m]} ${y}`, `${short[m]} ${y}`, `${m}/${y}`, `${String(m).padStart(2,'0')}/${y}`];
+  })();
+  const selectedSheetRows = sheetRows.filter(row => {
+    if (!monthTokens.length) return true;
+    const text = row.join(' ').toLowerCase();
+    return monthTokens.some(token => text.includes(token.toLowerCase()));
+  });
   const detail = [...(selected.contractors || []), ...(selected.employees || [])]
     .sort((a, b) => b.amount - a.amount);
 
@@ -562,6 +577,31 @@ function BuildingMaintenanceReport() {
           September remains zero when there are no September work orders; no old-month data is carried into it.
         </div>
       </div>
+
+      {sheetHeaders.length > 0 && (
+        <div className="panel" style={{ marginBottom: '20px' }}>
+          <div style={{ background: '#f1f5f9', padding: '12px 16px', borderRadius: '8px 8px 0 0', fontWeight: 700 }}>
+            Google Sheet — MonthlySavings (Temporary Source)
+          </div>
+          <div style={{ padding: '8px 12px', color: '#64748b', fontSize: 12 }}>
+            This temporary view reads the MonthlySavings tab directly from Google Sheets. Selected month: {selected.month}.
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr style={{ background: '#f8fafc' }}>
+                {sheetHeaders.map((h, i) => <th key={i} style={{ textAlign: 'left', padding: '10px 12px', whiteSpace: 'nowrap' }}>{h || ('Column ' + (i + 1))}</th>)}
+              </tr></thead>
+              <tbody>
+                {(selectedSheetRows.length ? selectedSheetRows : sheetRows).map((row, ri) => (
+                  <tr key={ri}>
+                    {sheetHeaders.map((_, i) => <td key={i} style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>{row[i] ?? ''}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="panel" style={{ marginBottom: '20px' }}>
         <div style={{ background: '#f1f5f9', padding: '12px 16px', borderRadius: '8px 8px 0 0', fontWeight: 700 }}>

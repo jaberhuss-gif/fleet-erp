@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../api/client';
+import { printContent } from '../api/print';
 
 export default function FleetTicketViewer({ user }) {
   const [tickets, setTickets] = useState([]);
@@ -58,7 +59,10 @@ export default function FleetTicketViewer({ user }) {
               Vehicle maintenance and KM tickets are separated. This page is read-only for viewers.
             </p>
           </div>
-          <button className="btn btn-primary" onClick={load}>🔄 Refresh</button>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-secondary" onClick={() => printContent(type === 'km' ? 'Daily KM Tickets' : 'Vehicle Maintenance Tickets', 'Fleet ticket report')}>🖨️ Print</button>
+            <button className="btn btn-primary" onClick={load}>🔄 Refresh</button>
+          </div>
         </div>
       </div>
 

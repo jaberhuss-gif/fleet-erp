@@ -41,7 +41,6 @@ export default function Reports() {
   if (error) return <div className="alert alert-error">{error}</div>;
   if (!data) return <div className="loading">No data</div>;
 
-  const s = data.summary || {};
   const allMonths = data.months || [];
   const monthOptions = allMonths.map(m => m.month);
   const currentMonth = new Date().toISOString().slice(0, 7);
@@ -49,6 +48,17 @@ export default function Reports() {
   const rangeCount = Number(rangeMonths) || 12;
   const activeIndex = Math.max(0, monthOptions.indexOf(activeMonth));
   const months = allMonths.slice(Math.max(0, activeIndex - rangeCount + 1), activeIndex + 1);
+  const s = {
+    grandTotal: months.reduce((x,m)=>x+Number(m.total||0),0),
+    totalWO: months.reduce((x,m)=>x+Number(m.woCost||0),0),
+    totalProjects: months.reduce((x,m)=>x+Number(m.projSpent||0),0),
+    totalPurchases: months.reduce((x,m)=>x+Number(m.purCost||0),0),
+    totalContractor: months.reduce((x,m)=>x+Number(m.woContractor||0)+Number(m.purContractor||0),0),
+    totalInternal: months.reduce((x,m)=>x+Number(m.woInternal||0)+Number(m.purCompany||0),0)
+  };
+  const sTotal = s.totalContractor + s.totalInternal;
+  s.internalPercent = sTotal ? (s.totalInternal/sTotal)*100 : 0;
+  s.contractorPercent = sTotal ? (s.totalContractor/sTotal)*100 : 0;
 
   const chartData = months.map(m => ({
     month: m.month,

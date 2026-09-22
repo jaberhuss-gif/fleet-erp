@@ -1315,6 +1315,7 @@ export async function ensurePurchaseRequestsTable() {
 
 
 export async function listPurchaseRequests() {
+  await ensurePurchaseRequestsTable();
   const result = await query(`
     SELECT *
     FROM purchase_requests
@@ -1332,6 +1333,7 @@ export async function getPurchaseRequest(id) {
 }
 
 export async function createPurchaseRequest(data = {}) {
+  await ensurePurchaseRequestsTable();
   const quantity = pgNum(data.quantity, 1);
   const estimatedUnitCost = pgNum(data.estimatedUnitCost ?? data.estimated_unit_cost);
   const estimatedTotal =
@@ -1381,6 +1383,7 @@ export async function createPurchaseRequest(data = {}) {
 }
 
 export async function approvePurchaseRequest(id, user = {}, approvalNotes = "") {
+  await ensurePurchaseRequestsTable();
   const current = await getPurchaseRequest(id);
   if (!current) throw new Error("Purchase request not found");
   if (current.status !== "Pending") throw new Error("Only Pending requests can be approved");
@@ -1406,6 +1409,7 @@ export async function approvePurchaseRequest(id, user = {}, approvalNotes = "") 
 }
 
 export async function rejectPurchaseRequest(id, user = {}, reason = "") {
+  await ensurePurchaseRequestsTable();
   const current = await getPurchaseRequest(id);
   if (!current) throw new Error("Purchase request not found");
   if (current.status !== "Pending") throw new Error("Only Pending requests can be rejected");
@@ -1431,6 +1435,7 @@ export async function rejectPurchaseRequest(id, user = {}, reason = "") {
 }
 
 export async function recordPurchaseFromRequest(id, data = {}, user = {}) {
+  await ensurePurchaseRequestsTable();
   const request = await getPurchaseRequest(id);
   if (!request) throw new Error("Purchase request not found");
   if (request.status !== "Approved") throw new Error("Purchase can only be recorded after Owner approval");

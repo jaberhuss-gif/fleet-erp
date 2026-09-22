@@ -1,5 +1,6 @@
 import { query, transaction } from "./postgres.js";
 import { sendFcmToTokens } from "./fcm.js";
+import { ensurePeriodicMaintenanceSchema } from "./database-pg.js";
 
 const TZ = "Asia/Riyadh";
 

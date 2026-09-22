@@ -46,6 +46,7 @@ app.get("/api/health", async (req, res) => res.json({ status: "ok", time: new Da
 // ===== VEHICLES (PostgreSQL Connected) =====
 app.get("/api/vehicles", async (req, res) => {
   try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     const vehicles = await listVehiclesPG();
     res.json({ success: true, vehicles });
   } catch (e) {
@@ -56,6 +57,7 @@ app.get("/api/vehicles", async (req, res) => {
 
 app.get("/api/vehicles/list", async (req, res) => {
   try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     const vehicles = await listVehiclesPG();
     res.json({
       success: true,
@@ -77,6 +79,7 @@ app.get("/api/vehicles/:id", async (req, res) => {
 });
 app.get("/api/vehicles/by-plate", async (req, res) => {
   try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     const plate = String(req.query.plate || "").trim();
     if (!plate) return res.status(400).json({ success: false, error: "Plate is required" });
 
@@ -94,7 +97,9 @@ app.get("/api/vehicles/by-plate", async (req, res) => {
 
 
 app.get("/api/vehicles/:id/details", async (req, res) => {
-  try { const v = await getVehicleByIdPG(req.params.id); if (!v) return res.status(404).json({ success: false }); res.json({ success: true, vehicle: v, readings: await listReadingsPG(req.params.id), oilChanges: await listOilChangesPG(req.params.id) }); }
+  try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    const v = await getVehicleByIdPG(req.params.id); if (!v) return res.status(404).json({ success: false }); res.json({ success: true, vehicle: v, readings: await listReadingsPG(req.params.id), oilChanges: await listOilChangesPG(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 

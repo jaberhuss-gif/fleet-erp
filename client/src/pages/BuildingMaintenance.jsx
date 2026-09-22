@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import BuildingDashboard from './BuildingDashboard';
-import Sites from './Sites';
 import WorkOrders from './WorkOrders';
 import Projects from './Projects';
 import Purchases from './Purchases';
@@ -10,7 +9,6 @@ export default function BuildingMaintenance({ user, access = {} }) {
 
   const tabs = [
     { id: 'dashboard', module: 'building', label: 'Dashboard' },
-    { id: 'sites', module: 'support', label: 'Sites' },
     { id: 'work-orders', module: 'building', label: 'Work Orders' },
     { id: 'projects', module: 'projects', label: 'Projects' },
     { id: 'purchases', module: 'purchase_requests', label: 'Purchases' }
@@ -38,7 +36,6 @@ export default function BuildingMaintenance({ user, access = {} }) {
       </div>
 
       {sub === 'dashboard' && <BuildingDashboard />}
-      {sub === 'sites' && <Sites />}
       {sub === 'work-orders' && <WorkOrders user={user} access={access} />}
       {sub === 'projects' && <Projects user={user} access={access} />}
       {sub === 'purchases' && <Purchases user={user} access={access} />}

@@ -99,7 +99,7 @@ function findKmIndex(headers) {
   return generic;
 }
 
-function parseCsv(text) {
+export function parseCsv(text) {
   const rows = [];
   let row = [];
   let cell = "";
@@ -278,6 +278,31 @@ async function syncKmRecordsToDb(rows, indexes) {
   }
 
   return { scanned: kmRecords.size, inserted: inserted, updated: updated, skipped: skipped, unmatched: unmatched };
+}
+
+export async function getMonthlySavingsSheet() {
+  const url =
+    process.env.GOOGLE_MONTHLY_SAVINGS_CSV_URL ||
+    "https://docs.google.com/spreadsheets/d/12_WSi8KrHZ9-dtZzrlHmTCI-Jiwg7zDieJ5NU3-lVxY/gviz/tq?tqx=out:csv&sheet=MonthlySavings";
+
+  const response = await fetch(url, {
+    headers: { "User-Agent": "Fleet-ERP-MonthlySavings/1.0" }
+  });
+
+  if (!response.ok) {
+    throw new Error(`MonthlySavings Google Sheet HTTP ${response.status}`);
+  }
+
+  const rows = parseCsv(await response.text());
+  if (!rows.length) {
+    return { source: "Google Sheet / MonthlySavings", headers: [], rows: [] };
+  }
+
+  return {
+    source: "Google Sheet / MonthlySavings",
+    headers: rows[0],
+    rows: rows.slice(1)
+  };
 }
 
 export async function syncGoogleSheetVehicles() {

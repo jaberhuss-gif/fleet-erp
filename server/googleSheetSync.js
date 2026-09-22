@@ -162,7 +162,7 @@ async function syncV2Km(plateNumber, plateCode, km, readingDate, meterUpdatedAt 
   )).rows[0];
   if (!vehicle) return;
   await v2Query(
-    "INSERT INTO fleet_erp_v2.km_readings(vehicle_id,reading_km,reading_date,notes) VALUES($1,$2,$3,$4) ON CONFLICT(vehicle_id,reading_date) DO UPDATE SET reading_km=GREATEST(fleet_erp_v2.km_readings.reading_km,EXCLUDED.reading_km),notes=EXCLUDED.notes",
+    "INSERT INTO fleet_erp_v2.km_readings(vehicle_id,reading_km,reading_date,notes) VALUES($1,$2,$3::date,$4) ON CONFLICT(vehicle_id,reading_date) DO UPDATE SET reading_km=GREATEST(fleet_erp_v2.km_readings.reading_km,EXCLUDED.reading_km),notes=EXCLUDED.notes",
     [vehicle.id, km, readingDate, "Google Sheet migration"]
   );
   await v2Query(

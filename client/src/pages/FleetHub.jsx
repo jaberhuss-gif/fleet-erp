@@ -9,6 +9,12 @@ import FleetTicketViewer from './FleetTicketViewer';
 
 const FLEET_SECTIONS = [
   {
+    id: 'overview',
+    label: '📊 Overview',
+    title: 'Fleet Overview',
+    description: 'Fleet alerts, KM compliance, open maintenance and vehicle tickets.'
+  },
+  {
     id: 'vehicles',
     label: '🚙 Vehicles',
     title: 'Vehicles',

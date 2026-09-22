@@ -22,6 +22,40 @@ export default function FleetTicketViewer({ user }) {
     }
   };
 
+  const handleWhatsApp = async (id) => {
+    if (user?.role !== 'Owner') return;
+    try {
+      // Always read the current vehicle assignment/phone from PostgreSQL
+      // immediately before opening WhatsApp. Never use a stale ticket snapshot.
+      const res = await api.get('/tickets/' + id + '/whatsapp-info');
+      const info = res.data || {};
+      if (!info.driverPhone) {
+        alert('No phone number found for the current driver assigned to this vehicle.');
+        return;
+      }
+
+      const ticket = tickets.find(t => t.id === id);
+      const isMaintenance = String(ticket?.category || '').toLowerCase() === 'maintenance';
+      const msg = isMaintenance
+        ? 'Hello ' + (info.driverName || 'Driver') + ',\\n\\n' +
+          'Vehicle ' + (info.vehiclePlate || '') + ' requires maintenance.\\n' +
+          'Current: ' + Number(info.currentKm || 0).toLocaleString() + ' km\\n\\n' +
+          'Please visit the workshop.\\n\\n' +
+          'Thank you,\\nFleet Management'
+        : 'Hello ' + (info.driverName || 'Driver') + ',\\n\\n' +
+          'No KM reading recorded today for vehicle ' + (info.vehiclePlate || '') + '.\\n' +
+          'Last reading: ' + Number(info.currentKm || 0).toLocaleString() + ' km.\\n\\n' +
+          'Please record before 7:00 AM.\\n\\n' +
+          'Thank you,\\nFleet Management';
+
+      const url = 'https://wa.me/' + info.driverPhone + '?text=' + encodeURIComponent(msg);
+      window.open(url, '_blank');
+      await api.put('/tickets/' + id + '/log-whatsapp', {});
+    } catch (e) {
+      alert('WhatsApp failed: ' + (e.response?.data?.error || e.message));
+    }
+  };
+
   useEffect(() => { load(); }, []);
 
   const vehicleTickets = useMemo(() => {
@@ -117,6 +151,7 @@ export default function FleetTicketViewer({ user }) {
                 <th>Priority</th>
                 <th>Status</th>
                 <th>Description</th>
+                {user?.role === 'Owner' && <th>WhatsApp</th>}
               </tr>
             </thead>
             <tbody>
@@ -133,6 +168,17 @@ export default function FleetTicketViewer({ user }) {
                     </span>
                   </td>
                   <td>{t.description || '-'}</td>
+                  {user?.role === 'Owner' && (
+                    <td>
+                      <button
+                        className="btn btn-success"
+                        style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}
+                        onClick={() => handleWhatsApp(t.id)}
+                      >
+                        📱 WhatsApp
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

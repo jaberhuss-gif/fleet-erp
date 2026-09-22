@@ -131,6 +131,7 @@ export default function App() {
 
   const canViewTab = (target) => {
     if (OWNER_ONLY_TABS.has(target)) return user?.role === 'Owner';
+    if (target === 'fleet-tickets') return ['SupportManager', 'SSM'].includes(user?.role);
     // Campus Manager is intentionally limited to Support & Service only.
     if (user?.role === 'CampusManager') return target === 'support-service';
     // Support/Service Managers only get Warehouse + Vehicle Tickets.

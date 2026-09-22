@@ -493,14 +493,6 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-function requireAuth(req, res, next) {
-  const token = (req.headers.authorization || "").replace("Bearer ", "");
-  const decoded = verifyToken(token);
-  if (!decoded) return res.status(401).json({ success: false, error: "Unauthorized" });
-  req.user = decoded;
-  next();
-}
-
 function requireRole(...allowedRoles) {
   return async (req, res, next) => {
     if (!req.user || !allowedRoles.includes(req.user.role)) {

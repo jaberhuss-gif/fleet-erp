@@ -32,6 +32,9 @@ export const getVehicles = () =>
 export const getVehiclesList = () =>
   api.get('/vehicles/list').then((r) => r.data);
 
+export const getVehicleByPlate = (plate) =>
+  api.get('/vehicles/by-plate', { params: { plate } }).then((r) => r.data);
+
 export const getVehicleDetails = (id) =>
   api.get('/vehicles/' + id + '/details').then((r) => r.data);
 

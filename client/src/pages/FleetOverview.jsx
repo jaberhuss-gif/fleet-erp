@@ -10,17 +10,14 @@ export default function FleetOverview({onViewVehicle}){
     api.get('/work-orders?status=Open'),
     api.get('/tickets'),
     api.get('/km-daily-notifications'),
-    api.get('/google-sheet-submission-report')
   ]);
   const vehicles=v.data.vehicles||[];
   const openKm=Number(km.data?.count||0);
-  const daily=sub.data||{};
   const alerts=a.data||{};
   setD({
-    date: daily.reportDate || new Date().toISOString().slice(0,10),
+    date: new Date().toISOString().slice(0,10),
     vehicles:{total:vehicles.length,active:vehicles.length,unavailable:0},
     kmCompliance:{submitted:Math.max(0,vehicles.length-openKm)},
-    dailySubmission:{submitted:Number(daily.submittedCount||0)},
     alerts:{total:Number((alerts.urgent||[]).length+(alerts.warning||[]).length),critical:Number((alerts.urgent||[]).length),high:Number((alerts.warning||[]).length)},
     openMaintenance:(w.data.orders||[]).length,
     openTickets:(t.data.tickets||[]).filter(x=>x.status!=='Closed').length
@@ -42,13 +39,12 @@ export default function FleetOverview({onViewVehicle}){
   <div className="cards-grid">
    <Metric icon="🚙" title="Fleet" value={v.total||0} sub={(v.active||0)+' active · '+(v.unavailable||0)+' unavailable'}/>
    <Metric icon="📏" title="KM Today" value={km.submitted||0} sub="submitted readings"/>
-   <Metric icon="📋" title="Daily Submission" value={sub.submitted||0} sub="Google Sheet submissions"/>
    <Metric icon="🔔" title="Open Alerts" value={a.total||0} sub={(a.critical||0)+' critical · '+(a.high||0)+' high'} danger={a.critical>0}/>
    <Metric icon="🔧" title="Open Maintenance" value={d.openMaintenance||0} sub="work orders"/>
    <Metric icon="🎫" title="Open Tickets" value={d.openTickets||0} sub="vehicle tickets"/>
   </div>
   <div className="cards-grid">
-   <div className="panel"><h2>Today's Controls</h2><Info label="KM compliance" value={(km.submitted||0)+' / '+(v.active||0)}/><Info label="Daily vehicle submission" value={(sub.submitted||0)+' / '+(v.active||0)}/><Info label="Alert load" value={(a.total||0)+' open'}/></div>
+   <div className="panel"><h2>Today's Controls</h2><Info label="KM compliance" value={(km.submitted||0)+' / '+(v.active||0)}/><Info label="Alert load" value={(a.total||0)+' open'}/></div>
    <div className="panel"><h2>Operational Priorities</h2>{a.critical?<div className="alert alert-error">🚨 Critical vehicle alerts require attention.</div>:<div className="alert alert-success">✓ No critical vehicle alerts.</div>}{a.high?<div className="alert alert-warning">⚠️ {a.high} high-priority fleet alerts are open.</div>:null}</div>
   </div>
  </div>;

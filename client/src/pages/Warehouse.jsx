@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
+import { printContent } from '../api/print';
 
 export default function Warehouse({ user, access = {} }) {
   const canWork = user?.role === 'Owner' || !!access?.warehouse?.can_work;
@@ -153,7 +154,7 @@ export default function Warehouse({ user, access = {} }) {
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
             
-            <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "inventory", [{key:"code",label:"Code"},{key:"name",label:"Name"},{key:"category",label:"Category"},{key:"quantity",label:"Quantity"},{key:"unit",label:"Unit"},{key:"min_stock",label:"Min Stock"},{key:"unit_cost",label:"Unit Cost"},{key:"location",label:"Location"},{key:"supplier",label:"Supplier"}])}>Export CSV</button>{canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
+            <button className="btn btn-secondary" style={{ marginRight: "8px" }} onClick={() => printContent("Warehouse Inventory", search ? "Search: " + search : "All warehouse inventory")}>🖨️ Print</button><button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "inventory", [{key:"code",label:"Code"},{key:"name",label:"Name"},{key:"category",label:"Category"},{key:"quantity",label:"Quantity"},{key:"unit",label:"Unit"},{key:"min_stock",label:"Min Stock"},{key:"unit_cost",label:"Unit Cost"},{key:"location",label:"Location"},{key:"supplier",label:"Supplier"}])}>Export CSV</button>{canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
               {showForm ? 'Cancel' : '+ Add Item'}
             </button>}
           </div>

@@ -2722,7 +2722,6 @@ export async function getGeneralMaintenanceReport(filters = {}) {
       COALESCE(contractor_cost, 0) AS contractor_cost,
       COALESCE(labor_cost, 0) AS labor_cost,
       COALESCE(parts_cost, 0) AS parts_cost,
-      performed_by,
       month, year
     FROM work_orders
     WHERE ${where}
@@ -2765,8 +2764,8 @@ export async function getGeneralMaintenanceReport(filters = {}) {
     const laborCost = pgNum(o.labor_cost);
     const partsCost = pgNum(o.parts_cost);
     const person = external
-      ? pgStr(o.performed_by || o.contractor_name, "Unknown Contractor")
-      : pgStr(o.performed_by || o.assigned_to, "Company / Internal");
+      ? pgStr(o.contractor_name, "Unknown Contractor")
+      : pgStr(o.assigned_to, "Company / Internal");
 
     m.totalWO += 1;
     m.totalAmount += finalCost;
@@ -2831,7 +2830,7 @@ export async function getMonthlyReport(filters = {}) {
   const year = Number(filters.year) || new Date().getFullYear();
   const site = pgStr(filters.site, "");
 
-  const start = `${year}-01-01`;
+  const start = `${year}-07-01`;
   const next = `${year + 1}-01-01`;
   const params = [start, next];
   const siteClause = site ? ` AND site = $${params.push(site)}` : "";
@@ -2860,7 +2859,7 @@ export async function getMonthlyReport(filters = {}) {
   `, purchaseParams);
 
   const months = {};
-  for (let i = 1; i <= 12; i++) {
+  for (let i = 7; i <= 12; i++) {
     const key = `${year}-${String(i).padStart(2, "0")}`;
     months[key] = {
       month: key, woCount: 0, woCost: 0, woContractor: 0, woInternal: 0,

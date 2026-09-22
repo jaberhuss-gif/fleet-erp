@@ -50,9 +50,18 @@ export default function FleetHub({ user, access, onViewVehicle }) {
     );
   }
 
-  const current = FLEET_SECTIONS.find(s => s.id === section) || FLEET_SECTIONS[0];
+  const visibleSections = user?.role === 'Owner'
+    ? FLEET_SECTIONS
+    : FLEET_SECTIONS.filter(s => s.id !== 'vehicles' && s.id !== 'maintenance');
+
+  const safeSection = visibleSections.some(s => s.id === section)
+    ? section
+    : (visibleSections[0]?.id || 'km');
+
+  const current = visibleSections.find(s => s.id === safeSection) || visibleSections[0];
 
   const changeSection = (next) => {
+    if (!visibleSections.some(s => s.id === next)) return;
     setSection(next);
     setSmartOpen(false);
   };
@@ -71,7 +80,7 @@ export default function FleetHub({ user, access, onViewVehicle }) {
       </div>
 
       <div className="sub-nav" style={{ marginBottom: 18 }}>
-        {FLEET_SECTIONS.map(item => (
+        {visibleSections.map(item => (
           <button
             key={item.id}
             className={section === item.id ? 'sub-btn active' : 'sub-btn'}
@@ -101,11 +110,11 @@ export default function FleetHub({ user, access, onViewVehicle }) {
         <SmartReportIssue canWork={fleetWork} />
       ) : (
         <>
-          {section === 'overview' && <FleetOverview onViewVehicle={onViewVehicle} />}
-          {section === 'vehicles' && <Vehicles onViewVehicle={onViewVehicle} canWork={fleetWork} />}
-          {section === 'maintenance' && <VehicleMaintenance canWork={fleetWork} />}
-          {section === 'km' && <DriverPortal canWork={fleetWork} />}
-          {section === 'issue' && <ReportIssue canWork={fleetWork} />}
+          {safeSection === 'overview' && <FleetOverview onViewVehicle={onViewVehicle} />}
+          {safeSection === 'vehicles' && user?.role === 'Owner' && <Vehicles onViewVehicle={onViewVehicle} canWork={fleetWork} />}
+          {safeSection === 'maintenance' && user?.role === 'Owner' && <VehicleMaintenance canWork={fleetWork} />}
+          {safeSection === 'km' && <DriverPortal canWork={fleetWork} />}
+          {safeSection === 'issue' && <ReportIssue canWork={fleetWork} />}
         </>
       )}
     </div>

@@ -10,7 +10,7 @@ import { fileURLToPath } from "url";
 import * as db from "./database-pg.js";
 import { query as pgQuery } from "./postgres.js";
 import { mountV2 } from "./v2/index.js";
-import { getKmDailyNotifications } from "./kmDailyNotifications.js";
+import { getKmDailyNotifications, getDriverDailyKmStatus } from "./kmDailyNotifications.js";
 
 const { listVehicles:listVehiclesPG, getVehicleById:getVehicleByIdPG, createVehicle:createVehiclePG, updateVehicle:updateVehiclePG, deleteVehicle:deleteVehiclePG, deleteAllVehicles:deleteAllVehiclesPG, addReading:addReadingPG, listReadings:listReadingsPG, changeOil:changeOilPG, listOilChanges:listOilChangesPG, createTicket:createTicketPG, listTickets:listTicketsPG, closeTicket:closeTicketPG, deleteAllTickets:deleteAllTicketsPG, acknowledgeTicket:acknowledgeTicketPG, closeTicketWithNotes:closeTicketWithNotesPG, listTicketsByReporter:listTicketsByReporterPG, getReporterStats:getReporterStatsPG, listSites:listSitesPG, getSite:getSitePG, createSite:createSitePG, updateSite:updateSitePG, deleteSite:deleteSitePG, getAlerts:getAlertsPG, importVehicles:importVehiclesPG, listWorkOrders:listWorkOrdersPG, getWorkOrder:getWorkOrderPG, createWorkOrder:createWorkOrderPG, updateWorkOrder:updateWorkOrderPG, closeWorkOrder:closeWorkOrderPG, deleteWorkOrder:deleteWorkOrderPG, listProjects:listProjectsPG, getProject:getProjectPG, createProject:createProjectPG, updateProject:updateProjectPG, deleteProject:deleteProjectPG, listPurchases:listPurchasesPG, createPurchase:createPurchasePG, deletePurchase:deletePurchasePG, listDrivers:listDriversPG, getDriver:getDriverPG, createDriver:createDriverPG, updateDriver:updateDriverPG, deleteDriver:deleteDriverPG, listInventory:listInventoryPG, getInventoryItem:getInventoryItemPG, createInventoryItem:createInventoryItemPG, updateInventoryItem:updateInventoryItemPG, deleteInventoryItem:deleteInventoryItemPG, stockIn:stockInPG, stockOut:stockOutPG, transferStock:transferStockPG, listStockTransactions:listStockTransactionsPG, getLowStockItems:getLowStockItemsPG, listPeriodicMaintenance:listPeriodicMaintenancePG, getPeriodicMaintenance:getPeriodicMaintenancePG, createPeriodicMaintenance:createPeriodicMaintenancePG, updatePeriodicMaintenance:updatePeriodicMaintenancePG, completePeriodicMaintenance:completePeriodicMaintenancePG, deletePeriodicMaintenance:deletePeriodicMaintenancePG, getPeriodicAlerts:getPeriodicAlertsPG, generateScheduledMaintenance:generateScheduledMaintenancePG, logAction:logActionPG, listAuditLog:listAuditLogPG, getAuditStats:getAuditStatsPG, clearAuditLog:clearAuditLogPG, getBuildingDashboard:getBuildingDashboardPG, getDashboard:getDashboardPG, getMonthlyReport:getMonthlyReportPG, getGeneralMaintenanceReport:getGeneralMaintenanceReportPG, getFinancialReport:getFinancialReportPG }=db;
 
@@ -519,6 +519,17 @@ app.post("/api/users", requireRole("Owner"), async (req, res) => {
 app.delete("/api/users/:id", requireRole("Owner"), async (req, res) => {
   try { res.json({ success: deleteUser(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ===== DRIVER DAILY KM STATUS =====
+app.get("/api/driver/km-status", async (req, res) => {
+  try {
+    const status = await getDriverDailyKmStatus(req.user.id);
+    res.json({ success: true, status });
+  } catch (e) {
+    console.error("[DriverKMStatus]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 // ===== DRIVERS =====

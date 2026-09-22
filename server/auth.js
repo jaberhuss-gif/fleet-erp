@@ -36,8 +36,8 @@ export async function login(username, password) {
       site,
       department
     FROM users
-    WHERE username = $1
-      AND is_active = 1
+    WHERE LOWER(username) = LOWER($1)
+      AND is_active = TRUE
     LIMIT 1
   `, [username]);
 
@@ -161,7 +161,7 @@ export async function createUser(data = {}) {
       department,
       is_active
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)
     RETURNING
       id,
       username,

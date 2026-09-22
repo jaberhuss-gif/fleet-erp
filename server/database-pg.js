@@ -1,4 +1,5 @@
 ﻿import { query } from "./postgres.js";
+import { getMonthlySavingsSheet } from "./googleSheetSync.js";
 
 function numberValue(value, fallback = 0) {
   if (value === undefined || value === null || value === "") return fallback;
@@ -2701,6 +2702,13 @@ export async function getGeneralMaintenanceReport(filters = {}) {
   const year = Number(filters.year) || new Date().getFullYear();
   const site = pgStr(filters.site, "");
 
+  let monthlySavings = { source: "Google Sheet / MonthlySavings", headers: [], rows: [] };
+  try {
+    monthlySavings = await getMonthlySavingsSheet();
+  } catch (sheetError) {
+    console.warn("[MonthlySavings] Temporary sheet read failed:", sheetError.message);
+  }
+
   const params = [year];
   let where = `
     reported_date >= make_date($1, 1, 1)
@@ -2816,7 +2824,10 @@ export async function getGeneralMaintenanceReport(filters = {}) {
 
   return {
     year,
-    source: "ERP work_orders",
+    source: monthlySavings.rows.length ? monthlySavings.source : "ERP work_orders",
+    temporarySheetSource: monthlySavings.rows.length > 0,
+    monthlySavingsHeaders: monthlySavings.headers,
+    monthlySavingsRows: monthlySavings.rows,
     projectsExcluded: true,
     site: site || null,
     months,

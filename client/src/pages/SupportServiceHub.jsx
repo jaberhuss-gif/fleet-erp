@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import Warehouse from './Warehouse';
-import Sites from './Sites';
 import MaintenanceRequest from './MaintenanceRequest';
 
 export default function SupportServiceHub({ user, access = {} }) {
@@ -9,9 +8,8 @@ export default function SupportServiceHub({ user, access = {} }) {
     !!access?.[module]?.[mode === 'work' ? 'can_work' : 'can_view'];
 
   const tabs = [
-    { id: 'request', label: '📝 Request Maintenance / Building', title: 'Request Maintenance / Building', show: can('support') || can('building') },
-    { id: 'warehouse', label: '📦 Warehouse', title: 'Warehouse & Stock', show: can('warehouse') },
-    { id: 'site', label: '📍 Site', title: 'All Sites & Locations', show: can('support') }
+    { id: 'request', label: '📝 Request Maintenance / Building', title: 'Request Maintenance / Building', show: can('support','work') || can('building','work') },
+    { id: 'warehouse', label: '📦 Warehouse', title: 'Warehouse & Stock', show: can('warehouse') }
   ].filter(t => t.show);
 
   const [tab, setTab] = useState(() => tabs[0]?.id || 'site');
@@ -28,7 +26,7 @@ export default function SupportServiceHub({ user, access = {} }) {
           <div>
             <h1 style={{ margin:0 }}>🛠️ Support & Service</h1>
             <p style={{ margin:'6px 0 0', color:'#64748b' }}>
-              Site-wide service view. Site is not a permission restriction.
+              Maintenance requests and warehouse services.
             </p>
           </div>
           {can('building','work') && (
@@ -51,7 +49,6 @@ export default function SupportServiceHub({ user, access = {} }) {
 
       {tab === 'request' && <MaintenanceRequest user={user} access={access} />}
       {tab === 'warehouse' && <Warehouse user={user} access={access} />}
-      {tab === 'site' && <Sites />}
     </div>
   );
 }

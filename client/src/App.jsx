@@ -29,8 +29,6 @@ const TAB_MODULES = {
   'vehicle-alerts': ['fleet'],
   operations: ['building', 'projects', 'warehouse', 'purchase_requests'],
   troubleshooter: ['troubleshooter'],
-  tickets: ['tickets'],
-  mytickets: ['mytickets'],
   'fleet-tickets': ['fleet_tickets'],
   reports: ['reports'],
   'advanced-reports': ['advanced_reports']
@@ -42,7 +40,6 @@ const TAB_LABELS = {
   'vehicle-alerts': '🔔 Alerts',
   operations: '🛠️ Operations',
   troubleshooter: '🧠 Troubleshooter',
-  tickets: 'Tickets',
   reports: 'Reports',
   mytickets: '📋 My Tickets',
   'fleet-tickets': '🚗 Vehicle Tickets',
@@ -134,12 +131,16 @@ export default function App() {
 
   const canViewTab = (target) => {
     if (OWNER_ONLY_TABS.has(target)) return user?.role === 'Owner';
+    // Campus Manager is intentionally limited to Support & Service only.
+    if (user?.role === 'CampusManager') return target === 'support-service';
+    // Support/Service Managers only get Warehouse + Vehicle Tickets.
+    if (['SupportManager', 'SSM'].includes(user?.role)) return ['support-service', 'fleet-tickets'].includes(target);
     const modules = TAB_MODULES[target] || [];
     return modules.some(canViewModule);
   };
 
   const allowedTabs = useMemo(() => {
-    const tabs = ['gm', 'support-service', 'operations', 'fleet', 'vehicle-alerts', 'troubleshooter', 'tickets', 'mytickets', 'fleet-tickets', 'reports', 'advanced-reports'];
+    const tabs = ['gm', 'support-service', 'operations', 'fleet', 'vehicle-alerts', 'troubleshooter', 'fleet-tickets', 'reports', 'advanced-reports'];
     const visible = tabs.filter(canViewTab);
     if (user?.role === 'Owner') {
       return [...visible, 'drivers', 'users', 'audit', 'backup'];
@@ -256,8 +257,6 @@ export default function App() {
         {tab === 'vehicle-alerts' && <VehicleAlerts onOpenVehicle={handleViewVehicle} />}
         {tab === 'troubleshooter' && <Troubleshooter />}
         {tab === 'operations' && <OperationsHub access={access || {}} user={user} />}
-        {tab === 'tickets' && <Tickets user={user} access={access || {}} />}
-        {tab === 'mytickets' && <MyTickets />}
         {tab === 'fleet-tickets' && <FleetTicketViewer />}
         {tab === 'advanced-reports' && <AdvancedReports />}
         {tab === 'reports' && <Reports />}

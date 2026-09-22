@@ -166,9 +166,15 @@ async function syncV2Km(plateNumber, plateCode, km, readingDate, meterUpdatedAt 
     [vehicle.id, km, readingDate, "Google Sheet migration"]
   );
   await v2Query(
-    "UPDATE fleet_erp_v2.vehicles SET current_km=GREATEST(current_km,$1::numeric), meter_updated_at=COALESCE($2::timestamptz,meter_updated_at), last_oil_km=CASE WHEN $3::numeric IS NOT NULL THEN GREATEST(last_oil_km,$3::numeric) ELSE last_oil_km END, last_oil_change_date=CASE WHEN $4::date IS NOT NULL AND (last_oil_change_date IS NULL OR $4::date >= last_oil_change_date) THEN $4::date ELSE last_oil_change_date END, updated_at=CURRENT_TIMESTAMP WHERE id=$5::integer",
-    [km, meterUpdatedAt, lastOilKm, lastOilDate, vehicle.id]
+    "UPDATE fleet_erp_v2.vehicles SET current_km=GREATEST(current_km,$1::numeric), meter_updated_at=COALESCE($2::timestamptz,meter_updated_at), updated_at=CURRENT_TIMESTAMP WHERE id=$3::integer",
+    [km, meterUpdatedAt, vehicle.id]
   );
+  if (lastOilKm != null || lastOilDate != null) {
+    await v2Query(
+      "UPDATE fleet_erp_v2.vehicles SET last_oil_km=CASE WHEN $1::numeric IS NOT NULL THEN GREATEST(COALESCE(last_oil_km,0),$1::numeric) ELSE last_oil_km END, last_oil_change_date=CASE WHEN $2::date IS NOT NULL AND (last_oil_change_date IS NULL OR $2::date >= last_oil_change_date) THEN $2::date ELSE last_oil_change_date END, updated_at=CURRENT_TIMESTAMP WHERE id=$3::integer",
+      [lastOilKm, lastOilDate, vehicle.id]
+    );
+  }
 }
 
 function isInactive(value) {

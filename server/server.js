@@ -73,29 +73,6 @@ app.get("/api/vehicles/list", async (req, res) => {
   }
 });
 
-app.get("/api/vehicles/by-plate", async (req, res) => {
-  try {
-    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    const plate = String(req.query.plate || "").trim();
-    if (!plate) return res.status(400).json({ success: false, error: "Plate is required" });
-
-    const vehicle = await getVehicleByPlatePG(plate);
-    if (!vehicle) return res.status(404).json({ success: false, error: "Vehicle not found" });
-
-    // Always read the current vehicle row from PostgreSQL. The driver shown here
-    // is the current assignment; historical KM records are not modified.
-    res.json({ success: true, vehicle });
-  } catch (e) {
-    console.error("Error fetching vehicle by plate:", e);
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
-
-
-app.get("/api/vehicles/:id", async (req, res) => {
-  try { const v = await getVehicleByIdPG(req.params.id); if (!v) return res.status(404).json({ success: false }); res.json({ success: true, vehicle: v }); }
-  catch (e) { res.status(500).json({ success: false, error: e.message }); }
-});
 app.get("/api/vehicles/:id/details", async (req, res) => {
   try {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");

@@ -47,7 +47,7 @@ async function getOwnerTokens() {
     SELECT DISTINCT pt.token
     FROM push_tokens pt
     JOIN users u ON u.id = pt.user_id
-    WHERE u.is_active = 1
+    WHERE u.is_active = TRUE
       AND u.role = 'Owner'
   `);
   return result.rows.map(r => r.token).filter(Boolean);
@@ -60,7 +60,7 @@ async function getDriverUserId(driverPhone, driverName) {
   const result = await query(`
     SELECT u.id
     FROM users u
-    WHERE u.is_active = 1
+    WHERE u.is_active = TRUE
       AND u.role = 'Driver'
       AND regexp_replace(COALESCE(u.phone, ''), '[^0-9]', '', 'g') = $1
     ORDER BY u.id

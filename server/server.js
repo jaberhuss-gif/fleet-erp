@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
-import { login, listUsers, createUser, deleteUser, requireAuth } from "./auth.js";
-import { requirePermission } from "./rbac.js";
+import { login, listUsers, createUser, updateUser, deleteUser, requireAuth } from "./auth.js";
+import { requirePermission, ACCESS_MODULES, getUserAccess, saveUserAccess } from "./rbac.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -516,8 +516,58 @@ app.post("/api/users", requireRole("Owner"), async (req, res) => {
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
+app.put("/api/users/:id", requireRole("Owner"), async (req, res) => {
+  try {
+    const user = await updateUser(req.params.id, req.body);
+    res.json({ success: true, user });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+app.get("/api/users/:id/access", async (req, res) => {
+  try {
+    const targetId = String(req.params.id);
+    if (req.user?.role !== "Owner" && String(req.user?.id) !== targetId) {
+      return res.status(403).json({ success: false, error: "Forbidden" });
+    }
+
+    const target = await pgQuery(
+      'SELECT id, role FROM users WHERE id = $1 LIMIT 1',
+      [req.params.id]
+    );
+    if (!target.rows[0]) {
+      return res.status(404).json({ success: false, error: "User not found" });
+    }
+
+    const access = await getUserAccess(target.rows[0].id, target.rows[0].role);
+    res.json({ success: true, modules: ACCESS_MODULES, access });
+  } catch (e) {
+    console.error("GET /api/users/:id/access:", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.put("/api/users/:id/access", requireRole("Owner"), async (req, res) => {
+  try {
+    const target = await pgQuery(
+      'SELECT id, role FROM users WHERE id = $1 LIMIT 1',
+      [req.params.id]
+    );
+    if (!target.rows[0]) {
+      return res.status(404).json({ success: false, error: "User not found" });
+    }
+
+    const access = await saveUserAccess(target.rows[0].id, req.body?.access || {});
+    res.json({ success: true, access });
+  } catch (e) {
+    console.error("PUT /api/users/:id/access:", e);
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
 app.delete("/api/users/:id", requireRole("Owner"), async (req, res) => {
-  try { res.json({ success: deleteUser(req.params.id) }); }
+  try { res.json({ success: await deleteUser(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 

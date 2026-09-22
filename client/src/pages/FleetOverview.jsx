@@ -4,10 +4,6 @@ export default function FleetOverview({onViewVehicle}){
  const [d,setD]=useState(null),[err,setErr]=useState('');
  const load=async()=>{try{
   setErr('');
-  try{
-    setD((await api.get('/v2/fleet-dashboard')).data);
-    return;
-  }catch(_v2){}
   const [v,a,w,t,km,sub]=await Promise.all([
     api.get('/vehicles'),
     api.get('/alerts'),
@@ -19,19 +15,20 @@ export default function FleetOverview({onViewVehicle}){
   const vehicles=v.data.vehicles||[];
   const openKm=Number(km.data?.count||0);
   const daily=sub.data||{};
-  const activeVehicles=vehicles.filter(x=>!['inactive','sold','disposed','disabled'].includes(String(x.status||'').toLowerCase()));
   const alerts=a.data||{};
   setD({
     date: daily.reportDate || new Date().toISOString().slice(0,10),
-    vehicles:{total:vehicles.length,active:activeVehicles.length,unavailable:Math.max(0,vehicles.length-activeVehicles.length)},
-    kmCompliance:{submitted:Math.max(0,activeVehicles.length-openKm)},
+    vehicles:{total:vehicles.length,active:vehicles.length,unavailable:0},
+    kmCompliance:{submitted:Math.max(0,vehicles.length-openKm)},
     dailySubmission:{submitted:Number(daily.submittedCount||0)},
     alerts:{total:Number((alerts.urgent||[]).length+(alerts.warning||[]).length),critical:Number((alerts.urgent||[]).length),high:Number((alerts.warning||[]).length)},
     openMaintenance:(w.data.orders||[]).length,
     openTickets:(t.data.tickets||[]).filter(x=>x.status!=='Closed').length
   });
-}catch(e){setErr(e.response?.data?.error||e.message)}};
- useEffect(()=>{load()},[]);
+ }catch(legacyError){
+  try{setD((await api.get('/v2/fleet-dashboard')).data);}
+  catch(_v2){setErr(legacyError.response?.data?.error||legacyError.message);}
+ }}; useEffect(()=>{load()},[]);
  if(err)return <div className="alert alert-error">{err}</div>;
  if(!d)return <div className="loading">Loading Fleet Command...</div>;
  const v=d.vehicles||{},a=d.alerts||{},km=d.kmCompliance||{},sub=d.dailySubmission||{};

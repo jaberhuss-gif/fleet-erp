@@ -36,7 +36,7 @@ export async function login(username, password) {
       site,
       department
     FROM users
-    WHERE LOWER(username) = LOWER($1)
+    WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
       AND is_active = 1
     LIMIT 1
   `, [username]);

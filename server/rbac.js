@@ -349,10 +349,25 @@ export async function requirePermission(req, res, next) {
       });
     }
 
-    // Drivers always retain their core Fleet workflow (KM, assigned-vehicle details,
-    // and issue reporting), even if an old/stale user_access row revoked fleet access.
-    // This preserves the Driver role contract while management modules remain configurable.
+    // Drivers retain their Fleet workflow (KM, assigned-vehicle details, and issue reporting).
+    // Smart Report creates a ticket through POST /api/tickets, but Drivers must not receive
+    // general Tickets-management access just to submit a vehicle issue.
+    const isDriverSmartReport =
+      req.user?.role === "Driver" &&
+      permission.module === "tickets" &&
+      req.method === "POST" &&
+      pathname === "/api/tickets";
+
     if (req.user?.role === "Driver" && permission.module === "fleet") return next();
+
+    if (isDriverSmartReport) {
+      const body = req.body || {};
+      const hasRequiredReportFields =
+        Number.isFinite(Number(body.vehicleId)) &&
+        String(body.description || "").trim().length > 0 &&
+        String(body.reportedBy || "").trim().toLowerCase() === "driver";
+      if (hasRequiredReportFields) return next();
+    }
 
   const accessAllowed = await hasModuleAccess(req.user, permission.module, mode);
     if (accessAllowed) return next();

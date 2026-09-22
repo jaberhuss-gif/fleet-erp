@@ -45,6 +45,9 @@ export default function Vehicles({ onViewVehicle, canWork = false }) {
       if (editing) {
         await api.put('/vehicles/' + editing.id, form);
         setMessage('Vehicle updated');
+        // Notify any KM/Fleet screen in this SPA and other open tabs to refresh the current vehicle assignment.
+        window.dispatchEvent(new CustomEvent('fleet-vehicles-updated'));
+        localStorage.setItem('fleet-vehicles-updated-at', String(Date.now()));
       } else {
         await api.post('/vehicles', form);
         setMessage('Vehicle added');

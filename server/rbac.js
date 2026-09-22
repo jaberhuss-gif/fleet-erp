@@ -58,6 +58,11 @@ function getModuleFromPath(pathname) {
 
   const route = parts[1] || "";
 
+  // Vehicle master data and periodic vehicle maintenance are Owner-only.
+  // Drivers retain the Fleet module for KM entry and issue reporting, but
+  // must not receive the Vehicles or Vehicle Maintenance pages/data through
+  // these management endpoints.
+
   // V2 uses /api/v2/<resource>. Keep the same RBAC matrix as the
   // legacy API instead of allowing an authenticated user to bypass
   // module permissions simply because the route is versioned.
@@ -231,6 +236,12 @@ export async function hasModuleAccess(user, module, mode = "view") {
   if (!user) return false;
   if (user.role === "Owner") return true;
 
+  // Vehicle master data and periodic vehicle-maintenance management are
+  // Owner-only. Driver Fleet access remains limited to KM/issue workflows.
+  if (
+    (module === "fleet" && user.__ownerOnlyVehicleSection === true)
+  ) return false;
+
   // Support Manager can view/manage service tickets as configured, but
   // cannot open Fleet or perform Fleet operations. Vehicle Tickets is separate.
   if (user.role === "SupportManager" && module === "fleet") return false;
@@ -316,6 +327,26 @@ export async function requirePermission(req, res, next) {
     if (!permission) return next();
 
     const mode = req.method === "GET" ? "view" : "work";
+
+    // These management endpoints are Owner-only. The Driver still uses
+    // /api/vehicles/list and the normal Fleet workflow for KM entry.
+    const pathname = String(req.originalUrl || req.path || "").split("?")[0];
+    const ownerOnlyVehicleRoute =
+      pathname === "/api/vehicles" ||
+      /^\/api\/vehicles\/[^/]+$/.test(pathname) ||
+      pathname === "/api/v2/vehicles" ||
+      /^\/api\/v2\/vehicles\/[^/]+\/360\/?$/.test(pathname) ||
+      pathname === "/api/periodic-maintenance" ||
+      /^\/api\/periodic-maintenance\/[^/]+$/.test(pathname);
+
+    if (ownerOnlyVehicleRoute && req.user?.role !== "Owner") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Vehicle management is Owner-only."
+      });
+    }
+
     const accessAllowed = await hasModuleAccess(req.user, permission.module, mode);
     if (accessAllowed) return next();
 

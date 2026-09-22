@@ -450,8 +450,6 @@ export async function syncGoogleSheetVehicles() {
       }
     }
 
-    if (active !== null) add("status = ?", active ? "Active" : "Inactive");
-
     await pool.query(
       `UPDATE vehicles SET ${sets.join(", ")} WHERE id = $${params.length + 1}`,
       [...params, id]
@@ -685,7 +683,7 @@ async function closeDailyVehicleSubmissionTicket(record, reportDate, evidenceDat
         )
       )
   `, [
-    `Google Sheet submission detected for ${record.vehicle} on ${reportDate}. Evidence timestamp: ${evidenceDateTime || "record timestamp available"}.`,
+    `ERP database KM reading detected for ${record.vehicle} on ${reportDate}. Evidence timestamp: ${evidenceDateTime || "record timestamp available"}.`,
     title,
     `Daily submission received for ${record.vehicle} on ${reportDate}.`,
     DAILY_SUBMISSION_TICKET_CATEGORY,

@@ -12,7 +12,7 @@ import { query as pgQuery } from "./postgres.js";
 import { mountV2 } from "./v2/index.js";
 import { getKmDailyNotifications, getDriverDailyKmStatus } from "./kmDailyNotifications.js";
 
-const { listVehicles:listVehiclesPG, getVehicleById:getVehicleByIdPG, createVehicle:createVehiclePG, updateVehicle:updateVehiclePG, deleteVehicle:deleteVehiclePG, deleteAllVehicles:deleteAllVehiclesPG, addReading:addReadingPG, listReadings:listReadingsPG, changeOil:changeOilPG, listOilChanges:listOilChangesPG, createTicket:createTicketPG, listTickets:listTicketsPG, closeTicket:closeTicketPG, deleteAllTickets:deleteAllTicketsPG, acknowledgeTicket:acknowledgeTicketPG, closeTicketWithNotes:closeTicketWithNotesPG, listTicketsByReporter:listTicketsByReporterPG, getReporterStats:getReporterStatsPG, listSites:listSitesPG, getSite:getSitePG, createSite:createSitePG, updateSite:updateSitePG, deleteSite:deleteSitePG, getAlerts:getAlertsPG, importVehicles:importVehiclesPG, listWorkOrders:listWorkOrdersPG, getWorkOrder:getWorkOrderPG, createWorkOrder:createWorkOrderPG, updateWorkOrder:updateWorkOrderPG, closeWorkOrder:closeWorkOrderPG, deleteWorkOrder:deleteWorkOrderPG, listProjects:listProjectsPG, getProject:getProjectPG, createProject:createProjectPG, updateProject:updateProjectPG, deleteProject:deleteProjectPG, listPurchases:listPurchasesPG, createPurchase:createPurchasePG, deletePurchase:deletePurchasePG, listDrivers:listDriversPG, getDriver:getDriverPG, createDriver:createDriverPG, updateDriver:updateDriverPG, deleteDriver:deleteDriverPG, listInventory:listInventoryPG, getInventoryItem:getInventoryItemPG, createInventoryItem:createInventoryItemPG, updateInventoryItem:updateInventoryItemPG, deleteInventoryItem:deleteInventoryItemPG, stockIn:stockInPG, stockOut:stockOutPG, transferStock:transferStockPG, listStockTransactions:listStockTransactionsPG, getLowStockItems:getLowStockItemsPG, listPeriodicMaintenance:listPeriodicMaintenancePG, getPeriodicMaintenance:getPeriodicMaintenancePG, createPeriodicMaintenance:createPeriodicMaintenancePG, updatePeriodicMaintenance:updatePeriodicMaintenancePG, completePeriodicMaintenance:completePeriodicMaintenancePG, deletePeriodicMaintenance:deletePeriodicMaintenancePG, getPeriodicAlerts:getPeriodicAlertsPG, generateScheduledMaintenance:generateScheduledMaintenancePG, logAction:logActionPG, listAuditLog:listAuditLogPG, getAuditStats:getAuditStatsPG, clearAuditLog:clearAuditLogPG, getBuildingDashboard:getBuildingDashboardPG, getDashboard:getDashboardPG, getMonthlyReport:getMonthlyReportPG, getGeneralMaintenanceReport:getGeneralMaintenanceReportPG, getFinancialReport:getFinancialReportPG }=db;
+const { listVehicles:listVehiclesPG, getVehicleById:getVehicleByIdPG, createVehicle:createVehiclePG, updateVehicle:updateVehiclePG, deleteVehicle:deleteVehiclePG, deleteAllVehicles:deleteAllVehiclesPG, addReading:addReadingPG, listReadings:listReadingsPG, changeOil:changeOilPG, listOilChanges:listOilChangesPG, createTicket:createTicketPG, listTickets:listTicketsPG, closeTicket:closeTicketPG, deleteAllTickets:deleteAllTicketsPG, acknowledgeTicket:acknowledgeTicketPG, closeTicketWithNotes:closeTicketWithNotesPG, listTicketsByReporter:listTicketsByReporterPG, getReporterStats:getReporterStatsPG, listSites:listSitesPG, getSite:getSitePG, createSite:createSitePG, updateSite:updateSitePG, deleteSite:deleteSitePG, getAlerts:getAlertsPG, importVehicles:importVehiclesPG, listWorkOrders:listWorkOrdersPG, getWorkOrder:getWorkOrderPG, createWorkOrder:createWorkOrderPG, updateWorkOrder:updateWorkOrderPG, closeWorkOrder:closeWorkOrderPG, deleteWorkOrder:deleteWorkOrderPG, listProjects:listProjectsPG, getProject:getProjectPG, createProject:createProjectPG, updateProject:updateProjectPG, deleteProject:deleteProjectPG, listPurchases:listPurchasesPG, createPurchase:createPurchasePG, deletePurchase:deletePurchasePG, listPurchaseRequests:listPurchaseRequestsPG, createPurchaseRequest:createPurchaseRequestPG, approvePurchaseRequest:approvePurchaseRequestPG, rejectPurchaseRequest:rejectPurchaseRequestPG, recordPurchaseFromRequest:recordPurchaseFromRequestPG, listDrivers:listDriversPG, getDriver:getDriverPG, createDriver:createDriverPG, updateDriver:updateDriverPG, deleteDriver:deleteDriverPG, listInventory:listInventoryPG, getInventoryItem:getInventoryItemPG, createInventoryItem:createInventoryItemPG, updateInventoryItem:updateInventoryItemPG, deleteInventoryItem:deleteInventoryItemPG, stockIn:stockInPG, stockOut:stockOutPG, transferStock:transferStockPG, listStockTransactions:listStockTransactionsPG, getLowStockItems:getLowStockItemsPG, listPeriodicMaintenance:listPeriodicMaintenancePG, getPeriodicMaintenance:getPeriodicMaintenancePG, createPeriodicMaintenance:createPeriodicMaintenancePG, updatePeriodicMaintenance:updatePeriodicMaintenancePG, completePeriodicMaintenance:completePeriodicMaintenancePG, deletePeriodicMaintenance:deletePeriodicMaintenancePG, getPeriodicAlerts:getPeriodicAlertsPG, generateScheduledMaintenance:generateScheduledMaintenancePG, logAction:logActionPG, listAuditLog:listAuditLogPG, getAuditStats:getAuditStatsPG, clearAuditLog:clearAuditLogPG, getBuildingDashboard:getBuildingDashboardPG, getDashboard:getDashboardPG, getMonthlyReport:getMonthlyReportPG, getGeneralMaintenanceReport:getGeneralMaintenanceReportPG, getFinancialReport:getFinancialReportPG }=db;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -358,6 +358,62 @@ app.delete("/api/sites/:id", async (req, res) => {
   }
 });
 
+
+// ===== SUPPORT MANAGER (SITE READ-ONLY) =====
+app.get("/api/support-manager/tickets", async (req, res) => {
+  try {
+    const site = String(req.user?.site || "").trim();
+    if (!site) return res.json({ success: true, tickets: [] });
+    const tickets = await listTicketsPG({});
+    const siteKey = site.toLowerCase();
+    const filtered = tickets.filter(t =>
+      String(t.location || "").trim().toLowerCase() === siteKey ||
+      String(t.site || "").trim().toLowerCase() === siteKey
+    );
+    res.json({ success: true, tickets: filtered });
+  } catch (e) {
+    console.error("Error fetching Support Manager tickets:", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get("/api/support-manager/warehouse", async (req, res) => {
+  try {
+    const site = String(req.user?.site || "").trim();
+    if (!site) return res.json({ success: true, items: [] });
+    const siteKey = site.toLowerCase();
+    const items = (await listInventoryPG()).filter(item =>
+      String(item.location || "").trim().toLowerCase().includes(siteKey)
+    ).map(item => ({ ...item, location_code: item.location || "" }));
+    res.json({ success: true, items });
+  } catch (e) {
+    console.error("Error fetching Support Manager warehouse:", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ===== MAINTENANCE REQUEST =====
+app.post("/api/maintenance-requests", async (req, res) => {
+  try {
+    const { site, category, description, priority } = req.body || {};
+    if (!String(description || "").trim()) return res.status(400).json({ success: false, error: "Maintenance description is required" });
+    const ticket = await createTicketPG({
+      vehicleId: null,
+      title: `Building Maintenance Request — ${category || "General Maintenance"}`,
+      location: String(site || req.user?.site || "").trim(),
+      category: category || "General Maintenance",
+      description: String(description).trim(),
+      reportedBy: req.user?.full_name || req.user?.username || "User",
+      priority: priority || "Medium",
+      department: "Building"
+    });
+    res.status(201).json({ success: true, ticket });
+  } catch (e) {
+    console.error("Error creating maintenance request:", e);
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
 // ===== WORK ORDERS =====
 app.get("/api/work-orders", async (req, res) => {
   try {
@@ -424,6 +480,39 @@ app.post("/api/purchases", async (req, res) => {
 app.delete("/api/purchases/:id", async (req, res) => {
   try { res.json({ success: await deletePurchasePG(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+
+// ===== PROJECT PURCHASE REQUESTS =====
+app.get("/api/purchase-requests", async (req, res) => {
+  try { res.json({ success: true, requests: await listPurchaseRequestsPG() }); }
+  catch (e) { console.error("Error fetching purchase requests:", e); res.status(500).json({ success: false, error: e.message }); }
+});
+app.post("/api/purchase-requests", async (req, res) => {
+  try {
+    const request = await createPurchaseRequestPG({ ...req.body, requestedByUserId: req.user?.id, requestedBy: req.user?.full_name || req.user?.username || "User" });
+    res.status(201).json({ success: true, request });
+  } catch (e) { console.error("Error creating purchase request:", e); res.status(400).json({ success: false, error: e.message }); }
+});
+app.put("/api/purchase-requests/:id/approve", async (req, res) => {
+  try {
+    if (req.user?.role !== "Owner" || String(req.user?.username || "").toLowerCase() !== "owner") return res.status(403).json({ success: false, error: "Owner approval is required" });
+    const request = await approvePurchaseRequestPG(req.params.id, req.user, req.body?.approvalNotes || "");
+    res.json({ success: true, request });
+  } catch (e) { console.error("Error approving purchase request:", e); res.status(400).json({ success: false, error: e.message }); }
+});
+app.put("/api/purchase-requests/:id/reject", async (req, res) => {
+  try {
+    if (req.user?.role !== "Owner" || String(req.user?.username || "").toLowerCase() !== "owner") return res.status(403).json({ success: false, error: "Owner rejection is required" });
+    const request = await rejectPurchaseRequestPG(req.params.id, req.user, req.body?.reason || "");
+    res.json({ success: true, request });
+  } catch (e) { console.error("Error rejecting purchase request:", e); res.status(400).json({ success: false, error: e.message }); }
+});
+app.post("/api/purchase-requests/:id/purchase", async (req, res) => {
+  try {
+    const result = await recordPurchaseFromRequestPG(req.params.id, req.body || {}, req.user);
+    res.status(201).json({ success: true, ...result });
+  } catch (e) { console.error("Error recording purchase request:", e); res.status(400).json({ success: false, error: e.message }); }
 });
 
 // ===== BUILDING DASHBOARD =====

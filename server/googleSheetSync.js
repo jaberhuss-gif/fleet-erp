@@ -435,8 +435,9 @@ export async function syncGoogleSheetVehicles() {
       sets.push(sql.replace("?", `$${params.length}`));
     };
 
-    if (driver) add("driver = ?", driver);
-    if (phone) add("phone = ?", phone);
+    // Google Sheet is a temporary KM/evidence source during migration.
+    // It must NEVER overwrite the ERP master assignment (driver/phone/status).
+    // Vehicle assignment is maintained in PostgreSQL by Fleet Management.
 
     if (km !== null) {
       const existingKm = Number(result.rows[0].current_km || 0);
@@ -699,19 +700,21 @@ async function closeDailyVehicleSubmissionTicket(record, reportDate, evidenceDat
 export async function getDailyVehicleSubmissionReport(targetDate = null) {
   if (!pool) throw new Error("DATABASE_URL is not configured");
 
-  const plateKeys = FIXED_DAILY_SUBMISSION_VEHICLES.map(([number, code]) =>
-    normalizePlateKey(`${number} ${code}`)
-  );
+  const wantedDate = String(
+    targetDate ||
+      (() => {
+        const d = new Date(Date.now() + RIYADH_OFFSET_MS);
+        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+      })()
+  ).slice(0, 10);
 
+  // PostgreSQL is the permanent source of truth for Reader Log.
+  // During migration, syncGoogleSheetVehicles() imports temporary Sheet KM
+  // readings into km_records before this report runs.
+  // After Google Sheet is retired, this report continues to work unchanged.
   const vehicleResult = await pool.query(`
-    SELECT
-      v.id,
-      v.plate_number,
-      v.plate_code,
-      v.driver,
-      v.phone,
-      v.location,
-      v.status
+    SELECT v.id, v.plate_number, v.plate_code, v.driver, v.phone,
+           v.location, v.status, v.current_km
     FROM vehicles v
     ORDER BY v.plate_number, v.plate_code
   `);
@@ -722,95 +725,23 @@ export async function getDailyVehicleSubmissionReport(targetDate = null) {
     if (!dbByPlate.has(key)) dbByPlate.set(key, v);
   }
 
-  const response = await fetch(SHEET_URL, {
-    headers: { "User-Agent": "Fleet-ERP-DailyVehicleSubmission/1.0" }
-  });
-  if (!response.ok) throw new Error(`Google Sheet HTTP ${response.status}`);
+  // Reader Log submission is now based on the permanent ERP KM history.
+  const readingResult = await pool.query(`
+    SELECT DISTINCT ON (vehicle_id) vehicle_id, reading_km, reading_date
+    FROM km_records
+    WHERE reading_date::date = $1::date
+    ORDER BY vehicle_id, reading_km DESC, id DESC
+  `, [wantedDate]);
 
-  const rows = parseCsv(await response.text());
-  if (rows.length < 1) throw new Error("Google Sheet contains no rows");
-
-  const headers = rows[0];
-  const plateIndex = findIndex(headers, aliases.plate);
-  const dateIndex = findIndex(headers, aliases.date);
-  const driverIndex = findIndex(headers, aliases.driver);
-  const phoneIndex = findIndex(headers, aliases.phone);
-
-  if (plateIndex < 0) {
-    throw new Error(`Vehicle/plate column not found. Headers: ${headers.join(", ")}`);
-  }
-  if (dateIndex < 0) {
-    throw new Error(`Date/time column not found. Headers: ${headers.join(", ")}`);
-  }
-
-  const todayRiyadh = () => {
-    const d = new Date(Date.now() + RIYADH_OFFSET_MS);
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-  };
-
-  const wantedDate = String(targetDate || todayRiyadh()).slice(0, 10);
-  const sheetByPlate = new Map();
-
-  const fixedByKey = new Map();
-  const fixedByNumber = new Map();
-
-  for (const [number, code] of FIXED_DAILY_SUBMISSION_VEHICLES) {
-    const fixedKey = normalizePlateKey(`${number} ${code}`);
-    fixedByKey.set(fixedKey, fixedKey);
-    fixedByNumber.set(normalizePlateKey(number), fixedKey);
-  }
-
-  function resolveSheetVehicleKey(value) {
-    const rawKey = normalizePlateKey(value);
-    if (!rawKey) return null;
-
-    if (fixedByKey.has(rawKey)) return fixedByKey.get(rawKey);
-
-    const numberMatch = rawKey.match(/^\d+/);
-    if (numberMatch) {
-      const byNumber = fixedByNumber.get(numberMatch[0]);
-      if (byNumber) return byNumber;
-    }
-
-    return null;
-  }
-
-  for (const values of rows.slice(1)) {
-    const plate = String(values[plateIndex] ?? "").trim();
-    const rawDate = String(values[dateIndex] ?? "").trim();
-    if (!plate || !rawDate) continue;
-
-    const parsed = parseSheetDate(rawDate);
-    if (!parsed) continue;
-
-    const localDate = new Date(parsed.getTime() + RIYADH_OFFSET_MS);
-    const sheetDate =
-      `${localDate.getUTCFullYear()}-${String(localDate.getUTCMonth() + 1).padStart(2, "0")}-${String(localDate.getUTCDate()).padStart(2, "0")}`;
-
-    if (sheetDate !== wantedDate) continue;
-
-    const key = resolveSheetVehicleKey(plate);
-    if (!key) continue;
-
-    const existing = sheetByPlate.get(key);
-    if (!existing || parsed.getTime() > existing.timestampMs) {
-      sheetByPlate.set(key, {
-        sheetPlate: plate,
-        rawDate,
-        timestampMs: parsed.getTime(),
-        timestamp: parsed.toISOString(),
-        sheetDriver: driverIndex >= 0 ? String(values[driverIndex] ?? "").trim() : "",
-        sheetPhone: phoneIndex >= 0 ? String(values[phoneIndex] ?? "").trim() : ""
-      });
-    }
-  }
+  const readingByVehicleId = new Map();
+  for (const row of readingResult.rows) readingByVehicleId.set(Number(row.vehicle_id), row);
 
   const records = [];
   for (const [number, code] of FIXED_DAILY_SUBMISSION_VEHICLES) {
     const vehicle = `${number} ${code}`;
     const key = normalizePlateKey(vehicle);
     const v = dbByPlate.get(key);
-    const submitted = sheetByPlate.get(key) || null;
+    const reading = v?.id ? readingByVehicleId.get(Number(v.id)) : null;
 
     const record = {
       vehicleId: v?.id || null,
@@ -818,27 +749,26 @@ export async function getDailyVehicleSubmissionReport(targetDate = null) {
       driver: v?.driver || "",
       phone: v?.phone || "",
       location: v?.location || "",
-      submittedToday: !!submitted,
-      submissionTimestamp: submitted?.timestamp || null,
-      sheetPlate: submitted?.sheetPlate || null,
-      evidenceDateTime: submitted?.rawDate || null,
-      sheetDriver: submitted?.sheetDriver || "",
-      sheetPhone: submitted?.sheetPhone || "",
+      submittedToday: !!reading,
+      submissionTimestamp: reading?.reading_date ? new Date(reading.reading_date).toISOString() : null,
+      sheetPlate: null,
+      evidenceDateTime: reading?.reading_date ? new Date(reading.reading_date).toISOString() : null,
+      sheetDriver: "",
+      sheetPhone: "",
       databaseVehicleFound: !!v,
-      status: submitted ? "Submitted" : "Not Submitted",
+      status: reading ? "Submitted" : "Not Submitted",
       ticketStatus: null,
       ticketId: null
     };
 
-    if (!submitted && v?.id) {
+    if (!reading && v?.id) {
       const ticket = await ensureDailyVehicleSubmissionTicket(record, wantedDate);
       record.ticketId = ticket?.id || null;
       record.ticketStatus = ticket?.status || "Open";
-    } else if (submitted && v?.id) {
-      await closeDailyVehicleSubmissionTicket(record, wantedDate, submitted.rawDate);
+    } else if (reading && v?.id) {
+      await closeDailyVehicleSubmissionTicket(record, wantedDate, record.evidenceDateTime);
       record.ticketStatus = "Closed";
     }
-
     records.push(record);
   }
 
@@ -849,7 +779,8 @@ export async function getDailyVehicleSubmissionReport(targetDate = null) {
     success: true,
     reportDate: wantedDate,
     generatedAt: new Date().toISOString(),
-    source: "Google Sheet",
+    source: "PostgreSQL",
+    temporarySource: "Google Sheet (migration only)",
     fixedVehicleCount: records.length,
     expectedVehicleCount: FIXED_DAILY_SUBMISSION_VEHICLES.length,
     vehicleCountMatchesExpected: records.length === FIXED_DAILY_SUBMISSION_VEHICLES.length,

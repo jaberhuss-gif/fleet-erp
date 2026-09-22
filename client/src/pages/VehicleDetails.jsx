@@ -5,7 +5,18 @@ const tabs=['Overview','KM','Maintenance','Oil','Tires','Inspection','Documents'
 
 export default function VehicleDetails({vehicleId,onBack}){
  const [data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[tab,setTab]=useState('Overview');
- useEffect(()=>{(async()=>{try{setLoading(true);const r=await api.get('/v2/vehicles/'+vehicleId+'/360');setData(r.data)}catch(e){setError(e.response?.data?.error||e.message)}finally{setLoading(false)}})()},[vehicleId]);
+ useEffect(()=>{(async()=>{try{
+  setLoading(true);
+  try{const r=await api.get('/v2/vehicles/'+vehicleId+'/360');setData(r.data);return;}catch(_v2){}
+  const [detail,ticketRes,pmRes]=await Promise.all([
+    api.get('/vehicles/'+vehicleId+'/details'),
+    api.get('/tickets?vehicleId='+encodeURIComponent(vehicleId)),
+    api.get('/periodic-maintenance?vehicleId='+encodeURIComponent(vehicleId))
+  ]);
+  const v=detail.data?.vehicle||{};
+  const pm=pmRes.data?.records||pmRes.data?.maintenance||[];
+  setData({vehicle:{...v,plate_number:v.plate_number||String(v.plate||'').split(/\s+/)[0],plate_code:v.plate_code||String(v.plate||'').split(/\s+/).slice(1).join(' '),driver_name:v.driver_name||v.driver||'',driver_phone:v.driver_phone||v.phone||'',legacy_location:v.location||'',legacy_driver_name:v.driver||'',legacy_driver_phone:v.phone||'',current_km:v.currentKm??v.currentKM??0,last_oil_km:v.lastOilKm??v.lastOilKM??0,oil_interval_km:v.oilChangeInterval??5000,last_oil_change_date:v.lastOilChangeDate||v.last_oil_change_date||''},readings:detail.data?.readings||[],alerts:[],submissions:[],compliance:[],maintenance:pm,tickets:ticketRes.data?.tickets||[],schedules:pm,documents:[],tires:[]});
+}catch(e){setError(e.response?.data?.error||e.message)}finally{setLoading(false)}})()},[vehicleId]);
  if(loading)return <div className="loading">Loading Vehicle 360...</div>;
  if(error)return <div className="alert alert-error">{error}</div>;
  if(!data)return <div className="loading">Vehicle not found.</div>;

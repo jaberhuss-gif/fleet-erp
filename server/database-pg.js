@@ -277,9 +277,16 @@ export async function addReading(vehicleId, data = {}) {
     throw new Error("Reading must be >= current");
   }
 
+  // Default to the Riyadh calendar date. The server/container TZ may be UTC, so
+  // never use the server-local date to decide "today's" reading.
+  const todayResult = await query(
+    `SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date::text AS today`
+  );
+  const riyadhToday = todayResult.rows[0]?.today;
+
   const readingDate =
     stringValue(data.readingDate) ||
-    new Date().toISOString().slice(0, 10);
+    riyadhToday;
 
   const plate = `${v.plate_number || ""} ${v.plate_code || ""}`.trim();
 
@@ -313,32 +320,15 @@ export async function addReading(vehicleId, data = {}) {
     notes: stringValue(data.notes)
   });
 
-  // Automatically close all open Daily KM tickets for this vehicle when
-  // today's reading is successfully saved. Do not depend on the legacy
-  // description marker because older tickets may not contain it.
+  // Automatically close all open Daily KM tickets for this vehicle when today's
+  // reading is successfully saved. Uses the single shared helper instead of a
+  // fourth copy of the same UPDATE.
   try {
-    const todayResult = await query(
-      `SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date AS today`
-    );
-    const today = todayResult.rows[0]?.today;
-
-    if (String(readingDate).slice(0, 10) === String(today).slice(0, 10)) {
-      await query(
-        `UPDATE tickets
-         SET status = 'Closed',
-             closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP),
-             closed_by = COALESCE(closed_by, 'System'),
-             resolution_notes = CASE
-               WHEN COALESCE(resolution_notes, '') = '' THEN $2
-               ELSE resolution_notes
-             END
-         WHERE vehicle_id = $1
-           AND category = 'Daily KM'
-           AND status <> 'Closed'`,
-        [
-          vehicleId,
-          `Today's KM reading was entered successfully: ${km.toLocaleString()} km.`
-        ]
+    if (String(readingDate).slice(0, 10) === String(riyadhToday).slice(0, 10)) {
+      const { closeDailyKmTickets } = await import("./dailyKm.js");
+      await closeDailyKmTickets(
+        vehicleId,
+        `Today's KM reading was entered successfully: ${km.toLocaleString()} km.`
       );
     }
   } catch (cardError) {
@@ -373,6 +363,181 @@ export async function ensurePeriodicMaintenanceSchema() {
       ADD COLUMN IF NOT EXISTS interval_days INTEGER DEFAULT 180,
       ADD COLUMN IF NOT EXISTS notification_sent_at TIMESTAMPTZ
   `);
+}
+
+// Idempotent, additive ticket-schema guard.
+//
+// The ticket INSERTs reference department and the assignment columns. This adds
+// only the columns that are genuinely missing, using IF NOT EXISTS, and never
+// drops, renames, recreates, or rewrites the tickets table, so existing tickets
+// and all historical data are preserved.
+export async function ensureTicketSchema() {
+  await query(`
+    ALTER TABLE tickets
+      ADD COLUMN IF NOT EXISTS department TEXT,
+      ADD COLUMN IF NOT EXISTS assigned_to_user_id BIGINT,
+      ADD COLUMN IF NOT EXISTS assigned_to_name TEXT,
+      ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ
+  `);
+
+  await query(`
+    ALTER TABLE tickets
+      ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS acknowledged_by TEXT,
+      ADD COLUMN IF NOT EXISTS closed_by TEXT,
+      ADD COLUMN IF NOT EXISTS resolution_notes TEXT
+  `);
+
+  await query(`CREATE INDEX IF NOT EXISTS idx_tickets_vehicle_id ON tickets(vehicle_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_tickets_category ON tickets(category)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)`);
+}
+
+// Additive, idempotent guard for the Building Maintenance tables.
+//
+// These four tables can exist as incomplete shells (for example an `id`-only
+// table left behind by a partial migration). Every building query selects real
+// columns, so an incomplete table turns every building/report endpoint into a
+// 500 (e.g. `column "reported_date" does not exist`). This only adds missing
+// columns and indexes; it never drops, renames or rewrites anything, so
+// existing rows are preserved.
+export async function ensureBuildingSchema() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS work_orders (
+      id SERIAL PRIMARY KEY,
+      wo_no TEXT UNIQUE,
+      site TEXT,
+      area TEXT,
+      category TEXT,
+      priority TEXT DEFAULT 'Medium',
+      description TEXT,
+      assigned_to TEXT,
+      is_contractor INTEGER DEFAULT 0,
+      contractor_name TEXT,
+      performed_by TEXT,
+      status TEXT DEFAULT 'Open',
+      reported_date DATE,
+      completed_date DATE,
+      final_cost NUMERIC DEFAULT 0,
+      contractor_cost NUMERIC DEFAULT 0,
+      labor_cost NUMERIC DEFAULT 0,
+      parts_cost NUMERIC DEFAULT 0,
+      closing_notes TEXT,
+      parts_used TEXT,
+      month TEXT,
+      year TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id SERIAL PRIMARY KEY,
+      project_no TEXT UNIQUE,
+      name TEXT,
+      description TEXT,
+      site TEXT,
+      project_type TEXT DEFAULT 'Development',
+      status TEXT DEFAULT 'Active',
+      budget NUMERIC DEFAULT 0,
+      spent NUMERIC DEFAULT 0,
+      start_date DATE,
+      end_date DATE,
+      manager TEXT,
+      contractor TEXT,
+      month TEXT,
+      year TEXT,
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS purchases (
+      id SERIAL PRIMARY KEY,
+      purchase_no TEXT UNIQUE,
+      type TEXT,
+      reference_no TEXT,
+      item_name TEXT,
+      quantity NUMERIC DEFAULT 1,
+      unit_cost NUMERIC DEFAULT 0,
+      total_cost NUMERIC DEFAULT 0,
+      supplier TEXT,
+      purchased_by TEXT DEFAULT 'Company',
+      purchase_date DATE,
+      month TEXT,
+      year TEXT,
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS sites (
+      id SERIAL PRIMARY KEY,
+      code TEXT UNIQUE,
+      name TEXT,
+      region TEXT DEFAULT '',
+      campus_manager TEXT DEFAULT '',
+      phone TEXT DEFAULT '',
+      notes TEXT,
+      status TEXT DEFAULT 'Active',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Fill in any column still missing on a pre-existing (possibly stub) table.
+  const additions = {
+    work_orders: [
+      ["wo_no", "TEXT"], ["site", "TEXT"], ["area", "TEXT"], ["category", "TEXT"],
+      ["priority", "TEXT DEFAULT 'Medium'"], ["description", "TEXT"],
+      ["assigned_to", "TEXT"], ["is_contractor", "INTEGER DEFAULT 0"],
+      ["contractor_name", "TEXT"], ["performed_by", "TEXT"],
+      ["status", "TEXT DEFAULT 'Open'"], ["reported_date", "DATE"],
+      ["completed_date", "DATE"], ["final_cost", "NUMERIC DEFAULT 0"],
+      ["contractor_cost", "NUMERIC DEFAULT 0"], ["labor_cost", "NUMERIC DEFAULT 0"],
+      ["parts_cost", "NUMERIC DEFAULT 0"], ["closing_notes", "TEXT"],
+      ["parts_used", "TEXT"], ["month", "TEXT"], ["year", "TEXT"],
+      ["created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"],
+      ["updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"]
+    ],
+    projects: [
+      ["project_no", "TEXT"], ["name", "TEXT"], ["description", "TEXT"],
+      ["site", "TEXT"], ["project_type", "TEXT DEFAULT 'Development'"],
+      ["status", "TEXT DEFAULT 'Active'"], ["budget", "NUMERIC DEFAULT 0"],
+      ["spent", "NUMERIC DEFAULT 0"], ["start_date", "DATE"], ["end_date", "DATE"],
+      ["manager", "TEXT"], ["contractor", "TEXT"], ["month", "TEXT"], ["year", "TEXT"],
+      ["notes", "TEXT"],
+      ["created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"],
+      ["updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"]
+    ],
+    purchases: [
+      ["purchase_no", "TEXT"], ["type", "TEXT"], ["reference_no", "TEXT"],
+      ["item_name", "TEXT"], ["quantity", "NUMERIC DEFAULT 1"],
+      ["unit_cost", "NUMERIC DEFAULT 0"], ["total_cost", "NUMERIC DEFAULT 0"],
+      ["supplier", "TEXT"], ["purchased_by", "TEXT DEFAULT 'Company'"],
+      ["purchase_date", "DATE"], ["month", "TEXT"], ["year", "TEXT"], ["notes", "TEXT"],
+      ["created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"]
+    ],
+    sites: [
+      ["code", "TEXT"], ["name", "TEXT"], ["region", "TEXT DEFAULT ''"],
+      ["campus_manager", "TEXT DEFAULT ''"], ["phone", "TEXT DEFAULT ''"],
+      ["notes", "TEXT"], ["status", "TEXT DEFAULT 'Active'"],
+      ["created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"]
+    ]
+  };
+
+  for (const [table, columns] of Object.entries(additions)) {
+    const list = columns.map(([name, type]) => `ADD COLUMN IF NOT EXISTS ${name} ${type}`).join(",\n      ");
+    await query(`ALTER TABLE ${table}\n      ${list}`);
+  }
+
+  await query(`CREATE INDEX IF NOT EXISTS idx_work_orders_reported_date ON work_orders(reported_date)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_work_orders_contractor ON work_orders(contractor_name)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_projects_start_date ON projects(start_date)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_purchases_purchase_date ON purchases(purchase_date)`);
 }
 
 export async function updatePeriodicAfterOilChange(vehicleId, currentKm, oilDate) {
@@ -545,27 +710,42 @@ export async function createTicket(data = {}) {
 }
 
 export async function listTickets(filters = {}) {
-  let sql = `SELECT * FROM tickets WHERE 1=1`;
+  // Vehicle-linked tickets are enriched with vehicle information so the UI can
+  // show plate/driver/site without extra round-trips. Aliases keep the existing
+  // ticket fields intact for current API consumers.
+  let sql = `
+    SELECT
+      t.*,
+      v.id AS v_id,
+      v.plate_number AS v_plate_number,
+      v.plate_code AS v_plate_code,
+      CONCAT(v.plate_number, ' ', COALESCE(v.plate_code, '')) AS vehicle_plate,
+      v.driver AS vehicle_driver,
+      v.phone AS vehicle_phone,
+      v.location AS vehicle_location
+    FROM tickets t
+    LEFT JOIN vehicles v ON v.id = t.vehicle_id
+    WHERE 1=1`;
   const params = [];
 
   if (filters.status) {
     params.push(filters.status);
-    sql += ` AND status = $${params.length}`;
+    sql += ` AND t.status = $${params.length}`;
   }
 
   if (filters.vehicleId) {
     params.push(filters.vehicleId);
-    sql += ` AND vehicle_id = $${params.length}`;
+    sql += ` AND t.vehicle_id = $${params.length}`;
   }
 
   if (filters.reportedBy) {
     params.push(filters.reportedBy);
-    sql += ` AND reported_by = $${params.length}`;
+    sql += ` AND t.reported_by = $${params.length}`;
   }
 
   if (filters.department) {
     params.push(filters.department);
-    sql += ` AND department = ${params.length}`;
+    sql += ` AND t.department = $${params.length}`;
   }
 
   // Fleet ticket separation:
@@ -573,22 +753,51 @@ export async function listTickets(filters = {}) {
   // fleetType=km: Daily KM tickets only.
   // fleetType=general: non-vehicle tickets only.
   if (filters.fleetType === "maintenance") {
-    sql += ` AND vehicle_id IS NOT NULL AND COALESCE(category, '') <> 'Daily KM' AND COALESCE(category, '') <> 'Daily Vehicle Submission'`;
+    sql += ` AND t.vehicle_id IS NOT NULL AND COALESCE(t.category, '') <> 'Daily KM' AND COALESCE(t.category, '') <> 'Daily Vehicle Submission'`;
   } else if (filters.fleetType === "km") {
-    sql += ` AND vehicle_id IS NOT NULL AND category = 'Daily KM'`;
+    sql += ` AND t.vehicle_id IS NOT NULL AND t.category = 'Daily KM'`;
   } else if (filters.fleetType === "general") {
-    sql += ` AND vehicle_id IS NULL`;
+    sql += ` AND t.vehicle_id IS NULL AND COALESCE(t.category, '') <> 'Daily KM' AND COALESCE(t.category, '') <> 'Daily Vehicle Submission' AND COALESCE(t.category, '') <> 'Maintenance'`;
+  } else if (filters.excludeDailyKm === "true" || filters.excludeDailyKm === true) {
+    sql += ` AND COALESCE(t.category, '') <> 'Daily KM'`;
   }
 
   if (filters.category) {
     params.push(filters.category);
-    sql += ` AND category = ${params.length}`;
+    sql += ` AND t.category = $${params.length}`;
   }
 
-  sql += ` ORDER BY opened_at DESC, id DESC`;
+  sql += ` ORDER BY t.opened_at DESC, t.id DESC`;
 
   const result = await query(sql, params);
-  return result.rows;
+
+  return result.rows.map((row) => {
+    const {
+      v_id, v_plate_number, v_plate_code, vehicle_plate, vehicle_driver,
+      vehicle_phone, vehicle_location, ...ticket
+    } = row;
+
+    return {
+      ...ticket,
+      vehicleId: ticket.vehicle_id ?? null,
+      category: ticket.category || "",
+      plate: vehicle_plate ? String(vehicle_plate).trim() : null,
+      driver: vehicle_driver || null,
+      driverPhone: vehicle_phone || null,
+      site: vehicle_location || null,
+      vehicle: v_id
+        ? {
+            id: Number(v_id),
+            plateNumber: v_plate_number || "",
+            plateCode: v_plate_code || "",
+            plate: String(vehicle_plate || "").trim(),
+            driver: vehicle_driver || "",
+            phone: vehicle_phone || "",
+            location: vehicle_location || ""
+          }
+        : null
+    };
+  });
 }
 export async function closeTicket(id) {
   const result = await query(
@@ -838,6 +1047,42 @@ function pgMonthYear(date = new Date()) {
   };
 }
 
+// Normalize a date-ish value to a `YYYY-MM` key.
+//
+// `pg` returns DATE columns as JS Date objects, so the old
+// `String(reported_date).slice(0, 7)` pattern produced "Thu Jul" and every
+// report bucket silently fell through to zero. Handle Date, ISO strings and
+// `YYYY-MM-DD` text uniformly.
+function pgMonthKey(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, "0")}`;
+  }
+  const raw = String(value).trim();
+  const match = raw.match(/^(\d{4})-(\d{2})/);
+  if (match) return `${match[1]}-${match[2]}`;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+// Normalize an optional date input to a `YYYY-MM-DD` string, or null.
+//
+// A blank/absent start date must stay null. The previous behaviour defaulted to
+// `new Date()`, so an import that carried an empty Start Date silently stamped
+// the project with the import day and created a phantom reporting month.
+function pgDateOrNull(value) {
+  if (value === undefined || value === null) return null;
+  const raw = String(value).trim();
+  if (raw === "") return null;
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
 function pgGenNo(prefix) {
   return prefix + "-" + String(Date.now()).slice(-6);
 }
@@ -899,14 +1144,27 @@ export async function getAlerts() {
 
   const urgent = vehicles.filter(v => v.status === "Urgent Overdue");
   const warning = vehicles.filter(v => v.status === "Warning");
+  const safe = vehicles.filter(v => v.status === "Safe");
 
+  // Contract: urgent/warning/safe are vehicle ARRAYS (the shape every
+  // dashboard and the notifications UI consume). Numeric counts are exposed
+  // separately so callers never have to guess between a number and an array.
   return {
     total: vehicles.length,
-    urgent: urgent.length,
-    warning: warning.length,
-    safe: vehicles.filter(v => v.status === "Safe").length,
+    urgent,
+    warning,
+    safe,
     urgentVehicles: urgent,
     warningVehicles: warning,
+    urgentCount: urgent.length,
+    warningCount: warning.length,
+    safeCount: safe.length,
+    summary: {
+      total: vehicles.length,
+      urgent: urgent.length,
+      warning: warning.length,
+      safe: safe.length
+    },
     vehicles
   };
 }
@@ -1249,9 +1507,13 @@ export async function getProject(id) {
 }
 
 export async function createProject(data = {}) {
-  const { month, year } = pgMonthYear(
-    data.startDate || data.start_date || new Date()
-  );
+  // A project without a start date stays without one. Do NOT default to today:
+  // that fabricated a phantom reporting month for every imported row whose
+  // Start Date was blank. month/year cache fields simply stay null too.
+  const startDate = pgDateOrNull(data.startDate ?? data.start_date);
+  const monthKey = pgMonthKey(startDate);
+  const month = monthKey;
+  const year = monthKey ? monthKey.slice(0, 4) : null;
 
   const result = await query(`
     INSERT INTO projects
@@ -1284,8 +1546,8 @@ export async function createProject(data = {}) {
     pgStr(data.status, "Active"),
     pgNum(data.budget),
     pgNum(data.spent),
-    data.startDate ?? data.start_date ?? new Date(),
-    data.endDate ?? data.end_date ?? null,
+    startDate,
+    pgDateOrNull(data.endDate ?? data.end_date),
     pgStr(data.manager),
     pgStr(data.contractor),
     month,
@@ -1302,6 +1564,21 @@ export async function updateProject(id, data = {}) {
   if (!current) {
     throw new Error("Project not found");
   }
+
+  const startDateProvided =
+    data.startDate !== undefined || data.start_date !== undefined;
+  const startDate = startDateProvided
+    ? pgDateOrNull(data.startDate ?? data.start_date)
+    : current.start_date;
+
+  // Keep the cached month/year in step with the effective start date. Clearing
+  // the start date clears the cache too, so no stale month survives.
+  const effectiveStart = startDate ? pgDateOrNull(startDate) : null;
+  const monthKey = pgMonthKey(effectiveStart);
+  const month =
+    data.month ?? (startDateProvided ? monthKey : current.month);
+  const year =
+    data.year ?? (startDateProvided ? (monthKey ? monthKey.slice(0, 4) : null) : current.year);
 
   const result = await query(`
     UPDATE projects
@@ -1333,12 +1610,14 @@ export async function updateProject(id, data = {}) {
     data.status ?? current.status,
     data.budget ?? current.budget,
     data.spent ?? current.spent,
-    data.startDate ?? data.start_date ?? current.start_date,
-    data.endDate ?? data.end_date ?? current.end_date,
+    effectiveStart,
+    data.endDate !== undefined || data.end_date !== undefined
+      ? pgDateOrNull(data.endDate ?? data.end_date)
+      : current.end_date,
     data.manager ?? current.manager,
     data.contractor ?? current.contractor,
-    data.month ?? current.month,
-    data.year ?? current.year,
+    month,
+    year,
     data.notes ?? current.notes,
     id
   ]);
@@ -2595,6 +2874,11 @@ export async function generateScheduledMaintenance(monthsAhead = 6) {
     inspection: { km: null, days: 365 }
   };
 
+  const horizonMonths = Math.max(1, Math.min(Number(monthsAhead) || 6, 60));
+  const horizonDate = new Date();
+  horizonDate.setDate(horizonDate.getDate() + horizonMonths * 30);
+  const horizonKey = horizonDate.toISOString().slice(0, 10);
+
   const result = await query(`
     SELECT id, current_km, last_oil_km
     FROM vehicles
@@ -2624,8 +2908,14 @@ export async function generateScheduledMaintenance(monthsAhead = 6) {
         scheduledDate.setDate(scheduledDate.getDate() + 60);
       } else {
         scheduledDate = new Date();
-        scheduledDate.setDate(scheduledDate.getDate() + interval.days);
+        // Respect the requested horizon: never schedule beyond monthsAhead.
+        scheduledDate.setDate(
+          scheduledDate.getDate() + Math.min(interval.days, horizonMonths * 30)
+        );
       }
+
+      const scheduledKey = scheduledDate.toISOString().slice(0, 10);
+      if (scheduledKey > horizonKey) continue;
 
       await query(
         `INSERT INTO periodic_maintenance
@@ -2634,7 +2924,7 @@ export async function generateScheduledMaintenance(monthsAhead = 6) {
         [
           vehicle.id,
           type,
-          scheduledDate.toISOString().slice(0, 10),
+          scheduledKey,
           nextDueKm,
           interval.km,
           interval.days
@@ -2645,7 +2935,7 @@ export async function generateScheduledMaintenance(monthsAhead = 6) {
     }
   }
 
-  return { created };
+  return { created, monthsAhead: horizonMonths };
 }
 
 /* ============================================================
@@ -2904,7 +3194,7 @@ export async function getGeneralMaintenanceReport(filters = {}) {
 
   if (site) {
     params.push(site);
-    where += ` AND site = ${params.length}`;
+    where += ` AND site = $${params.length}`;
   }
 
   const result = await query(`
@@ -2950,7 +3240,7 @@ export async function getGeneralMaintenanceReport(filters = {}) {
   const people = new Map();
 
   for (const o of orders) {
-    const month = String(o.reported_date).slice(0, 7);
+    const month = pgMonthKey(o.reported_date);
     const m = map.get(month);
     if (!m) continue;
 
@@ -3068,7 +3358,7 @@ export async function getMonthlyReport(filters = {}) {
     };
   }
 
-  const monthKey = value => value ? String(value).slice(0, 7) : null;
+  const monthKey = value => pgMonthKey(value);
   const isExternal = value => {
     const n = String(value || "").trim().toLowerCase();
     return n !== "" && n !== "company" && n !== "internal";
@@ -3172,7 +3462,7 @@ export async function getFinancialReport() {
 
   const woByMonth = {};
   for (const w of workOrders) {
-    const m = w.month || 'Unknown';
+    const m = pgMonthKey(w.reported_date) || w.month || 'Unknown';
     if (!woByMonth[m]) woByMonth[m] = new Set();
     woByMonth[m].add(normalizeWO(w.wo_no));
   }
@@ -3182,10 +3472,7 @@ export async function getFinancialReport() {
     const startDateRaw = p.start_date ?? p.startDate ?? "";
     if (String(startDateRaw).trim() === "") continue;
 
-    const startDate = new Date(startDateRaw);
-    const m = !Number.isNaN(startDate.getTime())
-      ? startDate.toISOString().slice(0, 7)
-      : (p.month || 'Unknown');
+    const m = pgMonthKey(startDateRaw) || p.month || 'Unknown';
 
     if (!projByMonth[m]) projByMonth[m] = new Set();
     projByMonth[m].add(normalizeProj(p.project_no));
@@ -3238,7 +3525,7 @@ export async function getFinancialReport() {
   // Work Orders
   // ==========================
   for (const w of workOrders) {
-    const b = bucket(w.month);
+    const b = bucket(pgMonthKey(w.reported_date) || w.month);
     const cost = Number(w.final_cost || w.contractor_cost || 0);
     // Use contractor_name ONLY — is_contractor is unreliable (always 0 for most rows)
     const contractorName = String(w.contractor_name || "").trim();
@@ -3273,10 +3560,7 @@ export async function getFinancialReport() {
     const startDateRaw = p.start_date ?? p.startDate ?? "";
     if (String(startDateRaw).trim() === "") continue;
 
-    const startDate = new Date(startDateRaw);
-    const derivedMonth = !Number.isNaN(startDate.getTime())
-      ? startDate.toISOString().slice(0, 7)
-      : (p.month || "Unknown");
+    const derivedMonth = pgMonthKey(startDateRaw) || p.month || "Unknown";
 
     const b = bucket(derivedMonth);
     const spent = Number(p.spent || 0);
@@ -3306,13 +3590,13 @@ export async function getFinancialReport() {
   // Purchases
   // ==========================
   for (const p of purchases) {
-    const b = bucket(p.month);
+    const pMonth = pgMonthKey(p.purchase_date) || p.month || 'Unknown';
+    const b = bucket(pMonth);
     const amount = Number(p.total_cost || 0);
     const type = String(p.type || "").toLowerCase();
     const purchasedBy = String(p.purchased_by || "").trim().toLowerCase();
     const refNorm = normalizeWO(p.reference_no || '');
     const refNormProj = normalizeProj(p.reference_no || '');
-    const pMonth = p.month || 'Unknown';
 
     // === Work Order / Maintenance purchases ===
     if (
@@ -3380,9 +3664,53 @@ export async function getFinancialReport() {
   const sum = field =>
     rows.reduce((s, r) => s + Number(r[field] || 0), 0);
 
-  const maintenanceTotalBaseline = MAINT_BASELINE * rows.length;
-  const developmentTotalBaseline = DEV_BASELINE * rows.length;
-  const totalSavings = sum("totalSavings");
+  // A month only represents real reporting activity when it has an actual cost
+  // to justify its share of the fixed monthly baseline. Months that contain
+  // only zero-cost records (e.g. a project shell created with no spend) must
+  // not inflate the baseline with extra salary months.
+  const hasActivity = r =>
+    Number(r.contractorWO || 0) +
+      Number(r.partsWO || 0) +
+      Number(r.contractorDev || 0) +
+      Number(r.partsDev || 0) +
+      Number(r.otherPurchases || 0) > 0;
+
+  const activeMonths = rows.filter(hasActivity);
+  const monthCount = activeMonths.length;
+  for (const r of rows) r.active = hasActivity(r);
+
+  // Report months whose only records are zero-cost project shells. A project
+  // whose blank Start Date was stamped with the import day (for example
+  // 2026-09-13) creates such a phantom month. It contributes no real activity,
+  // so it must not appear as a September bucket. This deliberately keeps months
+  // that carry genuine work (a work order or a purchase) even when their cost
+  // is zero, so employee-only months are never hidden.
+  const phantomMonths = new Set(
+    rows
+      .filter(r =>
+        Number(r.employeeWOCount || 0) === 0 &&
+        Number(r.contractorWOCount || 0) === 0 &&
+        Number(r.contractorWO || 0) === 0 &&
+        Number(r.partsWO || 0) === 0 &&
+        Number(r.contractorDev || 0) === 0 &&
+        Number(r.partsDev || 0) === 0 &&
+        Number(r.otherPurchases || 0) === 0 &&
+        (Number(r.internalProjectCount || 0) > 0 ||
+          Number(r.contractorProjectCount || 0) > 0)
+      )
+      .map(r => r.month)
+  );
+
+  const emittedRows = rows.filter(r => !phantomMonths.has(r.month));
+
+  // Totals are restricted to active months so baseline, actual and savings are
+  // all measured over the same set of months and stay internally consistent.
+  const sumActive = field =>
+    activeMonths.reduce((s, r) => s + Number(r[field] || 0), 0);
+
+  const maintenanceTotalBaseline = MAINT_BASELINE * monthCount;
+  const developmentTotalBaseline = DEV_BASELINE * monthCount;
+  const totalSavings = sumActive("totalSavings");
   const totalBaseline = maintenanceTotalBaseline + developmentTotalBaseline;
 
   // Merge contractor breakdown across all months
@@ -3402,15 +3730,16 @@ export async function getFinancialReport() {
   }
 
   return {
-    rows,
+    rows: emittedRows,
 
     grand: {
-      monthCount: rows.length,
+      monthCount,
 
       // Dashboard aliases
       totalBaseline,
-      totalActual: sum("maintActual") + sum("devActual"),
-      months: rows,
+      totalActual: sumActive("maintActual") + sumActive("devActual"),
+      activeMonths,
+      months: emittedRows,
 
       // Baseline
       baseline: totalBaseline,
@@ -3420,31 +3749,31 @@ export async function getFinancialReport() {
       developmentTotalBaseline,
 
       // Actual costs
-      contractorWO: sum("contractorWO"),
-      partsWO: sum("partsWO"),
-      salaryMaint: sum("salaryMaint"),
-      maintActual: sum("maintActual"),
+      contractorWO: sumActive("contractorWO"),
+      partsWO: sumActive("partsWO"),
+      salaryMaint: sumActive("salaryMaint"),
+      maintActual: sumActive("maintActual"),
 
-      contractorDev: sum("contractorDev"),
-      partsDev: sum("partsDev"),
-      salaryDev: sum("salaryDev"),
-      devActual: sum("devActual"),
+      contractorDev: sumActive("contractorDev"),
+      partsDev: sumActive("partsDev"),
+      salaryDev: sumActive("salaryDev"),
+      devActual: sumActive("devActual"),
 
-      otherPurchases: sum("otherPurchases"),
-      totalCost: sum("totalCost"),
+      otherPurchases: sumActive("otherPurchases"),
+      totalCost: sumActive("totalCost"),
 
       // Savings
-      maintSavings: sum("maintSavings"),
-      devSavings: sum("devSavings"),
+      maintSavings: sumActive("maintSavings"),
+      devSavings: sumActive("devSavings"),
       totalSavings,
 
       maintTotalSavingsPct:
         maintenanceTotalBaseline
-          ? (sum("maintSavings") / maintenanceTotalBaseline) * 100
+          ? (sumActive("maintSavings") / maintenanceTotalBaseline) * 100
           : 0,
       devTotalSavingsPct:
         developmentTotalBaseline
-          ? (sum("devSavings") / developmentTotalBaseline) * 100
+          ? (sumActive("devSavings") / developmentTotalBaseline) * 100
           : 0,
       totalSavingsPct:
         totalBaseline
@@ -3452,14 +3781,14 @@ export async function getFinancialReport() {
           : 0,
 
       // Counts
-      employeeWOCount: sum("employeeWOCount"),
-      contractorWOCount: sum("contractorWOCount"),
-      totalWOCount: sum("employeeWOCount") + sum("contractorWOCount"),
+      employeeWOCount: sumActive("employeeWOCount"),
+      contractorWOCount: sumActive("contractorWOCount"),
+      totalWOCount: sumActive("employeeWOCount") + sumActive("contractorWOCount"),
 
-      internalProjectCount: sum("internalProjectCount"),
-      contractorProjectCount: sum("contractorProjectCount"),
+      internalProjectCount: sumActive("internalProjectCount"),
+      contractorProjectCount: sumActive("contractorProjectCount"),
       totalProjectCount:
-        sum("internalProjectCount") + sum("contractorProjectCount"),
+        sumActive("internalProjectCount") + sumActive("contractorProjectCount"),
 
       // Contractor breakdown
       contractorBreakdown: mergedBreakdown

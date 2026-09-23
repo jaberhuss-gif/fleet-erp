@@ -27,7 +27,19 @@ export default function FinancialReport() {
   const DEV_BASELINE = 132551;
   const SALARY_MAINT = 2200;
   const SALARY_DEV = 2200;
-  const monthCount = months.length;
+
+  // Prefer the server's active-month count: months with zero real spend must
+  // not multiply the fixed monthly baseline. Fall back to a local computation
+  // for older responses that do not include `active`.
+  const hasActivity = m =>
+    Number(m.contractorWO || 0) + Number(m.partsWO || 0) +
+    Number(m.contractorDev || 0) + Number(m.partsDev || 0) +
+    Number(m.otherPurchases || 0) > 0;
+  const monthCount = Number.isFinite(Number(data.grand?.monthCount))
+    ? Number(data.grand.monthCount)
+    : months.filter(hasActivity).length;
+  const isActiveMonth = m =>
+    typeof m.active === 'boolean' ? m.active : hasActivity(m);
 
   const monthlyData = months.map(m => ({
     ...m,
@@ -54,13 +66,17 @@ export default function FinancialReport() {
   const devBaselineTotal = DEV_BASELINE * monthCount;
   const totalBaseline = maintBaselineTotal + devBaselineTotal;
 
-  const contractorWOTotal = monthlyData.reduce((s, m) => s + m.contractorWO, 0);
-  const partsWOTotal = monthlyData.reduce((s, m) => s + m.partsWO, 0);
+  // Totals cover only active months so they line up with the baseline above.
+  const activeData = monthlyData.filter(isActiveMonth);
+  const activeSum = (fn) => activeData.reduce((s, m) => s + fn(m), 0);
+
+  const contractorWOTotal = activeSum(m => m.contractorWO);
+  const partsWOTotal = activeSum(m => m.partsWO);
   const salaryMaintTotal = SALARY_MAINT * monthCount;
   const maintActualTotal = contractorWOTotal + partsWOTotal + salaryMaintTotal;
 
-  const contractorDevTotal = monthlyData.reduce((s, m) => s + m.contractorDev, 0);
-  const partsDevTotal = monthlyData.reduce((s, m) => s + m.partsDev, 0);
+  const contractorDevTotal = activeSum(m => m.contractorDev);
+  const partsDevTotal = activeSum(m => m.partsDev);
   const salaryDevTotal = SALARY_DEV * monthCount;
   const devActualTotal = contractorDevTotal + partsDevTotal + salaryDevTotal;
 
@@ -72,12 +88,12 @@ export default function FinancialReport() {
   const devSavingsPct = devBaselineTotal ? (devSavingsTotal / devBaselineTotal) * 100 : 0;
   const totalSavingsPct = totalBaseline ? (totalSavings / totalBaseline) * 100 : 0;
 
-  const employeeWOTotal = monthlyData.reduce((s, m) => s + m.employeeWOCount, 0);
-  const contractorWOCountTotal = monthlyData.reduce((s, m) => s + m.contractorWOCount, 0);
-  const internalProjectTotal = monthlyData.reduce((s, m) => s + m.internalProjectCount, 0);
-  const contractorProjectCountTotal = monthlyData.reduce((s, m) => s + m.contractorProjectCount, 0);
+  const employeeWOTotal = activeSum(m => m.employeeWOCount);
+  const contractorWOCountTotal = activeSum(m => m.contractorWOCount);
+  const internalProjectTotal = activeSum(m => m.internalProjectCount);
+  const contractorProjectCountTotal = activeSum(m => m.contractorProjectCount);
 
-  const otherPurchasesTotal = monthlyData.reduce((s, m) => s + Number(m.otherPurchases || 0), 0);
+  const otherPurchasesTotal = activeSum(m => Number(m.otherPurchases || 0));
 
   const getPctStyle = (pct) => {
     if (pct >= 70) return { bg: '#dcfce7', color: '#16a34a', icon: '🟢' };

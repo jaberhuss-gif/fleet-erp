@@ -807,8 +807,10 @@ app.delete("/api/periodic-maintenance/:id", async (req, res) => {
 app.post("/api/periodic-maintenance/generate", async (req, res) => {
   try {
     const months = Number(req.body.monthsAhead) || 6;
-    const created = await generateScheduledMaintenancePG(months);
-    res.json({ success: true, created: created.length, records: created });
+    const result = await generateScheduledMaintenancePG(months);
+    const createdCount = typeof result === "number" ? result : Number(result?.created || 0);
+    const records = Array.isArray(result?.records) ? result.records : [];
+    res.json({ success: true, created: createdCount, monthsAhead: result?.monthsAhead || months, records });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
@@ -1066,6 +1068,23 @@ if (process.env.ERP_V2_ENABLED === "true") {
   } catch (e) {
     console.error("[ERP V2] startup failed:", e.message);
   }
+}
+
+// Additive, idempotent ticket-schema guard. Only missing columns are added;
+// existing tickets and historical data are never modified or removed.
+try {
+  await db.ensureTicketSchema();
+} catch (e) {
+  console.error("[Schema] ticket schema check failed:", e.message);
+}
+
+// Same guard for the Building Maintenance tables. Without this, a partially
+// migrated work_orders/projects/purchases/sites table makes the building
+// dashboard, monthly and financial reports return HTTP 500.
+try {
+  await db.ensureBuildingSchema();
+} catch (e) {
+  console.error("[Schema] building schema check failed:", e.message);
 }
 
 app.use(express.static(path.join(__dirname, '../client/dist')));

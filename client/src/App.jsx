@@ -30,6 +30,7 @@ const TAB_MODULES = {
   operations: ['building', 'projects', 'warehouse', 'purchase_requests'],
   troubleshooter: ['troubleshooter'],
   'fleet-tickets': ['fleet_tickets'],
+  tickets: ['tickets'],
   reports: ['reports'],
   'advanced-reports': ['advanced_reports']
 };
@@ -131,17 +132,18 @@ export default function App() {
 
   const canViewTab = (target) => {
     if (OWNER_ONLY_TABS.has(target)) return user?.role === 'Owner';
-    if (target === 'fleet-tickets') return ['SupportManager', 'SSM'].includes(user?.role);
-    // Campus Manager is intentionally limited to Support & Service only.
-    if (user?.role === 'CampusManager') return target === 'support-service';
-    // Support/Service Managers only get Warehouse + Vehicle Tickets.
-    if (['SupportManager', 'SSM'].includes(user?.role)) return ['support-service', 'fleet-tickets'].includes(target);
+    if (user?.role === 'Owner') return true;
+    // Vehicle Tickets accessibility is driven by the RBAC fleet_tickets module
+    // (Owner, SupportManager, SSM, FleetSupervisor, FleetViewer). Do not hardcode
+    // a role list here: that previously hid the tab from authorized roles.
+    //
+    // General Tickets is driven by the tickets module (GM, Accountant, ...).
     const modules = TAB_MODULES[target] || [];
     return modules.some(canViewModule);
   };
 
   const allowedTabs = useMemo(() => {
-    const tabs = ['gm', 'support-service', 'operations', 'fleet', 'vehicle-alerts', 'troubleshooter', 'fleet-tickets', 'reports', 'advanced-reports'];
+    const tabs = ['gm', 'support-service', 'operations', 'fleet', 'vehicle-alerts', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
     const visible = tabs.filter(canViewTab);
     if (user?.role === 'Owner') {
       return [...visible, 'drivers', 'users', 'audit', 'backup'];
@@ -259,6 +261,7 @@ export default function App() {
         {tab === 'troubleshooter' && <Troubleshooter />}
         {tab === 'operations' && <OperationsHub access={access || {}} user={user} />}
         {tab === 'fleet-tickets' && <FleetTicketViewer user={user} />}
+        {tab === 'tickets' && canViewModule('tickets') && <Tickets user={user} access={access || {}} />}
         {tab === 'advanced-reports' && <AdvancedReports />}
         {tab === 'reports' && <Reports />}
         {tab === 'drivers' && user.role === 'Owner' && <Drivers />}

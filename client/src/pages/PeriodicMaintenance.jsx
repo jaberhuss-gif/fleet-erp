@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../api/client';
-import { exportToCSV } from '../api/export';
+import { exportToExcel } from '../api/export';
 
 const TYPE_LABELS = {
   '6_months_general': '🔧 6-Month General Maintenance',
@@ -141,6 +141,34 @@ export default function PeriodicMaintenance({ canWork = false }) {
 
   const currentList = subTabData[subTab] || filtered;
 
+  // A record is considered filled/processed when any actual work data exists.
+  // The generated vehicle/type/scheduled-date fields alone do not count.
+  const hasActionData = (r) =>
+    r.status === 'Completed' ||
+    Boolean(String(r.completed_date || '').trim()) ||
+    Boolean(String(r.technician || '').trim()) ||
+    Number(r.cost || 0) > 0 ||
+    Boolean(String(r.notes || '').trim());
+
+  const filledRecords = filtered.filter(hasActionData);
+  const untouchedRecords = filtered.filter((r) => !hasActionData(r));
+
+  const exportColumns = [
+    { key: 'vehicle_plate', label: 'Vehicle' },
+    { key: 'driver_name', label: 'Driver' },
+    { key: 'type', label: 'Type' },
+    { key: 'scheduled_date', label: 'Scheduled' },
+    { key: 'completed_date', label: 'Completed' },
+    { key: 'status', label: 'Status' },
+    { key: 'technician', label: 'Technician' },
+    { key: 'cost', label: 'Cost (SAR)' },
+    { key: 'notes', label: 'Notes' }
+  ];
+
+  const exportReport = async (data, filename, sheetName) => {
+    await exportToExcel(data, filename, exportColumns, sheetName);
+  };
+
   const getStatusBadge = (r) => {
     if (r.status === 'Completed') return <span className="status-badge status-safe">Completed</span>;
     if (r.scheduled_date < today) return <span className="status-badge status-urgent">Overdue</span>;
@@ -189,15 +217,12 @@ export default function PeriodicMaintenance({ canWork = false }) {
 
         <div className="btn-row">
           {canWork && <button className="btn btn-warning" onClick={handleGenerate}>Auto-Generate All</button>}
-          <button className="btn btn-success" onClick={() => exportToCSV(currentList, 'periodic-maintenance', [
-            { key: 'vehicle_plate', label: 'Vehicle' },
-            { key: 'type', label: 'Type' },
-            { key: 'scheduled_date', label: 'Scheduled' },
-            { key: 'completed_date', label: 'Completed' },
-            { key: 'status', label: 'Status' },
-            { key: 'technician', label: 'Technician' },
-            { key: 'cost', label: 'Cost' }
-          ])}>Export CSV</button>
+          <button className="btn btn-success" onClick={() => exportReport(filledRecords, 'Periodic_Maintenance_Filled', 'Filled Records')}>
+            📊 Export Filled Records ({filledRecords.length})
+          </button>
+          <button className="btn btn-warning" onClick={() => exportReport(untouchedRecords, 'Periodic_Maintenance_Untouched', 'No Action Records')}>
+            📋 Export No Action Records ({untouchedRecords.length})
+          </button>
           {canWork && <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
             {showForm ? 'Cancel' : '+ Schedule New'}
           </button>}

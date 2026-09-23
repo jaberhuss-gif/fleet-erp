@@ -24,7 +24,7 @@ const OWNER_ONLY_TABS = new Set(['drivers', 'users', 'audit', 'backup']);
 
 const TAB_MODULES = {
   gm: ['gm'],
-  'support-service': ['support'],
+  // Support & Service is a container: show it when the Owner grants any service module.\n  // The individual sub-sections are still controlled by their own access flags.\n  'support-service': ['support', 'building', 'projects', 'warehouse', 'purchase_requests'],
   fleet: ['fleet'],
   troubleshooter: ['troubleshooter'],
   'fleet-tickets': ['fleet_tickets'],

@@ -199,15 +199,6 @@ export async function getUserAccess(userId, role) {
   for (const m of ACCESS_MODULES) {
     const explicit = result.rows.find(r => r.module === m.id);
 
-    // Support/Service Managers are restricted to Warehouse + Vehicle Tickets only.
-    if (
-      (role === "SupportManager" || role === "SSM") &&
-      !["warehouse", "fleet_tickets"].includes(m.id)
-    ) {
-      access[m.id] = { can_view: false, can_work: false };
-      continue;
-    }
-
     if (explicit) {
       access[m.id] = { can_view: Boolean(explicit.can_view), can_work: Boolean(explicit.can_work) };
       continue;
@@ -231,17 +222,13 @@ export async function saveUserAccess(userId, access = {}) {
   for (const module of ACCESS_MODULES.map(m => m.id)) {
     const value = access[module] || {};
 
-    // Hard security rule for Support Manager: Fleet and Purchase Requests
-    // are never granted, even if old/stale access rows contain access.
-    const restrictedServiceRole =
-      targetRole === "SupportManager" &&
-      !["warehouse", "fleet_tickets"].includes(module);
+    // The Owner controls the saved matrix. Role templates provide defaults
+    // only when no explicit user_access row exists.
     const restrictedCampusRole =
       targetRole === "CampusManager" &&
       !["support", "building", "projects", "warehouse", "purchase_requests", "troubleshooter"].includes(module);
-    const blockedForSupportManager = restrictedServiceRole || restrictedCampusRole;
-    const canWork = blockedForSupportManager ? false : Boolean(value.can_work);
-    const canView = blockedForSupportManager ? false : (Boolean(value.can_view) || canWork);
+    const canWork = restrictedCampusRole ? false : Boolean(value.can_work);
+    const canView = restrictedCampusRole ? false : (Boolean(value.can_view) || canWork);
     await query(
       `INSERT INTO user_access (user_id, module, can_view, can_work)
        VALUES ($1, $2, $3, $4)
@@ -273,10 +260,6 @@ export async function hasModuleAccess(user, module, mode = "view") {
   if (
     (module === "fleet" && user.__ownerOnlyVehicleSection === true)
   ) return false;
-
-  // Support/Service Managers: Warehouse + read-only Vehicle Tickets only.
-  if (["SupportManager", "SSM"].includes(user.role) &&
-      !["warehouse", "fleet_tickets"].includes(module)) return false;
 
   // Campus Manager: support/building/projects/warehouse/purchase requests + troubleshooter view.
   if (user.role === "CampusManager" &&

@@ -12,14 +12,14 @@ export function exportToCSV(data, filename, columns) {
       let val = item[k];
       if (val === null || val === undefined) val = '';
       val = String(val).replace(/"/g, '""');
-      if (val.includes(',') || val.includes('"') || val.includes('\\n')) {
+      if (val.includes(',') || val.includes('"') || val.includes('\n')) {
         val = '"' + val + '"';
       }
       return val;
     }).join(',')
   );
 
-  const csv = [headers.join(','), ...rows].join('\\n');
+  const csv = [headers.join(','), ...rows].join('\n');
   const blob = new Blob(['\\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

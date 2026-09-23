@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import pg from "pg";
 import { v2Query, v2Enabled } from "./v2/db.js";
+import { FIXED_FLEET_VEHICLES } from "./dailyKm.js";
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -24,9 +25,7 @@ const pool = process.env.DATABASE_URL
     })
   : null;
 
-let runInProgress = false;
-let syncTimer = null;
-let kmSevenAmTimer = null;
+let syncInProgress = false;
 
 const aliases = {
   plate: ["plate", "plate number", "plate_number", "vehicle", "vehicle number", "vehicle no", "vehicle no.", "car plate", "carplate", "registration", "registration number"],
@@ -280,15 +279,26 @@ async function syncKmRecordsToDb(rows, indexes) {
     const readingDate = record.dateKey;
 
     const existingRecord = await pool.query(
-      "SELECT id, reading_km FROM km_records WHERE vehicle_id = $1 AND reading_date = $2 LIMIT 1",
+      "SELECT id, reading_km, notes FROM km_records WHERE vehicle_id = $1 AND reading_date = $2 ORDER BY reading_km DESC, id DESC LIMIT 1",
       [vehicleId, readingDate]
     );
 
     if (existingRecord.rows[0]) {
-      if (Number(existingRecord.rows[0].reading_km) !== record.km) {
+      const existing = existingRecord.rows[0];
+      const existingKm = Number(existing.reading_km);
+      const existingNotes = String(existing.notes || "");
+
+      // PostgreSQL ERP entries are authoritative. A Google Sheet row may only
+      // update a row that was itself imported from the Sheet, and only when the
+      // Sheet value is higher. ERP-entered readings are never overwritten.
+      const wasImported = existingNotes.includes(SHEET_IMPORT_MARKER);
+
+      if (!wasImported) {
+        skipped += 1;
+      } else if (record.km > existingKm) {
         await pool.query(
-          "UPDATE km_records SET reading_km = $1 WHERE id = $2",
-          [record.km, existingRecord.rows[0].id]
+          "UPDATE km_records SET reading_km = $1, notes = $2 WHERE id = $3",
+          [record.km, SHEET_IMPORT_MARKER, existing.id]
         );
         updated += 1;
       } else {
@@ -296,8 +306,8 @@ async function syncKmRecordsToDb(rows, indexes) {
       }
     } else {
       await pool.query(
-        "INSERT INTO km_records (vehicle_id, plate, reading_km, reading_date, is_oil_change, notes, created_at) VALUES ($1, $2, $3, $4, 0, '', CURRENT_TIMESTAMP)",
-        [vehicleId, record.plate, record.km, readingDate]
+        "INSERT INTO km_records (vehicle_id, plate, reading_km, reading_date, is_oil_change, notes, created_at) VALUES ($1, $2, $3, $4, 0, $5, CURRENT_TIMESTAMP)",
+        [vehicleId, record.plate, record.km, readingDate, SHEET_IMPORT_MARKER]
       );
       inserted += 1;
     }
@@ -308,44 +318,12 @@ async function syncKmRecordsToDb(rows, indexes) {
       console.error("[GoogleSheetSync] V2 KM sync failed:", error.message);
     }
 
-    // Google Sheet is a valid KM input source. Once today's reading is
-    // synchronized into km_records, immediately close any still-open Daily KM
-    // ticket for this vehicle/date. This does not depend on the legacy marker,
-    // so older tickets such as 4481 JUA are also resolved.
-    try {
-      const todayResult = await pool.query(
-        "SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date::text AS today"
-      );
-      const today = todayResult.rows[0]?.today;
-      if (String(readingDate).slice(0, 10) === String(today).slice(0, 10)) {
-        const closed = await pool.query(
-          `UPDATE tickets
-           SET status = 'Closed',
-               closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP),
-               closed_by = COALESCE(closed_by, 'System'),
-               resolution_notes = CASE
-                 WHEN COALESCE(resolution_notes, '') = '' THEN $2
-                 ELSE resolution_notes
-               END
-           WHERE vehicle_id = $1
-             AND category = 'Daily KM'
-             AND status <> 'Closed'
-           RETURNING id`,
-          [
-            vehicleId,
-            `Today's KM reading was synchronized from Google Sheet: ${record.km.toLocaleString()} km.`
-          ]
-        );
-        if (closed.rowCount > 0) {
-          console.log("[GoogleSheetSync] Closed Daily KM ticket(s):", vehicleId, closed.rows.map(r => r.id));
-        }
-      }
-    } catch (ticketError) {
-      console.error("[GoogleSheetSync] Daily KM ticket close failed:", vehicleId, ticketError.message);
-    }
+    // Google Sheet data is external/imported and is intentionally NOT allowed
+    // to resolve Daily KM compliance. Ticket closing is handled exclusively by
+    // the PostgreSQL-driven Daily KM reconciler.
   }
 
-  return { scanned: kmRecords.size, inserted: inserted, updated: updated, skipped: skipped, unmatched: unmatched };
+  return { scanned: kmRecords.size, inserted, updated, skipped, unmatched };
 }
 
 export async function getMonthlySavingsSheet() {
@@ -516,7 +494,9 @@ export async function syncGoogleSheetVehicles() {
       add("current_km = ?", nextKm);
       if (nextKm !== existingKm) kmUpdated += 1;
 
-      if (date) {
+      // Only advance the meter timestamp when the Sheet actually moved the
+      // reading forward. An older Sheet row must not stamp a newer ERP reading.
+      if (date && nextKm > existingKm) {
         add("meter_updated_at = ?", date.toISOString());
       }
     }
@@ -613,388 +593,118 @@ export async function syncGoogleSheetVehicles() {
 }
 
 
-const FIXED_DAILY_SUBMISSION_VEHICLES = [
-  ["1357", "JER"], ["1369", "JER"], ["1543", "BUA"], ["1560", "EHR"],
-  ["1706", "BUA"], ["1709", "BUA"], ["1712", "BUA"], ["1713", "BUA"],
-  ["1715", "BUA"], ["1716", "BUA"], ["1722", "BUA"], ["1737", "BUA"],
-  ["1738", "BUA"], ["2110", "EUA"], ["2158", "EUA"], ["2287", "EUA"],
-  ["2290", "EUA"], ["2295", "EUA"], ["2344", "EUA"], ["2349", "EUA"],
-  ["2687", "EUA"], ["3296", "DER"], ["4430", "JUA"], ["4431", "JUA"],
-  ["4435", "JUA"], ["4463", "JUA"], ["4479", "JUA"], ["4481", "JUA"],
-  ["4532", "LUA"], ["4533", "LUA"], ["4534", "LUA"], ["4538", "LUA"],
-  ["4541", "LUA"], ["4980", "JUA"], ["5456", "TKA"], ["6183", "ZUA"]
-];
+// Single shared definition of the 36-vehicle operational fleet.
+const FIXED_DAILY_SUBMISSION_VEHICLES = FIXED_FLEET_VEHICLES;
 
-// When true, the system will not create new "Daily Vehicle Submission" tickets.
-// We rely on the Daily KM ticket (category = "Daily KM") instead, which already
-// includes the vehicle plate, driver name, driver phone, and the WhatsApp button.
-const DISABLE_DAILY_VEHICLE_SUBMISSION_TICKETS = true;
-
-const DAILY_SUBMISSION_TICKET_CATEGORY = "Daily Vehicle Submission";
-const DAILY_SUBMISSION_TICKET_MARKER = "DAILY_VEHICLE_SUBMISSION_MISSING";
-
-function normalizePlateKey(value) {
-  return String(value || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-}
-
-async function ensureDailyVehicleSubmissionTicket(record, reportDate) {
-  if (DISABLE_DAILY_VEHICLE_SUBMISSION_TICKETS) {
-    return null;
-  }
-
-  const title = `Daily Vehicle Submission Missing — ${record.vehicle} — ${reportDate}`;
-  const description = `Daily submission missing for ${record.vehicle} on ${reportDate}.`;
-  const legacyDescription = `Daily submission missing for ${record.vehicle} on ${reportDate}`;
-
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query(
-      "SELECT pg_advisory_xact_lock(hashtext($1))",
-      [`DAILY_VEHICLE_SUBMISSION|${record.vehicle}|${reportDate}`]
-    );
-
-    const existing = await client.query(`
-      SELECT id, status, title, description, opened_at, vehicle_id
-      FROM tickets
-      WHERE category = $1
-        AND status IN ('Open', 'Acknowledged')
-        AND (
-          (
-            vehicle_id = $2
-            AND (
-              title = $3
-              OR title = 'Daily Vehicle Submission'
-              OR description = $4
-              OR description = $5
-              OR description LIKE $6
-            )
-          )
-          OR (
-            vehicle_id IS NULL
-            AND (
-              title = $3
-              OR title = 'Daily Vehicle Submission'
-              OR description = $4
-              OR description = $5
-              OR description LIKE $6
-            )
-          )
-        )
-      ORDER BY id ASC
-    `, [
-      DAILY_SUBMISSION_TICKET_CATEGORY,
-      record.vehicleId,
-      title,
-      legacyDescription,
-      `${legacyDescription}.`,
-      `%DAILY_VEHICLE_SUBMISSION_MISSING%date=${reportDate}%`
-    ]);
-
-    const matching = existing.rows.filter((ticket) => {
-      const text = `${ticket.title || ""} ${ticket.description || ""}`;
-      return (
-        text.includes(record.vehicle) &&
-        text.includes(reportDate) &&
-        (
-          text.includes("Daily Vehicle Submission") ||
-          text.includes("Daily submission missing for") ||
-          text.includes("DAILY_VEHICLE_SUBMISSION_MISSING")
-        )
-      );
-    });
-
-    if (matching.length > 0) {
-      const primary = matching[0];
-
-      await client.query(`
-        UPDATE tickets
-        SET title = $1,
-            description = $2
-        WHERE id = $3
-      `, [title, description, primary.id]);
-
-      for (const duplicate of matching.slice(1)) {
-        await client.query(`
-          UPDATE tickets
-          SET status = 'Closed',
-              closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP),
-              closed_by = COALESCE(closed_by, 'System'),
-              resolution_notes = CASE
-                WHEN COALESCE(resolution_notes, '') = '' THEN
-                  'Duplicate Daily Vehicle Submission ticket consolidated automatically.'
-                ELSE resolution_notes
-              END
-          WHERE id = $1
-            AND status <> 'Closed'
-        `, [duplicate.id]);
-      }
-
-      await client.query("COMMIT");
-      return { id: primary.id, status: "Open" };
-    }
-
-    const result = await client.query(`
-      INSERT INTO tickets
-        (vehicle_id, title, location, category, priority, status,
-         description, reported_by, opened_at, department)
-      VALUES
-        ($1, $2, $3, $4, 'High', 'Open', $5, 'System',
-         CURRENT_TIMESTAMP, 'Fleet')
-      RETURNING id, status
-    `, [
-      record.vehicleId,
-      title,
-      record.location || "",
-      DAILY_SUBMISSION_TICKET_CATEGORY,
-      description
-    ]);
-
-    await client.query("COMMIT");
-    return result.rows[0];
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
-async function closeDailyVehicleSubmissionTicket(record, reportDate, evidenceDateTime) {
-  const title = `Daily Vehicle Submission Missing — ${record.vehicle} — ${reportDate}`;
-  const legacyDescription = `Daily submission missing for ${record.vehicle} on ${reportDate}`;
-
-  await pool.query(`
-    UPDATE tickets
-    SET status = 'Closed',
-        closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP),
-        closed_by = COALESCE(closed_by, 'System'),
-        resolution_notes = CASE
-          WHEN COALESCE(resolution_notes, '') = '' THEN $1
-          ELSE resolution_notes
-        END,
-        title = $2,
-        description = $3
-    WHERE category = $4
-      AND status IN ('Open', 'Acknowledged')
-      AND (
-        (
-          vehicle_id = $5
-          AND (
-            title = $6
-            OR title = 'Daily Vehicle Submission'
-            OR description = $7
-            OR description = $8
-            OR description LIKE $9
-          )
-        )
-        OR (
-          vehicle_id IS NULL
-          AND (
-            title = $6
-            OR title = 'Daily Vehicle Submission'
-            OR description = $7
-            OR description = $8
-            OR description LIKE $9
-          )
-        )
-      )
-  `, [
-    `ERP database KM reading detected for ${record.vehicle} on ${reportDate}. Evidence timestamp: ${evidenceDateTime || "record timestamp available"}.`,
-    title,
-    `Daily submission received for ${record.vehicle} on ${reportDate}.`,
-    DAILY_SUBMISSION_TICKET_CATEGORY,
-    record.vehicleId,
-    title,
-    legacyDescription,
-    `${legacyDescription}.`,
-    `%DAILY_VEHICLE_SUBMISSION_MISSING%date=${reportDate}%`
-  ]);
-}
+// Legacy "Daily Vehicle Submission" ticket creation/closing was removed. Daily
+// KM tickets (category = "Daily KM") are the single compliance ticket type,
+// owned by dailyKm.js; the sheet-sync scheduler retires any legacy rows.
 
 export async function getDailyVehicleSubmissionReport(targetDate = null) {
   if (!pool) throw new Error("DATABASE_URL is not configured");
 
-  const wantedDate = String(
-    targetDate ||
-      (() => {
-        const d = new Date(Date.now() + RIYADH_OFFSET_MS);
-        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-      })()
-  ).slice(0, 10);
+  const { getDailyKmStatus } = await import("./dailyKm.js");
 
-  // PostgreSQL is the permanent source of truth for Reader Log.
-  // During migration, syncGoogleSheetVehicles() imports temporary Sheet KM
-  // readings into km_records before this report runs.
-  // After Google Sheet is retired, this report continues to work unchanged.
-  const vehicleResult = await pool.query(`
-    SELECT v.id, v.plate_number, v.plate_code, v.driver, v.phone,
-           v.location, v.status, v.current_km
-    FROM vehicles v
-    ORDER BY v.plate_number, v.plate_code
-  `);
+  // Legacy report shape, but the compliance decision is delegated to the single
+  // authoritative Daily KM calculation so every report agrees. This report no
+  // longer creates or closes tickets: Daily KM tickets are owned exclusively by
+  // the PostgreSQL-driven reconciler.
+  const compliance = await getDailyKmStatus(targetDate ? String(targetDate).slice(0, 10) : null);
 
-  const dbByPlate = new Map();
-  for (const v of vehicleResult.rows) {
-    const key = normalizePlateKey(`${v.plate_number || ""} ${v.plate_code || ""}`);
-    if (!dbByPlate.has(key)) dbByPlate.set(key, v);
-  }
-
-  // Reader Log submission is now based on the permanent ERP KM history.
-  const readingResult = await pool.query(`
-    SELECT DISTINCT ON (vehicle_id) vehicle_id, reading_km, reading_date
-    FROM km_records
-    WHERE reading_date::date = $1::date
-    ORDER BY vehicle_id, reading_km DESC, id DESC
-  `, [wantedDate]);
-
-  const readingByVehicleId = new Map();
-  for (const row of readingResult.rows) readingByVehicleId.set(Number(row.vehicle_id), row);
-
-  const records = [];
-  for (const [number, code] of FIXED_DAILY_SUBMISSION_VEHICLES) {
-    const vehicle = `${number} ${code}`;
-    const key = normalizePlateKey(vehicle);
-    const v = dbByPlate.get(key);
-    const reading = v?.id ? readingByVehicleId.get(Number(v.id)) : null;
-
-    const record = {
-      vehicleId: v?.id || null,
-      vehicle,
-      driver: v?.driver || "",
-      phone: v?.phone || "",
-      location: v?.location || "",
-      submittedToday: !!reading,
-      submissionTimestamp: reading?.reading_date ? new Date(reading.reading_date).toISOString() : null,
-      sheetPlate: null,
-      evidenceDateTime: reading?.reading_date ? new Date(reading.reading_date).toISOString() : null,
-      sheetDriver: "",
-      sheetPhone: "",
-      databaseVehicleFound: !!v,
-      status: reading ? "Submitted" : "Not Submitted",
-      ticketStatus: null,
-      ticketId: null
-    };
-
-    if (!reading && v?.id) {
-      const ticket = await ensureDailyVehicleSubmissionTicket(record, wantedDate);
-      record.ticketId = ticket?.id || null;
-      record.ticketStatus = ticket?.status || "Open";
-    } else if (reading && v?.id) {
-      await closeDailyVehicleSubmissionTicket(record, wantedDate, record.evidenceDateTime);
-      record.ticketStatus = "Closed";
-    }
-    records.push(record);
-  }
-
-  const submitted = records.filter(r => r.submittedToday).length;
-  const missing = records.length - submitted;
+  const records = compliance.records.map((r) => ({
+    vehicleId: r.vehicleId,
+    vehicle: r.vehiclePlate,
+    driver: r.driverName,
+    phone: r.driverPhone,
+    location: r.location,
+    submittedToday: r.status === "Submitted",
+    submissionTimestamp: r.readingDate ? new Date(r.readingDate).toISOString() : null,
+    sheetPlate: null,
+    evidenceDateTime: r.readingDate ? new Date(r.readingDate).toISOString() : null,
+    sheetDriver: "",
+    sheetPhone: "",
+    databaseVehicleFound: r.vehicleFound,
+    status: r.status === "Submitted" ? "Submitted" : "Not Submitted",
+    ticketStatus: null,
+    ticketId: null
+  }));
 
   return {
     success: true,
-    reportDate: wantedDate,
+    reportDate: compliance.date,
     generatedAt: new Date().toISOString(),
-    source: "PostgreSQL",
-    temporarySource: "Google Sheet (migration only)",
+    source: "ERP PostgreSQL km_records",
+    temporarySource: null,
+    googleSheetUsed: false,
     fixedVehicleCount: records.length,
     expectedVehicleCount: FIXED_DAILY_SUBMISSION_VEHICLES.length,
     vehicleCountMatchesExpected: records.length === FIXED_DAILY_SUBMISSION_VEHICLES.length,
-    submittedCount: submitted,
-    missingCount: missing,
-    submissionPercent: records.length ? (submitted / records.length) * 100 : 0,
+    submittedCount: compliance.submittedCount,
+    missingCount: compliance.missingCount,
+    submissionPercent: compliance.submissionRate,
     missingVehicles: records.filter(r => !r.submittedToday),
     records
   };
 }
 
 async function runDailyKmReminders() {
-  try {
-    const { reconcileAndNotify } = await import("./kmDailyNotifications.js");
-    return await reconcileAndNotify();
-  } catch (error) {
-    console.error("[KMDailyPush]", error.message);
-    return { open: 0, resolved: 0, records: [] };
-  }
+  const { reconcileAndNotify } = await import("./kmDailyNotifications.js");
+  return await reconcileAndNotify();
 }
 
-async function run() {
-  if (runInProgress) {
-    console.log("[GoogleSheetSync] Previous reconciliation is still running; skipping overlapping run.");
-    return;
+// Google Sheet synchronization only. Daily KM reconciliation and maintenance
+// checks are scheduled independently by scheduler.js so a Sheet outage cannot
+// stop compliance work. Exported so the scheduler can own the cadence.
+export async function runGoogleSheetSyncOnce() {
+  if (syncInProgress) {
+    console.log("[GoogleSheetSync] Previous sync is still running; skipping overlapping run.");
+    return { skipped: true };
   }
 
-  runInProgress = true;
+  syncInProgress = true;
   try {
-    await runOnce();
+    const summary = await syncGoogleSheetVehicles();
+    console.log("[GoogleSheetSync]", JSON.stringify(summary));
+    return summary;
   } finally {
-    runInProgress = false;
+    syncInProgress = false;
   }
 }
 
-async function runOnce() {
+// Kept for backwards compatibility: performs a full legacy pass in one go.
+export async function legacyRunOnce() {
+  const result = { sheetSync: null, dailyVehicleSubmission: null, kmDaily: null, maintenance: null };
+
   try {
-    console.log("[GoogleSheetSync]", JSON.stringify(await syncGoogleSheetVehicles()));
+    result.sheetSync = await runGoogleSheetSyncOnce();
   } catch (error) {
     console.error("[GoogleSheetSync]", error.message);
   }
 
   try {
-    console.log("[DailyVehicleSubmission]", JSON.stringify(await getDailyVehicleSubmissionReport()));
+    result.dailyVehicleSubmission = await getDailyVehicleSubmissionReport();
+    console.log("[DailyVehicleSubmission]", JSON.stringify(result.dailyVehicleSubmission));
   } catch (error) {
     console.error("[DailyVehicleSubmission]", error.message);
   }
 
   try {
-    console.log("[KMDailyReminder]", JSON.stringify(await runDailyKmReminders()));
+    result.kmDaily = await runDailyKmReminders();
+    console.log("[KMDailyReminder]", JSON.stringify(result.kmDaily));
   } catch (error) {
     console.error("[KMDailyReminder]", error.message);
   }
 
   try {
     const { checkMaintenanceDue } = await import("./kmDailyNotifications.js");
-    console.log("[MaintenanceCheck]", JSON.stringify(await checkMaintenanceDue()));
+    result.maintenance = await checkMaintenanceDue();
+    console.log("[MaintenanceCheck]", JSON.stringify(result.maintenance));
   } catch (error) {
     console.error("[MaintenanceCheck]", error.message);
   }
+
+  return result;
 }
 
-function millisUntilNextSevenAm() {
-  const now = Date.now();
-  const riyadhNow = new Date(now + RIYADH_OFFSET_MS);
+export { runDailyKmReminders };
 
-  const targetUtcLike = Date.UTC(
-    riyadhNow.getUTCFullYear(),
-    riyadhNow.getUTCMonth(),
-    riyadhNow.getUTCDate(),
-    7, 0, 0, 0
-  );
-
-  let delay = targetUtcLike - riyadhNow.getTime();
-  if (delay <= 0) {
-    const tomorrow = new Date(targetUtcLike);
-    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-    delay = tomorrow.getTime() - riyadhNow.getTime();
-  }
-
-  return Math.max(1000, delay);
-}
-
-export function startGoogleSheetVehicleSync() {
-  if (syncTimer || kmSevenAmTimer) return;
-
-  run();
-
-  const scheduleSevenAmCheck = () => {
-    kmSevenAmTimer = setTimeout(async () => {
-      await run();
-      scheduleSevenAmCheck();
-    }, millisUntilNextSevenAm());
-  };
-  scheduleSevenAmCheck();
-
-  syncTimer = setInterval(run, INTERVAL_MS);
-
-  console.log(
-    `Google Sheet vehicle sync and daily KM reminder enabled (${Math.round(INTERVAL_MS / 60000)} min interval; daily cutoff 07:00)`
-  );
-}

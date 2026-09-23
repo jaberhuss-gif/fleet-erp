@@ -141,10 +141,38 @@ export function getPermissionForRequest(req) {
   const pathname = String(req.originalUrl || req.path || "").split("?")[0];
   let module = getModuleFromPath(pathname);
   if (!module) return null;
-  if (pathname.startsWith("/api/tickets") && req.method !== "POST") module = "fleet_tickets";
+
+  // Ticket reads are split by scope:
+  //   fleetType=maintenance|km  -> fleet_tickets (Vehicle Tickets)
+  //   fleetType=general         -> tickets (General Tickets)
+  //   bare list read            -> aggregated; allow EITHER module
+  //   other /api/tickets/:id/*  -> fleet_tickets (vehicle-ticket actions)
+  // The unscoped list read backs the Fleet Overview dashboard, which fleet
+  // roles reach with only the fleet_tickets module. Naming a single module
+  // there locked FleetSupervisor/FleetViewer out of the whole Fleet tab, so an
+  // explicit fleetType keeps the strict split while the unscoped list read
+  // accepts whichever module the caller holds. Per-ticket subpaths keep their
+  // original fleet_tickets scoping.
+  let altModules = [];
+  const isBareTicketList = pathname === "/api/tickets" || pathname === "/api/tickets/";
+  if (pathname.startsWith("/api/tickets") && req.method !== "POST") {
+    const queryString = String(req.originalUrl || "").split("?")[1] || "";
+    const fleetType = new URLSearchParams(queryString).get("fleetType");
+    if (fleetType === "km" || fleetType === "maintenance") {
+      module = "fleet_tickets";
+    } else if (fleetType === "general") {
+      module = "tickets";
+    } else if (isBareTicketList) {
+      module = "tickets";
+      altModules = ["fleet_tickets"];
+    } else {
+      module = "fleet_tickets";
+    }
+  }
+
   const action = getSpecialAction(pathname, req.method);
   if (!action) return null;
-  return { module, action };
+  return { module, action, altModules };
 }
 
 function presetForRole(role) {
@@ -376,7 +404,16 @@ export async function requirePermission(req, res, next) {
       if (hasRequiredReportFields) return next();
     }
 
-  const accessAllowed = await hasModuleAccess(req.user, permission.module, mode);
+    let accessAllowed = await hasModuleAccess(req.user, permission.module, mode);
+
+    // The unscoped ticket read is an aggregated dashboard feed; it succeeds if
+    // the caller holds either the general or the vehicle ticket module.
+    if (!accessAllowed && permission.altModules?.length) {
+      for (const alt of permission.altModules) {
+        if (await hasModuleAccess(req.user, alt, mode)) { accessAllowed = true; break; }
+      }
+    }
+
     if (accessAllowed) return next();
 
     return res.status(403).json({

@@ -5,6 +5,7 @@ import { printContent } from '../api/print';
 
 export default function Warehouse({ user, access = {} }) {
   const canWork = user?.role === 'Owner' || !!access?.warehouse?.can_work;
+  const canManageItem = (item) => user?.role === 'Owner' || (user?.role === 'CampusManager' && Number(item?.created_by_user_id) === Number(user?.id));
   const [subTab, setSubTab] = useState('inventory');
   const [items, setItems] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -343,11 +344,11 @@ export default function Warehouse({ user, access = {} }) {
                     <td>{Number(i.unit_cost).toLocaleString()}</td>
                     <td>{i.location}</td>
                     <td>{getStockBadge(i)}</td>
-                    <td>{canWork && <button className="btn btn-success" style={{ padding: '5px 8px', fontSize: '11px' }} onClick={() => openAction('in', i)}>IN</button>}</td>
-                    <td>{canWork && <button className="btn btn-warning" style={{ padding: '5px 8px', fontSize: '11px' }} onClick={() => openAction('out', i)}>OUT</button>}</td>
-                    <td>{canWork && <button className="btn" style={{ padding: '5px 8px', fontSize: '11px', background: '#8b5cf6', color: 'white' }} onClick={() => openAction('transfer', i)}>TRANSFER</button>}</td>
+                    <td>{canManageItem(i) && <button className="btn btn-success" style={{ padding: '5px 8px', fontSize: '11px' }} onClick={() => openAction('in', i)}>IN</button>}</td>
+                    <td>{canManageItem(i) && <button className="btn btn-warning" style={{ padding: '5px 8px', fontSize: '11px' }} onClick={() => openAction('out', i)}>OUT</button>}</td>
+                    <td>{canManageItem(i) && <button className="btn" style={{ padding: '5px 8px', fontSize: '11px', background: '#8b5cf6', color: 'white' }} onClick={() => openAction('transfer', i)}>TRANSFER</button>}</td>
                     <td>
-                      {canWork && <>
+                      {canManageItem(i) && <>
                         
                         <button className="btn btn-primary" style={{ padding: '5px 8px', fontSize: '11px', marginRight: '3px' }} onClick={() => handleEdit(i)}>Edit</button>
                         <button className="btn btn-danger" style={{ padding: '5px 8px', fontSize: '11px' }} onClick={() => handleDelete(i.id, i.name)}>Del</button>
@@ -419,7 +420,7 @@ export default function Warehouse({ user, access = {} }) {
                     <td style={{ color: '#dc2626', fontWeight: 'bold' }}>{i.quantity}</td>
                     <td>{i.min_stock}</td>
                     <td>{i.location}</td>
-                    <td>{canWork && <button className="btn btn-success" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => openAction('in', i)}>Restock</button>}</td>
+                    <td>{canManageItem(i) && <button className="btn btn-success" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => openAction('in', i)}>Restock</button>}</td>
                   </tr>
                 ))}
               </tbody>

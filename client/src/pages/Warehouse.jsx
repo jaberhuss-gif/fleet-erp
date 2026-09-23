@@ -5,7 +5,7 @@ import { printContent } from '../api/print';
 
 export default function Warehouse({ user, access = {} }) {
   const canWork = user?.role === 'Owner' || !!access?.warehouse?.can_work;
-  const canManageItem = (item) => user?.role === 'Owner' || (user?.role === 'CampusManager' && Number(item?.created_by_user_id) === Number(user?.id));
+  const canManageItem = (item) => user?.role === 'Owner' || (['CampusManager', 'SupportManager', 'SSM'].includes(user?.role) && Number(item?.created_by_user_id) === Number(user?.id));
   const [subTab, setSubTab] = useState('inventory');
   const [items, setItems] = useState([]);
   const [transactions, setTransactions] = useState([]);

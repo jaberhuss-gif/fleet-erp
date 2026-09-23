@@ -234,7 +234,7 @@ export async function saveUserAccess(userId, access = {}) {
     // Hard security rule for Support Manager: Fleet and Purchase Requests
     // are never granted, even if old/stale access rows contain access.
     const restrictedServiceRole =
-      ["SupportManager", "SSM"].includes(targetRole) &&
+      targetRole === "SupportManager" &&
       !["warehouse", "fleet_tickets"].includes(module);
     const restrictedCampusRole =
       targetRole === "CampusManager" &&

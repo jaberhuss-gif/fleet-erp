@@ -246,6 +246,22 @@ export async function updateVehicle(id, data = {}) {
     : numberValue(vehicleRow.oil_change_interval, 5000);
 
   let driverId = data.driverId ?? data.driver_id;
+  if (driverId === undefined && (data.driverName !== undefined || data.driver !== undefined)) {
+    const requestedName = pgStr(data.driverName ?? data.driver);
+    const requestedPhone = pgStr(data.driverPhone ?? data.phone);
+    if (!requestedName) {
+      driverId = null;
+    } else {
+      const driverLookup = await query(`
+        SELECT id FROM drivers
+        WHERE lower(name)=lower($1)
+          AND ($2 = '' OR COALESCE(phone,'') = $2)
+        ORDER BY id LIMIT 1
+      `, [requestedName, requestedPhone]);
+      if (!driverLookup.rows[0]) throw new Error("Driver not found");
+      driverId = driverLookup.rows[0].id;
+    }
+  }
   if (driverId === undefined) driverId = vehicleRow.driver_id ?? null;
 
   if (driverId) {

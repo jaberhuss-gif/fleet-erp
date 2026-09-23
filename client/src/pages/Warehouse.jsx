@@ -194,7 +194,7 @@ export default function Warehouse({ user, access = {} }) {
                   {key:"location",label:"Location"},
                   {key:"supplier",label:"Supplier"}
                 ]);
-              }}>Export CSV</button><button className="btn btn-success" style={{ marginRight: "8px" }} onClick={async () => {
+              }}>Export CSV</button><button className="btn btn-secondary" style={{ marginRight: "8px" }} onClick={() => printContent("Warehouse Inventory", search ? "Search: " + search : "All warehouse inventory")}>📄 Export PDF</button><button className="btn btn-success" style={{ marginRight: "8px" }} onClick={async () => {
                 const byCode = {};
                 transactions.forEach(t => {
                   const code = t.item_code || '';

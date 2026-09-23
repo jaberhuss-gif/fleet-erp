@@ -16,6 +16,7 @@ const SHEET_URL =
 const INTERVAL_MS = Math.max(Number(process.env.GOOGLE_SHEET_SYNC_INTERVAL_MS || 5 * 60 * 1000), 60 * 1000);
 const RIYADH_OFFSET_MS = 3 * 60 * 60 * 1000;
 const MIN_RECORD_DATE = Date.UTC(2026, 4, 1, -3, 0, 0);
+const SHEET_IMPORT_MARKER = "Google Sheet import";
 const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,

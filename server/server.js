@@ -745,8 +745,15 @@ app.put("/api/inventory/:id", async (req, res) => {
 });
 
 app.delete("/api/inventory/:id", async (req, res) => {
-  try { if (!(await assertInventoryManager(req,res,req.params.id))) return; res.json({ success: await deleteInventoryItemPG(req.params.id) }); }
-  catch (e) { res.status(500).json({ success: false, error: e.message }); }
+  try {
+    if (req.user?.role !== "Owner") {
+      return res.status(403).json({
+        success: false,
+        error: "Only the Owner can permanently delete warehouse items."
+      });
+    }
+    res.json({ success: true, ...(await deleteInventoryItemPG(req.params.id)) });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.post("/api/inventory/stock-in", async (req, res) => {

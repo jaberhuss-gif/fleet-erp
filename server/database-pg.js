@@ -2366,12 +2366,25 @@ export async function deleteInventoryItem(id) {
     throw new Error("Inventory item not found");
   }
 
-  const result = await query(
-    `DELETE FROM inventory WHERE id = $1`,
-    [current.id]
-  );
+  return transaction(async (client) => {
+    // Stock transactions use item code/name rather than inventory.id.
+    // Remove only this item's history together with the item itself.
+    const txResult = await client.query(
+      `DELETE FROM stock_transactions
+       WHERE item_code = $1 AND item_name = $2`,
+      [current.code, current.name]
+    );
 
-  return { changes: result.rowCount };
+    const result = await client.query(
+      `DELETE FROM inventory WHERE id = $1`,
+      [current.id]
+    );
+
+    return {
+      changes: result.rowCount,
+      transactionsDeleted: txResult.rowCount
+    };
+  });
 }
 
 export async function canManageInventoryItem(user, id) {

@@ -351,7 +351,7 @@ export default function Warehouse({ user, access = {} }) {
                       {canManageItem(i) && <>
                         
                         <button className="btn btn-primary" style={{ padding: '5px 8px', fontSize: '11px', marginRight: '3px' }} onClick={() => handleEdit(i)}>Edit</button>
-                        <button className="btn btn-danger" style={{ padding: '5px 8px', fontSize: '11px' }} onClick={() => handleDelete(i.id, i.name)}>Del</button>
+                        {user?.role === 'Owner' && <button className="btn btn-danger" style={{ padding: '5px 8px', fontSize: '11px' }} onClick={() => handleDelete(i.id, i.name)}>Del</button>}
                       </>}
                     </td>
                   </tr>

@@ -615,6 +615,78 @@ export async function getKmDailyNotifications() {
   };
 }
  
+
+export async function getDailyKmReport(requestedDate = null) {
+  // ERP-only Daily KM report. Google Sheet is intentionally not consulted.
+  const dateResult = await query(`
+    SELECT COALESCE(
+      NULLIF(TRIM($1), ''),
+      (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date::text
+    )::date::text AS report_date
+  `, [requestedDate]);
+  const reportDate = dateResult.rows[0].report_date;
+
+  // Fleet population comes from vehicles; compliance comes only from km_records.
+  const result = await query(`
+    SELECT
+      v.id AS vehicle_id,
+      CONCAT(v.plate_number, ' ', COALESCE(v.plate_code, '')) AS vehicle_plate,
+      COALESCE(NULLIF(TRIM(v.driver), ''), '') AS driver_name,
+      COALESCE(NULLIF(TRIM(v.phone), ''), '') AS driver_phone,
+      v.current_km,
+      v.location,
+      kr.id AS reading_id,
+      kr.reading_km,
+      kr.reading_date,
+      CASE WHEN kr.id IS NULL THEN 'Missing' ELSE 'Submitted' END AS status
+    FROM vehicles v
+    LEFT JOIN LATERAL (
+      SELECT id, reading_km, reading_date
+      FROM km_records
+      WHERE vehicle_id = v.id
+        AND reading_date::date = $1::date
+      ORDER BY id DESC
+      LIMIT 1
+    ) kr ON TRUE
+    WHERE COALESCE(LOWER(TRIM(v.status)), '') NOT IN
+      ('inactive', 'sold', 'disposed', 'disabled')
+    ORDER BY
+      CASE WHEN kr.id IS NULL THEN 1 ELSE 0 END,
+      v.plate_number,
+      v.plate_code
+  `, [reportDate]);
+
+  const records = result.rows.map(r => ({
+    vehicleId: Number(r.vehicle_id),
+    vehiclePlate: r.vehicle_plate,
+    driverName: r.driver_name,
+    driverPhone: r.driver_phone,
+    currentKm: Number(r.current_km || 0),
+    location: r.location || '',
+    readingId: r.reading_id ? Number(r.reading_id) : null,
+    readingKm: r.reading_km == null ? null : Number(r.reading_km),
+    readingDate: r.reading_date || null,
+    status: r.status
+  }));
+
+  const submitted = records.filter(r => r.status === 'Submitted');
+  const missing = records.filter(r => r.status === 'Missing');
+
+  return {
+    success: true,
+    source: 'ERP PostgreSQL km_records',
+    googleSheetUsed: false,
+    date: reportDate,
+    fleetCount: records.length,
+    submittedCount: submitted.length,
+    missingCount: missing.length,
+    submissionRate: records.length ? (submitted.length / records.length) * 100 : 0,
+    submitted,
+    missing,
+    records
+  };
+}
+
 export async function getDriverDailyKmStatus(userId) {
   const userResult = await query(`
     SELECT id, role, phone, full_name, username

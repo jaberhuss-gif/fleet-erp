@@ -2210,6 +2210,11 @@ export async function ensureWarehouseTables() {
     )
   `);
 
+  await query(`
+    ALTER TABLE inventory ADD COLUMN IF NOT EXISTS created_by_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_inventory_created_by_user_id ON inventory(created_by_user_id)`);
+
   const locations = [
     ["MAIN", "Main Warehouse", "Main"],
     ["UQL", "Uqlat Al Soqour", "Uqlat Al Soqour"],
@@ -2238,6 +2243,7 @@ export async function ensureWarehouseTables() {
    ============================================================ */
 
 export async function listInventory() {
+  await ensureWarehouseTables();
   const result = await query(`
     SELECT *
     FROM inventory
@@ -2248,6 +2254,7 @@ export async function listInventory() {
 }
 
 export async function getInventoryItem(id) {
+  await ensureWarehouseTables();
   const result = await query(`
     SELECT *
     FROM inventory
@@ -2268,7 +2275,7 @@ export async function createInventoryItem(data = {}) {
       INSERT INTO inventory
       (
         code, name, category, unit, quantity, min_stock, unit_cost,
-        location, supplier, status, notes
+        location, supplier, status, notes, created_by_user_id
       )
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
       RETURNING *
@@ -2283,7 +2290,8 @@ export async function createInventoryItem(data = {}) {
       location,
       pgStr(data.supplier),
       pgStr(data.status, "ACTIVE"),
-      pgStr(data.notes)
+      pgStr(data.notes),
+      data.createdByUserId ?? data.created_by_user_id ?? null
     ]);
 
     const item = result.rows[0];
@@ -2308,6 +2316,7 @@ export async function createInventoryItem(data = {}) {
 }
 
 export async function updateInventoryItem(id, data = {}) {
+  await ensureWarehouseTables();
   const current = await getInventoryItem(id);
 
   if (!current) {
@@ -2350,6 +2359,7 @@ export async function updateInventoryItem(id, data = {}) {
 }
 
 export async function deleteInventoryItem(id) {
+  await ensureWarehouseTables();
   const current = await getInventoryItem(id);
 
   if (!current) {
@@ -2362,6 +2372,15 @@ export async function deleteInventoryItem(id) {
   );
 
   return { changes: result.rowCount };
+}
+
+export async function canManageInventoryItem(user, id) {
+  if (!user) return false;
+  if (user.role === "Owner") return true;
+  if (user.role !== "CampusManager") return false;
+  await ensureWarehouseTables();
+  const item = await getInventoryItem(id);
+  return Boolean(item && item.created_by_user_id != null && Number(item.created_by_user_id) === Number(user.id));
 }
 
 export async function stockIn(data = {}) {
@@ -2588,6 +2607,7 @@ export async function listStockTransactions() {
 }
 
 export async function getLowStockItems() {
+  await ensureWarehouseTables();
   const result = await query(`
     SELECT *
     FROM inventory

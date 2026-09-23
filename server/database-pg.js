@@ -2609,6 +2609,51 @@ export async function transferStock(data = {}) {
   });
 }
 
+export async function deleteStockTransaction(id) {
+  return transaction(async (client) => {
+    const tx = await client.query(
+      `SELECT id, type, item_code, item_name, quantity
+       FROM stock_transactions
+       WHERE id = $1
+       FOR UPDATE`,
+      [id]
+    );
+
+    if (!tx.rows[0]) throw new Error("Stock transaction not found");
+
+    const row = tx.rows[0];
+    const item = await client.query(
+      `SELECT id, quantity
+       FROM inventory
+       WHERE code = $1 AND name = $2
+       FOR UPDATE`,
+      [row.item_code, row.item_name]
+    );
+
+    if (!item.rows[0]) throw new Error("Inventory item linked to this transaction was not found");
+
+    const qty = Number(row.quantity) || 0;
+    const delta = row.type === "IN" ? -qty : qty;
+
+    const updated = await client.query(
+      `UPDATE inventory
+       SET quantity = quantity + $1,
+           status = CASE WHEN quantity + $1 > 0 THEN 'ACTIVE' ELSE status END,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2
+       RETURNING *`,
+      [delta, item.rows[0].id]
+    );
+
+    await client.query(`DELETE FROM stock_transactions WHERE id = $1`, [id]);
+
+    return {
+      deletedTransaction: row,
+      item: updated.rows[0]
+    };
+  });
+}
+
 export async function listStockTransactions() {
   const result = await query(`
     SELECT *

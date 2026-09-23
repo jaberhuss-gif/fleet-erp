@@ -485,12 +485,13 @@ export async function syncGoogleSheetVehicles() {
       }
     }
 
+    const oilDateKey = lastOilDate
+      ? lastOilDate.toISOString().slice(0, 10)
+      : (date ? date.toISOString().slice(0, 10) : null);
+
     if (lastOilKm !== null) {
       const existingOilKm = Number(result.rows[0].last_oil_km || 0);
       const existingOilDate = result.rows[0].last_oil_change_date ? new Date(result.rows[0].last_oil_change_date) : null;
-      const oilDateKey = lastOilDate
-        ? lastOilDate.toISOString().slice(0, 10)
-        : (date ? date.toISOString().slice(0, 10) : null);
 
       const isNewerOilRecord =
         !existingOilDate ||

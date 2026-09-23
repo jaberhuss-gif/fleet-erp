@@ -28,11 +28,12 @@ const ROLE_ACCESS_PRESETS = {
   GM: { gm: ["view"], support: ["view"], building: ["view"], projects: ["view"], warehouse: ["view"], purchase_requests: ["view"], fleet: ["view"], tickets: ["view"], troubleshooter: ["view"], reports: ["view"], advanced_reports: ["view"] },
   Accountant: { reports: ["view"], advanced_reports: ["view"], tickets: ["view"], purchase_requests: ["view"], building: ["view"], projects: ["view"] },
   CampusManager: {
-    support: ["view", "work"], warehouse: ["view", "work"]
+    support: ["view", "work"], building: ["view", "work"], projects: ["view", "work"],
+    warehouse: ["view", "work"], purchase_requests: ["view", "work"], troubleshooter: ["view"]
   },
   Driver: { fleet: ["view", "work"], mytickets: ["view"], troubleshooter: ["view"] },
   SupportManager: { warehouse: ["view"], fleet_tickets: ["view"] },
-  SSM: { warehouse: ["view"], fleet_tickets: ["view"] },
+  SSM: { building: ["view"], tickets: ["view"], warehouse: ["view"], fleet_tickets: ["view"] },
   FleetSupervisor: {
     gm: ["view"], fleet: ["view", "work"], fleet_tickets: ["view", "work"],
     building: ["view"], troubleshooter: ["view"]
@@ -237,7 +238,7 @@ export async function saveUserAccess(userId, access = {}) {
       !["warehouse", "fleet_tickets"].includes(module);
     const restrictedCampusRole =
       targetRole === "CampusManager" &&
-      !["support", "warehouse"].includes(module);
+      !["support", "building", "projects", "warehouse", "purchase_requests", "troubleshooter"].includes(module);
     const blockedForSupportManager = restrictedServiceRole || restrictedCampusRole;
     const canWork = blockedForSupportManager ? false : Boolean(value.can_work);
     const canView = blockedForSupportManager ? false : (Boolean(value.can_view) || canWork);
@@ -277,9 +278,9 @@ export async function hasModuleAccess(user, module, mode = "view") {
   if (["SupportManager", "SSM"].includes(user.role) &&
       !["warehouse", "fleet_tickets"].includes(module)) return false;
 
-  // Campus Manager: Support & Service + Warehouse only.
+  // Campus Manager: support/building/projects/warehouse/purchase requests + troubleshooter view.
   if (user.role === "CampusManager" &&
-      !["support", "warehouse"].includes(module)) return false;
+      !["support", "building", "projects", "warehouse", "purchase_requests", "troubleshooter"].includes(module)) return false;
 
   // Once the Owner has saved an access matrix for a user, that matrix is
   // authoritative. A false value must never fall back to legacy role/user
@@ -371,8 +372,8 @@ export async function requirePermission(req, res, next) {
       (pathname === "/api/vehicles" && ["POST", "DELETE"].includes(req.method)) ||
       (/^\/api\/vehicles\/[^/]+$/.test(pathname) && ["PUT", "DELETE"].includes(req.method)) ||
       pathname === "/api/vehicles/import" ||
-      pathname === "/api/v2/vehicles" ||
-      /^\/api\/v2\/vehicles\/[^/]+\/360\/?$/.test(pathname) ||
+      (pathname === "/api/v2/vehicles" && ["POST", "DELETE"].includes(req.method)) ||
+      (/^\/api\/v2\/vehicles\/[^/]+\/360\/?$/.test(pathname) && !["Owner", "GM", "FleetSupervisor"].includes(req.user?.role)) ||
       (pathname === "/api/periodic-maintenance" && ["POST", "DELETE"].includes(req.method)) ||
       (/^\/api\/periodic-maintenance\/[^/]+$/.test(pathname) && ["PUT", "DELETE"].includes(req.method));
 

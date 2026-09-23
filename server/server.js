@@ -771,6 +771,15 @@ app.post("/api/inventory/transfer", async (req, res) => {
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
+app.delete("/api/stock-transactions/:id", async (req, res) => {
+  try {
+    if (req.user?.role !== "Owner") {
+      return res.status(403).json({ success: false, error: "Only the Owner can delete stock transactions." });
+    }
+    res.json({ success: true, ...(await db.deleteStockTransaction(req.params.id)) });
+  } catch (e) { res.status(400).json({ success: false, error: e.message }); }
+});
+
 app.get("/api/stock-transactions", async (req, res) => {
   try { res.json({ success: true, transactions: await listStockTransactionsPG() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }

@@ -409,12 +409,21 @@ export async function reconcileAndNotify() {
   }
 
   for (const v of vehicles.rows) {
-    const updatedDateResult = v.meter_updated_at
-      ? await query(`SELECT (NULLIF(TRIM($1::text), '')::timestamptz AT TIME ZONE '${TZ}')::date::text AS reading_date`, [v.meter_updated_at])
-      : { rows: [{ reading_date: null }] };
+    // Source of truth for Daily KM compliance is the ERP database reading
+    // saved in km_records for this vehicle and Riyadh calendar date.
+    // Do NOT use vehicles.meter_updated_at to decide Submitted/Missing.
+    const readingResult = await query(
+      `SELECT id, reading_km, reading_date
+       FROM km_records
+       WHERE vehicle_id = $1
+         AND reading_date::date = $2::date
+       ORDER BY id DESC
+       LIMIT 1`,
+      [v.vehicle_id, today]
+    );
 
-    const readingDate = updatedDateResult.rows[0]?.reading_date;
-    const missing = readingDate !== today;
+    const hasTodayReading = readingResult.rows.length > 0;
+    const missing = !hasTodayReading;
 
     if (!missing) {
       const closed = await query(`

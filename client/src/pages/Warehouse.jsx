@@ -154,7 +154,47 @@ export default function Warehouse({ user, access = {} }) {
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
             
-            <button className="btn btn-secondary" style={{ marginRight: "8px" }} onClick={() => printContent("Warehouse Inventory", search ? "Search: " + search : "All warehouse inventory")}>🖨️ Print</button><button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "inventory", [{key:"code",label:"Code"},{key:"name",label:"Name"},{key:"category",label:"Category"},{key:"quantity",label:"Quantity"},{key:"unit",label:"Unit"},{key:"min_stock",label:"Min Stock"},{key:"unit_cost",label:"Unit Cost"},{key:"location",label:"Location"},{key:"supplier",label:"Supplier"}])}>Export CSV</button>{canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
+            <button className="btn btn-secondary" style={{ marginRight: "8px" }} onClick={() => printContent("Warehouse Inventory", search ? "Search: " + search : "All warehouse inventory")}>🖨️ Print</button><button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => {
+                const byCode = {};
+                transactions.forEach(t => {
+                  const code = t.item_code || '';
+                  if (!byCode[code]) byCode[code] = { inQty: 0, outQty: 0, transferQty: 0 };
+                  const q = Number(t.quantity) || 0;
+                  if (t.type === 'IN') byCode[code].inQty += q;
+                  else if (t.type === 'OUT') byCode[code].outQty += q;
+                  else if (t.type === 'TRANSFER') byCode[code].transferQty += q;
+                });
+                const report = filtered.map(i => ({
+                  code: i.code,
+                  name: i.name,
+                  category: i.category,
+                  quantity: i.quantity,
+                  unit: i.unit,
+                  min_stock: i.min_stock,
+                  unit_cost: i.unit_cost,
+                  location: i.location,
+                  supplier: i.supplier || '',
+                  IN: byCode[i.code]?.inQty || 0,
+                  OUT: byCode[i.code]?.outQty || 0,
+                  TRANSFER: byCode[i.code]?.transferQty || 0,
+                  balance: i.quantity
+                }));
+                exportToCSV(report, "inventory", [
+                  {key:"code",label:"Code"},
+                  {key:"name",label:"Name"},
+                  {key:"category",label:"Category"},
+                  {key:"quantity",label:"Current Balance"},
+                  {key:"unit",label:"Unit"},
+                  {key:"min_stock",label:"Min Stock"},
+                  {key:"unit_cost",label:"Unit Cost (SAR)"},
+                  {key:"location",label:"Location"},
+                  {key:"supplier",label:"Supplier"},
+                  {key:"IN",label:"IN"},
+                  {key:"OUT",label:"OUT"},
+                  {key:"TRANSFER",label:"TRANSFER"},
+                  {key:"balance",label:"Balance"}
+                ]);
+              }}>Export CSV</button>{canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
               {showForm ? 'Cancel' : '+ Add Item'}
             </button>}
           </div>
@@ -246,7 +286,7 @@ export default function Warehouse({ user, access = {} }) {
               <thead>
                 <tr>
                   <th>Code</th><th>Name</th><th>Category</th><th>Qty</th><th>Unit</th>
-                  <th>Min</th><th>Unit Cost</th><th>Location</th><th>Status</th><th>Actions</th>
+                  <th>Min</th><th>Unit Cost</th><th>Location</th><th>Status</th><th>IN</th><th>OUT</th><th>TRANSFER</th><th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -263,11 +303,12 @@ export default function Warehouse({ user, access = {} }) {
                     <td>{Number(i.unit_cost).toLocaleString()}</td>
                     <td>{i.location}</td>
                     <td>{getStockBadge(i)}</td>
+                    <td>{canWork && <button className="btn btn-success" style={{ padding: '5px 8px', fontSize: '11px' }} onClick={() => openAction('in', i)}>IN</button>}</td>
+                    <td>{canWork && <button className="btn btn-warning" style={{ padding: '5px 8px', fontSize: '11px' }} onClick={() => openAction('out', i)}>OUT</button>}</td>
+                    <td>{canWork && <button className="btn" style={{ padding: '5px 8px', fontSize: '11px', background: '#8b5cf6', color: 'white' }} onClick={() => openAction('transfer', i)}>TRANSFER</button>}</td>
                     <td>
                       {canWork && <>
-                        <button className="btn btn-success" style={{ padding: '5px 8px', fontSize: '11px', marginRight: '3px' }} onClick={() => openAction('in', i)}>+ In</button>
-                        <button className="btn btn-warning" style={{ padding: '5px 8px', fontSize: '11px', marginRight: '3px' }} onClick={() => openAction('out', i)}>- Out</button>
-                        <button className="btn" style={{ padding: '5px 8px', fontSize: '11px', marginRight: '3px', background: '#8b5cf6', color: 'white' }} onClick={() => openAction('transfer', i)}>⇄</button>
+                        
                         <button className="btn btn-primary" style={{ padding: '5px 8px', fontSize: '11px', marginRight: '3px' }} onClick={() => handleEdit(i)}>Edit</button>
                         <button className="btn btn-danger" style={{ padding: '5px 8px', fontSize: '11px' }} onClick={() => handleDelete(i.id, i.name)}>Del</button>
                       </>}

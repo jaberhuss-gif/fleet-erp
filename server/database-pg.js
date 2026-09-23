@@ -1,4 +1,4 @@
-﻿import { query } from "./postgres.js";
+﻿import { query, transaction } from "./postgres.js";
 import { v2Query, v2Enabled } from "./v2/db.js";
 import { getMonthlySavingsSheet } from "./googleSheetSync.js";
 
@@ -2260,39 +2260,51 @@ export async function getInventoryItem(id) {
 }
 
 export async function createInventoryItem(data = {}) {
-  const result = await query(`
-    INSERT INTO inventory
-    (
-      code,
-      name,
-      category,
-      unit,
-      quantity,
-      min_stock,
-      unit_cost,
-      location,
-      supplier,
-      status,
-      notes
-    )
-    VALUES
-    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-    RETURNING *
-  `, [
-    pgStr(data.code),
-    pgStr(data.name),
-    pgStr(data.category, "General"),
-    pgStr(data.unit, "PCS"),
-    pgNum(data.quantity),
-    pgNum(data.minStock ?? data.min_stock, 5),
-    pgNum(data.unitCost ?? data.unit_cost),
-    pgStr(data.location, "Main Warehouse"),
-    pgStr(data.supplier),
-    pgStr(data.status, "ACTIVE"),
-    pgStr(data.notes)
-  ]);
+  const qty = pgNum(data.quantity);
+  const location = pgStr(data.location, "Main Warehouse");
 
-  return result.rows[0];
+  return await transaction(async client => {
+    const result = await client.query(`
+      INSERT INTO inventory
+      (
+        code, name, category, unit, quantity, min_stock, unit_cost,
+        location, supplier, status, notes
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      RETURNING *
+    `, [
+      pgStr(data.code),
+      pgStr(data.name),
+      pgStr(data.category, "General"),
+      pgStr(data.unit, "PCS"),
+      qty,
+      pgNum(data.minStock ?? data.min_stock, 5),
+      pgNum(data.unitCost ?? data.unit_cost),
+      location,
+      pgStr(data.supplier),
+      pgStr(data.status, "ACTIVE"),
+      pgStr(data.notes)
+    ]);
+
+    const item = result.rows[0];
+
+    if (qty > 0) {
+      await client.query(`
+        INSERT INTO stock_transactions
+        (type, item_code, item_name, quantity, from_location, to_location, reference_no, notes)
+        VALUES ('IN',$1,$2,$3,NULL,$4,$5,$6)
+      `, [
+        item.code,
+        item.name,
+        qty,
+        location,
+        pgStr(data.referenceNo ?? data.reference_no),
+        pgStr(data.notes) || "Opening stock"
+      ]);
+    }
+
+    return item;
+  });
 }
 
 export async function updateInventoryItem(id, data = {}) {

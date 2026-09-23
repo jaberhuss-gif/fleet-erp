@@ -54,16 +54,6 @@ export default function DailyKmMissing({ user }) {
             </p>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            {user?.role === "Owner" && rows.length > 0 && (
-              <button
-                className="btn btn-success"
-                onClick={() => rows.forEach((row, index) => {
-                  if (index === 0) openWhatsApp(row);
-                })}
-              >
-                📱 WhatsApp
-              </button>
-            )}
             <button className="btn btn-primary" onClick={load}>🔄 Refresh</button>
           </div>
         </div>

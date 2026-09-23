@@ -137,22 +137,25 @@ ${marker}`,
 }
 
 async function closeDailyKmTicket(vehicleId, today, resolutionNotes = "") {
-  const marker = `DAILY_KM_MISSING|vehicle=${vehicleId}|date=${today}`;
-
-  await query(`
+  // Close every still-open Daily KM ticket for this vehicle. Older tickets
+  // may not contain the legacy DAILY_KM_MISSING marker, so marker matching
+  // must never be required for resolution after a valid today's reading.
+  const result = await query(`
     UPDATE tickets
     SET status = 'Closed',
         closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP),
         closed_by = COALESCE(closed_by, 'System'),
         resolution_notes = CASE
-          WHEN COALESCE(resolution_notes, '') = '' THEN $3
+          WHEN COALESCE(resolution_notes, '') = '' THEN $2
           ELSE resolution_notes
         END
     WHERE vehicle_id = $1
       AND category = 'Daily KM'
-      AND description LIKE $2
       AND status <> 'Closed'
-  `, [vehicleId, `%${marker}%`, resolutionNotes]);
+    RETURNING id
+  `, [vehicleId, resolutionNotes]);
+
+  return result.rowCount || 0;
 }
 
 async function sendDriverReminder(record) {

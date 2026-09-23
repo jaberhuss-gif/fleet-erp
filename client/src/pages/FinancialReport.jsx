@@ -22,62 +22,51 @@ export default function FinancialReport() {
   if (error) return <div className="alert alert-error">{error}</div>;
   if (!data) return <div className="loading">No data</div>;
 
-  const months = Array.isArray(data.months) ? data.months : (Array.isArray(data.rows) ? data.rows : []);
-  const MAINT_BASELINE = 20577;
-  const DEV_BASELINE = 132551;
-  const SALARY_MAINT = 2200;
-  const SALARY_DEV = 2200;
-  const monthCount = months.length;
-
+  // The API is the single calculator. Do not recompute baselines/salaries
+  // in the browser, which previously inflated totals.
+  const months = Array.isArray(data.months)
+    ? data.months
+    : (Array.isArray(data.rows) ? data.rows : []);
+  const grand = data.grand || {};
   const monthlyData = months.map(m => ({
     ...m,
     contractorWO: Number(m.contractorWO || 0),
     partsWO: Number(m.partsWO || 0),
-    salaryMaint: Number(m.salaryMaint || SALARY_MAINT),
+    salaryMaint: Number(m.salaryMaint || 0),
     contractorDev: Number(m.contractorDev || 0),
     partsDev: Number(m.partsDev || 0),
-    salaryDev: Number(m.salaryDev || SALARY_DEV),
+    salaryDev: Number(m.salaryDev || 0),
     employeeWOCount: Number(m.employeeWOCount || 0),
     contractorWOCount: Number(m.contractorWOCount || 0),
     internalProjectCount: Number(m.internalProjectCount || 0),
     contractorProjectCount: Number(m.contractorProjectCount || 0),
-    maintActual: Number(m.contractorWO || 0) + Number(m.partsWO || 0) + Number(m.salaryMaint || SALARY_MAINT),
-    devActual: Number(m.contractorDev || 0) + Number(m.partsDev || 0) + Number(m.salaryDev || SALARY_DEV),
-    maintSavings: MAINT_BASELINE - (Number(m.contractorWO || 0) + Number(m.partsWO || 0) + Number(m.salaryMaint || SALARY_MAINT)),
-    devSavings: DEV_BASELINE - (Number(m.contractorDev || 0) + Number(m.partsDev || 0) + Number(m.salaryDev || SALARY_DEV)),
-    maintPct: ((MAINT_BASELINE - (Number(m.contractorWO || 0) + Number(m.partsWO || 0) + Number(m.salaryMaint || SALARY_MAINT))) / MAINT_BASELINE) * 100,
-    devPct: ((DEV_BASELINE - (Number(m.contractorDev || 0) + Number(m.partsDev || 0) + Number(m.salaryDev || SALARY_DEV))) / DEV_BASELINE) * 100,
-    totalSavingsPct: (((MAINT_BASELINE + DEV_BASELINE) - (Number(m.contractorWO || 0) + Number(m.partsWO || 0) + Number(m.salaryMaint || SALARY_MAINT)) - (Number(m.contractorDev || 0) + Number(m.partsDev || 0) + Number(m.salaryDev || SALARY_DEV))) / (MAINT_BASELINE + DEV_BASELINE)) * 100
+    maintActual: Number(m.maintActual || 0),
+    devActual: Number(m.devActual || 0),
+    maintSavings: Number(m.maintSavings || 0),
+    devSavings: Number(m.devSavings || 0),
+    maintPct: Number(m.maintPct || 0),
+    devPct: Number(m.devPct || 0),
+    totalSavingsPct: Number(m.totalSavingsPct || 0)
   }));
 
-  const maintBaselineTotal = MAINT_BASELINE * monthCount;
-  const devBaselineTotal = DEV_BASELINE * monthCount;
-  const totalBaseline = maintBaselineTotal + devBaselineTotal;
-
-  const contractorWOTotal = monthlyData.reduce((s, m) => s + m.contractorWO, 0);
-  const partsWOTotal = monthlyData.reduce((s, m) => s + m.partsWO, 0);
-  const salaryMaintTotal = SALARY_MAINT * monthCount;
-  const maintActualTotal = contractorWOTotal + partsWOTotal + salaryMaintTotal;
-
-  const contractorDevTotal = monthlyData.reduce((s, m) => s + m.contractorDev, 0);
-  const partsDevTotal = monthlyData.reduce((s, m) => s + m.partsDev, 0);
-  const salaryDevTotal = SALARY_DEV * monthCount;
-  const devActualTotal = contractorDevTotal + partsDevTotal + salaryDevTotal;
-
-  const totalActual = maintActualTotal + devActualTotal;
-  const maintSavingsTotal = maintBaselineTotal - maintActualTotal;
-  const devSavingsTotal = devBaselineTotal - devActualTotal;
-  const totalSavings = maintSavingsTotal + devSavingsTotal;
-  const maintSavingsPct = maintBaselineTotal ? (maintSavingsTotal / maintBaselineTotal) * 100 : 0;
-  const devSavingsPct = devBaselineTotal ? (devSavingsTotal / devBaselineTotal) * 100 : 0;
-  const totalSavingsPct = totalBaseline ? (totalSavings / totalBaseline) * 100 : 0;
-
-  const employeeWOTotal = monthlyData.reduce((s, m) => s + m.employeeWOCount, 0);
-  const contractorWOCountTotal = monthlyData.reduce((s, m) => s + m.contractorWOCount, 0);
-  const internalProjectTotal = monthlyData.reduce((s, m) => s + m.internalProjectCount, 0);
-  const contractorProjectCountTotal = monthlyData.reduce((s, m) => s + m.contractorProjectCount, 0);
-
-  const otherPurchasesTotal = monthlyData.reduce((s, m) => s + Number(m.otherPurchases || 0), 0);
+  const monthCount = Number(grand.monthCount || monthlyData.length);
+  const totalBaseline = Number(grand.totalBaseline ?? grand.baseline ?? 0);
+  const totalActual = Number(grand.totalActual ?? 0);
+  const totalSavings = Number(grand.totalSavings ?? 0);
+  const maintBaselineTotal = Number(grand.maintenanceTotalBaseline ?? 0);
+  const devBaselineTotal = Number(grand.developmentTotalBaseline ?? 0);
+  const maintActualTotal = Number(grand.maintActual ?? 0);
+  const devActualTotal = Number(grand.devActual ?? 0);
+  const maintSavingsTotal = Number(grand.maintSavings ?? 0);
+  const devSavingsTotal = Number(grand.devSavings ?? 0);
+  const maintSavingsPct = Number(grand.maintTotalSavingsPct ?? 0);
+  const devSavingsPct = Number(grand.devTotalSavingsPct ?? 0);
+  const totalSavingsPct = Number(grand.totalSavingsPct ?? 0);
+  const employeeWOTotal = Number(grand.employeeWOCount ?? 0);
+  const contractorWOCountTotal = Number(grand.contractorWOCount ?? 0);
+  const internalProjectTotal = Number(grand.internalProjectCount ?? 0);
+  const contractorProjectCountTotal = Number(grand.contractorProjectCount ?? 0);
+  const otherPurchasesTotal = Number(grand.otherPurchases ?? 0);
 
   const getPctStyle = (pct) => {
     if (pct >= 70) return { bg: '#dcfce7', color: '#16a34a', icon: '🟢' };

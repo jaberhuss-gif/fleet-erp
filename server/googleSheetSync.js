@@ -307,6 +307,42 @@ async function syncKmRecordsToDb(rows, indexes) {
     } catch (error) {
       console.error("[GoogleSheetSync] V2 KM sync failed:", error.message);
     }
+
+    // Google Sheet is a valid KM input source. Once today's reading is
+    // synchronized into km_records, immediately close any still-open Daily KM
+    // ticket for this vehicle/date. This does not depend on the legacy marker,
+    // so older tickets such as 4481 JUA are also resolved.
+    try {
+      const todayResult = await pool.query(
+        "SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date::text AS today"
+      );
+      const today = todayResult.rows[0]?.today;
+      if (String(readingDate).slice(0, 10) === String(today).slice(0, 10)) {
+        const closed = await pool.query(
+          `UPDATE tickets
+           SET status = 'Closed',
+               closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP),
+               closed_by = COALESCE(closed_by, 'System'),
+               resolution_notes = CASE
+                 WHEN COALESCE(resolution_notes, '') = '' THEN $2
+                 ELSE resolution_notes
+               END
+           WHERE vehicle_id = $1
+             AND category = 'Daily KM'
+             AND status <> 'Closed'
+           RETURNING id`,
+          [
+            vehicleId,
+            `Today's KM reading was synchronized from Google Sheet: ${record.km.toLocaleString()} km.`
+          ]
+        );
+        if (closed.rowCount > 0) {
+          console.log("[GoogleSheetSync] Closed Daily KM ticket(s):", vehicleId, closed.rows.map(r => r.id));
+        }
+      }
+    } catch (ticketError) {
+      console.error("[GoogleSheetSync] Daily KM ticket close failed:", vehicleId, ticketError.message);
+    }
   }
 
   return { scanned: kmRecords.size, inserted: inserted, updated: updated, skipped: skipped, unmatched: unmatched };

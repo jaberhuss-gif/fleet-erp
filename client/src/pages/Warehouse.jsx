@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import api from '../api/client';
-import { exportToCSV } from '../api/export';
+import { exportToCSV, exportToExcel } from '../api/export';
 import { printContent } from '../api/print';
 
 export default function Warehouse({ user, access = {} }) {
@@ -194,7 +194,47 @@ export default function Warehouse({ user, access = {} }) {
                   {key:"location",label:"Location"},
                   {key:"supplier",label:"Supplier"}
                 ]);
-              }}>Export CSV</button>{canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
+              }}>Export CSV</button><button className="btn btn-success" style={{ marginRight: "8px" }} onClick={async () => {
+                const byCode = {};
+                transactions.forEach(t => {
+                  const code = t.item_code || '';
+                  if (!byCode[code]) byCode[code] = { inQty: 0, outQty: 0, transferQty: 0 };
+                  const q = Number(t.quantity) || 0;
+                  if (t.type === 'IN') byCode[code].inQty += q;
+                  else if (t.type === 'OUT') byCode[code].outQty += q;
+                  else if (t.type === 'TRANSFER') byCode[code].transferQty += q;
+                });
+                const report = filtered.map(i => ({
+                  code: i.code,
+                  name: i.name,
+                  category: i.category,
+                  IN: (byCode[i.code]?.inQty || 0) > 0 || (byCode[i.code]?.outQty || 0) > 0 || (byCode[i.code]?.transferQty || 0) > 0
+                    ? (byCode[i.code]?.inQty || 0)
+                    : Number(i.quantity) || 0,
+                  OUT: byCode[i.code]?.outQty || 0,
+                  TRANSFER: byCode[i.code]?.transferQty || 0,
+                  balance: i.quantity,
+                  unit: i.unit,
+                  min_stock: i.min_stock,
+                  unit_cost: i.unit_cost,
+                  location: i.location,
+                  supplier: i.supplier || ''
+                }));
+                await exportToExcel(report, "inventory", [
+                  {key:"code",label:"Code"},
+                  {key:"name",label:"Name"},
+                  {key:"category",label:"Category"},
+                  {key:"IN",label:"IN"},
+                  {key:"OUT",label:"OUT"},
+                  {key:"TRANSFER",label:"TRANSFER"},
+                  {key:"balance",label:"Balance"},
+                  {key:"unit",label:"Unit"},
+                  {key:"min_stock",label:"Min Stock"},
+                  {key:"unit_cost",label:"Unit Cost (SAR)"},
+                  {key:"location",label:"Location"},
+                  {key:"supplier",label:"Supplier"}
+                ], "Inventory");
+              }}>Export Excel</button>{canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
               {showForm ? 'Cancel' : '+ Add Item'}
             </button>}
           </div>

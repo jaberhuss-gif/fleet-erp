@@ -264,8 +264,8 @@ app.get("/api/dashboard", async (req, res) => {
 
 app.get("/api/google-sheet-submission-report", async (req, res) => {
   try {
-    const { getDailyVehicleSubmissionReport } = await import("./googleSheetSync.js");
-    const report = await getDailyVehicleSubmissionReport(req.query.date || null);
+    const { getDailySubmissionReport } = await import("./dailySubmissionReport.js");
+    const report = await getDailySubmissionReport(req.query.date || null);
     res.json(report);
   } catch (error) {
     console.error("[DailyVehicleSubmission]", error.message);

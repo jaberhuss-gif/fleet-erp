@@ -19,6 +19,8 @@ import FleetTicketViewer from './pages/FleetTicketViewer';
 import AdvancedReports from './pages/AdvancedReports';
 import api from './api/client';
 import DailyKmGate from './components/DailyKmGate';
+import DailyKmSubmitted from './pages/DailyKmSubmitted';
+import DailyKmMissing from './pages/DailyKmMissing';
 
 const OWNER_ONLY_TABS = new Set(['drivers', 'users', 'audit', 'backup']);
 
@@ -32,7 +34,9 @@ const TAB_MODULES = {
   'fleet-tickets': ['fleet_tickets'],
   tickets: ['tickets'],
   reports: ['reports'],
-  'advanced-reports': ['advanced_reports']
+  'advanced-reports': ['advanced_reports'],
+  'daily-submitted': ['fleet'],
+  'daily-missing': ['fleet']
 };
 
 const TAB_LABELS = {
@@ -45,6 +49,8 @@ const TAB_LABELS = {
   mytickets: '📋 My Tickets',
   'fleet-tickets': '🚗 Vehicle Tickets',
   'advanced-reports': '📊 Advanced Reports',
+  'daily-submitted': '📋 Daily KM — Submitted',
+  'daily-missing': '⚠️ Daily KM — Missing',
   'support-service': '🛠️ Support & Service',
   drivers: '👨‍🔧 Driver',
   users: 'Users',
@@ -143,7 +149,7 @@ export default function App() {
   };
 
   const allowedTabs = useMemo(() => {
-    const tabs = ['gm', 'support-service', 'operations', 'fleet', 'vehicle-alerts', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
+    const tabs = ['gm', 'support-service', 'operations', 'fleet', 'daily-submitted', 'daily-missing', 'vehicle-alerts', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
     const visible = tabs.filter(canViewTab);
     if (user?.role === 'Owner') {
       return [...visible, 'drivers', 'users', 'audit', 'backup'];
@@ -263,6 +269,8 @@ export default function App() {
         {tab === 'fleet-tickets' && <FleetTicketViewer user={user} />}
         {tab === 'tickets' && canViewModule('tickets') && <Tickets user={user} access={access || {}} />}
         {tab === 'advanced-reports' && <AdvancedReports />}
+        {tab === 'daily-submitted' && <DailyKmSubmitted />}
+        {tab === 'daily-missing' && <DailyKmMissing user={user} />}
         {tab === 'reports' && <Reports />}
         {tab === 'drivers' && user.role === 'Owner' && <Drivers />}
         {tab === 'users' && user.role === 'Owner' && <Users />}

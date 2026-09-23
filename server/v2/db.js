@@ -1,10 +1,5 @@
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 import pg from "pg";
 const { Pool } = pg;
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 let pool = null;
 export function v2Enabled(){ return !!process.env.V2_DATABASE_URL; }
 export function getV2Pool(){
@@ -20,8 +15,14 @@ export async function v2Transaction(fn){
   catch(e){await client.query("ROLLBACK").catch(()=>{});throw e;}finally{client.release();}
 }
 export async function ensureV2Schema(){
-  // Schema changes are managed by explicit migrations, not on every server startup.
-  // This function only verifies that the V2 schema is reachable.
   await v2Query("SELECT 1 FROM fleet_erp_v2.financial_settings WHERE id = 1");
+  // The migration is one-time and protected by an advisory lock + marker row.
+  // It copies the legacy production DB into V2 without deleting or modifying
+  // the legacy DB, including KM/WOs/projects/tickets entered on the current day.
+  if (process.env.V2_AUTO_MIGRATE !== "false") {
+    const { migrateLegacyToV2 } = await import("./migrateLegacyToV2.mjs");
+    const result = await migrateLegacyToV2();
+    if (!result.skipped) console.log("[V2 Migration] completed", result.counts);
+  }
   return true;
 }

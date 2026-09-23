@@ -372,7 +372,7 @@ export default function Warehouse({ user, access = {} }) {
           ) : (
             <table>
               <thead>
-                <tr><th>Date</th><th>Type</th><th>Item</th><th>Qty</th><th>From</th><th>To</th><th>Ref</th><th>Notes</th></tr>
+                <tr><th>Date</th><th>Type</th><th>Item</th><th>Qty</th><th>From</th><th>To</th><th>Ref</th><th>Notes</th>{user?.role === 'Owner' && <th>Action</th>}</tr>
               </thead>
               <tbody>
                 {transactions.map(t => (
@@ -391,7 +391,14 @@ export default function Warehouse({ user, access = {} }) {
                     <td>{t.from_location || '-'}</td>
                     <td>{t.to_location || '-'}</td>
                     <td>{t.reference_no || '-'}</td>
-                    <td>{t.notes || '-'}</td>
+                    <td>{t.notes || '-'}</td>{user?.role === 'Owner' && <td><button className="btn btn-danger" style={{ padding: '5px 8px', fontSize: '11px' }} onClick={async () => {
+  if (!confirm('Delete this stock transaction only? The item will remain and its quantity will be corrected.')) return;
+  try {
+    await api.delete('/stock-transactions/' + t.id);
+    setMessage('Transaction deleted and stock quantity corrected');
+    load();
+  } catch (e) { setError(e.response?.data?.error || e.message); }
+}}>Delete</button></td>}
                   </tr>
                 ))}
               </tbody>

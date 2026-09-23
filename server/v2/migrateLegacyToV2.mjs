@@ -1,7 +1,7 @@
 import { query } from "../postgres.js";
 import { v2Query, v2Transaction } from "./db.js";
 
-const MARKER = "legacy-main-to-v2-complete-v1";
+const MARKER = "legacy-main-to-v2-complete-v2";
 
 function s(v) { return v == null ? "" : String(v).trim(); }
 function n(v, d = 0) { const x = Number(v); return Number.isFinite(x) ? x : d; }
@@ -32,7 +32,7 @@ export async function migrateLegacyToV2() {
   if (already.rowCount) return { skipped: true, marker: MARKER };
 
   // Prevent two Render instances from migrating simultaneously.
-  await v2Query("SELECT pg_advisory_lock(hashtext($1))", [MARKER]);
+  await v2Query("SELECT pg_advisory_xact_lock(hashtext($1))", [MARKER]);
   try {
     const check = await v2Query("SELECT 1 FROM fleet_erp_v2.migration_runs WHERE marker=$1 LIMIT 1", [MARKER]);
     if (check.rowCount) return { skipped: true, marker: MARKER };
@@ -181,9 +181,9 @@ export async function migrateLegacyToV2() {
       for (const r of await rows("purchases")) {
         const ref = s(r.reference_no);
         await v2Query(`INSERT INTO fleet_erp_v2.maintenance_purchases
-          (item_name,quantity,unit_cost,total_cost,supplier_type,supplier_name,purchase_date)
-          VALUES($1,$2,$3,$4,$5,$6,$7)`,
-          [s(r.item_name),n(r.quantity,1),n(r.unit_cost),n(r.total_cost),s(r.purchased_by)||"Company",s(r.supplier),date(r.purchase_date)]);
+          (legacy_purchase_ref,item_name,quantity,unit_cost,supplier_type,supplier_name,purchase_date)
+          VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(legacy_purchase_ref) DO UPDATE SET item_name=EXCLUDED.item_name,quantity=EXCLUDED.quantity,unit_cost=EXCLUDED.unit_cost,supplier_type=EXCLUDED.supplier_type,supplier_name=EXCLUDED.supplier_name,purchase_date=EXCLUDED.purchase_date`,
+          [s(r.purchase_no||r.reference_no||`LEGACY-PURCHASE-${r.id}`),s(r.item_name),n(r.quantity,1),n(r.unit_cost),s(r.purchased_by)||"Company",s(r.supplier),date(r.purchase_date)]);
       }
       counts.purchases = (await rows("purchases")).length;
     }
@@ -192,9 +192,9 @@ export async function migrateLegacyToV2() {
     if (await tableExists("tickets")) {
       for (const r of await rows("tickets")) {
         const v = r.vehicle_id ? (await v2Query("SELECT id FROM fleet_erp_v2.vehicles WHERE legacy_vehicle_id=$1 LIMIT 1",[r.vehicle_id])).rows[0]?.id || null : null;
-        await v2Query(`INSERT INTO fleet_erp_v2.tickets(title,category,priority,status,vehicle_id,description,opened_at,closed_at,resolution_notes)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          [s(r.title || r.subject || r.description).slice(0,500),s(r.category),s(r.priority)||"Medium",s(r.status)||"Open",v,
+        await v2Query(`INSERT INTO fleet_erp_v2.tickets(legacy_ticket_ref,title,category,priority,status,vehicle_id,description,opened_at,closed_at,resolution_notes)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(legacy_ticket_ref) DO UPDATE SET title=EXCLUDED.title,category=EXCLUDED.category,priority=EXCLUDED.priority,status=EXCLUDED.status,vehicle_id=EXCLUDED.vehicle_id,description=EXCLUDED.description,opened_at=EXCLUDED.opened_at,closed_at=EXCLUDED.closed_at,resolution_notes=EXCLUDED.resolution_notes`,
+          [s(r.ticket_no||r.ticket_number||`LEGACY-TICKET-${r.id}`),s(r.title || r.subject || r.description).slice(0,500),s(r.category),s(r.priority)||"Medium",s(r.status)||"Open",v,
            s(r.description),r.opened_at || r.created_at || new Date(),r.closed_at || null,s(r.resolution_notes)]);
       }
       counts.tickets = (await rows("tickets")).length;

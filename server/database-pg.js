@@ -565,7 +565,24 @@ export async function listTickets(filters = {}) {
 
   if (filters.department) {
     params.push(filters.department);
-    sql += ` AND department = $${params.length}`;
+    sql += ` AND department = ${params.length}`;
+  }
+
+  // Fleet ticket separation:
+  // fleetType=maintenance: all vehicle maintenance/issues except KM.
+  // fleetType=km: Daily KM tickets only.
+  // fleetType=general: non-vehicle tickets only.
+  if (filters.fleetType === "maintenance") {
+    sql += ` AND vehicle_id IS NOT NULL AND COALESCE(category, '') <> 'Daily KM' AND COALESCE(category, '') <> 'Daily Vehicle Submission'`;
+  } else if (filters.fleetType === "km") {
+    sql += ` AND vehicle_id IS NOT NULL AND category = 'Daily KM'`;
+  } else if (filters.fleetType === "general") {
+    sql += ` AND vehicle_id IS NULL`;
+  }
+
+  if (filters.category) {
+    params.push(filters.category);
+    sql += ` AND category = ${params.length}`;
   }
 
   sql += ` ORDER BY opened_at DESC, id DESC`;

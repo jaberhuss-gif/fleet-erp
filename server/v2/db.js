@@ -16,10 +16,10 @@ export async function v2Transaction(fn){
 }
 export async function ensureV2Schema(){
   await v2Query("SELECT 1 FROM fleet_erp_v2.financial_settings WHERE id = 1");
-  // The migration is one-time and protected by an advisory lock + marker row.
-  // It copies the legacy production DB into V2 without deleting or modifying
-  // the legacy DB, including KM/WOs/projects/tickets entered on the current day.
-  if (process.env.V2_AUTO_MIGRATE !== "false") {
+  // Legacy-to-V2 migration is opt-in. V2 startup must never silently copy
+  // production data or rerun a migration just because the service restarted.
+  // Set V2_AUTO_MIGRATE=true only for an explicit migration run.
+  if (process.env.V2_AUTO_MIGRATE === "true") {
     const { migrateLegacyToV2 } = await import("./migrateLegacyToV2.mjs");
     const result = await migrateLegacyToV2();
     if (!result.skipped) console.log("[V2 Migration] completed", result.counts);

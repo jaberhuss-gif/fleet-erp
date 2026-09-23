@@ -985,6 +985,8 @@ export async function importVehicles(vehicles = []) {
    ============================================================ */
 
 export async function listWorkOrders(filters = {}) {
+  await ensureGeneralMaintenanceSchema();
+
   let sql = `
     SELECT *
     FROM work_orders
@@ -1031,7 +1033,9 @@ export async function getWorkOrder(id) {
 export async function ensureGeneralMaintenanceSchema() {
   await query(`
     ALTER TABLE work_orders
-      ADD COLUMN IF NOT EXISTS performed_by TEXT
+      ADD COLUMN IF NOT EXISTS performed_by TEXT,
+      ADD COLUMN IF NOT EXISTS reported_date DATE,
+      ADD COLUMN IF NOT EXISTS completed_date DATE
   `);
 }
 
@@ -2889,13 +2893,6 @@ export async function getGeneralMaintenanceReport(filters = {}) {
   const year = Number(filters.year) || new Date().getFullYear();
   const site = pgStr(filters.site, "");
 
-  let monthlySavings = { source: "Google Sheet / MonthlySavings", headers: [], rows: [] };
-  try {
-    monthlySavings = await getMonthlySavingsSheet();
-  } catch (sheetError) {
-    console.warn("[MonthlySavings] Temporary sheet read failed:", sheetError.message);
-  }
-
   const params = [year];
   let where = `
     reported_date >= make_date($1, 1, 1)
@@ -3012,10 +3009,10 @@ export async function getGeneralMaintenanceReport(filters = {}) {
 
   return {
     year,
-    source: monthlySavings.rows.length ? monthlySavings.source : "ERP work_orders",
-    temporarySheetSource: monthlySavings.rows.length > 0,
-    monthlySavingsHeaders: monthlySavings.headers,
-    monthlySavingsRows: monthlySavings.rows,
+    source: "ERP PostgreSQL work_orders",
+    temporarySheetSource: false,
+    monthlySavingsHeaders: [],
+    monthlySavingsRows: [],
     projectsExcluded: true,
     site: site || null,
     months,
@@ -3158,312 +3155,168 @@ export async function getFinancialReport() {
   const SALARY_MAINT = 2200;
   const SALARY_DEV = 2200;
 
+  await ensureGeneralMaintenanceSchema();
+
   const workOrders = await listWorkOrders();
   const projects = await listProjects();
   const purchases = await listPurchases();
 
-  // Build lookup sets per month for same-month matching
-  function normalizeWO(wo) {
-    return String(wo || '').replace(/[-\s]/g, '').toUpperCase();
-  }
-  function normalizeProj(proj) {
-    return String(proj || '').replace(/[-\s]/g, '').toUpperCase();
-  }
+  const normalize = value => String(value || '').replace(/[-\\s]/g, '').toUpperCase();
+  const monthOf = value => {
+    const m = String(value || '').match(/^(\\d{4})-(\\d{2})/);
+    return m ? m[0] : null;
+  };
+  const workOrderMonth = w => monthOf(w.reported_date) || monthOf(w.month);
+  const projectMonth = p => {
+    const raw = p.start_date ?? p.startDate ?? null;
+    return String(raw || '').trim() ? (monthOf(raw) || monthOf(p.month)) : null;
+  };
+  const purchaseMonth = p => monthOf(p.purchase_date) || monthOf(p.month);
 
   const woByMonth = {};
-  for (const w of workOrders) {
-    const m = w.month || 'Unknown';
-    if (!woByMonth[m]) woByMonth[m] = new Set();
-    woByMonth[m].add(normalizeWO(w.wo_no));
-  }
-
   const projByMonth = {};
-  for (const p of projects) {
-    const startDateRaw = p.start_date ?? p.startDate ?? "";
-    if (String(startDateRaw).trim() === "") continue;
-
-    const startDate = new Date(startDateRaw);
-    const m = !Number.isNaN(startDate.getTime())
-      ? startDate.toISOString().slice(0, 7)
-      : (p.month || 'Unknown');
-
-    if (!projByMonth[m]) projByMonth[m] = new Set();
-    projByMonth[m].add(normalizeProj(p.project_no));
-  }
-
   const months = {};
-
-  function bucket(month) {
-    const key = month || "Unknown";
-    if (!months[key]) {
-      months[key] = {
-        month: key,
-
-        // ===== Maintenance =====
-        employeeWOCount: 0,
-        contractorWOCount: 0,
-        contractorWO: 0,
-        partsWO: 0,
-        salaryMaint: SALARY_MAINT,
-        maintActual: 0,
-        maintSavings: 0,
-        maintPct: 0,
-
-        // ===== Development =====
-        internalProjectCount: 0,
-        contractorProjectCount: 0,
-        contractorDev: 0,
-        partsDev: 0,
-        salaryDev: SALARY_DEV,
-        devActual: 0,
-        devSavings: 0,
-        devPct: 0,
-
-        // ===== Other Purchases =====
-        otherPurchases: 0,
-
-        // ===== Total =====
-        totalCost: 0,
-        totalSavings: 0,
-        totalSavingsPct: 0,
-
-        // ===== Contractor Breakdown =====
+  const bucket = month => {
+    if (!/^\\d{4}-\\d{2}$/.test(String(month))) return null;
+    if (!months[month]) {
+      months[month] = {
+        month,
+        employeeWOCount: 0, contractorWOCount: 0, contractorWO: 0, partsWO: 0,
+        salaryMaint: SALARY_MAINT, maintActual: 0, maintSavings: 0, maintPct: 0,
+        internalProjectCount: 0, contractorProjectCount: 0, contractorDev: 0, partsDev: 0,
+        salaryDev: SALARY_DEV, devActual: 0, devSavings: 0, devPct: 0,
+        otherPurchases: 0, totalCost: 0, totalSavings: 0, totalSavingsPct: 0,
         contractorBreakdown: {}
       };
     }
-    return months[key];
-  }
+    return months[month];
+  };
 
-  // ==========================
-  // Work Orders
-  // ==========================
   for (const w of workOrders) {
-    const b = bucket(w.month);
-    const cost = Number(w.final_cost || w.contractor_cost || 0);
-    // Use contractor_name ONLY — is_contractor is unreliable (always 0 for most rows)
-    const contractorName = String(w.contractor_name || "").trim();
+    const m = workOrderMonth(w);
+    const b = bucket(m);
+    if (!b) continue;
+    if (!woByMonth[m]) woByMonth[m] = new Set();
+    woByMonth[m].add(normalize(w.wo_no));
 
-    // Contractor = has a name AND name is not "Company" or "Internal"
-    if (
-      contractorName !== "" &&
-      contractorName.toLowerCase() !== "company" &&
-      contractorName.toLowerCase() !== "internal"
-    ) {
+    const name = String(w.contractor_name || '').trim();
+    const external = name !== '' && !['company','internal'].includes(name.toLowerCase());
+    const cost = Number(w.final_cost || w.contractor_cost || 0);
+    if (external) {
       b.contractorWOCount++;
       b.contractorWO += cost;
-
-      const name = contractorName;
-      if (!b.contractorBreakdown[name]) {
-        b.contractorBreakdown[name] = {
-          woCount: 0, woCost: 0, projectCount: 0, projectCost: 0
-        };
-      }
+      if (!b.contractorBreakdown[name]) b.contractorBreakdown[name] = {woCount:0,woCost:0,projectCount:0,projectCost:0};
       b.contractorBreakdown[name].woCount++;
       b.contractorBreakdown[name].woCost += cost;
     } else {
-      // Employee (blank or "Company")
       b.employeeWOCount++;
     }
   }
 
-  // ==========================
-  // Projects
-  // ==========================
   for (const p of projects) {
-    const startDateRaw = p.start_date ?? p.startDate ?? "";
-    if (String(startDateRaw).trim() === "") continue;
+    const m = projectMonth(p);
+    const b = bucket(m);
+    if (!b) continue; // Blank Start Date is excluded from monthly reporting.
+    if (!projByMonth[m]) projByMonth[m] = new Set();
+    projByMonth[m].add(normalize(p.project_no));
 
-    const startDate = new Date(startDateRaw);
-    const derivedMonth = !Number.isNaN(startDate.getTime())
-      ? startDate.toISOString().slice(0, 7)
-      : (p.month || "Unknown");
-
-    const b = bucket(derivedMonth);
+    const name = String(p.contractor || '').trim();
+    const external = name !== '' && !['company','internal'].includes(name.toLowerCase());
     const spent = Number(p.spent || 0);
-    const contractorName = String(p.contractor || "").trim();
-
-    if (
-      contractorName !== "" &&
-      contractorName.toLowerCase() !== "company" &&
-      contractorName.toLowerCase() !== "internal"
-    ) {
+    if (external) {
       b.contractorProjectCount++;
       b.contractorDev += spent;
-
-      if (!b.contractorBreakdown[contractorName]) {
-        b.contractorBreakdown[contractorName] = {
-          woCount: 0, woCost: 0, projectCount: 0, projectCost: 0
-        };
-      }
-      b.contractorBreakdown[contractorName].projectCount++;
-      b.contractorBreakdown[contractorName].projectCost += spent;
+      if (!b.contractorBreakdown[name]) b.contractorBreakdown[name] = {woCount:0,woCost:0,projectCount:0,projectCost:0};
+      b.contractorBreakdown[name].projectCount++;
+      b.contractorBreakdown[name].projectCost += spent;
     } else {
       b.internalProjectCount++;
     }
   }
 
-  // ==========================
-  // Purchases
-  // ==========================
   for (const p of purchases) {
-    const b = bucket(p.month);
+    const m = purchaseMonth(p);
+    const b = bucket(m);
+    if (!b) continue;
     const amount = Number(p.total_cost || 0);
-    const type = String(p.type || "").toLowerCase();
-    const purchasedBy = String(p.purchased_by || "").trim().toLowerCase();
-    const refNorm = normalizeWO(p.reference_no || '');
-    const refNormProj = normalizeProj(p.reference_no || '');
-    const pMonth = p.month || 'Unknown';
+    const type = String(p.type || '').toLowerCase();
+    const buyer = String(p.purchased_by || '').trim().toLowerCase();
+    const ref = normalize(p.reference_no || '');
 
-    // === Work Order / Maintenance purchases ===
-    if (
-      type.includes("work") ||
-      type.includes("order") ||
-      type.includes("maintenance")
-    ) {
-      // Same-month rule: only count if the WO exists in THIS month
-      const wosThisMonth = woByMonth[pMonth] || new Set();
-      if (wosThisMonth.has(refNorm)) {
-        // Only Contractor purchases go to partsWO
-        if (purchasedBy === 'contractor') {
-          b.partsWO += amount;
-        }
-        // Company purchases for same-month WOs are not added
-        // (they are internal/employee cost, already counted in employeeWOCount)
-      }
-      // Cross-month purchases are excluded
-    }
-    // === Development Project purchases ===
-    else if (
-      type.includes("dev") ||
-      type.includes("project") ||
-      type.includes("development")
-    ) {
-      // Same-month rule: only count if the Project exists in THIS month
-      const projsThisMonth = projByMonth[pMonth] || new Set();
-      if (projsThisMonth.has(refNormProj)) {
-        b.partsDev += amount;
-      }
-    }
-    // === Other purchases ===
-    else {
+    if (type.includes('work') || type.includes('order') || type.includes('maintenance')) {
+      if ((woByMonth[m] || new Set()).has(ref) && buyer === 'contractor') b.partsWO += amount;
+    } else if (type.includes('dev') || type.includes('project') || type.includes('development')) {
+      if ((projByMonth[m] || new Set()).has(ref)) b.partsDev += amount;
+    } else {
       b.otherPurchases += amount;
     }
   }
 
-  // ==========================
-  // Calculate totals per month
-  // ==========================
   for (const b of Object.values(months)) {
     b.maintActual = b.contractorWO + b.partsWO + b.salaryMaint;
     b.devActual = b.contractorDev + b.partsDev + b.salaryDev;
-
     b.maintSavings = MAINT_BASELINE - b.maintActual;
     b.devSavings = DEV_BASELINE - b.devActual;
-
     b.totalCost = b.maintActual + b.devActual + b.otherPurchases;
     b.totalSavings = b.maintSavings + b.devSavings;
-
     b.maintPct = MAINT_BASELINE ? (b.maintSavings / MAINT_BASELINE) * 100 : 0;
     b.devPct = DEV_BASELINE ? (b.devSavings / DEV_BASELINE) * 100 : 0;
-
-    const baseline = MAINT_BASELINE + DEV_BASELINE;
-    b.totalSavingsPct = baseline ? (b.totalSavings / baseline) * 100 : 0;
+    b.totalSavingsPct = (MAINT_BASELINE + DEV_BASELINE)
+      ? (b.totalSavings / (MAINT_BASELINE + DEV_BASELINE)) * 100 : 0;
   }
 
-  // ==========================
-  // Sort and aggregate
-  // ==========================
-  const rows = Object.values(months)
-    .filter(r => /^\d{4}-\d{2}$/.test(String(r.month)))
-    .sort((a, b) => String(a.month).localeCompare(String(b.month)));
-
-  const sum = field =>
-    rows.reduce((s, r) => s + Number(r[field] || 0), 0);
-
+  const rows = Object.values(months).sort((a,b) => a.month.localeCompare(b.month));
+  const sum = field => rows.reduce((s,r) => s + Number(r[field] || 0), 0);
   const maintenanceTotalBaseline = MAINT_BASELINE * rows.length;
   const developmentTotalBaseline = DEV_BASELINE * rows.length;
-  const totalSavings = sum("totalSavings");
   const totalBaseline = maintenanceTotalBaseline + developmentTotalBaseline;
 
-  // Merge contractor breakdown across all months
   const mergedBreakdown = {};
   for (const r of rows) {
-    for (const [name, info] of Object.entries(r.contractorBreakdown || {})) {
-      if (!mergedBreakdown[name]) {
-        mergedBreakdown[name] = {
-          woCount: 0, woCost: 0, projectCount: 0, projectCost: 0
-        };
-      }
-      mergedBreakdown[name].woCount += info.woCount || 0;
-      mergedBreakdown[name].woCost += info.woCost || 0;
-      mergedBreakdown[name].projectCount += info.projectCount || 0;
-      mergedBreakdown[name].projectCost += info.projectCost || 0;
+    for (const [name, info] of Object.entries(r.contractorBreakdown)) {
+      if (!mergedBreakdown[name]) mergedBreakdown[name] = {woCount:0,woCost:0,projectCount:0,projectCost:0};
+      mergedBreakdown[name].woCount += info.woCount;
+      mergedBreakdown[name].woCost += info.woCost;
+      mergedBreakdown[name].projectCount += info.projectCount;
+      mergedBreakdown[name].projectCost += info.projectCost;
     }
   }
 
   return {
     rows,
-
     grand: {
       monthCount: rows.length,
-
-      // Dashboard aliases
       totalBaseline,
-      totalActual: sum("maintActual") + sum("devActual"),
+      totalActual: sum('maintActual') + sum('devActual'),
       months: rows,
-
-      // Baseline
       baseline: totalBaseline,
       maintenanceBaseline: MAINT_BASELINE,
       developmentBaseline: DEV_BASELINE,
       maintenanceTotalBaseline,
       developmentTotalBaseline,
-
-      // Actual costs
-      contractorWO: sum("contractorWO"),
-      partsWO: sum("partsWO"),
-      salaryMaint: sum("salaryMaint"),
-      maintActual: sum("maintActual"),
-
-      contractorDev: sum("contractorDev"),
-      partsDev: sum("partsDev"),
-      salaryDev: sum("salaryDev"),
-      devActual: sum("devActual"),
-
-      otherPurchases: sum("otherPurchases"),
-      totalCost: sum("totalCost"),
-
-      // Savings
-      maintSavings: sum("maintSavings"),
-      devSavings: sum("devSavings"),
-      totalSavings,
-
-      maintTotalSavingsPct:
-        maintenanceTotalBaseline
-          ? (sum("maintSavings") / maintenanceTotalBaseline) * 100
-          : 0,
-      devTotalSavingsPct:
-        developmentTotalBaseline
-          ? (sum("devSavings") / developmentTotalBaseline) * 100
-          : 0,
-      totalSavingsPct:
-        totalBaseline
-          ? (totalSavings / totalBaseline) * 100
-          : 0,
-
-      // Counts
-      employeeWOCount: sum("employeeWOCount"),
-      contractorWOCount: sum("contractorWOCount"),
-      totalWOCount: sum("employeeWOCount") + sum("contractorWOCount"),
-
-      internalProjectCount: sum("internalProjectCount"),
-      contractorProjectCount: sum("contractorProjectCount"),
-      totalProjectCount:
-        sum("internalProjectCount") + sum("contractorProjectCount"),
-
-      // Contractor breakdown
+      contractorWO: sum('contractorWO'),
+      partsWO: sum('partsWO'),
+      salaryMaint: sum('salaryMaint'),
+      maintActual: sum('maintActual'),
+      contractorDev: sum('contractorDev'),
+      partsDev: sum('partsDev'),
+      salaryDev: sum('salaryDev'),
+      devActual: sum('devActual'),
+      otherPurchases: sum('otherPurchases'),
+      totalCost: sum('totalCost'),
+      maintSavings: sum('maintSavings'),
+      devSavings: sum('devSavings'),
+      totalSavings: sum('totalSavings'),
+      maintTotalSavingsPct: maintenanceTotalBaseline ? (sum('maintSavings') / maintenanceTotalBaseline) * 100 : 0,
+      devTotalSavingsPct: developmentTotalBaseline ? (sum('devSavings') / developmentTotalBaseline) * 100 : 0,
+      totalSavingsPct: totalBaseline ? (sum('totalSavings') / totalBaseline) * 100 : 0,
+      employeeWOCount: sum('employeeWOCount'),
+      contractorWOCount: sum('contractorWOCount'),
+      totalWOCount: sum('employeeWOCount') + sum('contractorWOCount'),
+      internalProjectCount: sum('internalProjectCount'),
+      contractorProjectCount: sum('contractorProjectCount'),
+      totalProjectCount: sum('internalProjectCount') + sum('contractorProjectCount'),
       contractorBreakdown: mergedBreakdown
     }
   };
 }
-

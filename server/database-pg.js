@@ -136,24 +136,53 @@ function formatVehicle(row) {
 }
 
 export async function getVehicleById(id) {
-  const result = await query(`SELECT * FROM vehicles WHERE id = $1 LIMIT 1`, [id]);
-  return formatVehicle(result.rows[0]);
+  const result = await query(`
+    SELECT v.*, d.name AS relational_driver_name, d.phone AS relational_driver_phone,
+           d.id AS relational_driver_id
+    FROM vehicles v
+    LEFT JOIN drivers d ON d.id = v.driver_id
+    WHERE v.id = $1 LIMIT 1
+  `, [id]);
+  return formatVehicle({
+    ...result.rows[0],
+    driver: result.rows[0]?.relational_driver_name ?? result.rows[0]?.driver ?? "",
+    phone: result.rows[0]?.relational_driver_phone ?? result.rows[0]?.phone ?? ""
+  });
 }
 
 export async function getVehicleByPlate(plate) {
   const parts = stringValue(plate).split(/\s+/).filter(Boolean);
   const plateNumber = parts[0] || "";
   const plateCode = parts.slice(1).join(" ").toUpperCase();
-  const result = await query(
-    `SELECT * FROM vehicles WHERE plate_number = $1 AND plate_code = $2 LIMIT 1`,
-    [plateNumber, plateCode]
-  );
-  return formatVehicle(result.rows[0]);
+  const result = await query(`
+    SELECT v.*, d.name AS relational_driver_name, d.phone AS relational_driver_phone,
+           d.id AS relational_driver_id
+    FROM vehicles v
+    LEFT JOIN drivers d ON d.id = v.driver_id
+    WHERE v.plate_number = $1 AND v.plate_code = $2 LIMIT 1
+  `, [plateNumber, plateCode]);
+  const row = result.rows[0];
+  if (!row) return null;
+  return formatVehicle({
+    ...row,
+    driver: row.relational_driver_name ?? row.driver ?? "",
+    phone: row.relational_driver_phone ?? row.phone ?? ""
+  });
 }
 
 export async function listVehicles() {
-  const result = await query(`SELECT * FROM vehicles ORDER BY plate_number, plate_code`);
-  return result.rows.map(formatVehicle);
+  const result = await query(`
+    SELECT v.*, d.name AS relational_driver_name, d.phone AS relational_driver_phone,
+           d.id AS relational_driver_id
+    FROM vehicles v
+    LEFT JOIN drivers d ON d.id = v.driver_id
+    ORDER BY v.plate_number, v.plate_code
+  `);
+  return result.rows.map(row => formatVehicle({
+    ...row,
+    driver: row.relational_driver_name ?? row.driver ?? "",
+    phone: row.relational_driver_phone ?? row.phone ?? ""
+  }));
 }
 
 export async function createVehicle(vehicleData = {}) {
@@ -162,87 +191,109 @@ export async function createVehicle(vehicleData = {}) {
   const plateCode = parts.slice(1).join(" ").toUpperCase();
   if (!plateNumber) throw new Error("Vehicle plate is required");
 
-  const result = await query(
-    `INSERT INTO vehicles (plate_number, plate_code, make, model, year, status, location, driver, phone, current_km, last_oil_km, oil_change_interval, last_oil_change_date, meter_updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
-    [
-      plateNumber,
-      plateCode,
-      vehicleData.make || "Toyota",
-      vehicleData.model || "Hilux",
-      numberValue(vehicleData.year, 2022),
-      vehicleData.status || vehicleData.state || "جيد",
-      vehicleData.location || "",
-      vehicleData.driverName || vehicleData.driver || "",
-      vehicleData.driverPhone || vehicleData.phone || "",
-      numberValue(vehicleData.currentKM ?? vehicleData.km, 0),
-      numberValue(vehicleData.lastOilKM ?? vehicleData.serviceKm, 0),
-      numberValue(vehicleData.oilChangeInterval, 5000),
-      vehicleData.lastOilChangeDate || "",
-      new Date().toISOString()
-    ]
-  );
-  return formatVehicle(result.rows[0]);
+  const driverId = vehicleData.driverId ?? vehicleData.driver_id ?? null;
+  if (driverId) {
+    const driverCheck = await query(`SELECT id FROM drivers WHERE id = $1 LIMIT 1`, [driverId]);
+    if (!driverCheck.rows[0]) throw new Error("Driver not found");
+    const assigned = await query(`SELECT id FROM vehicles WHERE driver_id = $1 LIMIT 1`, [driverId]);
+    if (assigned.rows[0]) throw new Error("Driver is already assigned to another vehicle");
+  }
+
+  const result = await query(`
+    INSERT INTO vehicles
+      (plate_number, plate_code, make, model, year, status, location, driver_id,
+       driver, phone, current_km, last_oil_km, oil_change_interval, last_oil_change_date, meter_updated_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+    RETURNING *
+  `, [
+    plateNumber, plateCode,
+    vehicleData.make || "Toyota",
+    vehicleData.model || "Hilux",
+    numberValue(vehicleData.year, 2022),
+    vehicleData.status || vehicleData.state || "جيد",
+    vehicleData.location || "",
+    driverId,
+    "",
+    "",
+    numberValue(vehicleData.currentKM ?? vehicleData.km, 0),
+    numberValue(vehicleData.lastOilKM ?? vehicleData.serviceKm, 0),
+    numberValue(vehicleData.oilChangeInterval, 5000),
+    vehicleData.lastOilChangeDate || "",
+    new Date().toISOString()
+  ]);
+
+  if (driverId) {
+    const d = (await query(`SELECT name, phone FROM drivers WHERE id = $1`, [driverId])).rows[0];
+    await query(`UPDATE vehicles SET driver = $1, phone = $2 WHERE id = $3`, [d.name || "", d.phone || "", result.rows[0].id]);
+  }
+
+  return getVehicleById(result.rows[0].id);
 }
 
 export async function updateVehicle(id, data = {}) {
-  const vehicleResult = await query(
-    `SELECT * FROM vehicles WHERE id = $1 LIMIT 1`,
-    [id]
-  );
+  const vehicleResult = await query(`SELECT * FROM vehicles WHERE id = $1 LIMIT 1`, [id]);
   const vehicleRow = vehicleResult.rows[0];
   if (!vehicleRow) return { changes: 0 };
 
-  const currentKM =
-    data.currentKM !== undefined || data.km !== undefined
-      ? numberValue(data.currentKM ?? data.km, numberValue(vehicleRow.current_km, 0))
-      : numberValue(vehicleRow.current_km, 0);
+  const currentKM = data.currentKM !== undefined || data.km !== undefined
+    ? numberValue(data.currentKM ?? data.km, numberValue(vehicleRow.current_km, 0))
+    : numberValue(vehicleRow.current_km, 0);
+  const lastOilKM = data.lastOilKM !== undefined || data.serviceKm !== undefined
+    ? numberValue(data.lastOilKM ?? data.serviceKm, numberValue(vehicleRow.last_oil_km, 0))
+    : numberValue(vehicleRow.last_oil_km, 0);
+  const oilInterval = data.oilChangeInterval !== undefined && data.oilChangeInterval !== null && data.oilChangeInterval !== ""
+    ? numberValue(data.oilChangeInterval, 5000)
+    : numberValue(vehicleRow.oil_change_interval, 5000);
 
-  const lastOilKM =
-    data.lastOilKM !== undefined || data.serviceKm !== undefined
-      ? numberValue(data.lastOilKM ?? data.serviceKm, numberValue(vehicleRow.last_oil_km, 0))
-      : numberValue(vehicleRow.last_oil_km, 0);
+  let driverId = data.driverId ?? data.driver_id;
+  if (driverId === undefined) driverId = vehicleRow.driver_id ?? null;
 
-  const oilInterval =
-    data.oilChangeInterval !== undefined && data.oilChangeInterval !== null && data.oilChangeInterval !== ""
-      ? numberValue(data.oilChangeInterval, 5000)
-      : numberValue(vehicleRow.oil_change_interval, 5000);
+  if (driverId) {
+    const driverCheck = await query(`SELECT id, name, phone FROM drivers WHERE id = $1 LIMIT 1`, [driverId]);
+    if (!driverCheck.rows[0]) throw new Error("Driver not found");
+    const assigned = await query(
+      `SELECT id FROM vehicles WHERE driver_id = $1 AND id <> $2 LIMIT 1`,
+      [driverId, id]
+    );
+    if (assigned.rows[0]) throw new Error("Driver is already assigned to another vehicle");
+  }
 
-  const newDriver = data.driverName ?? data.driver ?? vehicleRow.driver ?? "";
-  const newPhone = data.driverPhone ?? data.phone ?? vehicleRow.phone ?? "";
-
-  const result = await query(
-    `UPDATE vehicles
-     SET current_km = $1,
-         last_oil_km = $2,
-         status = $3,
-         location = $4,
-         driver = $5,
-         phone = $6,
-         oil_change_interval = $7,
-         last_oil_change_date = $8,
-         updated_at = CURRENT_TIMESTAMP
-     WHERE id = $9`,
-    [
-      currentKM,
-      lastOilKM,
-      data.status ?? data.state ?? vehicleRow.status,
-      data.location ?? vehicleRow.location ?? "",
-      newDriver,
-      newPhone,
-      oilInterval,
-      data.lastOilChangeDate ?? vehicleRow.last_oil_change_date ?? null,
-      id
-    ]
-  );
+  const result = await query(`
+    UPDATE vehicles
+    SET current_km = $1,
+        last_oil_km = $2,
+        status = $3,
+        location = $4,
+        driver_id = $5,
+        oil_change_interval = $6,
+        last_oil_change_date = $7,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = $8
+  `, [
+    currentKM, lastOilKM,
+    data.status ?? data.state ?? vehicleRow.status,
+    data.location ?? vehicleRow.location ?? "",
+    driverId,
+    oilInterval,
+    data.lastOilChangeDate ?? vehicleRow.last_oil_change_date ?? null,
+    id
+  ]);
 
   if (result.rowCount) {
+    const d = driverId
+      ? (await query(`SELECT name, phone FROM drivers WHERE id = $1 LIMIT 1`, [driverId])).rows[0]
+      : null;
+    await query(`
+      UPDATE vehicles SET driver = $1, phone = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3
+    `, [d?.name || "", d?.phone || "", id]);
+
     await syncV2DriverAssignment({
       legacyVehicleId: id,
       plateNumber: vehicleRow.plate_number,
       plateCode: vehicleRow.plate_code,
-      driverName: newDriver,
-      phone: newPhone,
-      clear: !String(newDriver).trim()
+      driverName: d?.name || "",
+      phone: d?.phone || "",
+      clear: !driverId
     });
   }
 
@@ -1985,106 +2036,67 @@ export async function deletePurchase(id) {
 
 export async function listDrivers() {
   const result = await query(`
-    SELECT
-      d.*,
-      CASE
-        WHEN v.id IS NOT NULL
-        THEN CONCAT(v.plate_number, ' ', v.plate_code)
-        ELSE NULL
-      END AS vehicle_plate
+    SELECT d.*,
+           v.id AS assigned_vehicle_id,
+           CASE WHEN v.id IS NOT NULL THEN CONCAT(v.plate_number, ' ', v.plate_code) ELSE NULL END AS vehicle_plate
     FROM drivers d
-    LEFT JOIN vehicles v
-      ON v.id = d.vehicle_id
+    LEFT JOIN vehicles v ON v.driver_id = d.id
     ORDER BY d.name ASC
   `);
-
   return result.rows.map(d => ({
     ...d,
     licenseNo: d.license_no,
     licenseExpiry: d.license_expiry,
-    vehicleId: d.vehicle_id,
+    vehicleId: d.assigned_vehicle_id ?? null,
     vehiclePlate: d.vehicle_plate
   }));
 }
 
 export async function getDriver(id) {
   const result = await query(`
-    SELECT
-      d.*,
-      CASE
-        WHEN v.id IS NOT NULL
-        THEN CONCAT(v.plate_number, ' ', v.plate_code)
-        ELSE NULL
-      END AS vehicle_plate
+    SELECT d.*,
+           v.id AS assigned_vehicle_id,
+           CASE WHEN v.id IS NOT NULL THEN CONCAT(v.plate_number, ' ', v.plate_code) ELSE NULL END AS vehicle_plate
     FROM drivers d
-    LEFT JOIN vehicles v
-      ON v.id = d.vehicle_id
+    LEFT JOIN vehicles v ON v.driver_id = d.id
     WHERE d.id = $1
   `, [id]);
-
   if (!result.rows[0]) return null;
-
   const d = result.rows[0];
-
   return {
     ...d,
     licenseNo: d.license_no,
     licenseExpiry: d.license_expiry,
-    vehicleId: d.vehicle_id,
+    vehicleId: d.assigned_vehicle_id ?? null,
     vehiclePlate: d.vehicle_plate
   };
 }
 
 export async function createDriver(data = {}) {
   const vehicleId = data.vehicleId ?? data.vehicle_id ?? null;
-
   if (vehicleId) {
-    const assigned = await query(`SELECT id, driver FROM vehicles WHERE id = $1 LIMIT 1`, [vehicleId]);
-    if (!assigned.rows[0]) throw new Error("Vehicle not found");
-    const existing = await query(`SELECT id, name FROM drivers WHERE vehicle_id = $1 AND id <> $2 LIMIT 1`, [vehicleId, -1]);
-    if (existing.rows[0]) throw new Error(`Vehicle is already assigned to driver: ${existing.rows[0].name}`);
+    const vehicle = (await query(`SELECT id, driver_id FROM vehicles WHERE id = $1 LIMIT 1`, [vehicleId])).rows[0];
+    if (!vehicle) throw new Error("Vehicle not found");
+    if (vehicle.driver_id) throw new Error("Vehicle is already assigned to another driver");
   }
 
   const result = await query(`
     INSERT INTO drivers
-    (
-      name, phone, license_no, license_expiry, nationality,
-      vehicle_id, status, notes
-    )
+      (name, phone, license_no, license_expiry, nationality, vehicle_id, status, notes)
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
     RETURNING *
   `, [
-    pgStr(data.name),
-    pgStr(data.phone),
-    pgStr(data.licenseNo ?? data.license_no),
-    data.licenseExpiry ?? data.license_expiry ?? null,
-    pgStr(data.nationality),
-    vehicleId,
-    pgStr(data.status, "Active"),
-    pgStr(data.notes)
+    pgStr(data.name), pgStr(data.phone), pgStr(data.licenseNo ?? data.license_no),
+    data.licenseExpiry ?? data.license_expiry ?? null, pgStr(data.nationality),
+    vehicleId, pgStr(data.status, "Active"), pgStr(data.notes)
   ]);
 
   if (vehicleId) {
     await query(`
-      UPDATE vehicles
-      SET driver = $1,
-          phone = $2,
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = $3
-    `, [pgStr(data.name), pgStr(data.phone), vehicleId]);
-
-    const vehicleRow = (await query("SELECT plate_number, plate_code FROM vehicles WHERE id = $1 LIMIT 1", [vehicleId])).rows[0];
-    await syncV2DriverAssignment({
-      legacyDriverId: result.rows[0].id,
-      legacyVehicleId: vehicleId,
-      plateNumber: vehicleRow?.plate_number,
-      plateCode: vehicleRow?.plate_code,
-      driverName: pgStr(data.name),
-      phone: pgStr(data.phone),
-      status: pgStr(data.status, "Active")
-    });
+      UPDATE vehicles SET driver_id = $1, driver = $2, phone = $3, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $4
+    `, [result.rows[0].id, pgStr(data.name), pgStr(data.phone), vehicleId]);
   }
-
   return getDriver(result.rows[0].id);
 }
 
@@ -2092,42 +2104,29 @@ export async function updateDriver(id, data = {}) {
   const current = await getDriver(id);
   if (!current) throw new Error("Driver not found");
 
-  const oldVehicleId = current.vehicle_id || null;
-  const newVehicleId =
-    data.vehicleId !== undefined || data.vehicle_id !== undefined
-      ? (data.vehicleId ?? data.vehicle_id ?? null)
-      : oldVehicleId;
+  const oldVehicleId = current.vehicleId || null;
+  const vehicleProvided = data.vehicleId !== undefined || data.vehicle_id !== undefined;
+  const newVehicleId = vehicleProvided ? (data.vehicleId ?? data.vehicle_id ?? null) : oldVehicleId;
 
   if (newVehicleId) {
-    const vehicle = await query(`SELECT id FROM vehicles WHERE id = $1 LIMIT 1`, [newVehicleId]);
-    if (!vehicle.rows[0]) throw new Error("Vehicle not found");
-
-    const assigned = await query(
-      `SELECT id, name FROM drivers WHERE vehicle_id = $1 AND id <> $2 LIMIT 1`,
-      [newVehicleId, id]
-    );
-    if (assigned.rows[0]) {
-      throw new Error(`Vehicle is already assigned to driver: ${assigned.rows[0].name}`);
+    const vehicle = (await query(`SELECT id, driver_id FROM vehicles WHERE id = $1 LIMIT 1`, [newVehicleId])).rows[0];
+    if (!vehicle) throw new Error("Vehicle not found");
+    if (vehicle.driver_id && Number(vehicle.driver_id) !== Number(id)) {
+      throw new Error("Vehicle is already assigned to another driver");
     }
   }
 
+  const name = pgStr(data.name ?? current.name);
+  const phone = pgStr(data.phone ?? current.phone);
+
   const result = await query(`
     UPDATE drivers
-    SET
-      name = $1,
-      phone = $2,
-      license_no = $3,
-      license_expiry = $4,
-      nationality = $5,
-      vehicle_id = $6,
-      status = $7,
-      notes = $8,
-      updated_at = CURRENT_TIMESTAMP
-    WHERE id = $9
+    SET name=$1, phone=$2, license_no=$3, license_expiry=$4, nationality=$5,
+        vehicle_id=$6, status=$7, notes=$8, updated_at=CURRENT_TIMESTAMP
+    WHERE id=$9
     RETURNING *
   `, [
-    data.name ?? current.name,
-    data.phone ?? current.phone,
+    name, phone,
     data.licenseNo ?? data.license_no ?? current.license_no,
     data.licenseExpiry ?? data.license_expiry ?? current.license_expiry,
     data.nationality ?? current.nationality,
@@ -2137,43 +2136,15 @@ export async function updateDriver(id, data = {}) {
     id
   ]);
 
-  // Keep the vehicle master synchronized with the driver assignment.
   if (oldVehicleId && oldVehicleId !== newVehicleId) {
     await query(`
-      UPDATE vehicles
-      SET driver = '', phone = '', updated_at = CURRENT_TIMESTAMP
-      WHERE id = $1
+      UPDATE vehicles SET driver_id=NULL, driver='', phone='', updated_at=CURRENT_TIMESTAMP WHERE id=$1
     `, [oldVehicleId]);
   }
-
   if (newVehicleId) {
     await query(`
-      UPDATE vehicles
-      SET driver = $1, phone = $2, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $3
-    `, [
-      pgStr(data.name ?? current.name),
-      pgStr(data.phone ?? current.phone),
-      newVehicleId
-    ]);
-  }
-
-  if (oldVehicleId && oldVehicleId !== newVehicleId) {
-    const oldVehicle = (await query("SELECT plate_number, plate_code FROM vehicles WHERE id = $1 LIMIT 1", [oldVehicleId])).rows[0];
-    await syncV2DriverAssignment({ legacyVehicleId: oldVehicleId, plateNumber: oldVehicle?.plate_number, plateCode: oldVehicle?.plate_code, clear: true });
-  }
-
-  if (newVehicleId) {
-    const newVehicle = (await query("SELECT plate_number, plate_code FROM vehicles WHERE id = $1 LIMIT 1", [newVehicleId])).rows[0];
-    await syncV2DriverAssignment({
-      legacyDriverId: id,
-      legacyVehicleId: newVehicleId,
-      plateNumber: newVehicle?.plate_number,
-      plateCode: newVehicle?.plate_code,
-      driverName: pgStr(data.name ?? current.name),
-      phone: pgStr(data.phone ?? current.phone),
-      status: pgStr(data.status ?? current.status, "Active")
-    });
+      UPDATE vehicles SET driver_id=$1, driver=$2, phone=$3, updated_at=CURRENT_TIMESTAMP WHERE id=$4
+    `, [id, name, phone, newVehicleId]);
   }
 
   return getDriver(id);
@@ -2183,23 +2154,15 @@ export async function deleteDriver(id) {
   const current = await getDriver(id);
   if (!current) throw new Error("Driver not found");
 
-  const result = await query(
-    `UPDATE drivers
-     SET status = 'Inactive',
-         vehicle_id = NULL,
-         updated_at = CURRENT_TIMESTAMP
-     WHERE id = $1`,
-    [id]
-  );
+  const result = await query(`
+    UPDATE drivers SET status='Inactive', vehicle_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=$1
+  `, [id]);
 
-  if (!result.rowCount) throw new Error("Driver not found");
-
-  if (current.vehicle_id) {
-    const oldVehicle = (await query("SELECT plate_number, plate_code FROM vehicles WHERE id = $1 LIMIT 1", [current.vehicle_id])).rows[0];
-    await query("UPDATE vehicles SET driver = '', phone = '', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [current.vehicle_id]);
-    await syncV2DriverAssignment({ legacyVehicleId: current.vehicle_id, plateNumber: oldVehicle?.plate_number, plateCode: oldVehicle?.plate_code, clear: true });
+  if (current.vehicleId) {
+    await query(`
+      UPDATE vehicles SET driver_id=NULL, driver='', phone='', updated_at=CURRENT_TIMESTAMP WHERE id=$1
+    `, [current.vehicleId]);
   }
-
   return { changes: result.rowCount, deactivated: true };
 }
 

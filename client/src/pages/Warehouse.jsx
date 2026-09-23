@@ -168,31 +168,29 @@ export default function Warehouse({ user, access = {} }) {
                   code: i.code,
                   name: i.name,
                   category: i.category,
-                  quantity: i.quantity,
+                  IN: byCode[i.code]?.inQty || 0,
+                  OUT: byCode[i.code]?.outQty || 0,
+                  TRANSFER: byCode[i.code]?.transferQty || 0,
+                  balance: i.quantity,
                   unit: i.unit,
                   min_stock: i.min_stock,
                   unit_cost: i.unit_cost,
                   location: i.location,
-                  supplier: i.supplier || '',
-                  IN: byCode[i.code]?.inQty || 0,
-                  OUT: byCode[i.code]?.outQty || 0,
-                  TRANSFER: byCode[i.code]?.transferQty || 0,
-                  balance: i.quantity
+                  supplier: i.supplier || ''
                 }));
                 exportToCSV(report, "inventory", [
                   {key:"code",label:"Code"},
                   {key:"name",label:"Name"},
                   {key:"category",label:"Category"},
-                  {key:"quantity",label:"Current Balance"},
+                  {key:"IN",label:"IN"},
+                  {key:"OUT",label:"OUT"},
+                  {key:"TRANSFER",label:"TRANSFER"},
+                  {key:"balance",label:"Balance"},
                   {key:"unit",label:"Unit"},
                   {key:"min_stock",label:"Min Stock"},
                   {key:"unit_cost",label:"Unit Cost (SAR)"},
                   {key:"location",label:"Location"},
-                  {key:"supplier",label:"Supplier"},
-                  {key:"IN",label:"IN"},
-                  {key:"OUT",label:"OUT"},
-                  {key:"TRANSFER",label:"TRANSFER"},
-                  {key:"balance",label:"Balance"}
+                  {key:"supplier",label:"Supplier"}
                 ]);
               }}>Export CSV</button>{canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
               {showForm ? 'Cancel' : '+ Add Item'}

@@ -13,8 +13,13 @@ export default function FleetTicketViewer({ user }) {
     try {
       setLoading(true);
       setError('');
-      const res = await api.get('/tickets');
-      setTickets(Array.isArray(res.data?.tickets) ? res.data.tickets : []);
+      const [maintenanceRes, kmRes] = await Promise.all([
+        api.get('/tickets?fleetType=maintenance'),
+        api.get('/tickets?fleetType=km')
+      ]);
+      const maintenance = Array.isArray(maintenanceRes.data?.tickets) ? maintenanceRes.data.tickets : [];
+      const km = Array.isArray(kmRes.data?.tickets) ? kmRes.data.tickets : [];
+      setTickets([...maintenance, ...km]);
     } catch (e) {
       setError(e.response?.data?.error || e.message || 'Failed to load vehicle tickets.');
     } finally {
@@ -35,8 +40,8 @@ export default function FleetTicketViewer({ user }) {
       }
 
       const ticket = tickets.find(t => t.id === id);
-      const isMaintenance = String(ticket?.category || '').toLowerCase() === 'maintenance';
-      const msg = isMaintenance
+      const isKm = String(ticket?.category || '').toLowerCase() === 'daily km';
+      const msg = !isKm
         ? 'Hello ' + (info.driverName || 'Driver') + ',\\n\\n' +
           'Vehicle ' + (info.vehiclePlate || '') + ' requires maintenance.\\n' +
           'Current: ' + Number(info.currentKm || 0).toLocaleString() + ' km\\n\\n' +
@@ -59,7 +64,7 @@ export default function FleetTicketViewer({ user }) {
   useEffect(() => { load(); }, []);
 
   const vehicleTickets = useMemo(() => {
-    const maintenance = tickets.filter(t => String(t.category || '').toLowerCase() === 'maintenance');
+    const maintenance = tickets.filter(t => String(t.category || '').toLowerCase() !== 'daily km' && String(t.category || '').toLowerCase() !== 'daily vehicle submission');
     const km = tickets.filter(t => String(t.category || '').toLowerCase() === 'daily km');
     return { maintenance, km };
   }, [tickets]);
@@ -90,7 +95,7 @@ export default function FleetTicketViewer({ user }) {
           <div>
             <h1 style={{ margin: 0 }}>🚗 Vehicle Tickets</h1>
             <p style={{ margin: '6px 0 0', color: '#64748b' }}>
-              Vehicle maintenance and KM tickets are separated. This page is read-only for viewers.
+              Vehicle maintenance/issues and Daily KM compliance are completely separated.
             </p>
           </div>
           <div style={{display:'flex',gap:8}}>
@@ -109,7 +114,7 @@ export default function FleetTicketViewer({ user }) {
 
       <div className="cards-grid" style={{ marginBottom: 18 }}>
         <div className="card">
-          <h3>Total Tickets</h3>
+          <h3>{type === 'km' ? 'Daily KM Tickets' : 'Vehicle Maintenance Tickets'}</h3>
           <div className="big-number" style={{ color: '#1e3a8a' }}>{counts.total}</div>
           <div className="sub">Vehicle tickets</div>
         </div>

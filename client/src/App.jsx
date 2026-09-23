@@ -28,6 +28,7 @@ const TAB_MODULES = {
   'support-service': ['support'],
   fleet: ['fleet'],
   operations: ['building', 'projects', 'warehouse', 'purchase_requests'],
+  'warehouse-direct': ['warehouse'],
   troubleshooter: ['troubleshooter'],
   'fleet-tickets': ['fleet_tickets'],
   tickets: ['tickets'],
@@ -41,6 +42,7 @@ const TAB_LABELS = {
   gm: 'GM Dashboard',
   fleet: '🚗 Fleet',
   operations: '🛠️ Operations',
+  'warehouse-direct': '📦 Warehouse',
   troubleshooter: '🧠 Troubleshooter',
   reports: 'Reports',
   mytickets: '📋 My Tickets',
@@ -134,6 +136,7 @@ export default function App() {
   };
 
   const canViewTab = (target) => {
+    if (['SupportManager', 'SSM'].includes(user?.role) && target === 'operations') return false;
     if (OWNER_ONLY_TABS.has(target)) return user?.role === 'Owner';
     if (user?.role === 'Owner') return true;
     // Vehicle Tickets accessibility is driven by the RBAC fleet_tickets module
@@ -146,7 +149,7 @@ export default function App() {
   };
 
   const allowedTabs = useMemo(() => {
-    const tabs = ['gm', 'support-service', 'operations', 'fleet', 'daily-submitted', 'daily-missing', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
+    const tabs = ['gm', 'support-service', 'operations', 'warehouse-direct', 'fleet', 'daily-submitted', 'daily-missing', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
     const visible = tabs.filter(canViewTab);
     if (user?.role === 'Owner') {
       return [...visible, 'drivers', 'users', 'audit', 'backup'];
@@ -262,6 +265,7 @@ export default function App() {
         {tab === 'vehicle-details' && viewingVehicleId && <VehicleDetails vehicleId={viewingVehicleId} onBack={handleBackToVehicles} />}
         {tab === 'troubleshooter' && <Troubleshooter />}
         {tab === 'operations' && <OperationsHub access={access || {}} user={user} />}
+        {tab === 'warehouse-direct' && <Warehouse user={user} access={access || {}} />}
         {tab === 'fleet-tickets' && <FleetTicketViewer user={user} />}
         {tab === 'tickets' && canViewModule('tickets') && <Tickets user={user} access={access || {}} />}
         {tab === 'advanced-reports' && <AdvancedReports />}

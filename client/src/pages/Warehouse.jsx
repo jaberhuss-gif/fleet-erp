@@ -168,7 +168,9 @@ export default function Warehouse({ user, access = {} }) {
                   code: i.code,
                   name: i.name,
                   category: i.category,
-                  IN: byCode[i.code]?.inQty || 0,
+                  IN: (byCode[i.code]?.inQty || 0) > 0 || (byCode[i.code]?.outQty || 0) > 0 || (byCode[i.code]?.transferQty || 0) > 0
+                    ? (byCode[i.code]?.inQty || 0)
+                    : Number(i.quantity) || 0,
                   OUT: byCode[i.code]?.outQty || 0,
                   TRANSFER: byCode[i.code]?.transferQty || 0,
                   balance: i.quantity,

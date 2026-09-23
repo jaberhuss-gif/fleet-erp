@@ -2377,7 +2377,7 @@ export async function deleteInventoryItem(id) {
 export async function canManageInventoryItem(user, id) {
   if (!user) return false;
   if (user.role === "Owner") return true;
-  if (user.role !== "CampusManager") return false;
+  if (!["CampusManager", "SupportManager", "SSM"].includes(user.role)) return false;
   await ensureWarehouseTables();
   const item = await getInventoryItem(id);
   return Boolean(item && item.created_by_user_id != null && Number(item.created_by_user_id) === Number(user.id));

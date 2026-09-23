@@ -20,7 +20,7 @@ export function exportToCSV(data, filename, columns) {
   );
 
   const csv = [headers.join(','), ...rows].join('\n');
-  const blob = new Blob(['\\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

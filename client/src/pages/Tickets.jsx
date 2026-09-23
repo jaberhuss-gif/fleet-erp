@@ -19,7 +19,7 @@ export default function Tickets({ user, access = {} }) {
     try {
       setLoading(true);
       const [ticketsRes, kmRes] = await Promise.all([
-        api.get('/tickets'),
+        api.get('/tickets?fleetType=general'),
         api.get('/km-daily-notifications')
       ]);
       setTickets(ticketsRes.data.tickets || []);
@@ -49,8 +49,8 @@ export default function Tickets({ user, access = {} }) {
         return;
       }
       const ticket = tickets.find(t => t.id === id);
-      const isMaintenance = ticket?.category === 'Maintenance';
-      const msg = isMaintenance
+      const isKm = String(ticket?.category || '').toLowerCase() === 'daily km';
+      const msg = !isKm
         ? 'Hello ' + (info.driverName || 'Driver') + ',\n\n' +
           'Vehicle ' + (info.vehiclePlate || '') + ' requires maintenance.\n' +
           'Current: ' + Number(info.currentKm || 0).toLocaleString() + ' km\n\n' +
@@ -244,7 +244,7 @@ export default function Tickets({ user, access = {} }) {
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      {t.status === 'Open' && (t.category === 'Daily KM' || t.category === 'Maintenance' || t.category === 'Daily Vehicle Submission') && user?.role === 'Owner' && (
+                      {t.status === 'Open' && t.category !== 'Daily KM' && t.category !== 'Daily Vehicle Submission' && user?.role === 'Owner' && (
                         <button
                           className="btn btn-warning"
                           style={{ padding: '6px 10px', fontSize: '12px', background: '#25D366', borderColor: '#25D366', color: '#fff' }}

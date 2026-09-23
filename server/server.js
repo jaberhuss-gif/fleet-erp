@@ -710,6 +710,12 @@ app.delete("/api/drivers/:id", async (req, res) => {
 });
 
 // ===== WAREHOUSE =====
+const assertInventoryManager = async (req, res, id) => {
+  const allowed = await db.canManageInventoryItem(req.user, id);
+  if (!allowed) { res.status(403).json({ success: false, error: "You can view this stock, but you are not allowed to modify it." }); return false; }
+  return true;
+};
+
 app.get("/api/inventory", async (req, res) => {
   try { res.json({ success: true, items: await listInventoryPG() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
@@ -729,32 +735,32 @@ app.get("/api/inventory/:id", async (req, res) => {
 });
 
 app.post("/api/inventory", async (req, res) => {
-  try { res.json({ success: true, item: await createInventoryItemPG(req.body) }); }
+  try { res.json({ success: true, item: await createInventoryItemPG({ ...req.body, createdByUserId: req.user?.id ?? null }) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
 app.put("/api/inventory/:id", async (req, res) => {
-  try { res.json({ success: true, item: await updateInventoryItemPG(req.params.id, req.body) }); }
+  try { if (!(await assertInventoryManager(req,res,req.params.id))) return; res.json({ success: true, item: await updateInventoryItemPG(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
 app.delete("/api/inventory/:id", async (req, res) => {
-  try { res.json({ success: await deleteInventoryItemPG(req.params.id) }); }
+  try { if (!(await assertInventoryManager(req,res,req.params.id))) return; res.json({ success: await deleteInventoryItemPG(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.post("/api/inventory/stock-in", async (req, res) => {
-  try { res.json({ success: true, transaction: await stockInPG(req.body) }); }
+  try { if (!(await assertInventoryManager(req,res,req.body?.itemCode ?? req.body?.item_code ?? req.body?.id))) return; res.json({ success: true, transaction: await stockInPG(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
 app.post("/api/inventory/stock-out", async (req, res) => {
-  try { res.json({ success: true, transaction: await stockOutPG(req.body) }); }
+  try { if (!(await assertInventoryManager(req,res,req.body?.itemCode ?? req.body?.item_code ?? req.body?.id))) return; res.json({ success: true, transaction: await stockOutPG(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
 app.post("/api/inventory/transfer", async (req, res) => {
-  try { res.json({ success: true, transaction: await transferStockPG(req.body) }); }
+  try { if (!(await assertInventoryManager(req,res,req.body?.itemCode ?? req.body?.item_code ?? req.body?.id))) return; res.json({ success: true, transaction: await transferStockPG(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 

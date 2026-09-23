@@ -1,6 +1,5 @@
 ﻿import { query } from "./postgres.js";
 import { v2Query, v2Enabled } from "./v2/db.js";
-import { getMonthlySavingsSheet } from "./googleSheetSync.js";
 
 function numberValue(value, fallback = 0) {
   if (value === undefined || value === null || value === "") return fallback;
@@ -1253,9 +1252,9 @@ export async function getProject(id) {
 }
 
 export async function createProject(data = {}) {
-  const { month, year } = pgMonthYear(
-    data.startDate || data.start_date || new Date()
-  );
+  const rawStartDate = data.startDate ?? data.start_date ?? null;
+  const hasStartDate = rawStartDate !== null && String(rawStartDate).trim() !== "";
+  const { month, year } = hasStartDate ? pgMonthYear(rawStartDate) : { month: null, year: null };
 
   const result = await query(`
     INSERT INTO projects
@@ -1288,7 +1287,7 @@ export async function createProject(data = {}) {
     pgStr(data.status, "Active"),
     pgNum(data.budget),
     pgNum(data.spent),
-    data.startDate ?? data.start_date ?? new Date(),
+    hasStartDate ? rawStartDate : null,
     data.endDate ?? data.end_date ?? null,
     pgStr(data.manager),
     pgStr(data.contractor),
@@ -1337,12 +1336,14 @@ export async function updateProject(id, data = {}) {
     data.status ?? current.status,
     data.budget ?? current.budget,
     data.spent ?? current.spent,
-    data.startDate ?? data.start_date ?? current.start_date,
+    data.startDate !== undefined || data.start_date !== undefined
+      ? (String(data.startDate ?? data.start_date ?? "").trim() || null)
+      : (current.start_date || null),
     data.endDate ?? data.end_date ?? current.end_date,
     data.manager ?? current.manager,
     data.contractor ?? current.contractor,
-    data.month ?? current.month,
-    data.year ?? current.year,
+    (() => { const d = data.startDate !== undefined || data.start_date !== undefined ? (String(data.startDate ?? data.start_date ?? "").trim() || null) : (current.start_date || null); return d ? pgMonthYear(d).month : null; })(),
+    (() => { const d = data.startDate !== undefined || data.start_date !== undefined ? (String(data.startDate ?? data.start_date ?? "").trim() || null) : (current.start_date || null); return d ? pgMonthYear(d).year : null; })(),
     data.notes ?? current.notes,
     id
   ]);

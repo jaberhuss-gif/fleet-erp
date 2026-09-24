@@ -501,7 +501,7 @@ export async function syncGoogleSheetVehicles() {
       lastOilKm > 0 &&
       date;
 
-    if (lastOilKm !== null && lastOilKm > existingOilKm) {
+    if (oilChangedToday || (lastOilKm !== null && lastOilKm > existingOilKm)) {
       add("last_oil_km = ?", lastOilKm);
       if (oilChangedToday) {
         add("last_oil_change_date = ?", date.toISOString().slice(0, 10));

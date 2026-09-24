@@ -419,8 +419,7 @@ export async function syncGoogleSheetVehicles() {
     const phone = indexes.phone >= 0 ? String(values[indexes.phone] ?? "").trim() : "";
     const kmRaw = indexes.km >= 0 ? String(values[indexes.km] ?? "").trim() : "";
     const km = indexes.km >= 0 ? cleanKm(values[indexes.km]) : null;
-    // Last Oil Change KM/Date are ERP-maintained maintenance records.
-    // Google Sheet values for those columns are intentionally ignored.
+    const lastOilKm = indexes.lastOilKm >= 0 ? cleanKm(values[indexes.lastOilKm]) : null;
     if (km !== null) kmFound += 1;
     const active = indexes.active >= 0 ? !isInactive(values[indexes.active]) : null;
 
@@ -484,10 +483,28 @@ export async function syncGoogleSheetVehicles() {
       add("current_km = ?", nextKm);
       if (nextKm !== existingKm) kmUpdated += 1;
 
-      // Only advance the meter timestamp when the Sheet actually moved the
-      // reading forward. An older Sheet row must not stamp a newer ERP reading.
       if (date && nextKm > existingKm) {
         add("meter_updated_at = ?", date.toISOString());
+      }
+    }
+
+    // Last Oil Change KM is accepted only from the explicitly named Sheet
+    // column. It can never move backwards. When Current KM == Last Oil KM on
+    // the same dated row, the row is treated as an explicit same-day oil
+    // change and is also written to oil_changes so the startup repair cannot
+    // erase it later. Driver/phone remain ERP-controlled.
+    const existingOilKm = Number(result.rows[0].last_oil_km || 0);
+    const oilChangedToday =
+      lastOilKm !== null &&
+      km !== null &&
+      lastOilKm === km &&
+      lastOilKm > 0 &&
+      date;
+
+    if (lastOilKm !== null && lastOilKm > existingOilKm) {
+      add("last_oil_km = ?", lastOilKm);
+      if (oilChangedToday) {
+        add("last_oil_change_date = ?", date.toISOString().slice(0, 10));
       }
     }
 
@@ -495,6 +512,24 @@ export async function syncGoogleSheetVehicles() {
       `UPDATE vehicles SET ${sets.join(", ")} WHERE id = ${params.length + 1}`,
       [...params, id]
     );
+
+    if (oilChangedToday) {
+      try {
+        await pool.query(
+          `INSERT INTO oil_changes
+             (vehicle_id, oil_change_km, oil_change_date, changed_by, notes)
+           SELECT $1, $2, $3, 'Google Sheet', 'Google Sheet explicit same-day oil change'
+           WHERE NOT EXISTS (
+             SELECT 1 FROM oil_changes
+             WHERE vehicle_id = $1 AND oil_change_km = $2
+               AND oil_change_date::date = $3::date
+           )`,
+          [id, lastOilKm, date.toISOString().slice(0, 10)]
+        );
+      } catch (error) {
+        console.error("[GoogleSheetSync] oil history sync failed:", error.message);
+      }
+    }
 
     if (km !== null) {
       try {
@@ -537,8 +572,8 @@ export async function syncGoogleSheetVehicles() {
       phone: indexes.phone >= 0 ? headers[indexes.phone] : null,
       km: indexes.km >= 0 ? headers[indexes.km] : null,
       date: indexes.date >= 0 ? headers[indexes.date] : null,
-      lastOilKm: null,
-      lastOilDate: null
+      lastOilKm: indexes.lastOilKm >= 0 ? headers[indexes.lastOilKm] : null,
+      lastOilDate: indexes.lastOilDate >= 0 ? headers[indexes.lastOilDate] : null
     },
     samples,
     knownVehicleSample: knownVehicleSample

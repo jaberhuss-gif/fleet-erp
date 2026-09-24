@@ -368,17 +368,13 @@ export async function syncGoogleSheetVehicles() {
   );
   indexes.km = findKmIndex(headers);
 
-  if (indexes.km < 0 && headers.length >= 5) {
-    const compactHeaders = headers.map((h) =>
-      String(h ?? "")
-        .replace(/[\s_().-]/g, "")
-        .toLowerCase()
+  // Do not fall back to a positional column such as column 5.
+  // Column positions are unsafe: a future Sheet change could make oil KM,
+  // previous KM, or another numeric field look like the odometer.
+  if (indexes.km < 0) {
+    throw new Error(
+      `Current KM/odometer column not found. Refusing to import KM. Headers: ${headers.join(", ")}`
     );
-    const hasDailyKmShape =
-      compactHeaders.includes("lastoilkm") ||
-      compactHeaders.includes("timestamp") ||
-      compactHeaders.includes("datetime");
-    if (hasDailyKmShape) indexes.km = 4;
   }
 
   if (indexes.plate < 0) {

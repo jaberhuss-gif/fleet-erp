@@ -492,16 +492,6 @@ export async function syncGoogleSheetVehicles() {
     }
 
     await pool.query(
-            "INSERT INTO oil_changes (vehicle_id, oil_change_km, oil_change_date, changed_by, notes) " +
-            "SELECT $1, $2, $3, $4, $5 " +
-            "WHERE NOT EXISTS (SELECT 1 FROM oil_changes WHERE vehicle_id = $1 AND oil_change_km = $2 AND oil_change_date::date = $3::date)",
-            [id, lastOilKm, oilDateKey, "Google Sheet Migration", "Imported from Google Sheet; PostgreSQL is the permanent source of truth."]
-          );
-        }
-      }
-    }
-
-    await pool.query(
       `UPDATE vehicles SET ${sets.join(", ")} WHERE id = ${params.length + 1}`,
       [...params, id]
     );

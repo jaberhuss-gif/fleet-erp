@@ -1101,6 +1101,14 @@ try {
   console.error("[DriverRepair] startup reconciliation failed:", e.message);
 }
 
+// One-time repair: restore Last Oil Change KM/Date from trusted ERP oil history.
+// Google Sheet values are no longer allowed to modify these fields.
+try {
+  await db.repairLastOilChangeFromHistory();
+} catch (e) {
+  console.error("[OilRepair] startup reconciliation failed:", e.message);
+}
+
 // Additive, idempotent ticket-schema guard. Only missing columns are added;
 // existing tickets and historical data are never modified or removed.
 try {

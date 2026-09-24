@@ -1092,6 +1092,15 @@ if (process.env.ERP_V2_ENABLED === "true") {
   }
 }
 
+// Narrow startup safety reconciliation for the known 4481 JUA assignment.
+// It is idempotent and only acts when the vehicle is still linked to the old
+// Kamran record and exactly one Abdul Wahid driver record exists.
+try {
+  await db.repairKnownVehicleAssignments();
+} catch (e) {
+  console.error("[DriverRepair] startup reconciliation failed:", e.message);
+}
+
 // Additive, idempotent ticket-schema guard. Only missing columns are added;
 // existing tickets and historical data are never modified or removed.
 try {

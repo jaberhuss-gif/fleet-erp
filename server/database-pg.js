@@ -393,6 +393,57 @@ export async function repairKnownVehicleAssignments() {
   };
 }
 
+
+/**
+ * Restore Last Oil Change KM/Date from the authoritative oil_changes history.
+ * Google Sheet migration rows are excluded because the Sheet is not an oil-change
+ * source of truth. Vehicles with no trusted oil history are left untouched.
+ * This does not delete or rewrite any history.
+ */
+export async function repairLastOilChangeFromHistory() {
+  const result = await query(`
+    SELECT v.id, v.plate_number, v.plate_code, v.last_oil_km, v.last_oil_change_date,
+           oc.oil_change_km AS trusted_oil_km,
+           oc.oil_change_date AS trusted_oil_date
+    FROM vehicles v
+    LEFT JOIN LATERAL (
+      SELECT oil_change_km, oil_change_date
+      FROM oil_changes
+      WHERE vehicle_id = v.id
+        AND COALESCE(notes, '') NOT ILIKE '%Google Sheet Migration%'
+      ORDER BY oil_change_date DESC NULLS LAST, id DESC
+      LIMIT 1
+    ) oc ON TRUE
+    WHERE oc.oil_change_km IS NOT NULL
+  `);
+  let checked = 0;
+  let repaired = 0;
+  for (const row of result.rows) {
+    checked += 1;
+    const currentKm = Number(row.last_oil_km || 0);
+    const trustedKm = Number(row.trusted_oil_km || 0);
+    const currentDate = row.last_oil_change_date ? String(row.last_oil_change_date).slice(0, 10) : "";
+    const trustedDate = row.trusted_oil_date ? String(row.trusted_oil_date).slice(0, 10) : "";
+    if (currentKm === trustedKm && currentDate === trustedDate) continue;
+
+    await query(`
+      UPDATE vehicles
+      SET last_oil_km = $1,
+          last_oil_change_date = $2,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $3
+    `, [trustedKm, trustedDate || null, row.id]);
+    repaired += 1;
+    console.log("[OilRepair] restored Last Oil Change for", `${row.plate_number} ${row.plate_code}`, {
+      fromKm: currentKm,
+      toKm: trustedKm,
+      fromDate: currentDate || null,
+      toDate: trustedDate || null
+    });
+  }
+  return { checked, repaired };
+}
+
 export async function deleteVehicle(id) {
   const result = await query(`DELETE FROM vehicles WHERE id = $1`, [id]);
   return { changes: result.rowCount };

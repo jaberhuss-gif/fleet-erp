@@ -316,6 +316,83 @@ export async function updateVehicle(id, data = {}) {
   return { changes: result.rowCount };
 }
 
+
+/**
+ * One-time safety reconciliation for the known 4481 JUA assignment.
+ * This is intentionally narrow: it only changes the relational driver assignment
+ * when 4481 JUA is still assigned to the old Kamran record and there is exactly
+ * one active/inactive driver whose normalized name is Abdul Wahid.
+ * It never touches KM, oil-change fields, KM history, or driver master records.
+ */
+export async function repairKnownVehicleAssignments() {
+  const vehicleResult = await query(`
+    SELECT v.id, v.plate_number, v.plate_code, v.driver_id,
+           d.name AS driver_name, d.phone AS driver_phone
+    FROM vehicles v
+    LEFT JOIN drivers d ON d.id = v.driver_id
+    WHERE UPPER(TRIM(v.plate_number)) = '4481'
+      AND UPPER(TRIM(v.plate_code)) = 'JUA'
+    LIMIT 1
+  `);
+  const vehicle = vehicleResult.rows[0];
+  if (!vehicle) {
+    console.log("[DriverRepair] 4481 JUA not found; no change.");
+    return { changed: false, reason: "vehicle_not_found" };
+  }
+
+  const currentName = String(vehicle.driver_name || "").trim().toLowerCase();
+  if (!currentName.includes("kamran")) {
+    return { changed: false, reason: "not_assigned_to_kamran", currentDriver: vehicle.driver_name || "" };
+  }
+
+  const driverResult = await query(`
+    SELECT id, name, phone
+    FROM drivers
+    WHERE lower(regexp_replace(trim(name), '[^a-z0-9]+', '', 'g'))
+          = 'abdulwahid'
+    ORDER BY id
+  `);
+  if (driverResult.rows.length !== 1) {
+    console.warn("[DriverRepair] Abdul Wahid match is not unique; no change.", {
+      matches: driverResult.rows.length
+    });
+    return { changed: false, reason: "abdul_wahid_not_unique", matches: driverResult.rows.length };
+  }
+
+  const target = driverResult.rows[0];
+  await transaction(async (client) => {
+    await client.query(
+      `UPDATE vehicles
+       SET driver_id = $1, driver = $2, phone = $3, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4`,
+      [target.id, target.name || "", target.phone || "", vehicle.id]
+    );
+  });
+
+  await syncV2DriverAssignment({
+    legacyVehicleId: vehicle.id,
+    plateNumber: vehicle.plate_number,
+    plateCode: vehicle.plate_code,
+    driverName: target.name || "",
+    phone: target.phone || ""
+  });
+
+  console.log("[DriverRepair] 4481 JUA reassigned from old Kamran record to Abdul Wahid.", {
+    vehicleId: vehicle.id,
+    oldDriverId: vehicle.driver_id,
+    newDriverId: target.id
+  });
+
+  return {
+    changed: true,
+    vehicleId: vehicle.id,
+    oldDriverId: vehicle.driver_id,
+    newDriverId: target.id,
+    driverName: target.name || "",
+    phone: target.phone || ""
+  };
+}
+
 export async function deleteVehicle(id) {
   const result = await query(`DELETE FROM vehicles WHERE id = $1`, [id]);
   return { changes: result.rowCount };

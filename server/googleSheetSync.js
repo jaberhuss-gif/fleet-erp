@@ -94,12 +94,10 @@ function findKmIndex(headers) {
     if (index >= 0) return index;
   }
 
-  const generic = normalizedHeaders.findIndex((h) =>
-    /(km|kilometer|kilometre|odometer|mileage)/.test(h) &&
-    !/(last|previous|since|remaining|interval|change|service)/.test(h)
-  );
-
-  return generic;
+  // Safety rule: never guess the KM column. A wrong column can become an
+  // odometer reading and affect maintenance/oil-change decisions. Only an
+  // explicitly named current/latest odometer field is accepted.
+  return -1;
 }
 
 export function parseCsv(text) {

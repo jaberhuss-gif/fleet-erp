@@ -152,7 +152,7 @@ function cleanKm(value) {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
-async function syncV2Km(plateNumber, plateCode, km, readingDate, meterUpdatedAt = null, lastOilKm = null, lastOilDate = null) {
+async function syncV2Km(plateNumber, plateCode, km, readingDate, meterUpdatedAt = null) {
   if (!v2Enabled() || km == null) return;
   const vehicle = (await v2Query(
     "SELECT id FROM fleet_erp_v2.vehicles WHERE plate_number=$1 AND plate_code=$2 LIMIT 1",
@@ -167,12 +167,8 @@ async function syncV2Km(plateNumber, plateCode, km, readingDate, meterUpdatedAt 
     "UPDATE fleet_erp_v2.vehicles SET current_km=GREATEST(current_km,$1::numeric), meter_updated_at=COALESCE($2::timestamptz,meter_updated_at), updated_at=CURRENT_TIMESTAMP WHERE id=$3::integer",
     [km, meterUpdatedAt, vehicle.id]
   );
-  if (lastOilKm != null || lastOilDate != null) {
-    await v2Query(
-      "UPDATE fleet_erp_v2.vehicles SET last_oil_km=CASE WHEN $1::numeric IS NOT NULL THEN GREATEST(COALESCE(last_oil_km,0),$1::numeric) ELSE last_oil_km END, last_oil_change_date=CASE WHEN $2::date IS NOT NULL AND (last_oil_change_date IS NULL OR $2::date >= last_oil_change_date) THEN $2::date ELSE last_oil_change_date END, updated_at=CURRENT_TIMESTAMP WHERE id=$3::integer",
-      [lastOilKm, lastOilDate, vehicle.id]
-    );
-  }
+  // Google Sheet is an odometer/evidence source only.
+  // It must never write Last Oil Change KM or Last Oil Change Date.
 }
 
 function isInactive(value) {
@@ -423,9 +419,8 @@ export async function syncGoogleSheetVehicles() {
     const phone = indexes.phone >= 0 ? String(values[indexes.phone] ?? "").trim() : "";
     const kmRaw = indexes.km >= 0 ? String(values[indexes.km] ?? "").trim() : "";
     const km = indexes.km >= 0 ? cleanKm(values[indexes.km]) : null;
-    const lastOilKm = indexes.lastOilKm >= 0 ? cleanKm(values[indexes.lastOilKm]) : null;
-    const lastOilDateRaw = indexes.lastOilDate >= 0 ? String(values[indexes.lastOilDate] ?? "").trim() : "";
-    const lastOilDate = lastOilDateRaw ? parseSheetDate(lastOilDateRaw) : null;
+    // Last Oil Change KM/Date are ERP-maintained maintenance records.
+    // Google Sheet values for those columns are intentionally ignored.
     if (km !== null) kmFound += 1;
     const active = indexes.active >= 0 ? !isInactive(values[indexes.active]) : null;
 
@@ -496,25 +491,7 @@ export async function syncGoogleSheetVehicles() {
       }
     }
 
-    const oilDateKey = lastOilDate
-      ? lastOilDate.toISOString().slice(0, 10)
-      : (date ? date.toISOString().slice(0, 10) : null);
-
-    if (lastOilKm !== null) {
-      const existingOilKm = Number(result.rows[0].last_oil_km || 0);
-      const existingOilDate = result.rows[0].last_oil_change_date ? new Date(result.rows[0].last_oil_change_date) : null;
-
-      const isNewerOilRecord =
-        !existingOilDate ||
-        (lastOilDate && lastOilDate.getTime() >= existingOilDate.getTime()) ||
-        (!lastOilDate && lastOilKm > existingOilKm);
-
-      if (isNewerOilRecord) {
-        add("last_oil_km = ?", lastOilKm);
-        if (oilDateKey) add("last_oil_change_date = ?", oilDateKey);
-
-        if (oilDateKey) {
-          await pool.query(
+    await pool.query(
             "INSERT INTO oil_changes (vehicle_id, oil_change_km, oil_change_date, changed_by, notes) " +
             "SELECT $1, $2, $3, $4, $5 " +
             "WHERE NOT EXISTS (SELECT 1 FROM oil_changes WHERE vehicle_id = $1 AND oil_change_km = $2 AND oil_change_date::date = $3::date)",
@@ -536,9 +513,7 @@ export async function syncGoogleSheetVehicles() {
           splitPlateCode,
           km,
           date ? date.toISOString().slice(0, 10) : wantedDate,
-          date ? date.toISOString() : null,
-          lastOilKm,
-          oilDateKey || null
+          date ? date.toISOString() : null
         );
       } catch (error) {
         console.error("[GoogleSheetSync] V2 current KM sync failed:", error.message);
@@ -572,8 +547,8 @@ export async function syncGoogleSheetVehicles() {
       phone: indexes.phone >= 0 ? headers[indexes.phone] : null,
       km: indexes.km >= 0 ? headers[indexes.km] : null,
       date: indexes.date >= 0 ? headers[indexes.date] : null,
-      lastOilKm: indexes.lastOilKm >= 0 ? headers[indexes.lastOilKm] : null,
-      lastOilDate: indexes.lastOilDate >= 0 ? headers[indexes.lastOilDate] : null
+      lastOilKm: null,
+      lastOilDate: null
     },
     samples,
     knownVehicleSample: knownVehicleSample

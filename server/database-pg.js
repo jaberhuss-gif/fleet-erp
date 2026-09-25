@@ -2814,6 +2814,7 @@ export async function listPeriodicMaintenance(filters = {}) {
     SELECT
       pm.*,
       CONCAT(v.plate_number, ' ', v.plate_code) AS vehicle_plate,
+      v.location AS vehicle_location,
       v.driver AS driver_name
     FROM periodic_maintenance pm
     LEFT JOIN vehicles v

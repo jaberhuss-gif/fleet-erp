@@ -169,6 +169,10 @@ export default function PeriodicMaintenance({ canWork = false }) {
     await exportToExcel(data, filename, exportColumns, sheetName);
   };
 
+  const printPdfReport = () => {
+    window.print();
+  };
+
   const getStatusBadge = (r) => {
     if (r.status === 'Completed') return <span className="status-badge status-safe">Completed</span>;
     if (r.scheduled_date < today) return <span className="status-badge status-urgent">Overdue</span>;
@@ -213,9 +217,15 @@ export default function PeriodicMaintenance({ canWork = false }) {
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="panel">
+        <div className="print-header">
+          <h1>Periodic Maintenance & Inspection</h1>
+          <div className="print-meta">
+            Generated: {new Date().toLocaleString()} · Records: {currentList.length}
+          </div>
+        </div>
         <h2>Periodic Maintenance & Inspection</h2>
 
-        <div className="btn-row">
+        <div className="btn-row no-print">
           {canWork && <button className="btn btn-warning" onClick={handleGenerate}>Auto-Generate All</button>}
           <button className="btn btn-success" onClick={() => exportReport(filledRecords, 'Periodic_Maintenance_Filled', 'Filled Records')}>
             📊 Export Filled Records ({filledRecords.length})
@@ -223,13 +233,16 @@ export default function PeriodicMaintenance({ canWork = false }) {
           <button className="btn btn-warning" onClick={() => exportReport(untouchedRecords, 'Periodic_Maintenance_Untouched', 'No Action Records')}>
             📋 Export No Action Records ({untouchedRecords.length})
           </button>
+          <button className="btn btn-primary" onClick={printPdfReport}>
+            🖨️ Export PDF
+          </button>
           {canWork && <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
             {showForm ? 'Cancel' : '+ Schedule New'}
           </button>}
         </div>
 
         {showForm && (
-          <form onSubmit={handleSubmit}>
+          <form className="no-print" onSubmit={handleSubmit}>
             <h3>{editing ? 'Edit Schedule' : 'New Schedule'}</h3>
             <div className="cards-grid">
               <div className="form-group">
@@ -277,7 +290,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
           </form>
         )}
 
-        <div className="filters">
+        <div className="filters no-print">
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Vehicle / Driver" />
           <select value={filterVehicle} onChange={(e) => setFilterVehicle(e.target.value)}>
             <option value="all">All Vehicles</option>
@@ -299,7 +312,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
         {loading ? <div className="loading">Loading...</div> : (
           <table>
             <thead>
-              <tr><th>Vehicle</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Completed</th><th>Status</th><th>Technician</th><th>Cost</th><th>Actions</th></tr>
+              <tr><th>Vehicle</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Completed</th><th>Status</th><th>Technician</th><th>Cost</th><th>Notes</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {currentList.map((r) => (
@@ -312,6 +325,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
                   <td>{getStatusBadge(r)}</td>
                   <td>{r.technician || '-'}</td>
                   <td>{Number(r.cost || 0).toLocaleString()}</td>
+                  <td style={{ whiteSpace: 'pre-wrap', minWidth: '220px' }}>{r.notes || '-'}</td>
                   <td>
                     {canWork && r.status === 'Pending' && <button className="btn btn-success" onClick={() => handleComplete(r)}>Complete</button>}
                     {canWork && <button className="btn btn-primary" onClick={() => handleEdit(r)}>Edit</button>}

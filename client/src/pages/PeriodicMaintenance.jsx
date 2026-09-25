@@ -180,8 +180,8 @@ export default function PeriodicMaintenance({ canWork = false }) {
   };
 
   return (
-    <div>
-      <div className="sub-nav">
+    <div className="periodic-maintenance-print-root">
+      <div className="sub-nav print-hide">
         <button className={subTab === 'all' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('all')}>All ({records.length})</button>
         <button className={subTab === 'pending' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('pending')}>Pending ({subTabData.pending.length})</button>
         <button className={subTab === 'overdue' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('overdue')}>Overdue ({subTabData.overdue.length})</button>
@@ -189,7 +189,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
       </div>
 
       {/* ===== Stats Cards ===== */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+      <div className="print-hide" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '20px' }}>
         <div style={{ background: 'linear-gradient(135deg, #dc2626, #ef4444)', color: '#fff', padding: '16px 20px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(220,38,38,0.3)' }}>
           <div style={{ fontSize: '13px', opacity: 0.9, marginBottom: '6px' }}>Overdue</div>
           <div style={{ fontSize: '32px', fontWeight: '700', lineHeight: 1 }}>{alerts.counts?.overdue?.total ?? alerts.overdue.length}</div>
@@ -218,12 +218,12 @@ export default function PeriodicMaintenance({ canWork = false }) {
 
       <div className="panel">
         <div className="print-header">
-          <h1>Periodic Maintenance & Inspection</h1>
+          <h1>Vehicle Maintenance</h1>
           <div className="print-meta">
             Generated: {new Date().toLocaleString()} · Records: {currentList.length}
           </div>
         </div>
-        <h2>Periodic Maintenance & Inspection</h2>
+        <h2 className="print-hide">Periodic Maintenance & Inspection</h2>
 
         <div className="btn-row no-print">
           {canWork && <button className="btn btn-warning" onClick={handleGenerate}>Auto-Generate All</button>}

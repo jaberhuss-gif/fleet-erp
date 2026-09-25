@@ -1,3 +1,5 @@
+import { toWhatsAppRecipient } from "./phone.js";
+
 const DEFAULT_GRAPH_VERSION = "v23.0";
 
 function getConfig() {
@@ -11,8 +13,15 @@ function getConfig() {
   };
 }
 
+// The Cloud API needs E.164 digits with no plus. Driver numbers are hand-entered, so
+// resolve them through the shared normaliser rather than trusting the stored string.
 function normalizePhone(phone) {
-  return String(phone ?? "").trim().replace(/[\s().-]/g, "");
+  return toWhatsAppRecipient(phone);
+}
+
+export function isWhatsAppEnabled() {
+  const config = getConfig();
+  return config.enabled && Boolean(config.token) && Boolean(config.phoneNumberId);
 }
 
 export async function sendWhatsAppTemplate({ phone, templateName, language, bodyParameters = [] }) {
@@ -39,7 +48,7 @@ export async function sendWhatsAppTemplate({ phone, templateName, language, body
     return {
       sent: false,
       provider: "whatsapp-invalid-recipient",
-      response: "Recipient phone number is empty"
+      response: `Recipient phone number is not a valid mobile number: ${phone || "(empty)"}`
     };
   }
 
@@ -94,4 +103,17 @@ export async function sendWhatsAppTemplate({ phone, templateName, language, body
     messageId: parsed?.messages?.[0]?.id || null,
     response: JSON.stringify(parsed).slice(0, 2000)
   };
+}
+
+// Daily KM reminder. The template body parameters match the approved
+// `fleet_daily_km_reminder` template: driver name, plate, odometer.
+export async function sendDailyKmReminderWhatsApp({ driverName, phone, plate, currentKm }) {
+  return sendWhatsAppTemplate({
+    phone,
+    bodyParameters: [
+      driverName || "Driver",
+      plate || "your vehicle",
+      Number(currentKm || 0).toLocaleString("en-US")
+    ]
+  });
 }

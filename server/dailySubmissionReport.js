@@ -1,5 +1,6 @@
 import { query } from "./postgres.js";
 import { parseCsv } from "./googleSheetSync.js";
+import { toDayKey, resolveLatestKm, KM_STATUS } from "./kmSource.js";
 import {
   FIXED_FLEET_VEHICLES,
   normalizePlateKey,
@@ -156,10 +157,26 @@ export async function getDailySubmissionReport(targetDate = null) {
     const sheet = sheetByPlate.get(normalizePlateKey(label)) || null;
     const submitted = Boolean(erp || sheet);
 
+    // The two sources are reported side by side instead of one silently shadowing the
+    // other. `km` is the latest dated value; a same-day disagreement is flagged rather
+    // than hidden. `mismatch` is what the review screen needs to surface.
+    const erpKm = erp ? Number(erp.reading_km) : null;
+    const sheetKm = sheet ? Number(sheet.km) : null;
+    const erpDate = erp?.reading_date ? String(erp.reading_date).slice(0, 10) : null;
+    const sheetDate = sheet?.date ? toDayKey(sheet.date) : null;
+
     let source = "Not Submitted";
     if (erp && sheet) source = "ERP + Google Sheet";
     else if (erp) source = "ERP";
     else if (sheet) source = "Google Sheet";
+
+    // Reuse the same reconciliation the write path uses, so the number shown here can
+    // never disagree with the number that was actually persisted.
+    const resolution = resolveLatestKm({
+      erp: erp ? { km: erpKm, date: erpDate } : null,
+      sheet: sheet ? { km: sheetKm, date: sheetDate } : null
+    });
+    const disagreement = resolution.status === KM_STATUS.MISMATCH;
 
     return {
       vehicleId: vehicle ? Number(vehicle.id) : null,
@@ -168,9 +185,15 @@ export async function getDailySubmissionReport(targetDate = null) {
       phone: vehicle?.phone || sheet?.phone || "",
       location: vehicle?.location || "",
       currentKm: Number(vehicle?.current_km || 0),
-      erpKm: erp ? Number(erp.reading_km) : null,
-      googleSheetKm: sheet ? Number(sheet.km) : null,
-      km: sheet ? Number(sheet.km) : (erp ? Number(erp.reading_km) : null),
+      erpKm,
+      googleSheetKm: sheetKm,
+      erpDate,
+      googleSheetDate: sheetDate,
+      // When both sides share a date the reconciliation declines to choose, so fall back
+      // to a display value rather than showing nothing.
+      km: resolution.authoritative ?? sheetKm ?? erpKm,
+      mismatch: disagreement,
+      variance: disagreement ? resolution.variance : 0,
       source,
       submittedToday: submitted,
       status: submitted ? "Submitted" : "Not Submitted",

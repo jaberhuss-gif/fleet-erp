@@ -1,5 +1,7 @@
 import { query, transaction } from "./postgres.js";
 import { sendFcmToTokens } from "./fcm.js";
+import { sendDailyKmReminderWhatsApp } from "./whatsapp.js";
+import { toStoredPhone } from "./phone.js";
 import { ensurePeriodicMaintenanceSchema } from "./database-pg.js";
 import {
   DAILY_KM_TZ,
@@ -35,8 +37,11 @@ async function ensureTable() {
     ON km_daily_notifications(vehicle_id, reminder_date)`);
 }
 
-function phoneDigits(value) {
-  return String(value || "").replace(/[^0-9]/g, "");
+// Match a driver record to an ERP user by phone regardless of the stored format.
+// `0509145107` and `509145107` are the same person, so comparing raw digit strings
+// would fail to match a driver whose number was entered without the leading zero.
+function phoneMatchKey(value) {
+  return toStoredPhone(value).replace(/[^0-9]/g, "");
 }
 
 async function getOwnerTokens() {
@@ -51,20 +56,21 @@ async function getOwnerTokens() {
 }
 
 async function getDriverUserId(driverPhone) {
-  const phone = phoneDigits(driverPhone);
+  const phone = phoneMatchKey(driverPhone);
   if (!phone) return null;
 
+  // Compare on the normalised key so a stored `509145107` still matches a user row
+  // holding `0509145107`, and vice versa.
   const result = await query(`
-    SELECT u.id
+    SELECT u.id, u.phone
     FROM users u
     WHERE u.is_active = 1
       AND u.role = 'Driver'
-      AND regexp_replace(COALESCE(u.phone, ''), '[^0-9]', '', 'g') = $1
-    ORDER BY u.id
-    LIMIT 1
-  `, [phone]);
+      AND regexp_replace(COALESCE(u.phone, ''), '[^0-9]', '', 'g') <> ''
+  `);
 
-  return result.rows[0]?.id || null;
+  const match = result.rows.find((r) => phoneMatchKey(r.phone) === phone);
+  return match?.id || null;
 }
 
 async function getDriverTokens(userId) {
@@ -77,29 +83,62 @@ async function getDriverTokens(userId) {
 }
 
 async function sendDriverReminder(record) {
-  if (!record.driver_user_id) {
-    return { sent: 0, reason: "Driver ERP user not matched by phone." };
-  }
+  // FCM and WhatsApp are complementary, not alternatives: a driver with the app installed
+  // gets a push, and one without it still gets a WhatsApp message. Either channel being
+  // unavailable must not suppress the other.
+  const result = { sent: 0, failed: 0, channels: {} };
 
-  const tokens = await getDriverTokens(record.driver_user_id);
-  if (!tokens.length) {
-    return { sent: 0, reason: "Driver has no registered push token." };
-  }
-
-  const result = await sendFcmToTokens({
-    tokens,
-    title: "🚨 Daily KM Reading Required",
-    body: `Vehicle ${record.vehicle_plate || "assigned to you"} — current odometer: ${Number(record.current_km || 0).toLocaleString()} km — no KM reading entered by 07:00. Please open Fleet ERP and enter today's odometer reading.`,
-    data: {
-      type: "daily_km_missing",
-      icon: "🚨",
-      tab: "fleet",
-      url: "/",
-      notification_id: String(record.id)
+  if (record.driver_user_id) {
+    const tokens = await getDriverTokens(record.driver_user_id);
+    if (tokens.length) {
+      try {
+        const push = await sendFcmToTokens({
+          tokens,
+          title: "🚨 Daily KM Reading Required",
+          body: `Vehicle ${record.vehicle_plate || "assigned to you"} — current odometer: ${Number(record.current_km || 0).toLocaleString()} km — no KM reading entered by 07:00. Please open Fleet ERP and enter today's odometer reading.`,
+          data: {
+            type: "daily_km_missing",
+            icon: "🚨",
+            tab: "fleet",
+            url: "/",
+            notification_id: String(record.id)
+          }
+        });
+        result.sent += push.sent || 0;
+        result.failed += push.failed || 0;
+        result.channels.push = push;
+      } catch (error) {
+        result.channels.push = { sent: 0, error: error.message };
+      }
+    } else {
+      result.channels.push = { sent: 0, reason: "Driver has no registered push token." };
     }
-  });
+  } else {
+    result.channels.push = { sent: 0, reason: "Driver ERP user not matched by phone." };
+  }
 
-  return { sent: result.sent || 0, failed: result.failed || 0 };
+  // WhatsApp is sent automatically on the same schedule as the push; there is no
+  // button to press. When the Cloud API is not configured the attempt is recorded
+  // as a no-op so the missing driver is still visible in the logs.
+  try {
+    if (record.driver_phone) {
+      const wa = await sendDailyKmReminderWhatsApp({
+        driverName: record.driver_name,
+        phone: record.driver_phone,
+        plate: record.vehicle_plate,
+        currentKm: record.current_km
+      });
+      result.channels.whatsapp = wa;
+      if (wa.sent) result.sent += 1;
+    } else {
+      result.channels.whatsapp = { sent: false, reason: "Driver has no phone number." };
+    }
+  } catch (error) {
+    result.channels.whatsapp = { sent: false, error: error.message };
+    console.error("[WhatsApp] daily KM reminder failed:", record.vehicle_plate, error.message);
+  }
+
+  return result;
 }
 
 // ============================================================
@@ -531,9 +570,11 @@ export async function getDriverDailyKmStatus(userId) {
     return { required: false, reason: 'not_driver' };
   }
 
-  const phone = phoneDigits(user.phone);
+  const phone = phoneMatchKey(user.phone);
   const name = String(user.full_name || user.username || '').trim();
 
+  // A vehicle may carry the driver's number in either format, so the comparison has to
+  // happen on normalised keys rather than raw digits.
   const vehicleResult = await query(`
     SELECT
       v.id,
@@ -545,15 +586,21 @@ export async function getDriverDailyKmStatus(userId) {
     FROM vehicles v
     WHERE
       (
-        ($1 <> '' AND regexp_replace(COALESCE(v.phone, ''), '[^0-9]', '', 'g') = $1)
+        COALESCE(v.phone, '') <> ''
         OR ($2 <> '' AND LOWER(TRIM(v.driver)) = LOWER(TRIM($2)))
       )
       AND COALESCE(LOWER(TRIM(v.status)), '') NOT IN ('inactive', 'sold', 'disposed', 'disabled')
     ORDER BY v.id
-    LIMIT 1
+    LIMIT 50
   `, [phone, name]);
 
-  const vehicle = vehicleResult.rows[0];
+  const vehicle =
+    vehicleResult.rows.find((r) => phoneMatchKey(r.driver_phone) === phone) ||
+    vehicleResult.rows.find(
+      (r) => name && String(r.driver_name || "").trim().toLowerCase() === name.toLowerCase()
+    ) ||
+    null;
+
   if (!vehicle) {
     return { required: false, reason: 'vehicle_not_assigned' };
   }

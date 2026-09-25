@@ -155,18 +155,30 @@ function cleanKm(value) {
 async function syncV2Km(plateNumber, plateCode, km, readingDate, meterUpdatedAt = null) {
   if (!v2Enabled() || km == null) return;
   const vehicle = (await v2Query(
-    "SELECT id FROM fleet_erp_v2.vehicles WHERE plate_number=$1 AND plate_code=$2 LIMIT 1",
+    "SELECT id, current_km, meter_updated_at FROM fleet_erp_v2.vehicles WHERE plate_number=$1 AND plate_code=$2 LIMIT 1",
     [String(plateNumber || "").trim(), String(plateCode || "").trim().toUpperCase()]
   )).rows[0];
   if (!vehicle) return;
+
+  const existingDay = vehicle.meter_updated_at
+    ? String(vehicle.meter_updated_at).slice(0, 10)
+    : null;
+  const incomingDay = readingDate ? String(readingDate).slice(0, 10) : null;
+  const incomingIsNewer =
+    existingDay == null || (incomingDay != null && incomingDay > existingDay);
+
   await v2Query(
-    "INSERT INTO fleet_erp_v2.km_readings(vehicle_id,reading_km,reading_date,notes) VALUES($1,$2,$3::date,$4) ON CONFLICT(vehicle_id,reading_date) DO UPDATE SET reading_km=GREATEST(fleet_erp_v2.km_readings.reading_km,EXCLUDED.reading_km),notes=EXCLUDED.notes",
+    "INSERT INTO fleet_erp_v2.km_readings(vehicle_id,reading_km,reading_date,notes) VALUES($1,$2,$3::date,$4) ON CONFLICT(vehicle_id,reading_date) DO UPDATE SET reading_km=EXCLUDED.reading_km,notes=EXCLUDED.notes",
     [vehicle.id, km, readingDate, "Google Sheet migration"]
   );
-  await v2Query(
-    "UPDATE fleet_erp_v2.vehicles SET current_km=GREATEST(current_km,$1::numeric), meter_updated_at=COALESCE($2::timestamptz,meter_updated_at), updated_at=CURRENT_TIMESTAMP WHERE id=$3::integer",
-    [km, meterUpdatedAt, vehicle.id]
-  );
+
+  // Mirror the v1 rule: only a strictly newer dated reading may move the odometer.
+  if (incomingIsNewer) {
+    await v2Query(
+      "UPDATE fleet_erp_v2.vehicles SET current_km=$1::numeric, meter_updated_at=COALESCE($2::timestamptz,meter_updated_at), updated_at=CURRENT_TIMESTAMP WHERE id=$3::integer",
+      [km, meterUpdatedAt, vehicle.id]
+    );
+  }
   // Google Sheet is an odometer/evidence source only.
   // It must never write Last Oil Change KM or Last Oil Change Date.
 }
@@ -479,11 +491,26 @@ export async function syncGoogleSheetVehicles() {
 
     if (km !== null) {
       const existingKm = Number(result.rows[0].current_km || 0);
-      const nextKm = Math.max(km, existingKm);
-      add("current_km = ?", nextKm);
-      if (nextKm !== existingKm) kmUpdated += 1;
+      const existingMeterAt = result.rows[0].meter_updated_at
+        ? String(result.rows[0].meter_updated_at).slice(0, 10)
+        : null;
+      const sheetDay = date ? date.toISOString().slice(0, 10) : null;
 
-      if (date && nextKm > existingKm) {
+      // Latest dated reading wins. The sheet row is authoritative only when it is
+      // strictly newer than the odometer the ERP already holds. An older sheet row, or
+      // one for a day the ERP has already covered, must never move the stored value —
+      // that is what let a stale high figure become permanent. The ERP keeps the same-day
+      // tie because a driver's own correction is the record of authority; the sheet is
+      // evidence only.
+      const sheetIsNewer =
+        existingMeterAt == null || (sheetDay != null && sheetDay > existingMeterAt);
+      const nextKm = sheetIsNewer ? km : existingKm;
+
+      if (nextKm !== existingKm) {
+        add("current_km = ?", nextKm);
+        kmUpdated += 1;
+        if (date) add("meter_updated_at = ?", date.toISOString());
+      } else if (sheetDay == null && date) {
         add("meter_updated_at = ?", date.toISOString());
       }
     }

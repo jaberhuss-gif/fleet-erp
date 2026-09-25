@@ -53,18 +53,24 @@ async function syncV2KmReading({ plateNumber = "", plateCode = "", km, readingDa
   if (!v2Enabled() || km == null) return;
   try {
     const vehicle = (await v2Query(
-      "SELECT id FROM fleet_erp_v2.vehicles WHERE plate_number=$1 AND plate_code=$2 LIMIT 1",
+      "SELECT id, meter_updated_at FROM fleet_erp_v2.vehicles WHERE plate_number=$1 AND plate_code=$2 LIMIT 1",
       [String(plateNumber || "").trim(), String(plateCode || "").trim().toUpperCase()]
     )).rows[0];
     if (!vehicle) return;
     await v2Query(
-      "INSERT INTO fleet_erp_v2.km_readings(vehicle_id,reading_km,reading_date,notes) VALUES($1,$2,$3,$4) ON CONFLICT(vehicle_id,reading_date) DO UPDATE SET reading_km=GREATEST(fleet_erp_v2.km_readings.reading_km,EXCLUDED.reading_km),notes=EXCLUDED.notes",
+      "INSERT INTO fleet_erp_v2.km_readings(vehicle_id,reading_km,reading_date,notes) VALUES($1,$2,$3,$4) ON CONFLICT(vehicle_id,reading_date) DO UPDATE SET reading_km=EXCLUDED.reading_km,notes=EXCLUDED.notes",
       [vehicle.id, km, readingDate, notes || "ERP KM"]
     );
-    await v2Query(
-      "UPDATE fleet_erp_v2.vehicles SET current_km=GREATEST(current_km,$1),updated_at=CURRENT_TIMESTAMP WHERE id=$2",
-      [km, vehicle.id]
-    );
+    // `km` is already the newest reading for this vehicle (see addReading), so assigning it
+    // is safe; GREATEST would instead keep a stale bad high value forever.
+    const existingDay = vehicle.meter_updated_at ? String(vehicle.meter_updated_at).slice(0, 10) : null;
+    const incomingDay = readingDate ? String(readingDate).slice(0, 10) : null;
+    if (existingDay == null || (incomingDay != null && incomingDay >= existingDay)) {
+      await v2Query(
+        "UPDATE fleet_erp_v2.vehicles SET current_km=$1, meter_updated_at=COALESCE($3::timestamptz,meter_updated_at), updated_at=CURRENT_TIMESTAMP WHERE id=$2",
+        [km, vehicle.id, readingDate ? new Date(String(readingDate)).toISOString() : null]
+      );
+    }
   } catch (err) {
     console.error("[V2 KM Sync] failed:", err.message);
     throw new Error("KM was saved locally but V2 synchronization failed: " + err.message);
@@ -468,9 +474,6 @@ export async function addReading(vehicleId, data = {}) {
   const km = numberValue(data.readingKm, 0);
 
   if (km <= 0) throw new Error("Reading must be positive");
-  if (km < numberValue(v.current_km, 0)) {
-    throw new Error("Reading must be >= current");
-  }
 
   // Default to the Riyadh calendar date. The server/container TZ may be UTC, so
   // never use the server-local date to decide "today's" reading.
@@ -482,6 +485,31 @@ export async function addReading(vehicleId, data = {}) {
   const readingDate =
     stringValue(data.readingDate) ||
     riyadhToday;
+
+  // An odometer is monotonic in time, so a reading is bounded by its neighbours rather
+  // than by vehicles.current_km. Using the stored odometer as the floor is what locked in
+  // bad values permanently: once current_km jumped ahead, the correct reading could never
+  // be entered again. The lower bound is the newest reading strictly before this date and
+  // the upper bound is the earliest reading strictly after it.
+  const bounds = await query(
+    `SELECT
+       (SELECT reading_km FROM km_records
+         WHERE vehicle_id = $1 AND reading_date < $2::date
+         ORDER BY reading_date DESC, id DESC LIMIT 1) AS prior_km,
+       (SELECT reading_km FROM km_records
+         WHERE vehicle_id = $1 AND reading_date > $2::date
+         ORDER BY reading_date ASC, id ASC LIMIT 1) AS next_km`,
+    [vehicleId, String(readingDate).slice(0, 10)]
+  );
+  const priorKm = bounds.rows[0]?.prior_km == null ? null : numberValue(bounds.rows[0].prior_km, 0);
+  const nextKm = bounds.rows[0]?.next_km == null ? null : numberValue(bounds.rows[0].next_km, 0);
+
+  if (priorKm !== null && km < priorKm) {
+    throw new Error("Reading must be >= " + priorKm.toLocaleString() + " (previous dated reading)");
+  }
+  if (nextKm !== null && km > nextKm) {
+    throw new Error("Reading must be <= " + nextKm.toLocaleString() + " (later dated reading)");
+  }
 
   const plate = `${v.plate_number || ""} ${v.plate_code || ""}`.trim();
 
@@ -498,20 +526,33 @@ export async function addReading(vehicleId, data = {}) {
     ]
   );
 
+  // Derive the odometer from the newest reading by date rather than assigning the value
+  // just entered. A driver catching up on an earlier day legitimately submits a lower
+  // number, and that backfill must not roll the vehicle's odometer backwards.
+  const latestRow = await query(
+    `SELECT reading_km, reading_date FROM km_records
+     WHERE vehicle_id = $1
+     ORDER BY reading_date DESC, id DESC LIMIT 1`,
+    [vehicleId]
+  );
+  const odometerKm = latestRow.rows[0]
+    ? numberValue(latestRow.rows[0].reading_km, km)
+    : km;
+
   await query(
     `UPDATE vehicles
      SET current_km = $1,
          meter_updated_at = CURRENT_TIMESTAMP,
          updated_at = CURRENT_TIMESTAMP
      WHERE id = $2`,
-    [km, vehicleId]
+    [odometerKm, vehicleId]
   );
 
   await syncV2KmReading({
     plateNumber: v.plate_number,
     plateCode: v.plate_code,
-    km,
-    readingDate,
+    km: odometerKm,
+    readingDate: latestRow.rows[0]?.reading_date || readingDate,
     notes: stringValue(data.notes)
   });
 

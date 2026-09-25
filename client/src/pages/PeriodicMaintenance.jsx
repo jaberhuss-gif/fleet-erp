@@ -171,7 +171,87 @@ export default function PeriodicMaintenance({ canWork = false }) {
   };
 
   const printPdfReport = () => {
-    window.print();
+    // Use a dedicated print window so global app/table CSS cannot force
+    // one maintenance record onto a separate PDF page.
+    const esc = (value) => String(value ?? '-')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    const rows = currentList.map((r) => {
+      const status = r.status === 'Completed'
+        ? 'Completed'
+        : (r.scheduled_date < today ? 'Overdue' : 'Pending');
+      return `<tr>
+        <td>${esc(r.vehicle_plate)}</td>
+        <td>${esc(r.vehicle_location)}</td>
+        <td>${esc(r.driver_name)}</td>
+        <td>${esc(TYPE_LABELS[r.type] || r.type)}</td>
+        <td>${esc(r.scheduled_date)}</td>
+        <td>${esc(r.completed_date)}</td>
+        <td>${esc(status)}</td>
+        <td>${esc(r.technician)}</td>
+        <td>${esc(r.notes)}</td>
+      </tr>`;
+    }).join('');
+
+    const printWindow = window.open('', '_blank', 'width=1200,height=800');
+    if (!printWindow) {
+      setError('Please allow pop-ups for the PDF print report.');
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Vehicle Maintenance</title>
+<style>
+  @page { size: A4 landscape; margin: 10mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #fff; color: #111; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; }
+  .title { font-size: 18pt; font-weight: 700; color: #1e3a8a; margin: 0 0 3mm; }
+  .meta { font-size: 8pt; color: #555; margin-bottom: 4mm; padding-bottom: 3mm; border-bottom: 2px solid #1e3a8a; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  th, td { border: 1px solid #9aa4b2; padding: 4px 5px; text-align: left; vertical-align: top; line-height: 1.2; overflow-wrap: anywhere; }
+  th { background: #e9eef5; font-weight: 700; }
+  th:nth-child(1), td:nth-child(1) { width: 10%; }
+  th:nth-child(2), td:nth-child(2) { width: 13%; }
+  th:nth-child(3), td:nth-child(3) { width: 17%; }
+  th:nth-child(4), td:nth-child(4) { width: 11%; }
+  th:nth-child(5), td:nth-child(5) { width: 10%; }
+  th:nth-child(6), td:nth-child(6) { width: 10%; }
+  th:nth-child(7), td:nth-child(7) { width: 9%; }
+  th:nth-child(8), td:nth-child(8) { width: 10%; }
+  th:nth-child(9), td:nth-child(9) { width: 10%; }
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+  <div class="title">Vehicle Maintenance</div>
+  <div class="meta">Generated: ${esc(new Date().toLocaleString())} · Records: ${currentList.length}</div>
+  <table>
+    <thead><tr>
+      <th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th>
+      <th>Completed</th><th>Status</th><th>Technician</th><th>Notes</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+</body>
+</html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
   };
 
   const getStatusBadge = (r) => {

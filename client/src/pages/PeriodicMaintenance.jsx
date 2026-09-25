@@ -233,7 +233,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
           <button className="btn btn-warning" onClick={() => exportReport(untouchedRecords, 'Periodic_Maintenance_Untouched', 'No Action Records')}>
             📋 Export No Action Records ({untouchedRecords.length})
           </button>
-          <button className="btn btn-primary" onClick={printPdfReport}>
+          <button type="button" className="btn btn-primary pdf-export-btn" onClick={printPdfReport} title="Open the A4 PDF print dialog">
             🖨️ Export PDF
           </button>
           {canWork && <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
@@ -310,7 +310,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
         </div>
 
         {loading ? <div className="loading">Loading...</div> : (
-          <table>
+          <table className="periodic-maintenance-screen-table">
             <thead>
               <tr><th>Vehicle</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Completed</th><th>Status</th><th>Technician</th><th>Cost</th><th>Notes</th><th>Actions</th></tr>
             </thead>
@@ -336,6 +336,31 @@ export default function PeriodicMaintenance({ canWork = false }) {
             </tbody>
           </table>
         )}
+
+        <div className="periodic-maintenance-print-table-wrap">
+          <table className="periodic-maintenance-print-table">
+            <thead>
+              <tr>
+                <th>Vehicle</th><th>Driver</th><th>Type</th><th>Scheduled</th>
+                <th>Completed</th><th>Status</th><th>Technician</th><th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentList.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.vehicle_plate || '-'}</td>
+                  <td>{r.driver_name || '-'}</td>
+                  <td>{TYPE_LABELS[r.type] || r.type}</td>
+                  <td>{r.scheduled_date || '-'}</td>
+                  <td>{r.completed_date || '-'}</td>
+                  <td>{r.status === 'Completed' ? 'Completed' : (r.scheduled_date < today ? 'Overdue' : 'Pending')}</td>
+                  <td>{r.technician || '-'}</td>
+                  <td>{r.notes || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {completing && (

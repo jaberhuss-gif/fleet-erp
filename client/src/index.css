@@ -1315,61 +1315,54 @@ tr:hover td { background:rgba(20,184,166,.045) !important; }
 }
 
 
-/* ===== PERIODIC MAINTENANCE PDF: PRINT ONLY TITLE + TABLE ===== */
+/* ===== PERIODIC MAINTENANCE PDF: ONLY TITLE + PRINT TABLE ===== */
 @media print {
-  /* Remove the application chrome and every screen-only element. */
-  .header,
-  .daily-km-gate,
-  .no-print,
-  .sub-nav,
-  .periodic-maintenance-print-root > .sub-nav,
-  .periodic-maintenance-print-root > .alert {
-    display: none !important;
-  }
-
-  /* The maintenance page may live inside Support & Service. Hide all other
-     content visually, then place the printable page at the top of the sheet. */
-  body:has(.periodic-maintenance-print-root) .main {
-    position: relative !important;
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-
-  body:has(.periodic-maintenance-print-root) .main > * {
+  /* When this page is being printed, hide the entire application first.
+     Then explicitly reveal only the periodic-maintenance print root. */
+  body:has(.periodic-maintenance-print-root) * {
     visibility: hidden !important;
   }
 
-  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root {
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root,
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root * {
     visibility: visible !important;
+  }
+
+  body:has(.periodic-maintenance-print-root) .header,
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .print-hide,
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .btn-row,
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .filters,
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root form,
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .alert,
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .periodic-maintenance-screen-table,
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .pdf-export-btn,
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .print-meta,
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .modal-overlay {
+    display: none !important;
+  }
+
+  body:has(.periodic-maintenance-print-root) {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  body:has(.periodic-maintenance-print-root) .main {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root {
     position: absolute !important;
     inset: 0 !important;
     width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
+    background: #fff !important;
   }
 
-  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root * {
-    visibility: visible !important;
-  }
-
-  /* Hide all screen controls/cards inside the maintenance page. */
-  .periodic-maintenance-print-root .sub-nav,
-  .periodic-maintenance-print-root .btn-row,
-  .periodic-maintenance-print-root .filters,
-  .periodic-maintenance-print-root form,
-  .periodic-maintenance-print-root .periodic-maintenance-screen-table,
-  .periodic-maintenance-print-root .loading,
-  .periodic-maintenance-print-root .alert,
-  .periodic-maintenance-print-root .pdf-export-btn,
-  .periodic-maintenance-print-root .print-meta {
-    display: none !important;
-  }
-
-  /* Keep only the printable panel, title, and existing print table. */
-  .periodic-maintenance-print-root > .panel {
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root > .panel {
     display: block !important;
-    visibility: visible !important;
-    position: static !important;
     width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -1378,30 +1371,38 @@ tr:hover td { background:rgba(20,184,166,.045) !important; }
     overflow: visible !important;
   }
 
-  .periodic-maintenance-print-root .print-header {
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .print-header {
     display: block !important;
     margin: 0 0 6mm !important;
     padding: 0 0 3mm !important;
     border-bottom: 2px solid #1e3a8a !important;
   }
 
-  .periodic-maintenance-print-root .print-header h1 {
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .print-header h1 {
     display: block !important;
     margin: 0 !important;
     font-size: 18pt !important;
     line-height: 1.2 !important;
-    color: #1e3a8a !important;
   }
 
-  .periodic-maintenance-print-root .periodic-maintenance-print-table-wrap {
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .periodic-maintenance-print-table-wrap {
     display: block !important;
-    visibility: visible !important;
     width: 100% !important;
+    overflow: visible !important;
   }
 
-  .periodic-maintenance-print-root .periodic-maintenance-print-table {
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .periodic-maintenance-print-table {
     display: table !important;
-    visibility: visible !important;
     width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .periodic-maintenance-print-table thead {
+    display: table-header-group !important;
+  }
+
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .periodic-maintenance-print-table tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 }

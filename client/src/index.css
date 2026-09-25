@@ -1353,12 +1353,15 @@ tr:hover td { background:rgba(20,184,166,.045) !important; }
   }
 
   body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root {
-    position: absolute !important;
-    inset: 0 !important;
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
     width: 100% !important;
+    min-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
     background: #fff !important;
+    overflow: visible !important;
   }
 
   body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root > .panel {
@@ -1395,6 +1398,9 @@ tr:hover td { background:rgba(20,184,166,.045) !important; }
     display: table !important;
     width: 100% !important;
     border-collapse: collapse !important;
+    table-layout: fixed !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
   }
 
   body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .periodic-maintenance-print-table thead {

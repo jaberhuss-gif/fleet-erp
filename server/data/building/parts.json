@@ -1,0 +1,18 @@
+[
+  {
+    "part_id": "PART001",
+    "wo_no": "WO-0001",
+    "part_name": "Handle spray",
+    "quantity": 2,
+    "unit_price": 0,
+    "total_price": 0
+  },
+  {
+    "part_id": "PART002",
+    "wo_no": "WO-0003",
+    "part_name": "Hinge",
+    "quantity": 4,
+    "unit_price": 5,
+    "total_price": 20
+  }
+]

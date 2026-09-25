@@ -1,0 +1,32 @@
+[
+  {
+    "site_id": "SITE001",
+    "name": "Uqlat Al Soqour",
+    "region": "Qassim",
+    "status": "Active"
+  },
+  {
+    "site_id": "SITE002",
+    "name": "Al Hadar",
+    "region": "WD",
+    "status": "Active"
+  },
+  {
+    "site_id": "SITE003",
+    "name": "Al Hulifa",
+    "region": "Madina",
+    "status": "Active"
+  },
+  {
+    "site_id": "SITE004",
+    "name": "Al Sabiyah",
+    "region": "Madina",
+    "status": "Active"
+  },
+  {
+    "site_id": "SITE005",
+    "name": "WB",
+    "region": "Al Baha",
+    "status": "Active"
+  }
+]

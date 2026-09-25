@@ -173,6 +173,17 @@ export function getPermissionForRequest(req) {
 
   const action = getSpecialAction(pathname, req.method);
   if (!action) return null;
+
+  // The site list is shared reference data: work orders, projects, purchases
+  // and purchase requests all need it to render their site pickers. Gating the
+  // read behind `support` alone meant a role holding only building/projects/
+  // purchase_requests was refused the site list and the pages broke. Reads now
+  // accept any module that consumes sites; creating or changing a site still
+  // requires `support`.
+  if (pathname === "/api/sites" && req.method === "GET") {
+    altModules = ["building", "projects", "warehouse", "purchase_requests"];
+  }
+
   return { module, action, altModules };
 }
 

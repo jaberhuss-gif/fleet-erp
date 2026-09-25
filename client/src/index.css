@@ -1305,8 +1305,11 @@ tr:hover td { background:rgba(20,184,166,.045) !important; }
   .periodic-maintenance-print-table th:nth-child(8),
   .periodic-maintenance-print-table td:nth-child(8) { width: 18%; }
 
+  .periodic-maintenance-print-table tbody { display: table-row-group !important; }
+
   .periodic-maintenance-print-table tr {
-    page-break-inside: avoid !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
   }
 
   .periodic-maintenance-screen-table {

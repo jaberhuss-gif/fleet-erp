@@ -169,6 +169,10 @@ export default function PeriodicMaintenance({ canWork = false }) {
     await exportToExcel(data, filename, exportColumns, sheetName);
   };
 
+  const printPdfReport = () => {
+    window.print();
+  };
+
   const getStatusBadge = (r) => {
     if (r.status === 'Completed') return <span className="status-badge status-safe">Completed</span>;
     if (r.scheduled_date < today) return <span className="status-badge status-urgent">Overdue</span>;
@@ -213,9 +217,15 @@ export default function PeriodicMaintenance({ canWork = false }) {
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="panel">
+        <div className="print-header">
+          <h1>Periodic Maintenance & Inspection</h1>
+          <div className="print-meta">
+            Generated: {new Date().toLocaleString()} · Records: {currentList.length}
+          </div>
+        </div>
         <h2>Periodic Maintenance & Inspection</h2>
 
-        <div className="btn-row">
+        <div className="btn-row no-print">
           {canWork && <button className="btn btn-warning" onClick={handleGenerate}>Auto-Generate All</button>}
           <button className="btn btn-success" onClick={() => exportReport(filledRecords, 'Periodic_Maintenance_Filled', 'Filled Records')}>
             📊 Export Filled Records ({filledRecords.length})
@@ -223,13 +233,16 @@ export default function PeriodicMaintenance({ canWork = false }) {
           <button className="btn btn-warning" onClick={() => exportReport(untouchedRecords, 'Periodic_Maintenance_Untouched', 'No Action Records')}>
             📋 Export No Action Records ({untouchedRecords.length})
           </button>
+          <button type="button" className="btn btn-primary pdf-export-btn" onClick={printPdfReport} title="Open the A4 PDF print dialog">
+            🖨️ Export PDF
+          </button>
           {canWork && <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
             {showForm ? 'Cancel' : '+ Schedule New'}
           </button>}
         </div>
 
         {showForm && (
-          <form onSubmit={handleSubmit}>
+          <form className="no-print" onSubmit={handleSubmit}>
             <h3>{editing ? 'Edit Schedule' : 'New Schedule'}</h3>
             <div className="cards-grid">
               <div className="form-group">
@@ -277,7 +290,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
           </form>
         )}
 
-        <div className="filters">
+        <div className="filters no-print">
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Vehicle / Driver" />
           <select value={filterVehicle} onChange={(e) => setFilterVehicle(e.target.value)}>
             <option value="all">All Vehicles</option>
@@ -297,9 +310,9 @@ export default function PeriodicMaintenance({ canWork = false }) {
         </div>
 
         {loading ? <div className="loading">Loading...</div> : (
-          <table>
+          <table className="periodic-maintenance-screen-table">
             <thead>
-              <tr><th>Vehicle</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Completed</th><th>Status</th><th>Technician</th><th>Cost</th><th>Actions</th></tr>
+              <tr><th>Vehicle</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Completed</th><th>Status</th><th>Technician</th><th>Cost</th><th>Notes</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {currentList.map((r) => (
@@ -312,6 +325,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
                   <td>{getStatusBadge(r)}</td>
                   <td>{r.technician || '-'}</td>
                   <td>{Number(r.cost || 0).toLocaleString()}</td>
+                  <td style={{ whiteSpace: 'pre-wrap', minWidth: '220px' }}>{r.notes || '-'}</td>
                   <td>
                     {canWork && r.status === 'Pending' && <button className="btn btn-success" onClick={() => handleComplete(r)}>Complete</button>}
                     {canWork && <button className="btn btn-primary" onClick={() => handleEdit(r)}>Edit</button>}
@@ -322,6 +336,31 @@ export default function PeriodicMaintenance({ canWork = false }) {
             </tbody>
           </table>
         )}
+
+        <div className="periodic-maintenance-print-table-wrap">
+          <table className="periodic-maintenance-print-table">
+            <thead>
+              <tr>
+                <th>Vehicle</th><th>Driver</th><th>Type</th><th>Scheduled</th>
+                <th>Completed</th><th>Status</th><th>Technician</th><th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentList.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.vehicle_plate || '-'}</td>
+                  <td>{r.driver_name || '-'}</td>
+                  <td>{TYPE_LABELS[r.type] || r.type}</td>
+                  <td>{r.scheduled_date || '-'}</td>
+                  <td>{r.completed_date || '-'}</td>
+                  <td>{r.status === 'Completed' ? 'Completed' : (r.scheduled_date < today ? 'Overdue' : 'Pending')}</td>
+                  <td>{r.technician || '-'}</td>
+                  <td>{r.notes || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {completing && (

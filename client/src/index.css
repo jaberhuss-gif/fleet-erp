@@ -1173,3 +1173,143 @@ tr:hover td { background:rgba(20,184,166,.045) !important; }
   .panel { padding:14px !important; border-radius:13px; }
   .nav-btn { padding:8px 10px !important; }
 }
+
+
+/* ===== PERIODIC MAINTENANCE PDF REPORT ===== */
+.periodic-maintenance-print-table-wrap {
+  display: none;
+}
+
+.pdf-export-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  body {
+    background: #fff !important;
+    color: #111 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .main {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .panel {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  .panel > h2,
+  .panel > .btn-row,
+  .panel > .filters,
+  .panel > form,
+  .panel > .periodic-maintenance-screen-table,
+  .panel > .loading,
+  .panel > .print-header + h2 {
+    display: none !important;
+  }
+
+  .print-header {
+    display: block !important;
+    margin: 0 0 8mm !important;
+    padding: 0 0 4mm !important;
+    border-bottom: 2px solid #1e3a8a !important;
+  }
+
+  .print-header h1 {
+    font-size: 18pt !important;
+    line-height: 1.2 !important;
+    color: #1e3a8a !important;
+    margin: 0 !important;
+  }
+
+  .print-header .print-meta {
+    margin-top: 2mm !important;
+    font-size: 9pt !important;
+    color: #555 !important;
+  }
+
+  .periodic-maintenance-print-table-wrap {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  .periodic-maintenance-print-table {
+    display: table !important;
+    width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    font-size: 8.5pt !important;
+    color: #111 !important;
+  }
+
+  .periodic-maintenance-print-table thead {
+    display: table-header-group !important;
+  }
+
+  .periodic-maintenance-print-table th {
+    background: #e9eef5 !important;
+    color: #111 !important;
+    font-size: 8pt !important;
+    font-weight: 700 !important;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+    padding: 5px 4px !important;
+    border: 1px solid #8d99a8 !important;
+    vertical-align: middle !important;
+  }
+
+  .periodic-maintenance-print-table td {
+    padding: 5px 4px !important;
+    border: 1px solid #aeb7c2 !important;
+    vertical-align: top !important;
+    line-height: 1.25 !important;
+    word-break: break-word !important;
+    white-space: normal !important;
+  }
+
+  .periodic-maintenance-print-table th:nth-child(1),
+  .periodic-maintenance-print-table td:nth-child(1) { width: 10%; }
+  .periodic-maintenance-print-table th:nth-child(2),
+  .periodic-maintenance-print-table td:nth-child(2) { width: 14%; }
+  .periodic-maintenance-print-table th:nth-child(3),
+  .periodic-maintenance-print-table td:nth-child(3) { width: 17%; }
+  .periodic-maintenance-print-table th:nth-child(4),
+  .periodic-maintenance-print-table td:nth-child(4) { width: 10%; }
+  .periodic-maintenance-print-table th:nth-child(5),
+  .periodic-maintenance-print-table td:nth-child(5) { width: 10%; }
+  .periodic-maintenance-print-table th:nth-child(6),
+  .periodic-maintenance-print-table td:nth-child(6) { width: 9%; }
+  .periodic-maintenance-print-table th:nth-child(7),
+  .periodic-maintenance-print-table td:nth-child(7) { width: 12%; }
+  .periodic-maintenance-print-table th:nth-child(8),
+  .periodic-maintenance-print-table td:nth-child(8) { width: 18%; }
+
+  .periodic-maintenance-print-table tr {
+    page-break-inside: avoid !important;
+  }
+
+  .periodic-maintenance-screen-table {
+    display: none !important;
+  }
+}

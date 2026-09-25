@@ -1410,8 +1410,12 @@ tr:hover td { background:rgba(20,184,166,.045) !important; }
     display: table-header-group !important;
   }
 
+  body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .periodic-maintenance-print-table tbody {
+    display: table-row-group !important;
+  }
+
   body:has(.periodic-maintenance-print-root) .periodic-maintenance-print-root .periodic-maintenance-print-table tr {
-    break-inside: avoid !important;
-    page-break-inside: avoid !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
   }
 }

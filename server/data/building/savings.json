@@ -1,0 +1,34 @@
+[
+  {
+    "month": "July",
+    "year": 2026,
+    "contractor_wo": 2170,
+    "contractor_dev": 2525,
+    "parts_wo": 1417,
+    "parts_dev": 3281,
+    "total_labor": 4695,
+    "total_parts": 4698,
+    "total_cost": 9393,
+    "maintenance_savings": 14840.14167,
+    "development_savings": 124594.695,
+    "maintenance_pct": 72.1,
+    "development_pct": 93.99776817,
+    "total_savings_pct": 91.05779831
+  },
+  {
+    "month": "Aug",
+    "year": 2026,
+    "contractor_wo": 4638,
+    "contractor_dev": 58406,
+    "parts_wo": 6601,
+    "parts_dev": 0,
+    "total_labor": 63044,
+    "total_parts": 6601,
+    "total_cost": 69645,
+    "maintenance_savings": 7188.141667,
+    "development_savings": 74145.695,
+    "maintenance_pct": 34.9,
+    "development_pct": 54.33779788,
+    "total_savings_pct": 82.33375543
+  }
+]

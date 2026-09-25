@@ -15,6 +15,7 @@ import Troubleshooter from './pages/Troubleshooter';
 import MyTickets from './pages/MyTickets';
 import FleetTicketViewer from './pages/FleetTicketViewer';
 import AdvancedReports from './pages/AdvancedReports';
+import OperationsHub from './pages/OperationsHub';
 import api from './api/client';
 import DailyKmGate from './components/DailyKmGate';
 import DailyKmSubmitted from './pages/DailyKmSubmitted';
@@ -24,7 +25,13 @@ const OWNER_ONLY_TABS = new Set(['drivers', 'users', 'audit', 'backup']);
 
 const TAB_MODULES = {
   gm: ['gm'],
-  // Support & Service is a container: show it when the Owner grants any service module.\n  // The individual sub-sections are still controlled by their own access flags.\n  'support-service': ['support', 'building', 'projects', 'warehouse', 'purchase_requests'],
+  // Support & Service is a container: show it when the Owner grants any service module.
+  // The individual sub-sections are still controlled by their own access flags.
+  'support-service': ['support', 'building', 'projects', 'warehouse', 'purchase_requests'],
+  // Operations is the building-side workspace: maintenance, projects, warehouse
+  // and purchase requests. It is deliberately separate from Fleet. Visibility
+  // is driven only by the RBAC modules below — no role list is hardcoded here.
+  operations: ['building', 'projects', 'warehouse', 'purchase_requests'],
   fleet: ['fleet'],
   troubleshooter: ['troubleshooter'],
   'fleet-tickets': ['fleet_tickets'],
@@ -46,6 +53,7 @@ const TAB_LABELS = {
   'daily-submitted': '📋 Daily KM — Submitted',
   'daily-missing': '⚠️ Daily KM — Missing',
   'support-service': '🛠️ Support & Service',
+  operations: '🏢 Operations',
   drivers: '👨‍🔧 Driver',
   users: 'Users',
   audit: 'Audit Log',
@@ -136,7 +144,7 @@ export default function App() {
   };
 
   const allowedTabs = useMemo(() => {
-    const tabs = ['gm', 'support-service', 'fleet', 'daily-submitted', 'daily-missing', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
+    const tabs = ['gm', 'support-service', 'operations', 'fleet', 'daily-submitted', 'daily-missing', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
     const visible = tabs.filter(canViewTab);
     if (user?.role === 'Owner') {
       return [...visible, 'drivers', 'users', 'audit', 'backup'];
@@ -242,6 +250,7 @@ export default function App() {
       <main className="main">
         {tab === 'gm' && <GMDashboard />}
         {tab === 'support-service' && <SupportServiceHub user={user} access={access || {}} />}
+        {tab === 'operations' && <OperationsHub user={user} access={access || {}} />}
         {tab === 'fleet' && canViewModule('fleet') && (
           <FleetHub
             user={user}

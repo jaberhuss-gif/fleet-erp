@@ -155,6 +155,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
 
   const exportColumns = [
     { key: 'vehicle_plate', label: 'Vehicle' },
+    { key: 'vehicle_location', label: 'Location' },
     { key: 'driver_name', label: 'Driver' },
     { key: 'type', label: 'Type' },
     { key: 'scheduled_date', label: 'Scheduled' },
@@ -312,12 +313,13 @@ export default function PeriodicMaintenance({ canWork = false }) {
         {loading ? <div className="loading">Loading...</div> : (
           <table className="periodic-maintenance-screen-table">
             <thead>
-              <tr><th>Vehicle</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Completed</th><th>Status</th><th>Technician</th><th>Cost</th><th>Notes</th><th>Actions</th></tr>
+              <tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Completed</th><th>Status</th><th>Technician</th><th>Cost</th><th>Notes</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {currentList.map((r) => (
                 <tr key={r.id}>
                   <td>{r.vehicle_plate || '-'}</td>
+                  <td>{r.vehicle_location || '-'}</td>
                   <td>{r.driver_name || '-'}</td>
                   <td>{TYPE_LABELS[r.type] || r.type}</td>
                   <td>{r.scheduled_date}</td>
@@ -341,7 +343,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
           <table className="periodic-maintenance-print-table">
             <thead>
               <tr>
-                <th>Vehicle</th><th>Driver</th><th>Type</th><th>Scheduled</th>
+                <th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th>
                 <th>Completed</th><th>Status</th><th>Technician</th><th>Notes</th>
               </tr>
             </thead>
@@ -349,6 +351,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
               {currentList.map((r) => (
                 <tr key={r.id}>
                   <td>{r.vehicle_plate || '-'}</td>
+                  <td>{r.vehicle_location || '-'}</td>
                   <td>{r.driver_name || '-'}</td>
                   <td>{TYPE_LABELS[r.type] || r.type}</td>
                   <td>{r.scheduled_date || '-'}</td>

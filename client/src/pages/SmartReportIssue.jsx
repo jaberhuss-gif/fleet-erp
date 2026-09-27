@@ -19,6 +19,12 @@ export default function SmartReportIssue({ canWork = false }) {
   const [error, setError] = useState('');
   const [priority, setPriority] = useState('Medium');
   const [ticketCreated, setTicketCreated] = useState(null);
+  const [repairMode, setRepairMode] = useState(false);
+  const [repairDetails, setRepairDetails] = useState('');
+  const [partsUsed, setPartsUsed] = useState('');
+  const [repairKm, setRepairKm] = useState('');
+  const [repairDate, setRepairDate] = useState(new Date().toISOString().slice(0, 10));
+  const [repairCost, setRepairCost] = useState('0');
   const recognitionRef = useRef(null);
 
   useEffect(() => {
@@ -85,11 +91,45 @@ export default function SmartReportIssue({ canWork = false }) {
   };
 
   const handleFixed = () => {
-    setMessage('🎉 Excellent! Issue resolved without needing a ticket. Great job!');
-    setDescription('');
-    setDiagnosis(null);
-    setVehicleId('');
-    setTimeout(() => setMessage(''), 5000);
+    setRepairMode(true);
+    setRepairDetails('');
+    setPartsUsed('');
+    setRepairKm('');
+    setRepairCost('0');
+    setError('');
+    setMessage('Enter what you repaired, parts used and the KM, then submit for Fleet Manager verification.');
+  };
+
+  const submitRepair = async () => {
+    setError('');
+    if (!vehicleId) { setError('Please select a vehicle'); return; }
+    if (!description.trim()) { setError('The original problem is required'); return; }
+    if (!repairDetails.trim()) { setError('Please describe what was repaired'); return; }
+
+    try {
+      const order = await api.post('/vehicle-repairs', {
+        vehicleId: Number(vehicleId),
+        issueDescription: description.trim()
+      });
+      await api.put('/vehicle-repairs/' + order.data.repair.id + '/complete', {
+        repairDetails: repairDetails.trim(),
+        partsUsed: partsUsed.trim(),
+        repairKm: repairKm === '' ? null : Number(repairKm),
+        repairDate,
+        repairCost: repairCost === '' ? 0 : Number(repairCost)
+      });
+      setMessage('✅ Repair submitted. Status: Pending Verification. Fleet Manager must Confirm & Close it.');
+      setRepairMode(false);
+      setDescription('');
+      setDiagnosis(null);
+      setVehicleId('');
+      setRepairDetails('');
+      setPartsUsed('');
+      setRepairKm('');
+      setRepairCost('0');
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -291,7 +331,7 @@ export default function SmartReportIssue({ canWork = false }) {
                     className="btn btn-success"
                     style={{ flex: 1, padding: '12px', fontSize: '15px', minWidth: '200px' }}
                   >
-                    ✅ I Fixed It — No Ticket Needed
+                    ✅ I Fixed It — Submit Repair
                   </button>
                   <button
                     type="button"

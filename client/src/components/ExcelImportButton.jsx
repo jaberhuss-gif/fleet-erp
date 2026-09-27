@@ -2,8 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import api from '../api/client';
 
 const clean = v => v == null ? '' : String(v).trim();
-const key = v => clean(v).normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, '');
-const matchesAlias = (value, aliases) => { const k = key(value); return aliases.some(a => { const ak = key(a); return k === ak || k.includes(ak) || ak.includes(k); }); };
+const key = v => clean(v).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+const matchesAlias = (value, aliases) => {
+  const k = key(value);
+  if (!k) return false;
+  return aliases.some(a => {
+    const ak = key(a);
+    return k === ak || k.includes(ak) || ak.includes(k);
+  });
+};
 const num = v => {
   const n = Number(clean(v).replace(/,/g, '').replace(/[^0-9.\-]/g, ''));
   return Number.isFinite(n) ? n : 0;
@@ -11,7 +18,7 @@ const num = v => {
 
 const PROJECT_FIELDS = [
   { key:'srNo', label:'Sr.', aliases:['sr','srno','serial','serialno','sno','sno.','no','number','#','ت','ت.','ت/'] },
-  { key:'item', label:'Item', aliases:['item','itemdescription','item description','البند','description','details','detail','الوصف','workdescription'] },
+  { key:'item', label:'Item', aliases:['item','itemdescription','item description','construction item','البند','description','details','detail','الوصف','workdescription'] },
   { key:'unit', label:'Unit', aliases:['unit','units','الوحده','الوحدة','uom'] },
   { key:'quantity', label:'Quantities', aliases:['quantities','quantity','qty','qnty','amount','الكميات','كمية','الكمية'] }
 ];
@@ -76,10 +83,17 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
     return [f.key, h || ''];
   }));
 
+  const isQuotationStyle = rows => {
+    const scan = rows.slice(0, 100);
+    return scan.some(row => row.some(v => matchesAlias(v, ['sr','srno','serial','serialno','sno','ت'])))
+      && scan.some(row => row.some(v => key(v).includes('constructionitem') || key(v).includes('construction')));
+  };
+
   const findHeaderRow = rows => {
     let bestIndex = -1;
     let bestScore = 0;
     const scanLimit = Math.min(rows.length, 80);
+
     rows.slice(0, scanLimit).forEach((row, index) => {
       const values = row.map(clean).filter(Boolean);
       const score = fields.reduce((total, f) => total + (values.some(v => matchesAlias(v, f.aliases)) ? 1 : 0), 0);
@@ -89,15 +103,12 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
       }
     });
 
-    // Some quotation workbooks have a title/merged row such as "Quotation"
-    // immediately before the real bilingual header row. Search the nearby rows
-    // instead of treating the title as the header.
     if (bestScore < (isVehicle ? 1 : 2)) {
       const quotationRow = rows.slice(0, scanLimit).findIndex(row =>
         row.some(v => key(v).includes('quotation') || key(v).includes('quote'))
       );
       if (quotationRow >= 0) {
-        for (let i = quotationRow + 1; i < Math.min(rows.length, quotationRow + 12); i++) {
+        for (let i = quotationRow + 1; i < Math.min(rows.length, quotationRow + 20); i++) {
           const values = rows[i].map(clean).filter(Boolean);
           const score = fields.reduce((total, f) => total + (values.some(v => matchesAlias(v, f.aliases)) ? 1 : 0), 0);
           if (score > bestScore) {
@@ -109,6 +120,70 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
     }
 
     return bestScore >= (isVehicle ? 1 : 2) ? bestIndex : -1;
+  };
+
+  const buildProjectRows = (matrix, headerIndex) => {
+    const quotationStyle = isQuotationStyle(matrix);
+
+    // In this quotation, "Sr. / ت" is a label row rather than a complete
+    // six-column header. The actual table is positional:
+    // column 0 = Sr., column 1 = Item, column 2 = Unit, column 3 = Quantity.
+    if (quotationStyle) {
+      const rows = [];
+      let section = '';
+
+      for (let i = headerIndex + 1; i < matrix.length; i++) {
+        const row = matrix[i] || [];
+        const values = row.map(clean);
+        const nonEmpty = values.filter(Boolean);
+        if (!nonEmpty.length) continue;
+
+        const first = clean(values[0]);
+        const second = clean(values[1]);
+        const third = clean(values[2]);
+        const fourth = clean(values[3]);
+
+        // Ignore quotation metadata / repeated labels.
+        if (key(first).includes('constructionitem') || key(first).includes('electricalitem') || key(first).includes('mechanicalitem')) {
+          section = first;
+          continue;
+        }
+
+        // Keep only actual numbered line items. This prevents Date, VAT, CR,
+        // section headings, and trailing blank rows from becoming project items.
+        const sr = num(first);
+        if (!sr || !/^\d+(?:\.\d+)?$/.test(first.replace(/,/g,''))) continue;
+
+        rows.push({
+          excelRow: i + 1,
+          row: {
+            __SR__: first,
+            __ITEM__: second,
+            __UNIT__: third,
+            __QTY__: fourth,
+            __SECTION__: section
+          }
+        });
+      }
+
+      return {
+        headers: ['__SR__','__ITEM__','__UNIT__','__QTY__','__SECTION__'],
+        mapping: { srNo:'__SR__', item:'__ITEM__', unit:'__UNIT__', quantity:'__QTY__' },
+        rows
+      };
+    }
+
+    const rawHeaders = matrix[headerIndex].map(clean);
+    const uniqueHeaders = rawHeaders.map((h,i) => h || '__EMPTY' + (i ? '_' + i : ''));
+    const rows = matrix.slice(headerIndex + 1)
+      .filter(row => row.some(v => clean(v) !== ''))
+      .map((row,i) => {
+        const obj = {};
+        uniqueHeaders.forEach((h,j) => { obj[h] = row[j] ?? ''; });
+        return { excelRow: headerIndex + i + 2, row: obj };
+      });
+
+    return { headers:uniqueHeaders, mapping:autoMap(uniqueHeaders), rows };
   };
 
   const readFile = async file => {
@@ -133,20 +208,26 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
         );
       }
 
-      const rawHeaders = matrix[headerIndex].map(clean);
-      const uniqueHeaders = rawHeaders.map((h,i) => h || '__EMPTY' + (i ? '_' + i : ''));
-      const rows = matrix.slice(headerIndex + 1)
-        .filter(row => row.some(v => clean(v) !== ''))
-        .map((row,i) => {
-          const obj = {};
-          uniqueHeaders.forEach((h,j) => { obj[h] = row[j] ?? ''; });
-          return { excelRow: headerIndex + i + 2, row: obj };
-        });
+      const built = isVehicle ? null : buildProjectRows(matrix, headerIndex);
+      const rawHeaders = isVehicle ? matrix[headerIndex].map(clean) : built.headers;
+      const uniqueHeaders = isVehicle
+        ? rawHeaders.map((h,i) => h || '__EMPTY' + (i ? '_' + i : ''))
+        : built.headers;
+
+      const rows = isVehicle
+        ? matrix.slice(headerIndex + 1)
+            .filter(row => row.some(v => clean(v) !== ''))
+            .map((row,i) => {
+              const obj = {};
+              uniqueHeaders.forEach((h,j) => { obj[h] = row[j] ?? ''; });
+              return { excelRow: headerIndex + i + 2, row: obj };
+            })
+        : built.rows;
 
       if (!rows.length) throw new Error('The Excel file has no data rows after the header.');
 
       setHeaders(uniqueHeaders);
-      setMapping(autoMap(uniqueHeaders));
+      setMapping(isVehicle ? autoMap(uniqueHeaders) : built.mapping);
       setRecords(rows);
       setTargetId('');
     } catch (e) {

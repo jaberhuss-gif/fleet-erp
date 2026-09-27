@@ -2,6 +2,7 @@
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
 import { printContent } from '../api/print';
+import ExcelImportButton from '../components/ExcelImportButton';
 
 export default function Vehicles({ onViewVehicle, canWork = false }) {
   const [vehicles, setVehicles] = useState([]);
@@ -169,10 +170,7 @@ export default function Vehicles({ onViewVehicle, canWork = false }) {
             {canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
               {showForm ? 'Cancel' : '+ Add Vehicle'}
             </button>}
-            {canWork && <label className="btn btn-success" style={{ cursor: 'pointer', margin: 0 }}>
-              Import CSV
-              <input type="file" accept=".csv" onChange={handleFileImport} style={{ display: 'none' }} />
-            </label>}
+            {canWork && <ExcelImportButton kind="vehicles" onImported={load} label="Import Excel" />}
             <button className="btn btn-warning" onClick={() => exportToCSV(vehicles, "vehicles", [{key:"plate",label:"Plate"},{key:"driver",label:"Driver"},{key:"phone",label:"Phone"},{key:"location",label:"Location"},{key:"currentKm",label:"Current KM"},{key:"lastOilKm",label:"Last Oil KM"},{key:"sinceOil",label:"Since Oil"},{key:"status",label:"Status"}])}>Export CSV</button>
             {canWork && <button className="btn btn-danger" onClick={handleDeleteAll}>Delete All</button>}
           </div>

@@ -255,7 +255,7 @@ export default function Projects({ user, access = {} }) {
           </thead>
           <tbody>
             {filtered.map(p => {
-              const pct = p.budget > 0 ? Math.min((p.spent / p.budget) * 100, 100) : 0;
+              const pct = Number(p.progress_percent ?? 0);
               return (
                 <React.Fragment key={p.id}>
                   <tr>

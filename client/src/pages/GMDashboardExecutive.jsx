@@ -32,7 +32,7 @@ export default function GMDashboardExecutive() {
   const load = useCallback(async () => {
     try {
       setError('');
-      const [dashboard, vehicleAlerts, ticketData, buildingData, financialData] = await Promise.all([
+      const [dashboard, vehicleAlerts, ticketData, buildingData, financialData, monthFinancialData] = await Promise.all([
         getDashboard(),
         getAlerts(),
         getTickets(),

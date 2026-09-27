@@ -419,8 +419,8 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
           <tbody>
             {mappedRows.slice(0,100).map(r => <tr key={r.excelRow}>
               {isVehicle
-                ? <><td>{r.data.plate || '-'}</td><td>{r.data.make || '-'}</td><td>{r.data.model || '-'}</td><td>{r.data.driver || '-'}</td><td>{r.data.currentKm}</td><td>{selectedSiteName || '-'}</td><td style={{color:r.data.plate ? '#16a34a':'#dc2626'}}>{r.data.plate ? 'Ready':'Missing Plate'}</td></>
-                : <><td>{r.data.srNo || '-'}</td><td>{r.data.item || '-'}</td><td>{r.data.unit || '-'}</td><td>{r.data.quantity}</td><td style={{color:r.data.item ? '#16a34a':'#dc2626'}}>{r.data.item ? 'Ready':'Missing Item'}</td></>}
+                ? <><td>{r.data.plate || '-'}</td><td>{r.data.make || '-'}</td><td>{r.data.model || '-'}</td><td>{r.data.driver || '-'}</td><td>{r.data.currentKm}</td><td>{selectedSiteName || '-'}</td><td style={{color:r.data.plate ? '#16a34a':'#dc2626'}}>{r.data.plate ? 'Valid':'Missing Plate'}</td></>
+                : <><td>{r.data.srNo || '-'}</td><td>{r.data.item || '-'}</td><td>{r.data.unit || '-'}</td><td>{r.data.quantity}</td><td style={{color:r.data.item ? '#16a34a':'#dc2626'}}>{r.data.item ? 'Valid Item':'Missing Item'}</td></>}
             </tr>)}
           </tbody>
         </table>

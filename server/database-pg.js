@@ -607,6 +607,89 @@ export async function ensurePeriodicMaintenanceSchema() {
 // only the columns that are genuinely missing, using IF NOT EXISTS, and never
 // drops, renames, recreates, or rewrites the tickets table, so existing tickets
 // and all historical data are preserved.
+export async function ensureVehicleRepairSchema() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS vehicle_repair_orders (
+      id SERIAL PRIMARY KEY,
+      vehicle_id INTEGER NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+      reported_by TEXT,
+      issue_description TEXT NOT NULL DEFAULT '',
+      repair_details TEXT NOT NULL DEFAULT '',
+      parts_used TEXT DEFAULT '',
+      repair_km INTEGER,
+      repair_date DATE,
+      repair_cost NUMERIC DEFAULT 0,
+      repaired_by TEXT,
+      repaired_at TIMESTAMPTZ,
+      status TEXT NOT NULL DEFAULT 'Open',
+      verified_by TEXT,
+      verified_at TIMESTAMPTZ,
+      verification_notes TEXT DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_vehicle_repair_orders_vehicle ON vehicle_repair_orders(vehicle_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_vehicle_repair_orders_status ON vehicle_repair_orders(status)`);
+}
+
+export async function createVehicleRepairOrder(data = {}) {
+  const result = await query(
+    `INSERT INTO vehicle_repair_orders
+      (vehicle_id, reported_by, issue_description, status)
+     VALUES ($1,$2,$3,'Open')
+     RETURNING *`,
+    [data.vehicleId, stringValue(data.reportedBy || data.repairedBy), stringValue(data.issueDescription || data.description)]
+  );
+  return result.rows[0];
+}
+
+export async function listVehicleRepairOrders(filters = {}) {
+  const params = [];
+  let sql = `
+    SELECT r.*, v.plate_number, v.plate_code, v.driver AS vehicle_driver, v.location AS vehicle_location
+    FROM vehicle_repair_orders r
+    JOIN vehicles v ON v.id = r.vehicle_id
+    WHERE 1=1`;
+  if (filters.vehicleId) { params.push(filters.vehicleId); sql += ` AND r.vehicle_id = $${params.length}`; }
+  if (filters.reportedBy) { params.push(filters.reportedBy); sql += ` AND r.reported_by = $${params.length}`; }
+  if (filters.status) { params.push(filters.status); sql += ` AND r.status = $${params.length}`; }
+  sql += ` ORDER BY r.created_at DESC, r.id DESC`;
+  const result = await query(sql, params);
+  return result.rows.map(r => ({
+    ...r,
+    vehicleId: r.vehicle_id,
+    plate: [r.plate_number, r.plate_code].filter(Boolean).join(' ').trim(),
+    location: r.vehicle_location || ''
+  }));
+}
+
+export async function completeVehicleRepairOrder(id, data = {}) {
+  const result = await query(
+    `UPDATE vehicle_repair_orders
+     SET repair_details=$1, parts_used=$2, repair_km=$3, repair_date=COALESCE($4::date,CURRENT_DATE),
+         repair_cost=COALESCE($5,0), repaired_by=$6, repaired_at=CURRENT_TIMESTAMP,
+         status='Pending Verification', updated_at=CURRENT_TIMESTAMP
+     WHERE id=$7 AND status <> 'Completed'
+     RETURNING *`,
+    [stringValue(data.repairDetails), stringValue(data.partsUsed), numberValue(data.repairKm, null), data.repairDate || null, numberValue(data.repairCost, 0), stringValue(data.repairedBy || data.reportedBy), id]
+  );
+  if (!result.rows[0]) throw new Error('Repair order not found or already completed.');
+  return result.rows[0];
+}
+
+export async function closeVehicleRepairOrder(id, data = {}) {
+  const result = await query(
+    `UPDATE vehicle_repair_orders
+     SET status='Completed', verified_by=$1, verified_at=CURRENT_TIMESTAMP,
+         verification_notes=$2, updated_at=CURRENT_TIMESTAMP
+     WHERE id=$3 AND status='Pending Verification'
+     RETURNING *`,
+    [stringValue(data.verifiedBy) || 'Fleet Manager', stringValue(data.verificationNotes || data.notes), id]
+  );
+  if (!result.rows[0]) throw new Error('Repair order must be in Pending Verification before Fleet Manager can close it.');
+  return result.rows[0];
+}
 export async function ensureTicketSchema() {
   await query(`
     ALTER TABLE tickets

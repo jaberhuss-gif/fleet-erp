@@ -3552,6 +3552,70 @@ export async function getBuildingDashboard(filters = {}) {
   };
 }
 
+
+/* ============================================================
+   CURRENT MONTH DASHBOARD FINANCIALS
+   Mirrors the Apps Script dashboard calculation semantics.
+   ============================================================ */
+export async function getCurrentMonthDashboardFinancial() {
+  const wo = await query(`
+    SELECT
+      COUNT(*)::int AS total_wo,
+      COALESCE(SUM(COALESCE(final_cost,0)),0) AS maintenance_cost,
+      COALESCE(SUM(CASE WHEN (is_contractor = 1 OR (COALESCE(contractor_name,'') <> '' AND LOWER(contractor_name) NOT IN ('company','internal'))) AND COALESCE(contractor_cost,0) > 0 THEN contractor_cost ELSE 0 END),0) AS contractor_wo
+    FROM work_orders
+    WHERE reported_date >= date_trunc('month', CURRENT_DATE)
+      AND reported_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+  `);
+
+  const projects = await query(`
+    SELECT
+      COUNT(*)::int AS total_projects,
+      COALESCE(SUM(COALESCE(budget,0)),0) AS development_cost,
+      COALESCE(SUM(CASE WHEN COALESCE(NULLIF(TRIM(contractor),''),'') <> '' THEN COALESCE(spent,0) ELSE 0 END),0) AS contractor_dev
+    FROM projects
+    WHERE COALESCE(end_date, start_date) >= date_trunc('month', CURRENT_DATE)::date
+      AND COALESCE(end_date, start_date) < (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month')::date
+  `);
+
+  const purchases = await query(`
+    SELECT
+      COALESCE(SUM(CASE WHEN COALESCE(total_cost,0) > 0 THEN total_cost ELSE 0 END),0) AS parts_cost,
+      COALESCE(SUM(CASE WHEN LOWER(COALESCE(purchased_by,'company')) = 'contractor' AND COALESCE(total_cost,0) > 0 THEN total_cost ELSE 0 END),0) AS contractor_parts
+    FROM purchases
+    WHERE purchase_date >= date_trunc('month', CURRENT_DATE)::date
+      AND purchase_date < (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month')::date
+  `);
+
+  const w = wo.rows[0] || {};
+  const p = projects.rows[0] || {};
+  const pur = purchases.rows[0] || {};
+  const maintenanceCost = Number(w.maintenance_cost || 0);
+  const developmentCost = Number(p.development_cost || 0);
+  const partsCost = Number(pur.parts_cost || 0);
+  const contractorWO = Number(w.contractor_wo || 0);
+  const contractorDev = Number(p.contractor_dev || 0);
+  const contractorParts = Number(pur.contractor_parts || 0);
+  const totalCompanyCost = maintenanceCost + developmentCost + partsCost;
+  const totalContractorCost = contractorWO + contractorDev + contractorParts;
+
+  return {
+    currentMonth: new Date().toISOString().slice(0,7),
+    totalWO: Number(w.total_wo || 0),
+    totalProjects: Number(p.total_projects || 0),
+    totalDevProjects: Number(p.total_projects || 0),
+    maintenanceCost,
+    developmentCost,
+    partsCost,
+    contractorWO,
+    contractorDev,
+    contractorCost: contractorWO + contractorDev,
+    contractorParts,
+    totalContractorCost,
+    totalCompanyCost
+  };
+}
+
 /* ============================================================
    VEHICLE DASHBOARD
    ============================================================ */

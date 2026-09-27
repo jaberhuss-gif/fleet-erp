@@ -1,6 +1,7 @@
 ﻿import { useState } from 'react';
 import PeriodicMaintenance from './PeriodicMaintenance';
 import SmartReportIssue from './SmartReportIssue';
+import VehicleRepairOrders from './VehicleRepairOrders';
 
 export default function VehicleMaintenance({ canWork = false }) {
   const [sub, setSub] = useState('maintenance');
@@ -27,10 +28,16 @@ export default function VehicleMaintenance({ canWork = false }) {
         >
           🧠 Smart Report Issue
         </button>
+        <button
+          className={sub === 'repairs' ? 'sub-btn active' : 'sub-btn'}
+          onClick={() => setSub('repairs')}
+        >
+          🛠️ Repair Verification
+        </button>
       </div>
 
       {sub === 'maintenance' && <PeriodicMaintenance canWork={canWork} />}
-      {sub === 'report' && <SmartReportIssue canWork={canWork} />}
+      {sub === 'report' && <SmartReportIssue canWork={canWork} />}\n      {sub === 'repairs' && <VehicleRepairOrders canWork={canWork} />}
     </div>
   );
 }

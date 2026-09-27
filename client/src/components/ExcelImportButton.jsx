@@ -20,7 +20,10 @@ const PROJECT_FIELDS = [
   { key:'srNo', label:'Sr.', aliases:['sr','srno','serial','serialno','sno','sno.','no','number','#','ت','ت.','ت/'] },
   { key:'item', label:'Item', aliases:['item','itemdescription','item description','construction item','البند','description','details','detail','الوصف','workdescription'] },
   { key:'unit', label:'Unit', aliases:['unit','units','الوحده','الوحدة','uom'] },
-  { key:'quantity', label:'Quantities', aliases:['quantities','quantity','qty','qnty','amount','الكميات','كمية','الكمية'] }
+  { key:'quantity', label:'Quantities', aliases:['quantities','quantity','qty','qnty','amount','الكميات','كمية','الكمية'] },
+  { key:'price', label:'Price', aliases:['price','unitprice','سعر','السعر'] },
+  { key:'cost', label:'Cost', aliases:['cost','totalcost','التكلفة','التكلفه'] },
+  { key:'section', label:'Section', aliases:['section','category','type','القسم','التصنيف'] }
 ];
 
 const VEHICLE_FIELDS = [
@@ -46,6 +49,7 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
   const [mapping,setMapping] = useState({});
   const [targets,setTargets] = useState([]);
   const [targetId,setTargetId] = useState('');
+  const [projectName,setProjectName] = useState('');
   const [sites,setSites] = useState([]);
   const [siteId,setSiteId] = useState('');
   const [fileName,setFileName] = useState('');
@@ -74,16 +78,7 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
   const selectedSite = sites.find(s => String(s.id) === String(siteId));
   const selectedSiteName = selectedSite?.name || '';
 
-  const visibleTargets = isProject
-    ? targets.filter(x => {
-        const name = clean(x.name).toLowerCase();
-        const allowedProject =
-          name === 'socket assembly work' ||
-          name === 'a/c project' ||
-          name === 'ac project';
-        return allowedProject && (!selectedSiteName || clean(x.site) === clean(selectedSiteName));
-      })
-    : targets;
+  const visibleTargets = isProject ? targets.filter(x => !selectedSiteName || clean(x.site) === clean(selectedSiteName)) : targets;
 
   const autoMap = hs => Object.fromEntries(fields.map(f => {
     const h = hs.find(x => matchesAlias(x, f.aliases));
@@ -170,7 +165,7 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
         const fourth = clean(values[3]);
 
         // Ignore quotation metadata / repeated labels.
-        if (key(first).includes('constructionitem') || key(first).includes('electricalitem') || key(first).includes('mechanicalitem')) {
+        if (key(first).includes('constructionitem') || key(first).includes('electricalitem') || key(first).includes('mechanicalitem') || key(first).includes('installationitem')) {
           section = first;
           continue;
         }
@@ -194,7 +189,7 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
 
       return {
         headers: ['__SR__','__ITEM__','__UNIT__','__QTY__','__SECTION__'],
-        mapping: { srNo:'__SR__', item:'__ITEM__', unit:'__UNIT__', quantity:'__QTY__' },
+        mapping: { srNo:'__SR__', item:'__ITEM__', unit:'__UNIT__', quantity:'__QTY__', section:'__SECTION__' },
         rows
       };
     }
@@ -280,13 +275,8 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
     setError('');
 
     if (!siteId) return setError('Select a Site from the master Sites list first.');
-    if (!isVehicle && !targetId) return setError(isProject ? 'Select an existing Project first.' : 'Select an existing Work Order first.');
-    if (isProject && selectedSiteName) {
-      const project = targets.find(x => String(x.id) === String(targetId));
-      if (project && clean(project.site) !== clean(selectedSiteName)) {
-        return setError('The selected Project does not belong to the selected Site.');
-      }
-    }
+    if (isProject && !clean(projectName)) return setError('Enter the Project Name first.');
+    if (!isProject && !isVehicle && !targetId) return setError('Select an existing Work Order first.');
     if (invalid.length) return setError('Item is required for every project/work-order Excel row.');
     if (invalidVehicles.length) return setError('Plate is required for every vehicle Excel row.');
 
@@ -319,7 +309,16 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
           throw new Error(e.response?.data?.error || e.message);
         }
       } else {
-        const endpoint = (isProject ? '/projects/' : '/work-orders/') + targetId + '/items';
+        let effectiveTargetId = targetId;
+        if (isProject) {
+          const existing = targets.find(x => clean(x.name).toLowerCase() === clean(projectName).toLowerCase() && clean(x.site) === clean(selectedSiteName));
+          if (existing) effectiveTargetId = existing.id;
+          else {
+            const created = await api.post('/projects', { name: clean(projectName), site: selectedSiteName, projectType:'Development', status:'Not Started', budget:0, spent:0 });
+            effectiveTargetId = created.data.project.id;
+          }
+        }
+        const endpoint = (isProject ? '/projects/' : '/work-orders/') + effectiveTargetId + '/items';
         for (const r of mappedRows) {
           try {
             await api.post(endpoint, r.data);
@@ -378,20 +377,13 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
       </div>
 
       {!isVehicle && <div className='form-group'>
-        <label>{isProject ? 'Select Existing Project *' : 'Select Existing Work Order *'}</label>
-        <select value={targetId} onChange={e => setTargetId(e.target.value)} disabled={!siteId}>
-          <option value=''>-- Select --</option>
-          {visibleTargets.map(x => <option key={x.id} value={x.id}>
-            {isProject
-              ? (x.project_no || '') + ' - ' + (x.name || '')
-              : (x.wo_no || '') + ' - ' + (x.description || '')}
-          </option>)}
-        </select>
-        {siteId && visibleTargets.length === 0 && (
-          <div style={{fontSize:12,color:'#dc2626',marginTop:4}}>
-            No existing {isProject ? 'Projects' : 'Work Orders'} are assigned to this Site.
-          </div>
-        )}
+        {isProject ? <><label>Project Name *</label><input value={projectName} onChange={e => setProjectName(e.target.value)} disabled={!siteId} placeholder='e.g. Core Yard' /></> : <>
+          <label>Select Existing Work Order *</label>
+          <select value={targetId} onChange={e => setTargetId(e.target.value)} disabled={!siteId}>
+            <option value=''>-- Select --</option>
+            {visibleTargets.map(x => <option key={x.id} value={x.id}>{(x.wo_no || '') + ' - ' + (x.description || '')}</option>)}
+          </select>
+        </>}
       </div>}
 
       {headers.length > 0 && <div>
@@ -406,7 +398,7 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
           </div>)}
         </div>
         {!isVehicle && <div style={{fontSize:12,color:'#64748b'}}>
-          Price and Cost are intentionally not imported. Closing cost remains under the Close action.
+          Price, Cost and Section are read from Excel when present. Status is controlled per item after import; closing adds the actual amount and notes.
         </div>}
         {isVehicle && <div style={{fontSize:12,color:'#64748b'}}>
           Vehicle Location is taken only from the selected Master Site. It is never read from free-text Excel location data.
@@ -421,13 +413,13 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
           <thead><tr>
             {isVehicle
               ? <><th>Plate</th><th>Make</th><th>Model</th><th>Driver</th><th>Current KM</th><th>Site</th><th>Status</th></>
-              : <><th>Sr.</th><th>Item</th><th>Unit</th><th>Quantity</th><th>Status</th></>}
+              : <><th>Sr.</th><th>Item</th><th>Unit</th><th>Quantity</th><th>Price</th><th>Cost</th><th>Section</th><th>Status</th></>}
           </tr></thead>
           <tbody>
             {mappedRows.slice(0,100).map(r => <tr key={r.excelRow}>
               {isVehicle
                 ? <><td>{r.data.plate || '-'}</td><td>{r.data.make || '-'}</td><td>{r.data.model || '-'}</td><td>{r.data.driver || '-'}</td><td>{r.data.currentKm}</td><td>{selectedSiteName || '-'}</td><td style={{color:r.data.plate ? '#16a34a':'#dc2626'}}>{r.data.plate ? 'Valid':'Missing Plate'}</td></>
-                : <><td>{r.data.srNo || '-'}</td><td>{r.data.item || '-'}</td><td>{r.data.unit || '-'}</td><td>{r.data.quantity}</td><td style={{color:r.data.item ? '#16a34a':'#dc2626'}}>{r.data.item ? 'Valid Item':'Missing Item'}</td></>}
+                : <><td>{r.data.srNo || '-'}</td><td>{r.data.item || '-'}</td><td>{r.data.unit || '-'}</td><td>{r.data.quantity}</td><td>{r.data.price || 0}</td><td>{r.data.cost || 0}</td><td>{r.data.section || '-'}</td><td style={{color:r.data.item ? '#16a34a':'#dc2626'}}>{r.data.item ? 'Ready':'Missing Item'}</td></>}
             </tr>)}
           </tbody>
         </table>

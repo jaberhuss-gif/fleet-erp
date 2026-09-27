@@ -15,7 +15,7 @@ export default function Projects({ user, access = {} }) {
   const [filterSite, setFilterSite] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [form, setForm] = useState({
-    name: '', description: '', site: '', projectType: 'Development', status: 'Active',
+    name: '', description: '', site: '', projectType: 'Development', status: 'Not Started',
     budget: 0, spent: 0, startDate: '', endDate: '', manager: '', contractor: '', notes: ''
   });
 
@@ -32,7 +32,7 @@ export default function Projects({ user, access = {} }) {
   };
 
   const resetForm = () => {
-    setForm({ name: '', description: '', site: '', projectType: 'Development', status: 'Active',
+    setForm({ name: '', description: '', site: '', projectType: 'Development', status: 'Not Started',
       budget: 0, spent: 0, startDate: '', endDate: '', manager: '', contractor: '', notes: '' });
     setEditing(null);
     setShowForm(false);
@@ -144,7 +144,8 @@ export default function Projects({ user, access = {} }) {
             </div>
             <div className="form-group"><label>Status</label>
               <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
-                <option value="Active">Active</option>
+                <option value="Not Started">Not Started</option>
+                <option value="In Progress">In Progress</option>
                 <option value="On Hold">On Hold</option>
                 <option value="Completed">Completed</option>
                 <option value="Cancelled">Cancelled</option>
@@ -219,7 +220,8 @@ export default function Projects({ user, access = {} }) {
                   <td>
                     <span className={
                       'status-badge ' +
-                      (p.status === 'Active' ? 'status-warning' :
+                      (p.status === 'In Progress' ? 'status-warning' :
+                       p.status === 'Not Started' ? 'status-warning' :
                        p.status === 'Completed' ? 'status-safe' :
                        p.status === 'Cancelled' ? 'status-urgent' : 'status-warning')
                     }>

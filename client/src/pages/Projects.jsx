@@ -98,6 +98,14 @@ export default function Projects({ user, access = {} }) {
     } catch (e) { setError(e.response?.data?.error || e.message); }
   };
 
+  const reopenItem = async (item) => {
+    if (!window.confirm('Reopen this item so it can be edited and closed again?')) return;
+    try {
+      const r = await api.put('/project-items/' + item.id + '/reopen');
+      setItems(prev => prev.map(x => x.id === item.id ? r.data.item : x));
+    } catch (e) { setError(e.response?.data?.error || e.message); }
+  };
+
   const exportItemsExcel = (project) => {
     const rows = items.map(x => ({
       Sr: x.sr_no, Section:x.section, Item:x.item, Unit:x.unit, Quantity:x.quantity,
@@ -292,7 +300,13 @@ export default function Projects({ user, access = {} }) {
                               <option>Not Started</option><option>In Progress</option><option>Completed</option><option>On Hold</option>
                             </select></td>
                             <td>{item.actual_amount || 0}</td><td>{item.notes || '-'}</td>
-                            <td>{!(item.status === 'Closed' || (item.status === 'Completed' && Number(item.actual_amount || 0) > 0 && String(item.notes || '').trim())) && <button className="btn btn-success" style={{padding:'5px 8px'}} onClick={() => closeItem(item)}>Close</button>}</td>
+                            <td style={{whiteSpace:'nowrap'}}>
+  {item.status === 'Completed' && Number(item.actual_amount || 0) > 0 && String(item.notes || '').trim() ? (
+    <button className="btn btn-warning" style={{padding:'5px 8px'}} onClick={() => reopenItem(item)}>Reopen</button>
+  ) : (
+    <button className="btn btn-success" style={{padding:'5px 8px'}} onClick={() => closeItem(item)}>Close</button>
+  )}
+</td>
                           </tr>)}</tbody></table>
                         )}
                       </div>

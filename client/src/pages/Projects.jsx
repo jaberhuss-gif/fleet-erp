@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
+import ExcelImportButton from '../components/ExcelImportButton';
 
 export default function Projects({ user, access = {} }) {
   const canWork = user?.role === 'Owner' || !!access?.projects?.can_work;
@@ -91,9 +92,9 @@ export default function Projects({ user, access = {} }) {
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         
-        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "projects", [{key:"project_no",label:"Project #"},{key:"name",label:"Name"},{key:"site",label:"Site"},{key:"project_type",label:"Type"},{key:"manager",label:"Manager"},{key:"budget",label:"Budget"},{key:"spent",label:"Spent"},{key:"status",label:"Status"}])}>Export CSV</button>{canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
+        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "projects", [{key:"project_no",label:"Project #"},{key:"name",label:"Name"},{key:"site",label:"Site"},{key:"project_type",label:"Type"},{key:"manager",label:"Manager"},{key:"budget",label:"Budget"},{key:"spent",label:"Spent"},{key:"status",label:"Status"}])}>Export CSV</button>{canWork && <><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
           {showForm ? 'Cancel' : '+ New Project'}
-        </button>}
+        </button><ExcelImportButton endpoint="/projects" kind="projects" onImported={load} label="Import Excel" /></>}
       </div>
 
       {message && <div className="alert alert-success">{message}</div>}

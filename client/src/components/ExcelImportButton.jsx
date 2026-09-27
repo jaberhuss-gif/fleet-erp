@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import api from '../api/client';
 
 const clean = v => v == null ? '' : String(v).trim();
-const key = v => clean(v).normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[\\s_\\-/#().:|\\\\]+/g, '');
+const key = v => clean(v).normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, '');
 const matchesAlias = (value, aliases) => { const k = key(value); return aliases.some(a => { const ak = key(a); return k === ak || k.includes(ak) || ak.includes(k); }); };
 const num = v => {
   const n = Number(clean(v).replace(/,/g, '').replace(/[^0-9.\-]/g, ''));

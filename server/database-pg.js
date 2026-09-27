@@ -1938,7 +1938,7 @@ export async function updateProjectItem(id, data = {}) {
 }
 
 export async function closeProjectItem(id, data = {}) {
-  return updateProjectItem(id, { status:'Closed', actualAmount:data.actualAmount ?? data.actual_amount, notes:data.notes });
+  return updateProjectItem(id, { status:'Completed', actualAmount:data.actualAmount ?? data.actual_amount, notes:data.notes });
 }
 
 export async function listWorkOrderItems(workOrderId) {

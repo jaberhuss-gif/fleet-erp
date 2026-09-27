@@ -3527,6 +3527,30 @@ export async function getBuildingDashboard(filters = {}) {
       0
     );
 
+  // Imported project Excel rows store Price/Cost at project_items level.
+  // Keep manually entered project budgets/spent untouched, but when the project
+  // budget is zero use the imported item costs as the project's displayed cost.
+  const projectIds = projects.map(p => p.id).filter(Boolean);
+  let itemCostByProject = new Map();
+  if (projectIds.length) {
+    const itemCosts = await query(
+      `SELECT project_id, COALESCE(SUM(COALESCE(cost,0)),0) AS item_cost
+       FROM project_items
+       WHERE project_id = ANY($1::bigint[])
+       GROUP BY project_id`,
+      [projectIds]
+    );
+    itemCostByProject = new Map(
+      itemCosts.rows.map(r => [Number(r.project_id), Number(r.item_cost || 0)])
+    );
+  }
+
+  const projectBudget = projects.reduce((total, p) => {
+    const storedBudget = Number(p.budget || 0);
+    const importedItemCost = Number(itemCostByProject.get(Number(p.id)) || 0);
+    return total + (storedBudget !== 0 ? storedBudget : importedItemCost);
+  }, 0);
+
   return {
     workOrders: {
       total: woTotal,
@@ -3541,7 +3565,7 @@ export async function getBuildingDashboard(filters = {}) {
     },
     projects: {
       total: projects.length,
-      budget: sum(projects, "budget"),
+      budget: projectBudget,
       spent: sum(projects, "spent"),
       list: projects
     },
@@ -3571,8 +3595,23 @@ export async function getCurrentMonthDashboardFinancial() {
   const projects = await query(`
     SELECT
       COUNT(*)::int AS total_projects,
-      COALESCE(SUM(COALESCE(budget,0)),0) AS development_cost,
-      COALESCE(SUM(CASE WHEN COALESCE(NULLIF(TRIM(contractor),''),'') <> '' THEN COALESCE(spent,0) ELSE 0 END),0) AS contractor_dev
+      COALESCE(SUM(
+        CASE
+          WHEN COALESCE(budget,0) <> 0 THEN budget
+          ELSE COALESCE((
+            SELECT SUM(COALESCE(pi.cost,0))
+            FROM project_items pi
+            WHERE pi.project_id = projects.id
+          ),0)
+        END
+      ),0) AS development_cost,
+      COALESCE(SUM(
+        CASE
+          WHEN COALESCE(NULLIF(TRIM(contractor),''),'') <> ''
+          THEN COALESCE(spent,0)
+          ELSE 0
+        END
+      ),0) AS contractor_dev
     FROM projects
     WHERE COALESCE(end_date, start_date) >= date_trunc('month', CURRENT_DATE)::date
       AND COALESCE(end_date, start_date) < (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month')::date

@@ -691,6 +691,30 @@ export async function ensureBuildingSchema() {
   `);
 
   await query(`
+    CREATE TABLE IF NOT EXISTS project_items (
+      id SERIAL PRIMARY KEY,
+      project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      sr_no TEXT,
+      item TEXT,
+      unit TEXT,
+      quantity NUMERIC DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS work_order_items (
+      id SERIAL PRIMARY KEY,
+      work_order_id INTEGER NOT NULL REFERENCES work_orders(id) ON DELETE CASCADE,
+      sr_no TEXT,
+      item TEXT,
+      unit TEXT,
+      quantity NUMERIC DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await query(`
     CREATE TABLE IF NOT EXISTS purchases (
       id SERIAL PRIMARY KEY,
       purchase_no TEXT UNIQUE,
@@ -1791,6 +1815,28 @@ export async function createProject(data = {}) {
     pgStr(data.notes)
   ]);
 
+  return result.rows[0];
+}
+
+export async function listProjectItems(projectId) {
+  const result = await query(`SELECT * FROM project_items WHERE project_id = $1 ORDER BY id`, [projectId]);
+  return result.rows;
+}
+
+export async function createProjectItem(projectId, data = {}) {
+  const result = await query(`INSERT INTO project_items (project_id, sr_no, item, unit, quantity) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+    [projectId, stringValue(data.srNo ?? data.sr_no), stringValue(data.item), stringValue(data.unit), numberValue(data.quantity)]);
+  return result.rows[0];
+}
+
+export async function listWorkOrderItems(workOrderId) {
+  const result = await query(`SELECT * FROM work_order_items WHERE work_order_id = $1 ORDER BY id`, [workOrderId]);
+  return result.rows;
+}
+
+export async function createWorkOrderItem(workOrderId, data = {}) {
+  const result = await query(`INSERT INTO work_order_items (work_order_id, sr_no, item, unit, quantity) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+    [workOrderId, stringValue(data.srNo ?? data.sr_no), stringValue(data.item), stringValue(data.unit), numberValue(data.quantity)]);
   return result.rows[0];
 }
 

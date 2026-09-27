@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
+import ExcelImportButton from '../components/ExcelImportButton';
 
 export default function WorkOrders({ user, access = {} }) {
   const canWork = user?.role === 'Owner' || !!access?.building?.can_work;
@@ -123,9 +124,9 @@ export default function WorkOrders({ user, access = {} }) {
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         
-        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "work-orders", [{key:"wo_no",label:"WO #"},{key:"site",label:"Site"},{key:"category",label:"Category"},{key:"description",label:"Description"},{key:"assigned_to",label:"Assigned To"},{key:"status",label:"Status"},{key:"reported_date",label:"Reported"},{key:"completed_date",label:"Completed"},{key:"final_cost",label:"Cost"}])}>Export CSV</button>{canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
+        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "work-orders", [{key:"wo_no",label:"WO #"},{key:"site",label:"Site"},{key:"category",label:"Category"},{key:"description",label:"Description"},{key:"assigned_to",label:"Assigned To"},{key:"status",label:"Status"},{key:"reported_date",label:"Reported"},{key:"completed_date",label:"Completed"},{key:"final_cost",label:"Cost"}])}>Export CSV</button>{canWork && <><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
           {showForm ? 'Cancel' : '+ New Work Order'}
-        </button>}
+        </button><ExcelImportButton endpoint="/work-orders" kind="home-maintenance" onImported={load} label="Import Excel" /></>}
       </div>
 
       {message && <div className="alert alert-success">{message}</div>}

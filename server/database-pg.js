@@ -1959,6 +1959,15 @@ export async function closeProjectItem(id, data = {}) {
   return updateProjectItem(id, { status:'Completed', actualAmount:data.actualAmount ?? data.actual_amount, notes:data.notes });
 }
 
+export async function reopenProjectItem(id) {
+  const result = await query(`UPDATE project_items
+    SET status='Completed', actual_amount=0, notes='', closed_at=NULL, updated_at=CURRENT_TIMESTAMP
+    WHERE id=$1
+    RETURNING *`, [id]);
+  if (!result.rows[0]) throw new Error('Project item not found');
+  return result.rows[0];
+}
+
 export async function listWorkOrderItems(workOrderId) {
   const result = await query(`SELECT * FROM work_order_items WHERE work_order_id = $1 ORDER BY id`, [workOrderId]);
   return result.rows;

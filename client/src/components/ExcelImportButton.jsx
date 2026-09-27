@@ -163,6 +163,8 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
         const second = clean(values[1]);
         const third = clean(values[2]);
         const fourth = clean(values[3]);
+        const fifth = clean(values[4]);
+        const sixth = clean(values[5]);
 
         // Ignore quotation metadata / repeated labels.
         if (key(first).includes('constructionitem') || key(first).includes('electricalitem') || key(first).includes('mechanicalitem') || key(first).includes('installationitem')) {
@@ -182,14 +184,16 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
             __ITEM__: second,
             __UNIT__: third,
             __QTY__: fourth,
+            __PRICE__: fifth,
+            __COST__: sixth,
             __SECTION__: section
           }
         });
       }
 
       return {
-        headers: ['__SR__','__ITEM__','__UNIT__','__QTY__','__SECTION__'],
-        mapping: { srNo:'__SR__', item:'__ITEM__', unit:'__UNIT__', quantity:'__QTY__', section:'__SECTION__' },
+        headers: ['__SR__','__ITEM__','__UNIT__','__QTY__','__PRICE__','__COST__','__SECTION__'],
+        mapping: { srNo:'__SR__', item:'__ITEM__', unit:'__UNIT__', quantity:'__QTY__', price:'__PRICE__', cost:'__COST__', section:'__SECTION__' },
         rows
       };
     }
@@ -262,7 +266,7 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
     excelRow:r.excelRow,
     data:Object.fromEntries(fields.map(f => [
       f.key,
-      ['quantity','year','currentKm','lastOilKm','oilChangeInterval'].includes(f.key)
+      ['quantity','price','cost','year','currentKm','lastOilKm','oilChangeInterval'].includes(f.key)
         ? num(r.row[mapping[f.key]])
         : clean(r.row[mapping[f.key]])
     ]))

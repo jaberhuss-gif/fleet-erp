@@ -6,6 +6,7 @@ import ExcelImportButton from '../components/ExcelImportButton';
 
 export default function Vehicles({ onViewVehicle, canWork = false }) {
   const [vehicles, setVehicles] = useState([]);
+  const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -27,8 +28,9 @@ export default function Vehicles({ onViewVehicle, canWork = false }) {
   const load = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/vehicles');
+      const [res, siteRes] = await Promise.all([api.get('/vehicles'), api.get('/sites')]);
       setVehicles(res.data.vehicles || []);
+      setSites(siteRes.data.sites || []);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
@@ -220,7 +222,12 @@ export default function Vehicles({ onViewVehicle, canWork = false }) {
               <div className="form-group"><label>Year</label><input type="number" value={form.year} onChange={e => setForm({ ...form, year: Number(e.target.value) })} /></div>
               <div className="form-group"><label>Driver</label><input value={form.driver} onChange={e => setForm({ ...form, driver: e.target.value })} /></div>
               <div className="form-group"><label>Phone</label><input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></div>
-              <div className="form-group"><label>Location</label><input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} /></div>
+              <div className="form-group"><label>Site *</label>
+                <select value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} required>
+                  <option value="">-- Select Site --</option>
+                  {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                </select>
+              </div>
               <div className="form-group"><label>Current KM</label><input type="number" value={form.currentKm} onChange={e => setForm({ ...form, currentKm: Number(e.target.value) })} /></div>
               <div className="form-group"><label>Last Oil KM</label><input type="number" value={form.lastOilKm} onChange={e => setForm({ ...form, lastOilKm: Number(e.target.value) })} /></div>
               <div className="form-group"><label>Oil Interval</label><input type="number" value={form.oilChangeInterval} onChange={e => setForm({ ...form, oilChangeInterval: Number(e.target.value) })} /></div>

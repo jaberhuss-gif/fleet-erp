@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
+import * as XLSX from 'xlsx';
 import ExcelImportButton from '../components/ExcelImportButton';
 
 export default function Projects({ user, access = {} }) {
@@ -14,6 +15,9 @@ export default function Projects({ user, access = {} }) {
   const [editing, setEditing] = useState(null);
   const [filterSite, setFilterSite] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [openProjectId, setOpenProjectId] = useState(null);
+  const [items, setItems] = useState([]);
+  const [itemsLoading, setItemsLoading] = useState(false);
   const [form, setForm] = useState({
     name: '', description: '', site: '', projectType: 'Development', status: 'Not Started',
     budget: 0, spent: 0, startDate: '', endDate: '', manager: '', contractor: '', notes: ''
@@ -64,6 +68,55 @@ export default function Projects({ user, access = {} }) {
     });
     setEditing(p);
     setShowForm(true);
+  };
+
+  const loadItems = async (projectId) => {
+    try {
+      setItemsLoading(true);
+      const r = await api.get('/projects/' + projectId + '/items');
+      setItems(r.data.items || []);
+      setOpenProjectId(projectId);
+    } catch (e) { setError(e.response?.data?.error || e.message); }
+    finally { setItemsLoading(false); }
+  };
+
+  const updateItemStatus = async (item, status) => {
+    try {
+      const r = await api.put('/project-items/' + item.id, { status, actualAmount:item.actual_amount || 0, notes:item.notes || '' });
+      setItems(prev => prev.map(x => x.id === item.id ? r.data.item : x));
+    } catch (e) { setError(e.response?.data?.error || e.message); }
+  };
+
+  const closeItem = async (item) => {
+    const amount = window.prompt('Actual amount (SAR):', String(item.actual_amount || 0));
+    if (amount === null) return;
+    const notes = window.prompt('Closing notes:', item.notes || '') ?? '';
+    try {
+      const r = await api.put('/project-items/' + item.id + '/close', { actualAmount:Number(amount) || 0, notes });
+      setItems(prev => prev.map(x => x.id === item.id ? r.data.item : x));
+    } catch (e) { setError(e.response?.data?.error || e.message); }
+  };
+
+  const exportItemsExcel = (project) => {
+    const rows = items.map(x => ({
+      Sr: x.sr_no, Section:x.section, Item:x.item, Unit:x.unit, Quantity:x.quantity,
+      Price:x.price, Cost:x.cost, Status:x.status, 'Actual Amount':x.actual_amount, Notes:x.notes
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Project Items');
+    XLSX.writeFile(wb, (project.name || 'Project') + '-Items.xlsx');
+  };
+
+  const exportItemsPDF = (project) => {
+    const win = window.open('', '_blank');
+    if (!win) return;
+    const esc = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    win.document.write('<html><head><title>' + esc(project.name) + '</title><style>body{font-family:Arial;padding:24px}table{border-collapse:collapse;width:100%;font-size:11px}th,td{border:1px solid #999;padding:6px;text-align:left}th{background:#eee}.meta{margin-bottom:16px}</style></head><body>');
+    win.document.write('<h2>' + esc(project.name) + '</h2><div class="meta">Site: ' + esc(project.site) + '</div><table><thead><tr><th>Sr.</th><th>Section</th><th>Item</th><th>Unit</th><th>Qty</th><th>Price</th><th>Cost</th><th>Status</th><th>Actual Amount</th><th>Notes</th></tr></thead><tbody>');
+    items.forEach(x => win.document.write('<tr><td>'+esc(x.sr_no)+'</td><td>'+esc(x.section)+'</td><td>'+esc(x.item)+'</td><td>'+esc(x.unit)+'</td><td>'+esc(x.quantity)+'</td><td>'+esc(x.price)+'</td><td>'+esc(x.cost)+'</td><td>'+esc(x.status)+'</td><td>'+esc(x.actual_amount)+'</td><td>'+esc(x.notes)+'</td></tr>'));
+    win.document.write('</tbody></table><script>window.onload=function(){window.print();}</script></body></html>');
+    win.document.close();
   };
 
   const handleDelete = async (id) => {
@@ -229,12 +282,34 @@ export default function Projects({ user, access = {} }) {
                     </span>
                   </td>
                   <td>
-                    {canWork && <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleEdit(p)}>Edit</button>}
+                    <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => openProjectId === p.id ? setOpenProjectId(null) : loadItems(p.id)}>{openProjectId === p.id ? 'Hide Items' : 'Items'}</button>{canWork && <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleEdit(p)}>Edit</button>}
                     {canWork && <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(p.id)}>Delete</button>}
                   </td>
                 </tr>
               );
             })}
+            {openProjectId === p.id && (
+              <tr key={'items-' + p.id}><td colSpan="10">
+                <div style={{padding:12,background:'#f8fafc'}}>
+                  <div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap'}}>
+                    <strong style={{marginRight:'auto'}}>Project Items — {p.name}</strong>
+                    <button className="btn btn-success" onClick={() => exportItemsExcel(p)}>Export Excel</button>
+                    <button className="btn btn-primary" onClick={() => exportItemsPDF(p)}>Export PDF</button>
+                  </div>
+                  {itemsLoading ? <div>Loading items...</div> : items.length === 0 ? <div>No imported items.</div> : (
+                    <table><thead><tr><th>Sr.</th><th>Section</th><th>Item</th><th>Unit</th><th>Qty</th><th>Price</th><th>Cost</th><th>Status</th><th>Actual Amount</th><th>Notes</th><th>Action</th></tr></thead>
+                    <tbody>{items.map(item => <tr key={item.id}>
+                      <td>{item.sr_no}</td><td>{item.section || '-'}</td><td>{item.item}</td><td>{item.unit}</td><td>{item.quantity}</td><td>{item.price}</td><td>{item.cost}</td>
+                      <td><select value={item.status || 'Not Started'} onChange={e => updateItemStatus(item,e.target.value)}>
+                        <option>Not Started</option><option>In Progress</option><option>Completed</option><option>On Hold</option>
+                      </select></td>
+                      <td>{item.actual_amount || 0}</td><td>{item.notes || '-'}</td>
+                      <td>{item.status !== 'Closed' && <button className="btn btn-success" style={{padding:'5px 8px'}} onClick={() => closeItem(item)}>Close</button>}</td>
+                    </tr>)}</tbody></table>
+                  )}
+                </div>
+              </td></tr>
+            )}
           </tbody>
         </table>
       )}

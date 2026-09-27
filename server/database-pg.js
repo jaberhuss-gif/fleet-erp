@@ -1828,7 +1828,25 @@ export async function deleteWorkOrder(id) {
    ============================================================ */
 
 export async function listProjects(filters = {}) {
-  let sql = `SELECT * FROM projects WHERE 1=1`;
+  let sql = `
+    SELECT p.*,
+      COALESCE(pi.total_items, 0) AS total_items,
+      COALESCE(pi.completed_items, 0) AS completed_items,
+      CASE
+        WHEN COALESCE(pi.total_items, 0) > 0
+        THEN ROUND((COALESCE(pi.completed_items, 0)::numeric / pi.total_items::numeric) * 100, 0)
+        ELSE 0
+      END AS progress_percent
+    FROM projects p
+    LEFT JOIN (
+      SELECT project_id,
+        COUNT(*) AS total_items,
+        COUNT(*) FILTER (WHERE status = 'Completed') AS completed_items
+      FROM project_items
+      GROUP BY project_id
+    ) pi ON pi.project_id = p.id
+    WHERE 1=1
+  `;
   const params = [];
 
   if (filters.month) {
@@ -1846,7 +1864,7 @@ export async function listProjects(filters = {}) {
     sql += ` AND site = $${params.length}`;
   }
 
-  sql += ` ORDER BY created_at DESC, id DESC`;
+  sql += ` ORDER BY p.created_at DESC, p.id DESC`;
 
   const result = await query(sql, params);
   return result.rows;

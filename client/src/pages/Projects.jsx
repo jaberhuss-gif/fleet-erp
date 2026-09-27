@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
+import React from 'react';
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
 import * as XLSX from 'xlsx';
@@ -256,60 +257,50 @@ export default function Projects({ user, access = {} }) {
             {filtered.map(p => {
               const pct = p.budget > 0 ? Math.min((p.spent / p.budget) * 100, 100) : 0;
               return (
-                <tr key={p.id}>
-                  <td style={{ fontWeight: 'bold' }}>{p.project_no}</td>
-                  <td style={{ fontWeight: 'bold' }}>{p.name}</td>
-                  <td>{p.site}</td>
-                  <td>{p.project_type}</td>
-                  <td>{p.manager || '-'}</td>
-                  <td>{Number(p.budget || 0).toLocaleString()}</td>
-                  <td>{Number(p.spent || 0).toLocaleString()}</td>
-                  <td style={{ minWidth: '120px' }}>
-                    <div style={{ background: '#e2e8f0', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
-                      <div style={{ background: pct > 90 ? '#dc2626' : pct > 70 ? '#f59e0b' : '#16a34a', width: pct + '%', height: '100%' }}></div>
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>{pct.toFixed(0)}%</div>
-                  </td>
-                  <td>
-                    <span className={
-                      'status-badge ' +
-                      (p.status === 'In Progress' ? 'status-warning' :
-                       p.status === 'Not Started' ? 'status-warning' :
-                       p.status === 'Completed' ? 'status-safe' :
-                       p.status === 'Cancelled' ? 'status-urgent' : 'status-warning')
-                    }>
-                      {p.status}
-                    </span>
-                  </td>
-                  <td>
-                    <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => openProjectId === p.id ? setOpenProjectId(null) : loadItems(p.id)}>{openProjectId === p.id ? 'Hide Items' : 'Items'}</button>{canWork && <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleEdit(p)}>Edit</button>}
-                    {canWork && <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(p.id)}>Delete</button>}
-                  </td>
-                </tr>
+                <React.Fragment key={p.id}>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>{p.project_no}</td>
+                    <td style={{ fontWeight: 'bold' }}>{p.name}</td>
+                    <td>{p.site}</td><td>{p.project_type}</td><td>{p.manager || '-'}</td>
+                    <td>{Number(p.budget || 0).toLocaleString()}</td><td>{Number(p.spent || 0).toLocaleString()}</td>
+                    <td style={{ minWidth: '120px' }}>
+                      <div style={{ background: '#e2e8f0', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ background: pct > 90 ? '#dc2626' : pct > 70 ? '#f59e0b' : '#16a34a', width: pct + '%', height: '100%' }}></div>
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>{pct.toFixed(0)}%</div>
+                    </td>
+                    <td><span className={'status-badge ' + (p.status === 'Completed' ? 'status-safe' : p.status === 'Cancelled' ? 'status-urgent' : 'status-warning')}>{p.status}</span></td>
+                    <td>
+                      <button className="btn btn-primary" style={{padding:'6px 10px',fontSize:'12px',marginRight:'4px'}} onClick={() => openProjectId === p.id ? setOpenProjectId(null) : loadItems(p.id)}>{openProjectId === p.id ? 'Hide Items' : 'Items'}</button>
+                      {canWork && <button className="btn btn-primary" style={{padding:'6px 10px',fontSize:'12px',marginRight:'4px'}} onClick={() => handleEdit(p)}>Edit</button>}
+                      {canWork && <button className="btn btn-danger" style={{padding:'6px 10px',fontSize:'12px'}} onClick={() => handleDelete(p.id)}>Delete</button>}
+                    </td>
+                  </tr>
+                  {openProjectId === p.id && (
+                    <tr><td colSpan="10">
+                      <div style={{padding:12,background:'#f8fafc'}}>
+                        <div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap'}}>
+                          <strong style={{marginRight:'auto'}}>Project Items — {p.name}</strong>
+                          <button className="btn btn-success" onClick={() => exportItemsExcel(p)}>Export Excel</button>
+                          <button className="btn btn-primary" onClick={() => exportItemsPDF(p)}>Export PDF</button>
+                        </div>
+                        {itemsLoading ? <div>Loading items...</div> : items.length === 0 ? <div>No imported items.</div> : (
+                          <table><thead><tr><th>Sr.</th><th>Section</th><th>Item</th><th>Unit</th><th>Qty</th><th>Price</th><th>Cost</th><th>Status</th><th>Actual Amount</th><th>Notes</th><th>Action</th></tr></thead>
+                          <tbody>{items.map(item => <tr key={item.id}>
+                            <td>{item.sr_no}</td><td>{item.section || '-'}</td><td>{item.item}</td><td>{item.unit}</td><td>{item.quantity}</td><td>{item.price}</td><td>{item.cost}</td>
+                            <td><select value={item.status || 'Not Started'} onChange={e => updateItemStatus(item,e.target.value)}>
+                              <option>Not Started</option><option>In Progress</option><option>Completed</option><option>On Hold</option>
+                            </select></td>
+                            <td>{item.actual_amount || 0}</td><td>{item.notes || '-'}</td>
+                            <td>{item.status !== 'Closed' && <button className="btn btn-success" style={{padding:'5px 8px'}} onClick={() => closeItem(item)}>Close</button>}</td>
+                          </tr>)}</tbody></table>
+                        )}
+                      </div>
+                    </td></tr>
+                  )}
+                </React.Fragment>
               );
             })}
-            {openProjectId === p.id && (
-              <tr key={'items-' + p.id}><td colSpan="10">
-                <div style={{padding:12,background:'#f8fafc'}}>
-                  <div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap'}}>
-                    <strong style={{marginRight:'auto'}}>Project Items — {p.name}</strong>
-                    <button className="btn btn-success" onClick={() => exportItemsExcel(p)}>Export Excel</button>
-                    <button className="btn btn-primary" onClick={() => exportItemsPDF(p)}>Export PDF</button>
-                  </div>
-                  {itemsLoading ? <div>Loading items...</div> : items.length === 0 ? <div>No imported items.</div> : (
-                    <table><thead><tr><th>Sr.</th><th>Section</th><th>Item</th><th>Unit</th><th>Qty</th><th>Price</th><th>Cost</th><th>Status</th><th>Actual Amount</th><th>Notes</th><th>Action</th></tr></thead>
-                    <tbody>{items.map(item => <tr key={item.id}>
-                      <td>{item.sr_no}</td><td>{item.section || '-'}</td><td>{item.item}</td><td>{item.unit}</td><td>{item.quantity}</td><td>{item.price}</td><td>{item.cost}</td>
-                      <td><select value={item.status || 'Not Started'} onChange={e => updateItemStatus(item,e.target.value)}>
-                        <option>Not Started</option><option>In Progress</option><option>Completed</option><option>On Hold</option>
-                      </select></td>
-                      <td>{item.actual_amount || 0}</td><td>{item.notes || '-'}</td>
-                      <td>{item.status !== 'Closed' && <button className="btn btn-success" style={{padding:'5px 8px'}} onClick={() => closeItem(item)}>Close</button>}</td>
-                    </tr>)}</tbody></table>
-                  )}
-                </div>
-              </td></tr>
-            )}
           </tbody>
         </table>
       )}

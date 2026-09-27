@@ -781,7 +781,15 @@ export async function ensureBuildingSchema() {
       item TEXT,
       unit TEXT,
       quantity NUMERIC DEFAULT 0,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      price NUMERIC DEFAULT 0,
+      cost NUMERIC DEFAULT 0,
+      section TEXT DEFAULT '',
+      status TEXT DEFAULT 'Not Started',
+      actual_amount NUMERIC DEFAULT 0,
+      notes TEXT DEFAULT '',
+      closed_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -864,8 +872,12 @@ export async function ensureBuildingSchema() {
       ["purchase_date", "DATE"], ["month", "TEXT"], ["year", "TEXT"], ["notes", "TEXT"],
       ["created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"]
     ],
-    sites: [
-      ["code", "TEXT"], ["name", "TEXT"], ["region", "TEXT DEFAULT ''"],
+    project_items: [
+      ["price", "NUMERIC DEFAULT 0"], ["cost", "NUMERIC DEFAULT 0"], ["section", "TEXT DEFAULT ''"],
+      ["status", "TEXT DEFAULT 'Not Started'"], ["actual_amount", "NUMERIC DEFAULT 0"], ["notes", "TEXT DEFAULT ''"],
+      ["closed_at", "TIMESTAMP"], ["updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"]
+    ],
+    sites: [      ["code", "TEXT"], ["name", "TEXT"], ["region", "TEXT DEFAULT ''"],
       ["campus_manager", "TEXT DEFAULT ''"], ["phone", "TEXT DEFAULT ''"],
       ["notes", "TEXT"], ["status", "TEXT DEFAULT 'Active'"],
       ["created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"]
@@ -1907,9 +1919,26 @@ export async function listProjectItems(projectId) {
 }
 
 export async function createProjectItem(projectId, data = {}) {
-  const result = await query(`INSERT INTO project_items (project_id, sr_no, item, unit, quantity) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-    [projectId, stringValue(data.srNo ?? data.sr_no), stringValue(data.item), stringValue(data.unit), numberValue(data.quantity)]);
+  const result = await query(`INSERT INTO project_items (project_id, sr_no, item, unit, quantity, price, cost, section, status, actual_amount, notes)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    [projectId, stringValue(data.srNo ?? data.sr_no), stringValue(data.item), stringValue(data.unit), numberValue(data.quantity),
+      numberValue(data.price), numberValue(data.cost), stringValue(data.section), stringValue(data.status, 'Not Started'), numberValue(data.actualAmount ?? data.actual_amount), stringValue(data.notes)]);
   return result.rows[0];
+}
+
+export async function updateProjectItem(id, data = {}) {
+  const current = await query(`SELECT * FROM project_items WHERE id=$1`, [id]);
+  if (!current.rows[0]) throw new Error('Project item not found');
+  const result = await query(`UPDATE project_items SET status=$1, actual_amount=$2, notes=$3, updated_at=CURRENT_TIMESTAMP,
+    closed_at=CASE WHEN $1 IN ('Completed','Closed') THEN COALESCE(closed_at,CURRENT_TIMESTAMP) ELSE NULL END
+    WHERE id=$4 RETURNING *`,
+    [stringValue(data.status, current.rows[0].status || 'Not Started'), numberValue(data.actualAmount ?? data.actual_amount ?? current.rows[0].actual_amount),
+      stringValue(data.notes ?? current.rows[0].notes), id]);
+  return result.rows[0];
+}
+
+export async function closeProjectItem(id, data = {}) {
+  return updateProjectItem(id, { status:'Closed', actualAmount:data.actualAmount ?? data.actual_amount, notes:data.notes });
 }
 
 export async function listWorkOrderItems(workOrderId) {

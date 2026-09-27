@@ -104,6 +104,7 @@ function getModuleFromPath(pathname) {
     inventory: "warehouse",
     "stock-transactions": "warehouse",
     "periodic-maintenance": "fleet",
+    "vehicle-repairs": "fleet",
     "audit-log": "audit",
     backup: "backup",
     users: "users",

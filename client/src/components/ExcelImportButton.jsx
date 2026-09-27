@@ -75,7 +75,14 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
   const selectedSiteName = selectedSite?.name || '';
 
   const visibleTargets = isProject
-    ? targets.filter(x => !selectedSiteName || clean(x.site) === clean(selectedSiteName))
+    ? targets.filter(x => {
+        const name = clean(x.name).toLowerCase();
+        const allowedProject =
+          name === 'socket assembly work' ||
+          name === 'a/c project' ||
+          name === 'ac project';
+        return allowedProject && (!selectedSiteName || clean(x.site) === clean(selectedSiteName));
+      })
     : targets;
 
   const autoMap = hs => Object.fromEntries(fields.map(f => {

@@ -344,6 +344,7 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
     setMapping({});
     setTargets([]);
     setTargetId('');
+    setProjectName('');
     setSiteId('');
     setFileName('');
     setError('');
@@ -425,7 +426,7 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
         </table>
       </div>
       <div className='btn-row' style={{marginTop:10}}>
-        <button className='btn btn-success' onClick={importRows} disabled={busy || !siteId || (!isVehicle && !targetId)}>
+        <button className='btn btn-success' onClick={importRows} disabled={busy || !siteId || (isProject ? !projectName : (!isVehicle && !targetId))}>
           {busy ? 'Importing...' : 'Import ' + mappedRows.length + ' Row(s)'}
         </button>
         <button className='btn btn-warning' onClick={reset} disabled={busy}>Cancel</button>

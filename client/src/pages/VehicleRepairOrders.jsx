@@ -56,6 +56,19 @@ export default function VehicleRepairOrders({ canWork = false }) {
     }
   };
 
+  const closeTicket = async (id) => {
+    const notes = window.prompt('Verification notes (optional):', '') ?? '';
+    setBusy(true);
+    try {
+      await api.put('/tickets/' + id + '/close-with-notes', { notes });
+      await load();
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!canWork) return <div className="panel">Fleet work permission is not assigned to this user.</div>;
 
   return (
@@ -97,7 +110,11 @@ export default function VehicleRepairOrders({ canWork = false }) {
                     <button className="btn btn-success" type="button" onClick={() => closeRepair(r.id)} disabled={busy}>
                       Confirm & Close
                     </button>
-                  ) : '-'}
+                  ) : r.source === 'Ticket' && !['Closed', 'Completed'].includes(String(r.status || '')) ? (
+                    <button className="btn btn-success" type="button" onClick={() => closeTicket(r.ticketId)} disabled={busy}>
+                      Confirm & Close
+                    </button>
+                  ) : r.source === 'Ticket' ? 'Closed' : '-'}
                 </td>
               </tr>
             ))}

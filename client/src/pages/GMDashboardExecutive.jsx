@@ -24,6 +24,7 @@ export default function GMDashboardExecutive() {
   const [tickets, setTickets] = useState([]);
   const [building, setBuilding] = useState(null);
   const [financial, setFinancial] = useState(null);
+  const [monthFinancial, setMonthFinancial] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [updated, setUpdated] = useState(null);
@@ -37,12 +38,14 @@ export default function GMDashboardExecutive() {
         getTickets(),
         api.get('/building/dashboard').then(r => r.data),
         api.get('/reports/financial').then(r => r.data),
+        api.get('/dashboard/current-month-financials').then(r => r.data),
       ]);
       setData(dashboard);
       setAlerts(vehicleAlerts);
       setTickets(ticketData?.tickets || []);
       setBuilding(buildingData);
       setFinancial(financialData);
+      setMonthFinancial(monthFinancialData);
       setUpdated(new Date());
     } catch (e) {
       setError(e?.message || 'Unable to load executive dashboard');
@@ -61,6 +64,7 @@ export default function GMDashboardExecutive() {
   const ticketSummary = data.tickets || {};
   const grand = financial?.grand || {};
   const reportMonths = financial?.months || financial?.rows || [];
+  const mtd = monthFinancial || {};
   const openTickets = Number(ticketSummary.open || 0);
   const totalTickets = Number(ticketSummary.total || 0);
   const fleetTotal = Number(vehicles.total || 0);
@@ -101,6 +105,20 @@ export default function GMDashboardExecutive() {
             <KPI label="Vehicle Alerts" value={openVehicleAlerts} note={`${vehicles.urgent || 0} urgent • ${vehicles.warning || 0} warning`} tone={openVehicleAlerts ? 'red' : 'green'} />
             <KPI label="Total Savings" value={money(grand.totalSavings)} note={`${Number(grand.totalSavingsPct || 0).toFixed(1)}% reported savings`} tone="green" />
             <KPI label="Actual Cost" value={money(grand.totalActual)} note={`Baseline ${money(grand.totalBaseline)}`} />
+          </div>
+
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12, gap: 10, flexWrap: 'wrap' }}>
+              <h2 style={{ margin: 0 }}>Current Month — Actual Spend</h2>
+              <span style={{ color: '#64748b', fontSize: 12 }}>{mtd.currentMonth || ''} • Same calculation logic as the Apps Script dashboard</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 14 }}>
+              <KPI label="Maintenance Cost" value={money(mtd.maintenanceCost)} note={`${mtd.totalWO || 0} current-month work orders`} />
+              <KPI label="Development Cost" value={money(mtd.developmentCost)} note={`${mtd.totalDevProjects || 0} current-month projects`} />
+              <KPI label="Contractor Cost" value={money(mtd.contractorCost)} note="Contractor WO + development" tone="amber" />
+              <KPI label="Parts Cost" value={money(mtd.partsCost)} note={`Contractor parts ${money(mtd.contractorParts)}`} />
+              <KPI label="Total Company Cost" value={money(mtd.totalCompanyCost)} note="Maintenance + Development + Parts" tone="green" />
+            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 16 }}>

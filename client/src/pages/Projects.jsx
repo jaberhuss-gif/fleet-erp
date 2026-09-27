@@ -292,7 +292,7 @@ export default function Projects({ user, access = {} }) {
                               <option>Not Started</option><option>In Progress</option><option>Completed</option><option>On Hold</option>
                             </select></td>
                             <td>{item.actual_amount || 0}</td><td>{item.notes || '-'}</td>
-                            <td>{item.status !== 'Completed' && item.status !== 'Closed' && <button className="btn btn-success" style={{padding:'5px 8px'}} onClick={() => closeItem(item)}>Close</button>}</td>
+                            <td>{!(item.status === 'Closed' || (item.status === 'Completed' && Number(item.actual_amount || 0) > 0 && String(item.notes || '').trim())) && <button className="btn btn-success" style={{padding:'5px 8px'}} onClick={() => closeItem(item)}>Close</button>}</td>
                           </tr>)}</tbody></table>
                         )}
                       </div>

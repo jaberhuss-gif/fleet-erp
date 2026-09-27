@@ -9,7 +9,7 @@ const key = (v) => clean(v)
 
 const aliases = {
   projectNo: ['projectno','projectnumber','project#','id','projectid'],
-  name: ['name','projectname','description'],
+  name: ['name','projectname'],
   description: ['description','details','scope'],
   site: ['site','location','projectsite'],
   projectType: ['projecttype','type'],
@@ -220,7 +220,7 @@ export default function ExcelImportButton({
       />
       <button
         type="button"
-        className="btn btn-info"
+        className="btn btn-primary"
         onClick={() => inputRef.current?.click()}
         disabled={busy}
         title={`Import ${isProject ? 'Projects' : 'Home Maintenance'} from Excel`}

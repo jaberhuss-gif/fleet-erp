@@ -90,13 +90,28 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
   };
 
   const findHeaderRow = rows => {
+    const scanLimit = Math.min(rows.length, 100);
+
+    // Quotation-style files such as "core yard" do not have a normal
+    // four-column header. They contain a label row "Sr. / ت", followed by
+    // section rows (Construction Item / Electrical Item / Mechanical Item)
+    // and then numbered data. Always use the Sr. label row as the anchor.
+    if (!isVehicle && isQuotationStyle(rows)) {
+      const srIndex = rows.slice(0, scanLimit).findIndex(row =>
+        row.some(v => matchesAlias(v, ['sr','srno','serial','serialno','sno','ت']))
+      );
+      if (srIndex >= 0) return srIndex;
+    }
+
     let bestIndex = -1;
     let bestScore = 0;
-    const scanLimit = Math.min(rows.length, 80);
 
     rows.slice(0, scanLimit).forEach((row, index) => {
       const values = row.map(clean).filter(Boolean);
-      const score = fields.reduce((total, f) => total + (values.some(v => matchesAlias(v, f.aliases)) ? 1 : 0), 0);
+      const score = fields.reduce(
+        (total, f) => total + (values.some(v => matchesAlias(v, f.aliases)) ? 1 : 0),
+        0
+      );
       if (score > bestScore) {
         bestScore = score;
         bestIndex = index;
@@ -107,10 +122,14 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
       const quotationRow = rows.slice(0, scanLimit).findIndex(row =>
         row.some(v => key(v).includes('quotation') || key(v).includes('quote'))
       );
+
       if (quotationRow >= 0) {
         for (let i = quotationRow + 1; i < Math.min(rows.length, quotationRow + 20); i++) {
           const values = rows[i].map(clean).filter(Boolean);
-          const score = fields.reduce((total, f) => total + (values.some(v => matchesAlias(v, f.aliases)) ? 1 : 0), 0);
+          const score = fields.reduce(
+            (total, f) => total + (values.some(v => matchesAlias(v, f.aliases)) ? 1 : 0),
+            0
+          );
           if (score > bestScore) {
             bestScore = score;
             bestIndex = i;

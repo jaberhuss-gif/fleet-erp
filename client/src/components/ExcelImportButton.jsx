@@ -2,21 +2,22 @@ import { useEffect, useRef, useState } from 'react';
 import api from '../api/client';
 
 const clean = v => v == null ? '' : String(v).trim();
-const key = v => clean(v).toLowerCase().replace(/[\s_\-/#().:]+/g, '');
+const key = v => clean(v).normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[\\s_\\-/#().:|\\\\]+/g, '');
+const matchesAlias = (value, aliases) => { const k = key(value); return aliases.some(a => { const ak = key(a); return k === ak || k.includes(ak) || ak.includes(k); }); };
 const num = v => {
   const n = Number(clean(v).replace(/,/g, '').replace(/[^0-9.\-]/g, ''));
   return Number.isFinite(n) ? n : 0;
 };
 
 const PROJECT_FIELDS = [
-  { key:'srNo', label:'Sr.', aliases:['sr','srno','serial','serialno','ت','ت.'] },
-  { key:'item', label:'Item', aliases:['item','البند','description','details','itemdescription','الوصف'] },
-  { key:'unit', label:'Unit', aliases:['unit','الوحده','الوحدة','units'] },
-  { key:'quantity', label:'Quantities', aliases:['quantities','quantity','qty','الكميات','كمية','الكمية'] }
+  { key:'srNo', label:'Sr.', aliases:['sr','srno','serial','serialno','sno','sno.','no','number','#','ت','ت.','ت/'] },
+  { key:'item', label:'Item', aliases:['item','itemdescription','item description','البند','description','details','detail','الوصف','workdescription'] },
+  { key:'unit', label:'Unit', aliases:['unit','units','الوحده','الوحدة','uom'] },
+  { key:'quantity', label:'Quantities', aliases:['quantities','quantity','qty','qnty','amount','الكميات','كمية','الكمية'] }
 ];
 
 const VEHICLE_FIELDS = [
-  { key:'plate', label:'Plate', aliases:['plate','platenumber','plate_number','registration','registrationnumber','vehicle','vehicleid','رقم اللوحة','رقماللوحة','لوحة'] },
+  { key:'plate', label:'Plate', aliases:['plate','platenumber','plate_number','registration','registrationnumber','vehicle','vehicleid','vehicle number','رقم اللوحة','رقماللوحة','لوحة'] },
   { key:'make', label:'Make', aliases:['make','manufacturer','الصانع','الشركة'] },
   { key:'model', label:'Model', aliases:['model','موديل','الطراز'] },
   { key:'year', label:'Year', aliases:['year','modelyear','السنة','سنة'] },
@@ -71,22 +72,42 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
     : targets;
 
   const autoMap = hs => Object.fromEntries(fields.map(f => {
-    const h = hs.find(x => f.aliases.map(key).includes(key(x)));
+    const h = hs.find(x => matchesAlias(x, f.aliases));
     return [f.key, h || ''];
   }));
 
   const findHeaderRow = rows => {
     let bestIndex = -1;
     let bestScore = 0;
-    const aliases = fields.flatMap(f => f.aliases.map(key));
-    rows.slice(0, 40).forEach((row, index) => {
-      const values = row.map(clean);
-      const score = values.filter(v => aliases.includes(key(v))).length;
+    const scanLimit = Math.min(rows.length, 80);
+    rows.slice(0, scanLimit).forEach((row, index) => {
+      const values = row.map(clean).filter(Boolean);
+      const score = fields.reduce((total, f) => total + (values.some(v => matchesAlias(v, f.aliases)) ? 1 : 0), 0);
       if (score > bestScore) {
         bestScore = score;
         bestIndex = index;
       }
     });
+
+    // Some quotation workbooks have a title/merged row such as "Quotation"
+    // immediately before the real bilingual header row. Search the nearby rows
+    // instead of treating the title as the header.
+    if (bestScore < (isVehicle ? 1 : 2)) {
+      const quotationRow = rows.slice(0, scanLimit).findIndex(row =>
+        row.some(v => key(v).includes('quotation') || key(v).includes('quote'))
+      );
+      if (quotationRow >= 0) {
+        for (let i = quotationRow + 1; i < Math.min(rows.length, quotationRow + 12); i++) {
+          const values = rows[i].map(clean).filter(Boolean);
+          const score = fields.reduce((total, f) => total + (values.some(v => matchesAlias(v, f.aliases)) ? 1 : 0), 0);
+          if (score > bestScore) {
+            bestScore = score;
+            bestIndex = i;
+          }
+        }
+      }
+    }
+
     return bestScore >= (isVehicle ? 1 : 2) ? bestIndex : -1;
   };
 

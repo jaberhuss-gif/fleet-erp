@@ -1,4 +1,4 @@
-﻿import { query } from "./postgres.js";
+﻿import { query, transaction } from "./postgres.js";
 
 export async function listVehiclesPG() {
   const result = await query(`
@@ -111,7 +111,7 @@ export async function updateVehiclePG(id, data) {
       current_km = COALESCE($10, current_km),
       last_oil_km = COALESCE($11, last_oil_km),
       oil_change_interval = COALESCE($12, oil_change_interval),
-      last_oil_change_date = CASE WHEN $13::date IS NULL AND $13 IS NOT NULL THEN last_oil_change_date ELSE COALESCE($13, last_oil_change_date) END,
+      last_oil_change_date = COALESCE($13, last_oil_change_date),
       status = COALESCE($14, status),
       meter_updated_at = COALESCE($15, meter_updated_at),
       updated_at = CURRENT_TIMESTAMP
@@ -136,6 +136,68 @@ export async function updateVehiclePG(id, data) {
   ]);
 
   return result.rows[0] || null;
+}
+
+export async function updateLastOilChangePG(id, data = {}) {
+  const oilKm = Number(data.lastOilKm ?? data.last_oil_km);
+  if (!Number.isFinite(oilKm) || oilKm < 0) {
+    throw new Error("Last Oil Change KM must be a valid non-negative number");
+  }
+
+  const oilDateRaw = data.lastOilChangeDate ?? data.last_oil_change_date ?? null;
+  const oilDate = oilDateRaw ? String(oilDateRaw).slice(0, 10) : null;
+  if (oilDate && !/^\d{4}-\d{2}-\d{2}$/.test(oilDate)) {
+    throw new Error("Last Oil Change Date must be YYYY-MM-DD");
+  }
+
+  return transaction(async (client) => {
+    const vehicle = await client.query(
+      "SELECT id FROM vehicles WHERE id = $1 FOR UPDATE",
+      [id]
+    );
+    if (!vehicle.rows[0]) throw new Error("Vehicle not found");
+
+    const updated = await client.query(
+      `UPDATE vehicles
+       SET last_oil_km = $1,
+           last_oil_change_date = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3
+       RETURNING *`,
+      [oilKm, oilDate, id]
+    );
+
+    const history = await client.query(
+      `SELECT id
+       FROM oil_changes
+       WHERE vehicle_id = $1
+         AND COALESCE(notes, '') NOT ILIKE '%Google Sheet%'
+       ORDER BY oil_change_date DESC NULLS LAST, id DESC
+       LIMIT 1
+       FOR UPDATE`,
+      [id]
+    );
+
+    const note = "ERP Last Oil Change correction";
+    if (history.rows[0]) {
+      await client.query(
+        `UPDATE oil_changes
+         SET oil_change_km = $1, oil_change_date = $2,
+             changed_by = 'ERP', notes = $3
+         WHERE id = $4`,
+        [oilKm, oilDate, note, history.rows[0].id]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO oil_changes
+           (vehicle_id, oil_change_km, oil_change_date, changed_by, notes)
+         VALUES ($1, $2, $3, 'ERP', $4)`,
+        [id, oilKm, oilDate, note]
+      );
+    }
+
+    return updated.rows[0];
+  });
 }
 
 export async function deleteVehiclePG(id) {

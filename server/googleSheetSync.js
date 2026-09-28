@@ -515,25 +515,9 @@ export async function syncGoogleSheetVehicles() {
       }
     }
 
-    // Last Oil Change KM is accepted only from the explicitly named Sheet
-    // column. It can never move backwards. When Current KM == Last Oil KM on
-    // the same dated row, the row is treated as an explicit same-day oil
-    // change and is also written to oil_changes so the startup repair cannot
-    // erase it later. Driver/phone remain ERP-controlled.
-    const existingOilKm = Number(result.rows[0].last_oil_km || 0);
-    const oilChangedToday =
-      lastOilKm !== null &&
-      km !== null &&
-      lastOilKm === km &&
-      lastOilKm > 0 &&
-      date;
-
-    if (oilChangedToday || (lastOilKm !== null && lastOilKm > existingOilKm)) {
-      add("last_oil_km = ?", lastOilKm);
-      if (oilChangedToday) {
-        add("last_oil_change_date = ?", date.toISOString().slice(0, 10));
-      }
-    }
+    // Last Oil Change is ERP-controlled.
+    // Google Sheet may contain oil information for reporting/evidence, but it
+    // must NEVER write or overwrite vehicles.last_oil_km or last_oil_change_date.
 
     await pool.query(
       `UPDATE vehicles SET ${sets.join(", ")} WHERE id = ${params.length + 1}`,

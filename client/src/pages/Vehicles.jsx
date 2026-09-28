@@ -102,7 +102,7 @@ export default function Vehicles({ onViewVehicle, canWork = false }) {
     if (!vehicle) { setError('Please select a vehicle'); return; }
     if (oilEditKm === '' || Number(oilEditKm) < 0) { setError('Last Oil Change KM is required'); return; }
     try {
-      await api.put('/vehicles/' + vehicle.id, {
+      await api.put('/vehicles/' + vehicle.id + '/last-oil-change', {
         lastOilKm: Number(oilEditKm),
         lastOilChangeDate: oilEditDate || null
       });

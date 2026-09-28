@@ -111,7 +111,7 @@ export async function updateVehiclePG(id, data) {
       current_km = COALESCE($10, current_km),
       last_oil_km = COALESCE($11, last_oil_km),
       oil_change_interval = COALESCE($12, oil_change_interval),
-      last_oil_change_date = COALESCE($13, last_oil_change_date),
+      last_oil_change_date = CASE WHEN $13::date IS NULL AND $13 IS NOT NULL THEN last_oil_change_date ELSE COALESCE($13, last_oil_change_date) END,
       status = COALESCE($14, status),
       meter_updated_at = COALESCE($15, meter_updated_at),
       updated_at = CURRENT_TIMESTAMP

@@ -97,6 +97,9 @@ export async function createVehiclePG(data) {
 }
 
 export async function updateVehiclePG(id, data) {
+  // Last Oil Change is ERP-controlled through the dedicated
+  // /vehicles/:id/last-oil-change endpoint (or the official oil-change flow).
+  // Generic vehicle updates must never overwrite it.
   const result = await query(`
     UPDATE vehicles
     SET
@@ -109,11 +112,9 @@ export async function updateVehiclePG(id, data) {
       driver = COALESCE($8, driver),
       phone = COALESCE($9, phone),
       current_km = COALESCE($10, current_km),
-      last_oil_km = COALESCE($11, last_oil_km),
-      oil_change_interval = COALESCE($12, oil_change_interval),
-      last_oil_change_date = COALESCE($13, last_oil_change_date),
-      status = COALESCE($14, status),
-      meter_updated_at = COALESCE($15, meter_updated_at),
+      oil_change_interval = COALESCE($11, oil_change_interval),
+      status = COALESCE($12, status),
+      meter_updated_at = COALESCE($13, meter_updated_at),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = $1
     RETURNING *
@@ -128,9 +129,7 @@ export async function updateVehiclePG(id, data) {
     data.driver ?? null,
     data.phone ?? null,
     data.currentKm ?? data.current_km ?? null,
-    data.lastOilKm ?? data.last_oil_km ?? null,
     data.oilChangeInterval ?? data.oil_change_interval ?? null,
-    data.lastOilChangeDate ?? data.last_oil_change_date ?? null,
     data.status ?? null,
     data.meterUpdatedAt ?? data.meter_updated_at ?? null
   ]);

@@ -524,24 +524,6 @@ export async function syncGoogleSheetVehicles() {
       [...params, id]
     );
 
-    if (oilChangedToday) {
-      try {
-        await pool.query(
-          `INSERT INTO oil_changes
-             (vehicle_id, oil_change_km, oil_change_date, changed_by, notes)
-           SELECT $1, $2, $3, 'Google Sheet', 'Google Sheet explicit same-day oil change'
-           WHERE NOT EXISTS (
-             SELECT 1 FROM oil_changes
-             WHERE vehicle_id = $1 AND oil_change_km = $2
-               AND oil_change_date::date = $3::date
-           )`,
-          [id, lastOilKm, date.toISOString().slice(0, 10)]
-        );
-      } catch (error) {
-        console.error("[GoogleSheetSync] oil history sync failed:", error.message);
-      }
-    }
-
     if (km !== null) {
       try {
         await syncV2Km(

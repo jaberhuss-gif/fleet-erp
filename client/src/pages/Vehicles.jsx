@@ -211,7 +211,7 @@ export default function Vehicles({ onViewVehicle, canWork = false }) {
               {showForm ? 'Cancel' : '+ Add Vehicle'}
             </button>}
             {canWork && <ExcelImportButton kind="vehicles" onImported={load} label="Import Excel" />}
-            {canWork && <button className="btn btn-success" onClick={() => openOilEdit()}>Edit Last Oil Change</button>
+            {canWork && <button className="btn btn-success" onClick={() => openOilEdit()}>Edit Last Oil Change</button>}
             <button className="btn btn-warning" onClick={() => exportToCSV(vehicles, "vehicles", [{key:"plate",label:"Plate"},{key:"driver",label:"Driver"},{key:"phone",label:"Phone"},{key:"location",label:"Location"},{key:"currentKm",label:"Current KM"},{key:"lastOilKm",label:"Last Oil KM"},{key:"sinceOil",label:"Since Oil"},{key:"status",label:"Status"}])}>Export CSV</button>
             {canWork && <button className="btn btn-danger" onClick={handleDeleteAll}>Delete All</button>}
           </div>

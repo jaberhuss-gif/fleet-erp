@@ -32,7 +32,8 @@ export default function Purchases({ entryOnly = false, onBack }) {
   const resetForm = () => {
     setForm({ type: 'Work Order', referenceNo: '', itemName: '', quantity: 1, unitCost: 0,
       supplier: '', purchasedBy: 'Company', purchaseDate: '', notes: '' });
-    if (entryOnly) { onBack?.(); return; }\n    setShowForm(false);
+    if (entryOnly) { onBack?.(); return; }
+    setShowForm(false);
   };
 
   const handleSubmit = async (e) => {

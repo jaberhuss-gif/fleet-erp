@@ -4042,7 +4042,7 @@ export async function getFinancialReport() {
   // ==========================
   for (const w of workOrders) {
     const b = bucket(pgMonthKey(w.reported_date) || w.month);
-    const cost = Number(w.final_cost || w.contractor_cost || 0);
+    const cost = Number(w.labor_cost ?? w.contractor_cost ?? w.final_cost ?? 0);
     // Use contractor_name ONLY — is_contractor is unreliable (always 0 for most rows)
     const contractorName = String(w.contractor_name || "").trim();
 
@@ -4109,43 +4109,22 @@ export async function getFinancialReport() {
     const pMonth = pgMonthKey(p.purchase_date) || p.month || 'Unknown';
     const b = bucket(pMonth);
     const amount = Number(p.total_cost || 0);
-    const type = String(p.type || "").toLowerCase();
-    const purchasedBy = String(p.purchased_by || "").trim().toLowerCase();
-    const refNorm = normalizeWO(p.reference_no || '');
-    const refNormProj = normalizeProj(p.reference_no || '');
+    const type = String(p.type || '').toLowerCase();
+    const purchasedBy = String(p.purchased_by || '').trim().toLowerCase();
+    const ref = String(p.reference_no || '').trim().toUpperCase();
 
-    // === Work Order / Maintenance purchases ===
-    if (
-      type.includes("work") ||
-      type.includes("order") ||
-      type.includes("maintenance")
-    ) {
-      // Same-month rule: only count if the WO exists in THIS month
-      const wosThisMonth = woByMonth[pMonth] || new Set();
-      if (wosThisMonth.has(refNorm)) {
-        // Only Contractor purchases go to partsWO
-        if (purchasedBy === 'contractor') {
-          b.partsWO += amount;
-        }
-        // Company purchases for same-month WOs are not added
-        // (they are internal/employee cost, already counted in employeeWOCount)
-      }
-      // Cross-month purchases are excluded
-    }
-    // === Development Project purchases ===
-    else if (
-      type.includes("dev") ||
-      type.includes("project") ||
-      type.includes("development")
-    ) {
-      // Same-month rule: only count if the Project exists in THIS month
-      const projsThisMonth = projByMonth[pMonth] || new Set();
-      if (projsThisMonth.has(refNormProj)) {
-        b.partsDev += amount;
-      }
-    }
-    // === Other purchases ===
-    else {
+    // Match the legacy Apps Script classification: contractor purchases are
+    // split by WO-/PRJ- reference first, then by purchase type.
+    const isContractor = purchasedBy === 'contractor';
+    const isWO = ref.startsWith('WO-') || type.includes('work') || type.includes('order') || type.includes('maintenance');
+    const isDev = ref.startsWith('PRJ-') || type.includes('dev') || type.includes('project') || type.includes('development');
+
+    if (isContractor) {
+      if (isWO) b.partsWO += amount;
+      else if (isDev) b.partsDev += amount;
+      else b.otherPurchases += amount;
+    } else {
+      // Keep company/non-contractor purchases visible in the GM report.
       b.otherPurchases += amount;
     }
   }

@@ -73,13 +73,13 @@ export default function Purchases() {
   if (showForm) {
     return (
       <div className="panel">
-        <div style={{ background: 'linear-gradient(135deg, #047857, #34d399)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff', marginBottom: '16px' }}>
+        <div style={{ background: 'linear-gradient(135deg, #047857, #34d399)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>New Purchase</h2>
+          <button type="button" className="btn btn-warning" onClick={resetForm}>Back to Purchases</button>
         </div>
         {message && <div className="alert alert-success">{message}</div>}
         {error && <div className="alert alert-error">{error}</div>}
         <form onSubmit={handleSubmit} style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
-          <h3>New Purchase</h3>
           <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
             <div className="form-group"><label>Type</label>
               <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
@@ -102,11 +102,6 @@ export default function Purchases() {
             <div className="form-group"><label>Purchase Date</label><input type="date" value={form.purchaseDate} onChange={e => setForm({ ...form, purchaseDate: e.target.value })} /></div>
           </div>
           <div className="form-group"><label>Notes</label><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2}></textarea></div>
-          {form.type === 'Project' && (
-            <div className="alert alert-info">
-              Project purchases must be recorded through an approved Purchase Request.
-            </div>
-          )}
           <div className="btn-row">
             <button type="submit" className="btn btn-success">Save Purchase</button>
             <button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button>

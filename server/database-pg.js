@@ -1,6 +1,5 @@
 ﻿import { query, transaction } from "./postgres.js";
 import { v2Query, v2Enabled } from "./v2/db.js";
-import { getMonthlySavingsSheet } from "./googleSheetSync.js";
 
 function numberValue(value, fallback = 0) {
   if (value === undefined || value === null || value === "") return fallback;

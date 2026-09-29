@@ -17,6 +17,66 @@ function KPI({ label, value, note, tone = 'blue' }) {
   );
 }
 
+
+function BuildingGMDetail({ view, selectedMonths, records, monthLabel }) {
+  const monthSet = new Set(selectedMonths);
+  const key = value => String(value || '').slice(0, 7);
+  const filtered = view === 'work-orders'
+    ? records.workOrders.filter(r => monthSet.has(key(r.reported_date || r.created_at)))
+    : view === 'projects'
+      ? records.projects.filter(r => monthSet.has(key(r.start_date || r.startDate || r.created_at)))
+      : records.purchases.filter(r => monthSet.has(key(r.purchase_date || r.purchaseDate || r.created_at || r.month)));
+
+  const title = view === 'work-orders' ? 'Building Maintenance – Work Orders' : view === 'projects' ? 'Building Projects' : 'Building Purchases';
+
+  return (
+    <div style={{ marginBottom: 20, background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>{title}</h2>
+          <div style={{ color: '#64748b', fontSize: 12, marginTop: 5 }}>
+            {selectedMonths.length ? selectedMonths.map(monthLabel).join(' • ') : 'No month selected'} • {filtered.length} record(s)
+          </div>
+        </div>
+      </div>
+      {!selectedMonths.length ? (
+        <div className="alert alert-info">Select at least one month to view the records.</div>
+      ) : !filtered.length ? (
+        <div className="alert alert-info">No records found for the selected months.</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead><tr>
+              {view === 'work-orders' ? (
+                <>
+                  <th style={{textAlign:'left',padding:9}}>WO #</th><th style={{textAlign:'left',padding:9}}>Date</th><th style={{textAlign:'left',padding:9}}>Site</th><th style={{textAlign:'left',padding:9}}>Category</th><th style={{textAlign:'left',padding:9}}>Description</th><th style={{textAlign:'left',padding:9}}>Status</th><th style={{textAlign:'right',padding:9}}>Cost</th>
+                </>
+              ) : view === 'projects' ? (
+                <>
+                  <th style={{textAlign:'left',padding:9}}>Project</th><th style={{textAlign:'left',padding:9}}>Start Date</th><th style={{textAlign:'left',padding:9}}>Site</th><th style={{textAlign:'left',padding:9}}>Type</th><th style={{textAlign:'left',padding:9}}>Status</th><th style={{textAlign:'right',padding:9}}>Budget</th><th style={{textAlign:'right',padding:9}}>Spent</th>
+                </>
+              ) : (
+                <>
+                  <th style={{textAlign:'left',padding:9}}>Purchase #</th><th style={{textAlign:'left',padding:9}}>Date</th><th style={{textAlign:'left',padding:9}}>Type</th><th style={{textAlign:'left',padding:9}}>Reference</th><th style={{textAlign:'left',padding:9}}>Item</th><th style={{textAlign:'right',padding:9}}>Qty</th><th style={{textAlign:'right',padding:9}}>Total Cost</th><th style={{textAlign:'left',padding:9}}>Supplier</th>
+                </>
+              )}
+            </tr></thead>
+            <tbody>
+              {filtered.map((r, i) => view === 'work-orders' ? (
+                <tr key={r.id || i}><td style={{padding:9}}>{r.id || r.wo_number || '—'}</td><td style={{padding:9}}>{key(r.reported_date || r.created_at)}</td><td style={{padding:9}}>{r.site || '—'}</td><td style={{padding:9}}>{r.category || '—'}</td><td style={{padding:9}}>{r.description || '—'}</td><td style={{padding:9}}>{r.status || '—'}</td><td style={{padding:9,textAlign:'right'}}>{money(r.total_cost ?? r.totalCost ?? r.cost)}</td></tr>
+              ) : view === 'projects' ? (
+                <tr key={r.id || i}><td style={{padding:9}}>{r.name || r.project_name || '—'}</td><td style={{padding:9}}>{key(r.start_date || r.startDate || r.created_at)}</td><td style={{padding:9}}>{r.site || '—'}</td><td style={{padding:9}}>{r.project_type || r.projectType || r.type || '—'}</td><td style={{padding:9}}>{r.status || '—'}</td><td style={{padding:9,textAlign:'right'}}>{money(r.budget)}</td><td style={{padding:9,textAlign:'right'}}>{money(r.spent)}</td></tr>
+              ) : (
+                <tr key={r.id || i}><td style={{padding:9}}>{r.id || r.purchase_number || '—'}</td><td style={{padding:9}}>{key(r.purchase_date || r.purchaseDate || r.created_at || r.month)}</td><td style={{padding:9}}>{r.type || '—'}</td><td style={{padding:9}}>{r.reference_no || r.referenceNo || r.reference || '—'}</td><td style={{padding:9}}>{r.item_name || r.itemName || r.item || '—'}</td><td style={{padding:9,textAlign:'right'}}>{r.quantity ?? r.qty ?? 0}</td><td style={{padding:9,textAlign:'right'}}>{money(r.total_cost ?? r.totalCost ?? (Number(r.quantity || r.qty || 0) * Number(r.unit_cost || r.unitCost || 0)))}</td><td style={{padding:9}}>{r.supplier || '—'}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MonthlyBuildingCards({ rows }) {
   const months = rows.filter(row => row.month === '2026-07' || row.month === '2026-08');
 
@@ -76,6 +136,9 @@ export default function GMDashboardExecutive() {
   const [building, setBuilding] = useState(null);
   const [financial, setFinancial] = useState(null);
   const [monthFinancial, setMonthFinancial] = useState(null);
+  const [buildingView, setBuildingView] = useState(null);
+  const [buildingRecords, setBuildingRecords] = useState({ workOrders: [], projects: [], purchases: [] });
+  const [selectedMonths, setSelectedMonths] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [updated, setUpdated] = useState(null);
@@ -83,13 +146,16 @@ export default function GMDashboardExecutive() {
   const load = useCallback(async () => {
     try {
       setError('');
-      const [dashboard, vehicleAlerts, ticketData, buildingData, financialData, monthFinancialData] = await Promise.all([
+      const [dashboard, vehicleAlerts, ticketData, buildingData, financialData, monthFinancialData, workOrdersData, projectsData, purchasesData] = await Promise.all([
         getDashboard(),
         getAlerts(),
         getTickets(),
         api.get('/building/dashboard').then(r => r.data),
         api.get('/reports/financial').then(r => r.data),
         api.get('/dashboard/current-month-financials').then(r => r.data),
+        api.get('/work-orders').then(r => r.data),
+        api.get('/projects').then(r => r.data),
+        api.get('/purchases').then(r => r.data),
       ]);
       setData(dashboard);
       setAlerts(vehicleAlerts);
@@ -97,6 +163,11 @@ export default function GMDashboardExecutive() {
       setBuilding(buildingData);
       setFinancial(financialData);
       setMonthFinancial(monthFinancialData);
+      setBuildingRecords({
+        workOrders: workOrdersData?.orders || [],
+        projects: projectsData?.projects || [],
+        purchases: purchasesData?.purchases || [],
+      });
       setUpdated(new Date());
     } catch (e) {
       setError(e?.message || 'Unable to load executive dashboard');
@@ -115,7 +186,21 @@ export default function GMDashboardExecutive() {
   const ticketSummary = data.tickets || {};
   const grand = financial?.grand || {};
   const reportMonths = financial?.months || financial?.rows || [];
+  const availableMonths = Array.from(new Set([
+    ...reportMonths.map(r => r.month).filter(Boolean),
+    ...buildingRecords.workOrders.map(r => String(r.reported_date || r.created_at || '').slice(0, 7)).filter(Boolean),
+    ...buildingRecords.projects.map(r => String(r.start_date || r.startDate || r.created_at || '').slice(0, 7)).filter(Boolean),
+    ...buildingRecords.purchases.map(r => String(r.purchase_date || r.purchaseDate || r.created_at || r.month || '').slice(0, 7)).filter(Boolean),
+    new Date().toISOString().slice(0, 7),
+  ])).sort().reverse();
   const mtd = monthFinancial || {};
+  const selected = selectedMonths.length ? selectedMonths : availableMonths.slice(0, 1);
+  const toggleMonth = month => setSelectedMonths(prev => prev.includes(month) ? prev.filter(x => x !== month) : [...prev, month].sort());
+  const selectLatestMonths = count => setSelectedMonths(availableMonths.slice(0, count));
+  const monthLabel = month => {
+    const [y, m] = String(month).split('-');
+    return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  };
   const openTickets = Number(ticketSummary.open || 0);
   const totalTickets = Number(ticketSummary.total || 0);
   const fleetTotal = Number(vehicles.total || 0);
@@ -159,6 +244,54 @@ export default function GMDashboardExecutive() {
           </div>
 
           <MonthlyBuildingCards rows={reportMonths} />
+
+          <div style={{ marginBottom: 20, background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 18 }}>
+            <h2 style={{ margin: '0 0 6px' }}>Building Maintenance & Projects</h2>
+            <div style={{ color: '#64748b', fontSize: 12, marginBottom: 14 }}>
+              Choose what the GM wants to review, then select one or more months. You can select 1, 3, 6 or all 12 months, or manually choose any months.
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+              {[
+                ['work-orders', '🔧 Building Maintenance – Work Orders'],
+                ['projects', '🏗️ Building Projects'],
+                ['purchases', '🛒 Building Purchases'],
+              ].map(([id, label]) => (
+                <button key={id} className={buildingView === id ? 'btn btn-primary' : 'btn btn-secondary'} onClick={() => setBuildingView(id)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 14 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+                <strong style={{ marginRight: 4 }}>Period:</strong>
+                {[1, 3, 6, 12].map(n => (
+                  <button key={n} className="btn btn-secondary" onClick={() => selectLatestMonths(n)} disabled={!availableMonths.length}>
+                    {n === 12 ? 'Full Year' : n === 1 ? '1 Month' : `${n} Months`}
+                  </button>
+                ))}
+                <button className="btn btn-secondary" onClick={() => setSelectedMonths(availableMonths)}>Select All</button>
+                <button className="btn btn-secondary" onClick={() => setSelectedMonths([])}>Clear</button>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {availableMonths.map(month => (
+                  <label key={month} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: 8, cursor: 'pointer', background: selected.includes(month) ? '#eff6ff' : 'transparent' }}>
+                    <input type="checkbox" checked={selected.includes(month)} onChange={() => toggleMonth(month)} />
+                    {monthLabel(month)}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {buildingView && (
+            <BuildingGMDetail
+              view={buildingView}
+              selectedMonths={selected}
+              records={buildingRecords}
+              monthLabel={monthLabel}
+            />
+          )}
 
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12, gap: 10, flexWrap: 'wrap' }}>

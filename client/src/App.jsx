@@ -30,9 +30,6 @@ const TAB_MODULES = {
   // Support & Service is a container: show it when the Owner grants any service module.
   // The individual sub-sections are still controlled by their own access flags.
   'support-service': ['support', 'building', 'projects', 'warehouse', 'purchase_requests'],
-  // Operations is the building-side workspace: maintenance, projects, warehouse
-  // and purchase requests. It is deliberately separate from Fleet. Visibility
-  // is driven only by the RBAC modules below — no role list is hardcoded here.
   operations: ['building'],
   warehouse: ['warehouse', 'purchase_requests'],
   'building-maintenance': ['building'],
@@ -241,10 +238,10 @@ export default function App() {
           ))}
         </div>
 
-        {['warehouse','operations','building-maintenance'].some(t => allowedTabs.includes(t)) && (
+        {['operations','building-maintenance'].some(t => allowedTabs.includes(t)) && (
           <div className="erp-nav-group">
             <div className="erp-nav-heading">Building / Warehouse</div>
-            {['operations','building-maintenance','warehouse'].filter(t => allowedTabs.includes(t)).map(t => (
+            {['operations','building-maintenance'].filter(t => allowedTabs.includes(t)).map(t => (
               <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
                 {TAB_LABELS[t]}
               </button>

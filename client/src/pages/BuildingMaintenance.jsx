@@ -36,7 +36,7 @@ export default function BuildingMaintenance({ user, access = {} }) {
   return (
     <div className="panel">
       <style>{`
-        .building-entry-only > *:not(.building-entry-form) { display: none !important; }
+        .building-entry-only > *:not(.building-entry-form):not(.building-monthly-table) { display: none !important; }
         .building-entry-only > .building-entry-form { display: block !important; }
       `}</style>
       <h2>Building Maintenance</h2>

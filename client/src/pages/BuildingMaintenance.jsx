@@ -175,15 +175,15 @@ export default function BuildingMaintenance({ user, access = {} }) {
             <table className="data-table" style={{width:'100%'}}>
               <thead><tr>
                 {section==='work-orders' && <><th>WO #</th><th>Date</th><th>Site</th><th>Category</th><th>Description</th><th>Status</th><th>Total Cost</th></>}
-                {section==='projects' && <><th>Project</th><th>Start Date</th><th>Site</th><th>Type</th><th>Status</th><th>Budget</th><th>Spent</th></>}
-                {section==='purchases' && <><th>Purchase #</th><th>Date</th><th>Type</th><th>Reference</th><th>Item</th><th>Qty</th><th>Total Cost</th><th>Supplier</th></>}
+                {section==='projects' && <><th>Project #</th><th>Location</th><th>Description</th><th>Start Date</th><th>End Date</th><th>Status</th><th>Total Cost</th><th>Contractor Cost</th><th>Contractor</th></>}
+                {section==='purchases' && <><th>Purchase #</th><th>Date</th><th>Type</th><th>Reference ID</th><th>Item</th><th>Qty</th><th>Unit Cost</th><th>Total Cost</th><th>Supplier</th><th>Supplier Type</th><th>Notes</th></>}
               </tr></thead>
               <tbody>
                 {loading && <tr><td colSpan={8} style={{textAlign:'center',padding:24}}>Loading...</td></tr>}
                 {!loading && rows.length===0 && <tr><td colSpan={8} style={{textAlign:'center',padding:24}}>No records for {monthLabel(month)}</td></tr>}
                 {!loading && section==='work-orders' && rows.map(x=><tr key={x.id}><td>{x.wo_number||x.work_order_no||x.id}</td><td>{x.reported_date||''}</td><td>{x.site||''}</td><td>{x.category||''}</td><td>{x.description||''}</td><td>{x.status||''}</td><td>{Number(x.final_cost||x.total_cost||0).toLocaleString()}</td></tr>)}
-                {!loading && section==='projects' && rows.map(x=><tr key={x.id}><td>{x.name||''}</td><td>{x.start_date||''}</td><td>{x.site||''}</td><td>{x.project_type||''}</td><td>{x.status||''}</td><td>{Number(x.budget||0).toLocaleString()}</td><td>{Number(x.spent||0).toLocaleString()}</td></tr>)}
-                {!loading && section==='purchases' && rows.map(x=><tr key={x.id}><td>{x.purchase_no||x.id}</td><td>{x.purchase_date||''}</td><td>{x.type||''}</td><td>{x.reference_no||''}</td><td>{x.item_name||''}</td><td>{x.quantity||0}</td><td>{Number(x.total_cost||0).toLocaleString()}</td><td>{x.supplier||''}</td></tr>)}
+                {!loading && section==='projects' && rows.map(x=><tr key={x.id}><td>{x.project_no||''}</td><td>{x.site||''}</td><td>{x.description||''}</td><td>{x.start_date||''}</td><td>{x.end_date||''}</td><td>{x.status||''}</td><td>{Number(x.total_cost ?? x.spent ?? 0).toLocaleString()}</td><td>{Number(x.contractor_cost ?? (x.contractor ? (x.total_cost ?? x.spent ?? 0) : 0)).toLocaleString()}</td><td>{x.contractor||''}</td></tr>)}
+                {!loading && section==='purchases' && rows.map(x=><tr key={x.id}><td>{x.purchase_no||x.id}</td><td>{x.purchase_date||''}</td><td>{x.type||''}</td><td>{x.reference_no||''}</td><td>{x.item_name||''}</td><td>{x.quantity||0}</td><td>{Number(x.unit_cost||0).toLocaleString()}</td><td>{Number(x.total_cost||0).toLocaleString()}</td><td>{x.supplier||''}</td><td>{x.purchased_by||''}</td><td>{x.notes||''}</td></tr>)}
               </tbody>
             </table>
           </div>

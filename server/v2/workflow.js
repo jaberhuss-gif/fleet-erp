@@ -37,3 +37,23 @@ export async function listDailyExceptions(date){
  const b=await v2Query("SELECT v.id,v.plate_number,v.plate_code FROM fleet_erp_v2.vehicles v WHERE v.status='Active' AND NOT EXISTS(SELECT 1 FROM fleet_erp_v2.daily_km_compliance k WHERE k.vehicle_id=v.id AND k.compliance_date=$1 AND k.status='Submitted') ORDER BY v.plate_number",[date]);
  return {date,missingVehicleSubmission:a.rows,missingKm:b.rows};
 }
+
+export async function updateMaintenanceWorkOrder(id,x){
+  const r=await v2Query("UPDATE fleet_erp_v2.maintenance_work_orders SET site_id=COALESCE($2,site_id),category=COALESCE($3,category),priority=COALESCE($4,priority),description=COALESCE($5,description),reported_date=COALESCE($6,reported_date),contractor_name=COALESCE($7,contractor_name),contractor_cost=COALESCE($8,contractor_cost),internal_labor_cost=COALESCE($9,internal_labor_cost),closing_notes=COALESCE($10,closing_notes) WHERE id=$1 AND status <> 'Closed' RETURNING *",[id,x.siteId??null,s(x.category),s(x.priority),s(x.description),x.reportedDate||null,s(x.contractorName),Number(x.contractorCost||0),Number(x.internalLaborCost||0),s(x.closingNotes)]);
+  return r.rows[0]||null;
+}
+export async function closeMaintenanceWorkOrder(id,x){
+  return v2Transaction(async c=>{
+    const current=(await c.query("SELECT * FROM fleet_erp_v2.maintenance_work_orders WHERE id=$1 FOR UPDATE",[id])).rows[0];
+    if(!current) return null;
+    if(current.status==='Closed') return current;
+    const contractor=Number(x.contractorCost||0),labor=Number(x.internalLaborCost||0);
+    const parts=Number((await c.query("SELECT COALESCE(SUM(total_price),0) total FROM fleet_erp_v2.maintenance_parts WHERE work_order_id=$1",[id])).rows[0].total||0);
+    const purchases=Number((await c.query("SELECT COALESCE(SUM(total_cost),0) total FROM fleet_erp_v2.maintenance_purchases WHERE work_order_id=$1 AND supplier_type='Contractor'",[id])).rows[0].total||0);
+    const total=Number(x.finalTotal ?? (contractor+labor+parts+purchases));
+    return (await c.query("UPDATE fleet_erp_v2.maintenance_work_orders SET status='Closed',completion_date=COALESCE($2,CURRENT_DATE),contractor_cost=$3,internal_labor_cost=$4,final_total=$5,closing_notes=$6,closed_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING *",[id,x.completionDate||null,contractor,labor,total,s(x.closingNotes)])).rows[0];
+  });
+}
+export async function deleteMaintenanceWorkOrder(id){
+  const r=await v2Query("DELETE FROM fleet_erp_v2.maintenance_work_orders WHERE id=$1 AND status <> 'Closed' RETURNING id",[id]); return !!r.rows[0];
+}

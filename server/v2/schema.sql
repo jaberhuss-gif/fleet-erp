@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS maintenance_parts (
  total_price NUMERIC(14,2) GENERATED ALWAYS AS(quantity * unit_price) STORED
 );
 CREATE TABLE IF NOT EXISTS maintenance_purchases (
- id BIGSERIAL PRIMARY KEY, work_order_id BIGINT REFERENCES maintenance_work_orders(id) ON DELETE SET NULL,
+ id BIGSERIAL PRIMARY KEY, legacy_purchase_ref TEXT UNIQUE, work_order_id BIGINT REFERENCES maintenance_work_orders(id) ON DELETE SET NULL,
  item_name TEXT NOT NULL, quantity NUMERIC(14,3) NOT NULL DEFAULT 1, unit_cost NUMERIC(14,2) NOT NULL DEFAULT 0,
  total_cost NUMERIC(14,2) GENERATED ALWAYS AS(quantity * unit_cost) STORED,
  supplier_type TEXT NOT NULL DEFAULT 'Company', supplier_name TEXT, purchase_date DATE
@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS project_parts (
  total_price NUMERIC(14,2) GENERATED ALWAYS AS(quantity * unit_price) STORED
 );
 CREATE TABLE IF NOT EXISTS project_purchases (
- id BIGSERIAL PRIMARY KEY, project_id BIGINT REFERENCES projects(id) ON DELETE SET NULL,
+ id BIGSERIAL PRIMARY KEY, legacy_purchase_ref TEXT UNIQUE, project_id BIGINT REFERENCES projects(id) ON DELETE SET NULL,
  item_name TEXT NOT NULL, quantity NUMERIC(14,3) NOT NULL DEFAULT 1, unit_cost NUMERIC(14,2) NOT NULL DEFAULT 0,
  total_cost NUMERIC(14,2) GENERATED ALWAYS AS(quantity * unit_cost) STORED,
  supplier_type TEXT NOT NULL DEFAULT 'Contractor', supplier_name TEXT, purchase_date DATE

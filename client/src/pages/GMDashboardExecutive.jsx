@@ -7,6 +7,54 @@ import { printContent } from '../api/print';
 const money = value => `${Number(value || 0).toLocaleString()} SAR`;
 const pct = (value, total) => total > 0 ? Math.round((value / total) * 100) : 0;
 
+function KPI({ label, value, note, tone = 'blue' }) {
+  return (
+    <div style={{ background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 16, minHeight: 100 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: '#64748b' }}>{label}</div>
+      <div style={{ fontSize: 25, fontWeight: 800, marginTop: 7, color: tone === 'green' ? '#059669' : tone === 'amber' ? '#d97706' : tone === 'red' ? '#dc2626' : '#1d4ed8' }}>{value}</div>
+      {note && <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>{note}</div>}
+    </div>
+  );
+}
+
+function SelectedPeriodResult({ rows, selectedMonths, monthLabel }) {
+  if (!selectedMonths.length) return null;
+  const chosen = rows.filter(r => selectedMonths.includes(r.month));
+  const n = selectedMonths.length;
+  const sum = field => chosen.reduce((s, r) => s + Number(r[field] || 0), 0);
+  const maintBaseline = 20577 * n;
+  const devBaseline = 132551 * n;
+  const totalBaseline = maintBaseline + devBaseline;
+  const contractorWO = sum('contractorWO'); const partsWO = sum('partsWO'); const salaryMaint = sum('salaryMaint');
+  const maintActual = contractorWO + partsWO + salaryMaint;
+  const contractorDev = sum('contractorDev'); const partsDev = sum('partsDev'); const salaryDev = sum('salaryDev');
+  const devActual = contractorDev + partsDev + salaryDev;
+  const purchases = sum('otherPurchases');
+  const totalActual = maintActual + devActual + purchases;
+  const maintSavings = maintBaseline - maintActual; const devSavings = devBaseline - devActual; const totalSavings = maintSavings + devSavings;
+  const totalWO = sum('employeeWOCount') + sum('contractorWOCount');
+  const contractorWOCount = sum('contractorWOCount'); const employeeWOCount = sum('employeeWOCount');
+  const totalProjects = sum('internalProjectCount') + sum('contractorProjectCount');
+  const contractorProjects = sum('contractorProjectCount'); const internalProjects = sum('internalProjectCount');
+  const label = selectedMonths.map(monthLabel).join(' • ');
+  return (
+    <div style={{ marginBottom: 20, background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 18 }}>
+      <h2 style={{ margin: '0 0 4px' }}>Selected Period Results</h2>
+      <div style={{ color: '#64748b', fontSize: 12, marginBottom: 14 }}>{label}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 10 }}>
+        <KPI label="Maintenance Actual" value={money(maintActual)} note={'WO ' + money(contractorWO) + ' • Parts ' + money(partsWO) + ' • Salary ' + money(salaryMaint)} />
+        <KPI label="Maintenance Savings" value={money(maintSavings)} note={(maintBaseline ? (maintSavings / maintBaseline * 100).toFixed(1) : '0.0') + '% vs baseline'} tone="green" />
+        <KPI label="Work Orders" value={totalWO} note={employeeWOCount + ' internal • ' + contractorWOCount + ' contractor'} />
+        <KPI label="Projects Actual" value={money(devActual)} note={'Contractor ' + money(contractorDev) + ' • Parts ' + money(partsDev) + ' • Salary ' + money(salaryDev)} />
+        <KPI label="Projects Savings" value={money(devSavings)} note={(devBaseline ? (devSavings / devBaseline * 100).toFixed(1) : '0.0') + '% vs baseline'} tone="green" />
+        <KPI label="Projects" value={totalProjects} note={internalProjects + ' internal • ' + contractorProjects + ' contractor'} />
+        <KPI label="Purchases" value={money(purchases)} note="Other purchases included in period" tone="amber" />
+        <KPI label="Total Actual" value={money(totalActual)} note="Maintenance + Projects + Purchases" tone="amber" />
+        <KPI label="Total Savings" value={money(totalSavings)} note={(totalBaseline ? (totalSavings / totalBaseline * 100).toFixed(1) : '0.0') + '% vs combined baseline'} tone="green" />
+      </div>
+    </div>
+  );
+}
 function BuildingGMDetail({ view, selectedMonths, records, monthLabel }) {
   const monthSet = new Set(selectedMonths);
   const key = value => String(value || '').slice(0, 7);
@@ -132,7 +180,7 @@ export default function GMDashboardExecutive() {
     new Date().toISOString().slice(0, 7),
   ])).sort().reverse();
   const mtd = monthFinancial || {};
-  const selected = selectedMonths.length ? selectedMonths : availableMonths.slice(0, 1);
+  const selected = selectedMonths;
   const toggleMonth = month => setSelectedMonths(prev => prev.includes(month) ? prev.filter(x => x !== month) : [...prev, month].sort());
   const selectLatestMonths = count => setSelectedMonths(availableMonths.slice(0, count));
   const monthLabel = month => {
@@ -173,14 +221,6 @@ export default function GMDashboardExecutive() {
 
       {section === 'overview' && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 14, marginBottom: 20 }}>
-            <KPI label="Fleet Health" value={`${fleetHealth}%`} note={`${vehicles.safe || 0} of ${fleetTotal} vehicles safe`} tone="green" />
-            <KPI label="Open Tickets" value={openTickets} note={`${pct(openTickets, totalTickets)}% of all tickets`} tone={openTickets ? 'amber' : 'green'} />
-            <KPI label="Vehicle Alerts" value={openVehicleAlerts} note={`${vehicles.urgent || 0} urgent • ${vehicles.warning || 0} warning`} tone={openVehicleAlerts ? 'red' : 'green'} />
-            <KPI label="Total Savings" value={money(grand.totalSavings)} note={`${Number(grand.totalSavingsPct || 0).toFixed(1)}% reported savings`} tone="green" />
-            <KPI label="Actual Cost" value={money(grand.totalActual)} note={`Baseline ${money(grand.totalBaseline)}`} />
-          </div>
-
           <div style={{ marginBottom: 20, background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 18 }}>
             <h2 style={{ margin: '0 0 6px' }}>Building Maintenance & Projects</h2>
             <div style={{ color: '#64748b', fontSize: 12, marginBottom: 14 }}>
@@ -220,6 +260,8 @@ export default function GMDashboardExecutive() {
             </div>
           </div>
 
+          <SelectedPeriodResult rows={reportMonths} selectedMonths={selectedMonths} monthLabel={monthLabel} />
+
           {buildingView && (
             <BuildingGMDetail
               view={buildingView}
@@ -229,51 +271,12 @@ export default function GMDashboardExecutive() {
             />
           )}
 
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12, gap: 10, flexWrap: 'wrap' }}>
-              <h2 style={{ margin: 0 }}>Current Month — Actual Spend</h2>
-              <span style={{ color: '#64748b', fontSize: 12 }}>{mtd.currentMonth || ''} • Same calculation logic as the Apps Script dashboard</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 14 }}>
-              <KPI label="Maintenance Cost" value={money(mtd.maintenanceCost)} note={`${mtd.totalWO || 0} current-month work orders`} />
-              <KPI label="Development Cost" value={money(mtd.developmentCost)} note={`${mtd.totalDevProjects || 0} current-month projects`} />
-              <KPI label="Contractor Cost" value={money(mtd.contractorCost)} note="Contractor WO + development" tone="amber" />
-              <KPI label="Parts Cost" value={money(mtd.partsCost)} note={`Contractor parts ${money(mtd.contractorParts)}`} />
-              <KPI label="Total Company Cost" value={money(mtd.totalCompanyCost)} note="Maintenance + Development + Parts" tone="green" />
-            </div>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 16 }}>
-            <div>
-              <h2 style={{ marginTop: 0 }}>Operational Snapshot</h2>
-              <div style={{ display: 'grid', gap: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Maintenance W.O. Cost</span><strong>{money(building?.workOrders?.totalCost)}</strong></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Project Budget</span><strong>{money(building?.projects?.budget)}</strong></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Project Spent</span><strong>{money(building?.projects?.spent)}</strong></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Closed Tickets</span><strong>{ticketSummary.closed || 0}</strong></div>
-              </div>
-            </div>
-            <div>
-              <h2 style={{ marginTop: 0 }}>Management Attention</h2>
-              <div style={{ display: 'grid', gap: 10 }}>
-                <div>🚗 <strong>{vehicles.urgent || 0}</strong> vehicles require immediate maintenance attention.</div>
-                <div>🛠️ <strong>{openTickets}</strong> site/maintenance tickets remain open.</div>
-                <div>💰 Reported savings: <strong>{money(grand.totalSavings)}</strong>.</div>
-                <div>🧠 Troubleshooter is available from the main navigation for all authorized users.</div>
-              </div>
-            </div>
-          </div>
         </>
       )}
 
       {section === 'fleet' && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 14, marginBottom: 20 }}>
-            <KPI label="Total Vehicles" value={fleetTotal} note="Current fleet" />
-            <KPI label="Safe" value={vehicles.safe || 0} note={`${fleetHealth}% of fleet`} tone="green" />
-            <KPI label="Oil Overdue" value={vehicles.urgent || 0} note="Immediate action" tone="red" />
-            <KPI label="Warning" value={vehicles.warning || 0} note="Approaching service threshold" tone="amber" />
-          </div>
           <div>
             <h2 style={{ marginTop: 0 }}>Fleet Management Summary</h2>
             <p style={{ color: '#64748b' }}>Vehicle details, KM records, maintenance history, inspections and driver issue reporting are managed from the Fleet / Vehicles module. GM access remains read-only.</p>
@@ -284,13 +287,7 @@ export default function GMDashboardExecutive() {
 
       {section === 'financial' && (
         <div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14 }}>
-            <KPI label="Total Baseline" value={money(grand.totalBaseline)} />
-            <KPI label="Total Actual" value={money(grand.totalActual)} tone="green" />
-            <KPI label="Total Savings" value={money(grand.totalSavings)} tone="green" />
-            <KPI label="Savings Rate" value={`${Number(grand.totalSavingsPct || 0).toFixed(1)}%`} tone="green" />
-          </div>
-          <div style={{ marginTop: 20, background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 20 }}>
+          <div style={{ marginTop: 200, background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 20 }}>
             <h2 style={{ marginTop: 0 }}>📈 Baseline vs Actual by Month</h2>
             {reportMonths.length ? (
               <ResponsiveContainer width="100%" height={320}>

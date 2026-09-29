@@ -59,3 +59,10 @@ export async function closeMaintenanceWorkOrder(id,x){
 export async function deleteMaintenanceWorkOrder(id){
   const r=await v2Query("DELETE FROM fleet_erp_v2.maintenance_work_orders WHERE id=$1 AND status <> 'Closed' RETURNING id",[id]); return !!r.rows[0];
 }
+
+export async function updateProject(id,x){
+ const r=await v2Query("UPDATE fleet_erp_v2.projects SET site_id=COALESCE($2,site_id),description=COALESCE($3,description),start_date=COALESCE($4,start_date),end_date=COALESCE($5,end_date),status=COALESCE($6,status),contractor=COALESCE($7,contractor),contractor_cost=COALESCE($8,contractor_cost),budget=COALESCE($9,budget),name=COALESCE($10,name) WHERE id=$1 RETURNING *",[id,x.siteId??null,s(x.description),x.startDate||null,x.endDate||null,s(x.status),s(x.contractor),Number(x.contractorCost||0),Number(x.budget||0),s(x.name)]); return r.rows[0]||null;
+}
+export async function deleteProject(id){
+ const r=await v2Query("DELETE FROM fleet_erp_v2.projects WHERE id=$1 RETURNING id",[id]); return !!r.rows[0];
+}

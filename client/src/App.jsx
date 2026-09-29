@@ -240,7 +240,6 @@ export default function App() {
 
         {['operations','building-maintenance'].some(t => allowedTabs.includes(t)) && (
           <div className="erp-nav-group">
-            <div className="erp-nav-heading">Building / Warehouse</div>
             {['operations','building-maintenance'].filter(t => allowedTabs.includes(t)).map(t => (
               <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
                 {TAB_LABELS[t]}

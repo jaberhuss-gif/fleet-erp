@@ -55,7 +55,10 @@ const n = (v) => (v === undefined || v === null || v === "" ? 0 : Number(v));
 // Company/Internal is external contractor work; this is the same rule the
 // reports use, and it is what the demo was verified against.
 const COMPANY = new Set(["company", "internal", ""]);
-const isContractorRow = (wo) => !COMPANY.has(String(wo.assigned_to ?? "").trim().toLowerCase());
+const isContractorRow = (wo) => {
+  if (wo.is_contractor !== undefined) return Boolean(wo.is_contractor);
+  return !COMPANY.has(String(wo.contractor_name ?? "").trim().toLowerCase());
+};
 
 if (DRY_RUN) {
   console.log("DRY RUN — nothing will be written.\n");
@@ -142,7 +145,7 @@ for (const wo of workOrders) {
     [
       wo.wo_no, wo.site, wo.area || "", wo.category || "", wo.priority || "Medium",
       wo.description || "", wo.assigned_to || "", contractor ? 1 : 0,
-      contractor ? wo.assigned_to || "" : "", wo.assigned_to || "",
+      contractor ? (wo.contractor_name || wo.assigned_to || "") : "", wo.assigned_to || "",
       wo.status || "Open", wo.reported_date || null, wo.completed_date || null,
       n(wo.final_cost), contractor ? n(wo.final_cost) : 0, contractor ? 0 : n(wo.final_cost),
       0, wo.closing_notes || "", wo.parts_used || "",
@@ -155,14 +158,16 @@ counts.work_orders = workOrders.length;
 for (const p of projects) {
   await q(
     `INSERT INTO projects (project_no, description, site, status, spent,
-       contractor, start_date, end_date, month, year)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       contractor, contractor_cost, internal_labor_cost, start_date, end_date, month, year)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      ON CONFLICT (project_no) DO UPDATE SET
        description = EXCLUDED.description, status = EXCLUDED.status,
-       spent = EXCLUDED.spent, contractor = EXCLUDED.contractor`,
+       spent = EXCLUDED.spent, contractor = EXCLUDED.contractor,
+       contractor_cost = EXCLUDED.contractor_cost, internal_labor_cost = EXCLUDED.internal_labor_cost`,
     [
       p.project_no, p.description || "", p.site || "", p.status || "",
-      n(p.total_cost), p.contractor || "", p.start_date || null,
+      n(p.total_cost), p.contractor || "", n(p.contractor_cost),
+      p.start_date || null,
       p.end_date || null, monthKey(p.start_date), yearKey(p.start_date)
     ]
   );

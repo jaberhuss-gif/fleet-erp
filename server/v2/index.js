@@ -1,7 +1,7 @@
 import express from "express";
 import {ensureV2Schema,v2Enabled} from "./db.js";
 import {getFinancialReportV2} from "./financial.js";
-import {upsertDailySubmission,upsertDailyKm,createMaintenanceWorkOrder,addMaintenancePart,createProject,addProjectPart,listDailyExceptions} from "./workflow.js";
+import {upsertDailySubmission,upsertDailyKm,createMaintenanceWorkOrder,updateMaintenanceWorkOrder,closeMaintenanceWorkOrder,deleteMaintenanceWorkOrder,addMaintenancePart,createProject,addProjectPart,listDailyExceptions} from "./workflow.js";
 import {listVehicles,getVehicle,updateVehicle,recordOilChange,createVehicle,listDrivers,createDriver,listSites,createSite,listProjects,listMaintenance,listWarehouse,seedWarehouseLocations,listPurchaseRequests,createPurchaseRequest,listTickets,createTicket,listVehicleAlerts,refreshVehicleAlerts,closeVehicleAlert,getVehicle360,getFleetDashboard} from "./services.js";
 import {buildFmmsMigrationPreview} from "./fmms-preview.js";
 import {previewLegacyVehicleMigration,migrateLegacyVehicles} from "./legacy-vehicle-migration.js";
@@ -46,6 +46,9 @@ r.post("/vehicles/:id/oil-change",async(req,res)=>{try{const vehicle=await recor
  r.post("/daily-submission",async(req,res)=>{try{res.json({success:true,row:await upsertDailySubmission(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});
  r.post("/daily-km",async(req,res)=>{try{res.json({success:true,row:await upsertDailyKm(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});
  r.post("/maintenance/work-orders",async(req,res)=>{try{res.json({success:true,row:await createMaintenanceWorkOrder(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});
+ r.put("/maintenance/work-orders/:id",async(req,res)=>{try{const row=await updateMaintenanceWorkOrder(req.params.id,req.body||{});if(!row)return res.status(404).json({success:false,error:"Work order not found or already closed"});res.json({success:true,row});}catch(e){res.status(400).json({success:false,error:e.message});}});
+ r.put("/maintenance/work-orders/:id/close",async(req,res)=>{try{const row=await closeMaintenanceWorkOrder(req.params.id,req.body||{});if(!row)return res.status(404).json({success:false,error:"Work order not found"});res.json({success:true,row});}catch(e){res.status(400).json({success:false,error:e.message});}});
+ r.delete("/maintenance/work-orders/:id",async(req,res)=>{try{res.json({success:await deleteMaintenanceWorkOrder(req.params.id)});}catch(e){res.status(400).json({success:false,error:e.message});}});
  r.post("/maintenance/parts",async(req,res)=>{try{res.json({success:true,row:await addMaintenancePart(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});
  r.post("/projects",async(req,res)=>{try{res.json({success:true,row:await createProject(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});
  r.post("/projects/parts",async(req,res)=>{try{res.json({success:true,row:await addProjectPart(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});

@@ -164,14 +164,15 @@ export async function migrateLegacyToV2() {
         const siteId = site.rows[0]?.id || null;
         const contractor = s(r.contractor);
         const spent = n(r.spent);
+        const contractorCost = n(r.contractor_cost);
+        const internalLaborCost = n(r.internal_labor_cost);
         await v2Query(`INSERT INTO fleet_erp_v2.projects(project_no,site_id,description,start_date,end_date,status,contractor,contractor_cost,internal_labor_cost)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
           ON CONFLICT(project_no) DO UPDATE SET site_id=EXCLUDED.site_id,description=EXCLUDED.description,start_date=EXCLUDED.start_date,
           end_date=EXCLUDED.end_date,status=EXCLUDED.status,contractor=EXCLUDED.contractor,contractor_cost=EXCLUDED.contractor_cost,
           internal_labor_cost=EXCLUDED.internal_labor_cost`,
           [s(r.project_no || `PRJ-${r.id}`),siteId,s(r.description || r.name),date(r.start_date),date(r.end_date),s(r.status)||"Planned",
-           contractor,contractor && contractor.toLowerCase()!=="internal" && contractor.toLowerCase()!=="company" ? spent : 0,
-           contractor && contractor.toLowerCase()!=="internal" && contractor.toLowerCase()!=="company" ? 0 : spent]);
+           contractor, contractorCost, internalLaborCost]);
       }
       counts.projects = (await rows("projects")).length;
     }

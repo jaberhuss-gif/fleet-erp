@@ -3,8 +3,10 @@
 // The JSON under server/data/building was extracted from the building sheet and
 // reconciled against it (see extraction-notes.json). It is the same dataset the
 // building demo was built and verified on, so the numbers here match the sheet:
-//   July 2026  contractor WO 2170  parts WO 1417
-//   Aug  2026  contractor WO 4638  parts WO 6601
+//   July 2026  contractor WO 2170  contractor WO parts 1891
+//   Aug  2026  contractor WO 4638  contractor WO parts 6601
+//   July 2026  contractor Development 2525  contractor Development parts 3281
+//   Aug  2026  contractor Development 58406  contractor Development parts 0
 //
 // Safety: this refuses to run against a production database. It only ever talks
 // to the database named by ERP_DATABASE_URL (a dedicated target), never

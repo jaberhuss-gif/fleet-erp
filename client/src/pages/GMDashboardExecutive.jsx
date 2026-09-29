@@ -209,16 +209,6 @@ export default function GMDashboardExecutive() {
         </div>
       </div>
 
-      <div className="no-print" style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid #e2e8f0', paddingBottom: 10 }}>
-        {[
-          ['overview', '📊 Overview'],
-          ['fleet', '🚗 Fleet Status'],
-          ['financial', '💰 Financial Summary']
-        ].map(([id, label]) => (
-          <button key={id} onClick={() => setSection(id)} className={section === id ? 'btn btn-primary' : 'btn btn-secondary'}>{label}</button>
-        ))}
-      </div>
-
       {section === 'overview' && (
         <>
           <div style={{ marginBottom: 20, background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 18 }}>
@@ -228,9 +218,9 @@ export default function GMDashboardExecutive() {
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
               {[
-                ['work-orders', '🔧 Building Maintenance – Work Orders'],
-                ['projects', '🏗️ Building Projects'],
-                ['purchases', '🛒 Building Purchases'],
+                ['work-orders', '🔧 Work Orders'],
+                ['projects', '🏗️ Projects'],
+                ['purchases', '🛒 Purchases'],
               ].map(([id, label]) => (
                 <button key={id} className={buildingView === id ? 'btn btn-primary' : 'btn btn-secondary'} onClick={() => setBuildingView(id)}>
                   {label}

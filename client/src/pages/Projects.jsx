@@ -137,6 +137,13 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
     } catch (e) { setError(e.message); }
   };
 
+  const currentMonth = (() => {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  })();
+
+  const monthlyProjects = projects.filter(p => String(p.start_date || '').slice(0, 7) === currentMonth);
+
   const filtered = projects.filter(p => {
     const matchSite = filterSite === 'all' || p.site === filterSite;
     const matchStatus = filterStatus === 'all' || p.status === filterStatus;
@@ -226,6 +233,36 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
             <button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button>
           </div>
         </form>
+      )}
+
+      {entryOnly && (
+        <div className="building-monthly-table" style={{ marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', gap: '10px', flexWrap: 'wrap' }}>
+            <h3 style={{ margin: 0 }}>Projects — Current Month ({currentMonth})</h3>
+            <span style={{ color: '#64748b', fontSize: '13px' }}>{monthlyProjects.length} record(s)</span>
+          </div>
+          {loading ? <div className="loading">Loading...</div> : monthlyProjects.length === 0 ? (
+            <div className="alert alert-info">No projects recorded for {currentMonth}.</div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table>
+                <thead><tr>
+                  <th>Project #</th><th>Start Date</th><th>Name</th><th>Site</th><th>Type</th>
+                  <th>Manager</th><th>Contractor</th><th>Budget (SAR)</th><th>Spent (SAR)</th><th>Status</th>
+                </tr></thead>
+                <tbody>{monthlyProjects.map(p => (
+                  <tr key={p.id}>
+                    <td style={{ fontWeight: 'bold' }}>{p.project_no}</td><td>{p.start_date || '-'}</td>
+                    <td>{p.name || '-'}</td><td>{p.site || '-'}</td><td>{p.project_type || '-'}</td>
+                    <td>{p.manager || '-'}</td><td>{p.contractor || '-'}</td>
+                    <td>{Number(p.budget || 0).toLocaleString()}</td><td>{Number(p.spent || 0).toLocaleString()}</td>
+                    <td>{p.status || '-'}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Filters */}

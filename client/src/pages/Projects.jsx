@@ -52,8 +52,14 @@ export default function Projects({ user, access = {} }) {
     setMessage(''); setError('');
     try {
       if (editing) {
-        setError('Editing an existing V2 project is not enabled yet.');
-        return;
+        await api.put('/v2/projects/' + editing.id, {
+          siteId: sites.find(s => s.name === form.site)?.id || null,
+          name: form.name, description: form.description || form.name,
+          startDate: form.startDate || null, endDate: form.endDate || null,
+          status: form.status, contractor: form.contractor,
+          contractorCost: Number(form.spent || form.budget || 0), budget: Number(form.budget || 0)
+        });
+        setMessage('Project updated');
       } else {
         await api.post('/v2/projects', {
           siteId: sites.find(s => s.name === form.site)?.id || null,
@@ -141,7 +147,7 @@ export default function Projects({ user, access = {} }) {
   const handleDelete = async (id) => {
     if (!confirm('Delete this project?')) return;
     try {
-      await api.delete('/projects/' + id);
+      await api.delete('/v2/projects/' + id);
       setMessage('Project deleted');
       load();
     } catch (e) { setError(e.message); }

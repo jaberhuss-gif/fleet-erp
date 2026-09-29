@@ -426,233 +426,110 @@ function FleetMaintenanceReport() {
 }
 
 function BuildingMaintenanceReport() {
-  const now = new Date();
-  const [year, setYear] = useState(String(now.getFullYear()));
-  const [site, setSite] = useState('all');
-  const [report, setReport] = useState(null);
-  const [selectedMonth, setSelectedMonth] = useState(String(now.getFullYear()) + '-' + String(now.getMonth() + 1).padStart(2, '0'));
+  const [period, setPeriod] = useState('month');
+  const [financial, setFinancial] = useState(null);
+  const [workOrders, setWorkOrders] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
-  useEffect(() => { load(); }, [year, site]);
 
   const load = async () => {
     try {
       setLoading(true);
       setError('');
-      const qs = new URLSearchParams({ year });
-      if (site !== 'all') qs.set('site', site);
-      const res = await api.get('/reports/general-maintenance?' + qs.toString());
-      setReport(res.data);
+      const [f, w, p] = await Promise.all([
+        api.get('/v2/financial'),
+        api.get('/v2/maintenance'),
+        api.get('/v2/projects')
+      ]);
+      setFinancial(f.data || null);
+      setWorkOrders(w.data?.workOrders || []);
+      setProjects(p.data?.projects || []);
     } catch (e) {
-      setError(e.response?.data?.error || e.message || 'Failed to load maintenance report');
+      setError(e.response?.data?.error || e.message || 'Failed to load Building Maintenance V2 report');
     } finally {
       setLoading(false);
     }
   };
 
-  const money = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-  const monthLabel = (key) => {
-    const [y, m] = key.split('-').map(Number);
-    return new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
-  };
+  useEffect(() => { load(); }, []);
 
-  const months = report?.months || [];
-  const selected = months.find(m => m.month === selectedMonth) || months[0] || {
-    month: selectedMonth, totalWO: 0, contractorWO: 0, employeeWO: 0,
-    contractorAmount: 0, employeeAmount: 0, partsAmount: 0, totalAmount: 0,
-    contractors: [], employees: []
-  };
-  const sites = [...new Set((report?.orders || []).map(o => o.site).filter(Boolean))].sort();
+  const money = v => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  const months = financial?.months || [];
+  const selectedMonths = period === 'month' ? months.slice(-1) : period === '3months' ? months.slice(-3) : period === '6months' ? months.slice(-6) : months;
+  const totals = selectedMonths.reduce((a,m) => ({
+    baseline:a.baseline+Number(m.totalBaseline||0),
+    actual:a.actual+Number(m.actual||0),
+    savings:a.savings+Number(m.savings||0),
+    contractorWO:a.contractorWO+a.contractorWO*0+Number(m.contractorWO||0),
+    contractorDev:a.contractorDev+Number(m.contractorDev||0),
+    partsWO:a.partsWO+Number(m.partsWO||0),
+    partsDev:a.partsDev+Number(m.partsDev||0)
+  }), {baseline:0,actual:0,savings:0,contractorWO:0,contractorDev:0,partsWO:0,partsDev:0});
+  totals.savingsPercent = totals.baseline ? totals.savings / totals.baseline * 100 : 0;
+  const activeMonth = selectedMonths[selectedMonths.length - 1]?.month;
+  const monthWOs = workOrders.filter(x => String(x.reported_date || '').slice(0,7) === activeMonth);
+  const monthProjects = projects.filter(x => String(x.start_date || '').slice(0,7) === activeMonth || String(x.end_date || '').slice(0,7) === activeMonth);
 
-  const detail = [...(selected.contractors || []), ...(selected.employees || [])]
-    .sort((a, b) => b.amount - a.amount);
-
-  if (loading) return <div className="loading">Loading general maintenance report...</div>;
+  if (loading) return <div className="loading">Loading Building Maintenance V2 report...</div>;
   if (error) return <div className="alert alert-error">{error}</div>;
 
   return (
     <div>
       <div className="panel">
-        <div style={{ background: 'linear-gradient(135deg, #059669, #10b981)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
-          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>🏢 General Maintenance — Monthly Control</h2>
-          <div style={{ marginTop: 6, fontSize: 13, opacity: .95 }}>
-            ERP database only · Ordinary maintenance only · Projects excluded · Each month is calculated independently
-          </div>
+        <div style={{ background:'linear-gradient(135deg,#059669,#10b981)',padding:'16px 24px',borderRadius:'12px 12px 0 0',color:'#fff' }}>
+          <h2 style={{margin:0,fontSize:22,fontWeight:700}}>Building Maintenance — V2</h2>
+          <div style={{marginTop:6,fontSize:13,opacity:.95}}>Supabase V2 · Maintenance and Development kept separate · No Google Sheet reporting dependency</div>
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginTop: '16px', background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label>Year</label>
-            <select value={year} onChange={e => setYear(e.target.value)}>
-              {[now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2].map(y =>
-                <option key={y} value={y}>{y}</option>
-              )}
-            </select>
-          </div>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label>Site</label>
-            <select value={site} onChange={e => setSite(e.target.value)}>
-              <option value="all">All Sites</option>
-              {sites.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
+        <div style={{display:'flex',gap:10,flexWrap:'wrap',marginTop:16}}>
+          {[
+            ['month','Monthly'],['3months','3 Months'],['6months','6 Months'],['year','Year']
+          ].map(([v,l]) => <button key={v} className={period===v?'btn btn-primary':'btn btn-warning'} onClick={()=>setPeriod(v)}>{l}</button>)}
         </div>
       </div>
 
-      <div className="cards-grid" style={{ marginBottom: '20px' }}>
-        <div className="card success">
-          <h3>Total Work Orders</h3>
-          <div className="big-number">{report?.totals?.totalWO || 0}</div>
-          <div className="sub">General maintenance only</div>
-        </div>
-        <div className="card">
-          <h3>Contractor WOs</h3>
-          <div className="big-number">{report?.totals?.contractorWO || 0}</div>
-          <div className="sub">{money(report?.totals?.contractorAmount)} SAR</div>
-        </div>
-        <div className="card">
-          <h3>Employee WOs</h3>
-          <div className="big-number">{report?.totals?.employeeWO || 0}</div>
-          <div className="sub">{money(report?.totals?.employeeAmount)} SAR labor</div>
-        </div>
-        <div className="card">
-          <h3>Total Cost</h3>
-          <div className="big-number">{money(report?.totals?.totalAmount)}</div>
-          <div className="sub">SAR</div>
-        </div>
+      <div className="cards-grid" style={{marginBottom:20}}>
+        <div className="card"><h3>Baseline</h3><div className="big-number">{money(totals.baseline)}</div><div className="sub">SAR</div></div>
+        <div className="card warning"><h3>Actual</h3><div className="big-number">{money(totals.actual)}</div><div className="sub">SAR</div></div>
+        <div className="card success"><h3>Savings</h3><div className="big-number">{money(totals.savings)}</div><div className="sub">{totals.savingsPercent.toFixed(1)}%</div></div>
+        <div className="card"><h3>Months</h3><div className="big-number">{selectedMonths.length}</div><div className="sub">with baseline/activity data</div></div>
       </div>
 
-      <div className="panel" style={{ marginBottom: '20px' }}>
-        <div style={{ background: '#f1f5f9', padding: '12px 16px', borderRadius: '8px 8px 0 0', fontWeight: 700 }}>
-          Monthly Maintenance Summary
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#f8fafc' }}>
-                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Month</th>
-                <th style={{ textAlign: 'right', padding: '10px 12px' }}>Total WO</th>
-                <th style={{ textAlign: 'right', padding: '10px 12px' }}>Contractor WO</th>
-                <th style={{ textAlign: 'right', padding: '10px 12px' }}>Employee WO</th>
-                <th style={{ textAlign: 'right', padding: '10px 12px' }}>Contractor Amount</th>
-                <th style={{ textAlign: 'right', padding: '10px 12px' }}>Employee/Labor</th>
-                <th style={{ textAlign: 'right', padding: '10px 12px' }}>Parts</th>
-                <th style={{ textAlign: 'right', padding: '10px 12px' }}>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {months.map(m => (
-                <tr key={m.month}
-                    onClick={() => setSelectedMonth(m.month)}
-                    style={{ cursor: 'pointer', background: m.month === selected.month ? '#ecfdf5' : '#fff' }}>
-                  <td style={{ padding: '10px 12px', fontWeight: 700 }}>{monthLabel(m.month)}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>{m.totalWO}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>{m.contractorWO}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>{m.employeeWO}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>{money(m.contractorAmount)}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>{money(m.employeeAmount)}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>{money(m.partsAmount)}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700 }}>{money(m.totalAmount)}</td>
-                </tr>
-              ))}
-            </tbody>
+      <div className="panel" style={{marginBottom:20}}>
+        <div style={{background:'#f1f5f9',padding:'12px 16px',borderRadius:'8px 8px 0 0',fontWeight:700}}>Financial Control</div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <thead><tr style={{background:'#f8fafc'}}>
+              <th>Month</th><th>Contractor WO</th><th>Contractor Development</th><th>Parts / Materials WO</th><th>Parts / Materials Development</th><th>Salary</th><th>Actual</th><th>Baseline</th><th>Savings</th><th>Savings %</th>
+            </tr></thead>
+            <tbody>{selectedMonths.map(m=><tr key={m.month}>
+              <td>{m.month}</td><td>{money(m.contractorWO)}</td><td>{money(m.contractorDev)}</td><td>{money(m.partsWO)}</td><td>{money(m.partsDev)}</td><td>{money(m.salary)}</td><td>{money(m.actual)}</td><td>{money(m.totalBaseline)}</td><td>{money(m.savings)}</td><td>{Number(m.savingsPercent||0).toFixed(1)}%</td>
+            </tr>)}</tbody>
           </table>
         </div>
-        <div style={{ padding: '10px 12px', color: '#64748b', fontSize: 12 }}>
-          September remains zero when there are no September work orders; no old-month data is carried into it.
-        </div>
       </div>
 
-      <div className="panel" style={{ marginBottom: '20px' }}>
-          <div style={{ background: '#f1f5f9', padding: '12px 16px', borderRadius: '8px 8px 0 0', fontWeight: 700 }}>
-            Google Sheet — MonthlySavings (Temporary Source)
-          </div>
-          <div style={{ padding: '8px 12px', color: '#64748b', fontSize: 12 }}>
-            This temporary view reads the MonthlySavings tab directly from Google Sheets. Selected month: {selected.month}.
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr style={{ background: '#f8fafc' }}>
-                {sheetHeaders.map((h, i) => <th key={i} style={{ textAlign: 'left', padding: '10px 12px', whiteSpace: 'nowrap' }}>{h || ('Column ' + (i + 1))}</th>)}
-              </tr></thead>
-              <tbody>
-                {(selectedSheetRows.length ? selectedSheetRows : sheetRows).map((row, ri) => (
-                  <tr key={ri}>
-                    {sheetHeaders.map((_, i) => <td key={i} style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>{row[i] ?? ''}</td>)}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      <div className="cards-grid" style={{marginBottom:20}}>
+        <div className="card"><h3>Work Orders</h3><div className="big-number">{monthWOs.length}</div><div className="sub">Selected month</div></div>
+        <div className="card"><h3>Development</h3><div className="big-number">{monthProjects.length}</div><div className="sub">Selected month</div></div>
+        <div className="card"><h3>Contractor WO</h3><div className="big-number">{money(selectedMonths.reduce((s,m)=>s+Number(m.contractorWO||0),0))}</div><div className="sub">SAR</div></div>
+        <div className="card"><h3>Contractor Development</h3><div className="big-number">{money(selectedMonths.reduce((s,m)=>s+Number(m.contractorDev||0),0))}</div><div className="sub">SAR</div></div>
+      </div>
 
-      <div className="panel" style={{ marginBottom: '20px' }}>
-        <div style={{ background: '#f1f5f9', padding: '12px 16px', borderRadius: '8px 8px 0 0', fontWeight: 700 }}>
-          {monthLabel(selected.month)} — Who Worked / Contractor Detail
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#f8fafc' }}>
-                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Type</th>
-                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Contractor / Employee</th>
-                <th style={{ textAlign: 'right', padding: '10px 12px' }}>WO Count</th>
-                <th style={{ textAlign: 'right', padding: '10px 12px' }}>Amount (SAR)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {detail.length === 0 ? (
-                <tr><td colSpan="4" style={{ padding: 18, textAlign: 'center', color: '#64748b' }}>No general maintenance work orders in this month.</td></tr>
-              ) : detail.map((p, i) => (
-                <tr key={p.type + '|' + p.name + '|' + i}>
-                  <td style={{ padding: '10px 12px' }}>{p.type}</td>
-                  <td style={{ padding: '10px 12px', fontWeight: 600 }}>{p.name}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>{p.woCount}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>{money(p.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <div className="panel" style={{marginBottom:20}}>
+        <div style={{background:'#f1f5f9',padding:'12px 16px',borderRadius:'8px 8px 0 0',fontWeight:700}}>Work Orders — {activeMonth || 'No month selected'}</div>
+        <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
+          <thead><tr style={{background:'#f8fafc'}}><th>WO No</th><th>Date</th><th>Site</th><th>Category</th><th>Status</th><th>Contractor</th><th>Contractor Cost</th></tr></thead>
+          <tbody>{monthWOs.map(o=><tr key={o.id}><td>{o.wo_no}</td><td>{String(o.reported_date||'').slice(0,10)}</td><td>{o.site_name||'-'}</td><td>{o.category||'-'}</td><td>{o.status}</td><td>{o.contractor_name||'Company / Internal'}</td><td>{money(o.contractor_cost)}</td></tr>)}</tbody>
+        </table></div>
       </div>
 
       <div className="panel">
-        <div style={{ background: '#f1f5f9', padding: '12px 16px', borderRadius: '8px 8px 0 0', fontWeight: 700 }}>
-          {monthLabel(selected.month)} — Work Orders
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#f8fafc' }}>
-                <th style={{ textAlign: 'left', padding: '10px 12px' }}>WO No</th>
-                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Date</th>
-                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Site</th>
-                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Category</th>
-                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Who Worked</th>
-                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Type</th>
-                <th style={{ textAlign: 'right', padding: '10px 12px' }}>Cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(report?.orders || []).filter(o => String(o.reported_date).slice(0, 7) === selected.month).map(o => {
-                const external = !!(o.contractor_name && !['company', 'internal'].includes(String(o.contractor_name).trim().toLowerCase()));
-                return (
-                  <tr key={o.id}>
-                    <td style={{ padding: '10px 12px', fontWeight: 700 }}>{o.wo_no || '#' + o.id}</td>
-                    <td style={{ padding: '10px 12px' }}>{String(o.reported_date || '').slice(0, 10) || '-'}</td>
-                    <td style={{ padding: '10px 12px' }}>{o.site || '-'}</td>
-                    <td style={{ padding: '10px 12px' }}>{o.category || '-'}</td>
-                    <td style={{ padding: '10px 12px' }}>{external ? o.contractor_name : (o.assigned_to || 'Company / Internal')}</td>
-                    <td style={{ padding: '10px 12px' }}>{external ? 'Contractor' : 'Employee'}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{money(o.final_cost)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <div style={{background:'#f1f5f9',padding:'12px 16px',borderRadius:'8px 8px 0 0',fontWeight:700}}>Projects / Development — {activeMonth || 'No month selected'}</div>
+        <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
+          <thead><tr style={{background:'#f8fafc'}}><th>Project No</th><th>Site</th><th>Description</th><th>Start</th><th>End</th><th>Status</th><th>Contractor</th><th>Contractor Cost</th></tr></thead>
+          <tbody>{monthProjects.map(p=><tr key={p.id}><td>{p.project_no}</td><td>{p.site_name||'-'}</td><td>{p.description}</td><td>{p.start_date||'-'}</td><td>{p.end_date||'-'}</td><td>{p.status}</td><td>{p.contractor||'Company / Internal'}</td><td>{money(p.contractor_cost)}</td></tr>)}</tbody>
+        </table></div>
       </div>
     </div>
   );

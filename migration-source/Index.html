@@ -1,0 +1,3511 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Styles'); ?>
+  <?!= include('Modals'); ?>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <style>
+    body { background: #f8f9fa; font-family: 'Segoe UI', Tahoma, sans-serif; }
+    .sidebar { background: #0f172a; color: #fff; height: 100vh; padding: 20px; }
+    .sidebar h4 { font-weight: 700; }
+    .nav-link { color: #cbd5e1; cursor: pointer; padding: 10px; border-bottom: 1px solid #1e293b; border-radius: 8px; margin-bottom: 4px; transition: 0.2s; }
+    .nav-link:hover { background: #1e293b; color: #fff; }
+    .kpi-card { background: white; border-radius: 12px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); text-align: center; }
+    .kpi-number { font-size: 28px; font-weight: 700; }
+    .kpi-title { color: #6b7280; font-size: 14px; }
+    .card { border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .table { background: #fff; border-radius: 12px; overflow: hidden; }
+    .table thead { background: #0f172a; color: #fff; }
+    
+    .dashboard-stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+    .stat-card {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 20px 18px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      border-left: 5px solid;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.10);
+    }
+    .stat-card .stat-icon {
+      font-size: 26px;
+      margin-bottom: 6px;
+      display: inline-block;
+    }
+    .stat-card .stat-number {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      line-height: 1.2;
+    }
+    .stat-card .stat-label {
+      font-size: 13px;
+      color: #6b7280;
+      font-weight: 600;
+      margin-top: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .stat-card .stat-sub {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-top: 8px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .stat-card.blue { border-left-color: #3b82f6; }
+    .stat-card.blue .stat-number { color: #3b82f6; }
+    .stat-card.green { border-left-color: #10b981; }
+    .stat-card.green .stat-number { color: #10b981; }
+    .stat-card.purple { border-left-color: #8b5cf6; }
+    .stat-card.purple .stat-number { color: #8b5cf6; }
+    .stat-card.orange { border-left-color: #f59e0b; }
+    .stat-card.orange .stat-number { color: #f59e0b; }
+    .stat-card.red { border-left-color: #ef4444; }
+    .stat-card.red .stat-number { color: #ef4444; }
+    .stat-card.teal { border-left-color: #14b8a6; }
+    .stat-card.teal .stat-number { color: #14b8a6; }
+    
+    .stat-card .mini-table {
+      font-size: 11px;
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .stat-card .mini-table thead th {
+      text-align: left;
+      padding: 3px 4px;
+      font-weight: 600;
+      color: #6b7280;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .stat-card .mini-table tbody td {
+      padding: 3px 4px;
+      border-bottom: 1px solid #f3f4f6;
+      font-size: 11px;
+    }
+    .stat-card .mini-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+    .stat-card .mini-table .badge-act {
+      background: #3b82f6;
+      color: #fff;
+      padding: 1px 8px;
+      border-radius: 10px;
+      font-size: 10px;
+    }
+    .stat-card .mini-table .badge-wo {
+      background: #10b981;
+      color: #fff;
+      padding: 1px 8px;
+      border-radius: 10px;
+      font-size: 10px;
+    }
+    .stat-card .mini-table .status-closed {
+      background: #10b981;
+      color: #fff;
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-size: 9px;
+    }
+    .stat-card .mini-table .status-open {
+      background: #f59e0b;
+      color: #fff;
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-size: 9px;
+    }
+    .stat-card .mini-table .progress-bar-mini {
+      background: #e5e7eb;
+      border-radius: 4px;
+      height: 4px;
+      width: 60px;
+      display: inline-block;
+    }
+    .stat-card .mini-table .progress-bar-mini .fill {
+      background: #10b981;
+      border-radius: 4px;
+      height: 4px;
+    }
+    .stat-card .scroll-container {
+      max-height: 150px;
+      overflow-y: auto;
+    }
+    .stat-card .scroll-container::-webkit-scrollbar {
+      width: 4px;
+    }
+    .stat-card .scroll-container::-webkit-scrollbar-thumb {
+      background: #d1d5db;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-md-2 sidebar">
+      <h4>🔧 FMS</h4>
+      
+      <!-- ✅ Dashboard يظهر للجميع -->
+      <div class="nav-link" onclick="loadPage('dashboard')">📊 Dashboard</div>
+      
+      <!-- ✅ الأزرار المخفية للمدير العام -->
+      <div id="adminMenu" style="${USER_ROLE === 'manager' ? 'display:none;' : ''}">
+        <div class="nav-link" onclick="loadPage('sites')">🏗️ Sites</div>
+        <div class="nav-link" onclick="loadPage('workorders')">🔧 Work Orders</div>
+        <div class="nav-link" onclick="loadPage('financialReports')">📊 Financial Reports</div>
+        <div class="nav-link" onclick="loadPage('devprojects')">🏗️ Development</div>
+      </div>
+      
+      <!-- 🚗 VEHICLE REPORT -->
+<div class="nav-link" onclick="loadPage('vehicleReport')" style="
+  background: linear-gradient(135deg, #1e3a5f, #2563eb);
+  border-radius: 8px;
+  margin: 8px 0;
+  color: #ffffff;
+  font-weight: 600;
+  border: 1px solid #3b82f6;
+">
+  🚗 Vehicle Report
+</div>
+      
+      <!-- ✅ زر تسجيل الخروج -->
+      <div class="nav-link" onclick="logout()" style="margin-top: 20px; border-top: 1px solid #1e293b; color: #ef4444;">
+        🚪 Logout
+      </div>
+    </div>
+    
+    <div class="col-md-10 p-4">
+      <div id="content">
+        <div class="text-center py-5">
+          <h1>🔧 FMS</h1>
+          <p class="text-muted">Fleet Maintenance System</p>
+          <p>Click a menu item to get started.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+console.log("✅ FMS Loaded!");
+
+// =============================================
+// تعريف المتغيرات العامة
+// =============================================
+var USER_ROLE = 'manager';
+var CURRENT_USER = null;
+
+// =============================================
+// Custom Modals
+// =============================================
+function customConfirm(message, callback) {
+  var modalEl = document.getElementById('confirmModal');
+  if (!modalEl) {
+    var result = confirm(message);
+    callback(result);
+    return;
+  }
+  var modal = new bootstrap.Modal(modalEl);
+  document.getElementById('confirmModalBody').textContent = message;
+  var btn = document.getElementById('confirmModalBtn');
+  var newBtn = btn.cloneNode(true);
+  btn.parentNode.replaceChild(newBtn, btn);
+  window._confirmClicked = false;
+  newBtn.addEventListener('click', function() {
+    window._confirmClicked = true;
+    modal.hide();
+    callback(true);
+  });
+  modalEl.addEventListener('hidden.bs.modal', function onHidden() {
+    if (!window._confirmClicked) {
+      callback(false);
+    }
+    window._confirmClicked = false;
+    modalEl.removeEventListener('hidden.bs.modal', onHidden);
+  });
+  modal.show();
+}
+
+function customAlert(message, title) {
+  var modalEl = document.getElementById('alertModal');
+  if (!modalEl) {
+    alert(message);
+    return;
+  }
+  var modal = new bootstrap.Modal(modalEl);
+  document.getElementById('alertModalBody').textContent = message;
+  var header = document.getElementById('alertModalHeader');
+  var titleEl = document.getElementById('alertModalTitle');
+  if (title) {
+    titleEl.textContent = title;
+    if (title.includes('✅') || title.includes('success')) {
+      header.className = 'modal-header bg-success text-white';
+    } else if (title.includes('❌') || title.includes('خطأ')) {
+      header.className = 'modal-header bg-danger text-white';
+    } else {
+      header.className = 'modal-header bg-primary text-white';
+    }
+  } else {
+    titleEl.textContent = '📢 alert';
+    header.className = 'modal-header bg-primary text-white';
+  }
+  modal.show();
+}
+
+function customPrompt(message, callback) {
+  var modalEl = document.getElementById('promptModal');
+  if (!modalEl) {
+    var result = prompt(message);
+    callback(result);
+    return;
+  }
+  var modal = new bootstrap.Modal(modalEl);
+  document.getElementById('promptModalLabel').textContent = message;
+  document.getElementById('promptModalInput').value = '';
+  setTimeout(function() {
+    document.getElementById('promptModalInput').focus();
+  }, 300);
+  var btn = document.getElementById('promptModalBtn');
+  var newBtn = btn.cloneNode(true);
+  btn.parentNode.replaceChild(newBtn, btn);
+  newBtn.addEventListener('click', function() {
+    var value = document.getElementById('promptModalInput').value;
+    modal.hide();
+    callback(value);
+  });
+  document.getElementById('promptModalInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      var value = document.getElementById('promptModalInput').value;
+      modal.hide();
+      callback(value);
+    }
+  });
+  modal.show();
+}
+
+// =============================================
+// تسجيل الخروج
+// =============================================
+function logout() {
+  CURRENT_USER = null;
+  USER_ROLE = 'manager';
+  showLoginPage();
+}
+
+// =============================================
+// نظام تسجيل الدخول
+// =============================================
+function showLoginPage() {
+  var content = document.getElementById("content");
+  content.innerHTML = `
+    <div class="login-container" style="
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 80vh;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      border-radius: 16px;
+      padding: 40px;
+    ">
+      <div class="login-box" style="
+        background: #ffffff;
+        padding: 40px;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        width: 100%;
+        max-width: 400px;
+      ">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <span style="font-size: 48px;">🔧</span>
+          <h2 style="margin-top: 10px; color: #0f172a;">FMS Login</h2>
+          <p style="color: #6b7280; font-size: 14px;">Fleet Maintenance System</p>
+        </div>
+        
+        <div id="loginMessage" style="display: none; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 14px;"></div>
+        
+        <div style="margin-bottom: 15px;">
+          <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #374151;">👤 Username</label>
+          <input type="text" id="loginUsername" placeholder="Enter username" style="
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+          ">
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+          <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #374151;">🔑 Password</label>
+          <input type="password" id="loginPassword" placeholder="Enter password" style="
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+          " onkeydown="if(event.key==='Enter') handleLogin()">
+        </div>
+        
+        <button onclick="handleLogin()" style="
+          width: 100%;
+          padding: 12px;
+          background: linear-gradient(135deg, #3b82f6, #2563eb);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-size: 16px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s;
+        " onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+          🚀 Login
+        </button>
+        
+        <div style="text-align: center; margin-top: 15px; font-size: 12px; color: #9ca3af;">
+          Demo: admin / admin123
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function handleLogin() {
+  var username = document.getElementById('loginUsername').value.trim();
+  var password = document.getElementById('loginPassword').value.trim();
+  var messageEl = document.getElementById('loginMessage');
+  
+  var users = {
+    'admin': 'admin123',
+    'manager': 'manager123'
+  };
+  
+  if (!username || !password) {
+    messageEl.style.display = 'block';
+    messageEl.style.background = '#fef2f2';
+    messageEl.style.color = '#dc2626';
+    messageEl.innerHTML = '⚠️ Please enter both username and password';
+    return;
+  }
+  
+  if (users[username] && users[username] === password) {
+    CURRENT_USER = username;
+    messageEl.style.display = 'block';
+    messageEl.style.background = '#f0fdf4';
+    messageEl.style.color = '#16a34a';
+    messageEl.innerHTML = '✅ Login successful! Redirecting...';
+    
+    if (username === 'admin') {
+      USER_ROLE = 'admin';
+    } else {
+      USER_ROLE = 'manager';
+    }
+    
+    var adminMenu = document.getElementById('adminMenu');
+    if (adminMenu) {
+      adminMenu.style.display = (USER_ROLE === 'admin') ? 'block' : 'none';
+    }
+    
+    setTimeout(function() {
+      loadPage('dashboard');
+    }, 1000);
+    
+  } else {
+    messageEl.style.display = 'block';
+    messageEl.style.background = '#fef2f2';
+    messageEl.style.color = '#dc2626';
+    messageEl.innerHTML = '❌ Invalid username or password';
+  }
+}
+// =============================================
+// VEHICLE REPORT FUNCTIONS
+// =============================================
+
+function loadVehicleManagementReport() {
+  var content = document.getElementById("content");
+  if (!content) return;
+
+  content.innerHTML = `
+    <div style="display:flex; justify-content:center; align-items:center; min-height:300px; flex-direction:column; color:#64748b;">
+      <div class="spinner-border text-primary" role="status"></div>
+      <h5 style="margin-top:15px;">Loading Vehicle Maintenance Report...</h5>
+    </div>
+  `;
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+      console.log("✅ Vehicle Report Data:", data);
+      if (data && data.error) {
+        content.innerHTML = `<div class="alert alert-danger">❌ Error: ${data.error}</div>`;
+        return;
+      }
+      if (!data || !data.summary) {
+        content.innerHTML = `<div class="alert alert-warning">⚠️ No data available. Please try again.</div>`;
+        return;
+      }
+      renderVehicleReportAdvanced(data);
+    })
+    .withFailureHandler(function(error) {
+      console.error("❌ Server error:", error);
+      content.innerHTML = `<div class="alert alert-danger">Error: ${error.message || error}</div>`;
+    })
+    .getVehicleReportAdvanced();  // ✅ استخدم الدالة الجديدة
+}
+
+function renderVehicleReportAdvanced(data) {
+  try {
+    if (!data || !data.summary) {
+      document.getElementById("content").innerHTML = `
+        <div class="alert alert-warning">⚠️ No data available. Please try again.</div>
+      `;
+      return;
+    }
+
+    var summary = data.summary || {};
+    var monthlyReport = data.monthlyReport || [];
+    var top10Vehicles = data.top10Vehicles || [];
+    var highMaintenanceVehicles = data.highMaintenanceVehicles || [];
+    var vehicleReport = data.vehicleReport || [];
+
+    var content = document.getElementById("content");
+    if (!content) return;
+
+    var html = `
+      <!-- ===== HEADER WITH EXPORT BUTTONS ===== -->
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+          <h2 class="fw-bold mb-1">🚗 Vehicle Maintenance Analysis Report</h2>
+          <div class="text-muted">Detailed analysis of vehicle issues, tires, and performance</div>
+        </div>
+        <div>
+          <button class="btn btn-success me-2" onclick="exportToExcel()">📊 Export Excel</button>
+          <button class="btn btn-danger me-2" onclick="exportToPDF()">📄 Export PDF</button>
+          <button class="btn btn-primary" onclick="loadVehicleManagementReport()">🔄 Refresh</button>
+        </div>
+      </div>
+
+      <!-- ===== KPI STATS ===== -->
+      <div class="row g-4 mb-4">
+        <div class="col-md-3">
+          <div class="card p-3 text-center border-primary shadow-sm">
+            <div style="font-size:24px;">📋</div>
+            <div style="font-size:24px; font-weight:700;">${summary.totalIssues || 0}</div>
+            <div class="text-muted">Total Issues</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card p-3 text-center border-success shadow-sm">
+            <div style="font-size:24px;">🚘</div>
+            <div style="font-size:24px; font-weight:700;">${summary.totalVehicles || 0}</div>
+            <div class="text-muted">Total Vehicles</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card p-3 text-center border-warning shadow-sm">
+            <div style="font-size:24px;">🛞</div>
+            <div style="font-size:24px; font-weight:700;">${summary.totalTires || 0}</div>
+            <div class="text-muted">Total Tires (Received + Needed)</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card p-3 text-center border-danger shadow-sm">
+            <div style="font-size:24px;">⚠️</div>
+            <div style="font-size:24px; font-weight:700;">${highMaintenanceVehicles.length || 0}</div>
+            <div class="text-muted">High Maintenance Alerts</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // ============================================================
+    // تنبيهات السيارات المستهترة
+    // ============================================================
+    if (highMaintenanceVehicles.length > 0) {
+      html += `
+        <div class="alert alert-danger shadow-sm mb-4">
+          <h5 class="fw-bold">⚠️ High Maintenance Alerts (5+ issues in a month)</h5>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover">
+              <thead>
+                <tr><th>Vehicle</th><th>Month</th><th>Issues</th><th>Tires Changed</th></tr>
+              </thead>
+              <tbody>
+                ${highMaintenanceVehicles.map(function(item) {
+                  return `<tr>
+                    <td><strong>${item.plate}</strong></td>
+                    <td>${item.month}</td>
+                    <td><span class="badge bg-danger">${item.issues}</span></td>
+                    <td>${item.tireChanges}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="mt-2 text-muted small">💡 These vehicles may indicate driver negligence or mechanical issues</div>
+        </div>
+      `;
+    }
+
+    // ============================================================
+    // التقرير الشهري
+    // ============================================================
+    html += `
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-dark text-white">
+          <h5 class="mb-0">📅 Monthly Breakdown</h5>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-striped table-hover mb-0" style="font-size:13px;">
+              <thead style="background-color: #0f172a; color: white;">
+                <tr>
+                  <th>Month</th>
+                  <th>Vehicles</th>
+                  <th>Total Issues</th>
+                  <th>Tires Received</th>
+                  <th>Tires Needed</th>
+                  <th>Total Tires</th>
+                  <th>Top Vehicle</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${monthlyReport.map(function(month) {
+                  var topVehicle = month.vehicles.length > 0 ? month.vehicles[0] : null;
+                  return `<tr>
+                    <td><strong>${month.month}</strong></td>
+                    <td>${month.uniqueVehicles}</td>
+                    <td>${month.totalIssues}</td>
+                    <td>${month.totalTiresReceived || 0}</td>
+                    <td>${month.totalTiresNeeded || 0}</td>
+                    <td><span class="badge bg-primary">${month.totalTires || 0}</span></td>
+                    <td>${topVehicle ? topVehicle.plate + ' (' + topVehicle.issues + ' issues)' : '-'}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // ============================================================
+    // تفصيل كل شهر (السيارات والإطارات)
+    // ============================================================
+    html += `
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0">📊 Monthly Vehicle Details</h5>
+        </div>
+        <div class="card-body p-0">
+          <div class="accordion" id="monthlyAccordion">
+    `;
+
+    monthlyReport.forEach(function(month, index) {
+      var accordionId = 'month' + index;
+      html += `
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="heading${accordionId}">
+            <button class="accordion-button ${index > 0 ? 'collapsed' : ''}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse${accordionId}" aria-expanded="${index === 0 ? 'true' : 'false'}">
+              <strong>${month.month}</strong>
+              <span class="badge bg-primary ms-2">${month.uniqueVehicles} Vehicles</span>
+              <span class="badge bg-warning ms-2">${month.totalIssues} Issues</span>
+              <span class="badge bg-success ms-2">${month.totalTires} Tires</span>
+            </button>
+          </h2>
+          <div id="collapse${accordionId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" data-bs-parent="#monthlyAccordion">
+            <div class="accordion-body p-0">
+              <table class="table table-striped table-hover mb-0" style="font-size:13px;">
+                <thead style="background-color: #e9ecef;">
+                  <tr>
+                    <th>#</th>
+                    <th>Vehicle</th>
+                    <th>Issues</th>
+                    <th>Tires Received</th>
+                    <th>Tires Needed</th>
+                    <th>Total Tires</th>
+                    <th>Issue Types</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${month.vehicles.map(function(vehicle, idx) {
+                    var issueTypes = [];
+                    for (var type in vehicle.issueTypes) {
+                      issueTypes.push(type + ' (' + vehicle.issueTypes[type] + ')');
+                    }
+                    var rowColor = vehicle.issues >= 5 ? 'style="background-color: #fce4ec;"' : '';
+                    return `<tr ${rowColor}>
+                      <td>${idx + 1}</td>
+                      <td><strong>${vehicle.plate}</strong></td>
+                      <td><span class="badge ${vehicle.issues >= 5 ? 'bg-danger' : 'bg-primary'}">${vehicle.issues}</span></td>
+                      <td>${vehicle.tireReceived || 0}</td>
+                      <td>${vehicle.tireNeeded || 0}</td>
+                      <td><span class="badge bg-success">${vehicle.tireChanges}</span></td>
+                      <td style="font-size:11px;">${issueTypes.join(', ') || '-'}</td>
+                    </tr>`;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+    html += `
+          </div>
+        </div>
+      </div>
+    `;
+
+    // ============================================================
+    // تقرير السيارات الكامل (مرتب تنازلياً)
+    // ============================================================
+    html += `
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">🚗 Full Vehicle Report (All Vehicles)</h5>
+          <span class="badge bg-light text-dark">${vehicleReport.length} Vehicles</span>
+        </div>
+        <div class="card-body p-0" style="max-height:500px; overflow-y:auto;">
+          <table class="table table-striped table-hover mb-0" style="font-size:13px;">
+            <thead style="background-color: #0f172a; color: white; position:sticky; top:0; z-index:10;">
+              <tr>
+                <th>#</th>
+                <th>Vehicle</th>
+                <th>Total Issues</th>
+                <th>Tires Received</th>
+                <th>Tires Needed</th>
+                <th>Total Tires</th>
+                <th>Months Active</th>
+                <th>Avg Issues/Month</th>
+                <th>Main Issue</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${vehicleReport.map(function(item, idx) {
+                var mainIssue = '';
+                var maxCount = 0;
+                for (var type in item.issueTypes) {
+                  if (item.issueTypes[type] > maxCount) {
+                    maxCount = item.issueTypes[type];
+                    mainIssue = type;
+                  }
+                }
+                var rowColor = item.totalIssues >= 10 ? 'style="background-color: #fce4ec;"' : '';
+                return `<tr ${rowColor}>
+                  <td>${idx + 1}</td>
+                  <td><strong>${item.plate}</strong></td>
+                  <td><span class="badge ${item.totalIssues >= 10 ? 'bg-danger' : 'bg-primary'}">${item.totalIssues}</span></td>
+                  <td>${item.totalTiresReceived || 0}</td>
+                  <td>${item.totalTiresNeeded || 0}</td>
+                  <td><span class="badge bg-success">${item.totalTires}</span></td>
+                  <td>${item.monthsCount}</td>
+                  <td>${item.avgIssuesPerMonth}</td>
+                  <td>${mainIssue || '-'}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    html += `
+      <div class="text-muted small text-center">
+        <hr>Report generated on ${new Date().toLocaleString()}
+      </div>
+    `;
+
+    content.innerHTML = html;
+  } catch (error) {
+    console.error("Error rendering UI:", error);
+    document.getElementById("content").innerHTML = `
+      <div class="alert alert-danger">❌ Error: ${error.message}</div>
+    `;
+  }
+}
+
+// ============================================================
+// EXPORT TO EXCEL
+// ============================================================
+function exportToExcel() {
+  var btn = document.querySelector('.btn-success');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Creating...';
+  }
+  
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '📊 Export Excel';
+      }
+      if (result && result.error) {
+        customAlert('❌ Error: ' + result.error, 'Error');
+        return;
+      }
+      customAlert(
+        '✅ Excel file created successfully!<br><br>' +
+        '📎 <a href="' + result.url + '" target="_blank" style="color: #2563eb; font-weight: bold;">Click here to open the file</a>',
+        '✅ Success'
+      );
+    })
+    .withFailureHandler(function(err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '📊 Export Excel';
+      }
+      customAlert('❌ Error: ' + err.message, 'Error');
+    })
+    .exportVehicleReportToExcel();
+}
+
+// ============================================================
+// EXPORT TO PDF
+// ============================================================
+function exportToPDF() {
+  var btn = document.querySelector('.btn-danger');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Creating...';
+  }
+  
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '📄 Export PDF';
+      }
+      if (result && result.error) {
+        customAlert('❌ Error: ' + result.error, 'Error');
+        return;
+      }
+      customAlert(
+        '✅ PDF file created successfully!<br><br>' +
+        '📎 <a href="' + result.url + '" target="_blank" style="color: #2563eb; font-weight: bold;">Click here to open the file</a>',
+        '✅ Success'
+      );
+    })
+    .withFailureHandler(function(err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '📄 Export PDF';
+      }
+      customAlert('❌ Error: ' + err.message, 'Error');
+    })
+    .exportVehicleReportToPDF();
+}
+
+function loadPage(page) {
+  console.log("📄 loadPage:", page);
+
+  var content = document.getElementById("content");
+  if (!content) return;
+
+  try {
+    if (!CURRENT_USER) {
+      showLoginPage();
+      return;
+    }
+
+    if (USER_ROLE === 'manager' && page !== 'dashboard') {
+      customAlert(
+        "⛔ غير مصرح لك بالدخول! أنت تملك صلاحية الوصول إلى لوحة التحكم فقط.",
+        "🚫 ممنوع"
+      );
+      return;
+    }
+
+    if (page === "dashboard") {
+      renderDashboard();
+
+    } else if (page === "sites") {
+      renderSites();
+
+    } else if (page === "workorders") {
+      renderWorkOrders();
+
+    } else if (page === "financialReports") {
+      renderFinancialReports();
+
+   
+    } else if (page === "devprojects") {
+      renderDevProjects();
+
+    } else if (page === "vehicleReport") {
+      loadVehicleManagementReport();   // ✅ التغيير هنا
+
+    } else {
+      content.innerHTML = "<h2>Page not found</h2>";
+    }
+
+  } catch(e) {
+    console.error("❌ Error in loadPage:", e);
+    content.innerHTML =
+      '<div class="alert alert-danger">❌ Error: ' +
+      e.message +
+      '</div>';
+  }
+}
+// =============================================
+// RENDER DASHBOARD
+// =============================================
+function renderDashboard() {
+  var content = document.getElementById("content");
+  content.innerHTML = `
+    <div class="text-center py-5">
+      <div class="spinner-border text-primary"></div>
+      <p>Loading Dashboard...</p>
+    </div>
+  `;
+
+  Promise.all([
+    new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)
+        .getDashboardData();
+    }),
+    new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)
+        .getMonthlyContractorData();
+    }),
+    new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)
+        .getMonthlySavingsHistory();
+    })
+  ])
+  .then(function(results) {
+    var data = results[0];
+    var monthlyContractorData = results[1];
+    var savingsHistory = results[2];
+    
+    var latestSavings = null;
+    if (savingsHistory && savingsHistory.length > 0) {
+      savingsHistory.sort(function(a, b) {
+        if (a.year !== b.year) return b.year - a.year;
+        return (a.monthIndex || 0) - (b.monthIndex || 0);
+      });
+      latestSavings = savingsHistory[savingsHistory.length - 1];
+    }
+    
+    var historicalAvgMonthly = data.historicalAvgMonthly || 0;
+    var historicalTotal = data.historicalTotal || 0;
+    var historicalCount = data.historicalCount || 0;
+    
+    var partsCost = data.partsCost || 0;
+    var workerBonus = 150;
+    var salaryIncrease = 2000;
+    var yourMonthlyCost = partsCost + workerBonus + salaryIncrease;
+    
+    var actualSavings = historicalAvgMonthly - yourMonthlyCost;
+    var actualSavingsPercentage = historicalAvgMonthly > 0 ? (actualSavings / historicalAvgMonthly * 100) : 0;
+    var dailySavings = actualSavings / 30;
+
+    var actualMaintenanceCost = 123462.85;
+    var actualDevelopmentCost = 795304.17;
+    
+    var contractorWO = data.contractorWO || 0;
+    var contractorDev = data.contractorDev || 0;
+    var contractorPartsWO = data.contractorPartsWO || 0;
+    var contractorPartsDev = data.contractorPartsDev || 0;
+    var totalLabor = data.totalLabor || 0;
+    var totalParts = data.totalParts || 0;
+    var totalContractorCost = data.totalContractorCost || 0;
+
+    var currentContractorMaintenance = contractorWO + contractorPartsWO + contractorPartsDev;
+    var currentContractorDevelopment = contractorDev;
+
+    var monthlySalaryIncrease = 2000;
+    var monthlyEmployeeBonus = 150;
+    var totalMonthlyDeduction = monthlySalaryIncrease + monthlyEmployeeBonus;
+
+    var totalContractorMaintenance = currentContractorMaintenance + totalMonthlyDeduction;
+    var totalContractorDevelopment = currentContractorDevelopment + totalMonthlyDeduction;
+    
+    var avgMonthlyMaintenance = actualMaintenanceCost / 6;
+    var avgMonthlyDevelopment = actualDevelopmentCost / 6;
+    
+    var monthlyMaintenanceSavings = 0;
+    var monthlyDevelopmentSavings = 0;
+    var maintenanceSavingsPercent = 0;
+    var developmentSavingsPercent = 0;
+    
+    var maintenanceActualSpent = contractorWO + contractorPartsWO;
+    var developmentActualSpent = contractorDev + contractorPartsDev;
+    
+    var monthlySalaryIncrease2 = 2000;
+    var monthlyEmployeeBonus2 = 150;
+    var totalMonthlyDeduction2 = monthlySalaryIncrease2 + monthlyEmployeeBonus2;
+    
+    totalContractorMaintenance = maintenanceActualSpent + totalMonthlyDeduction2;
+    totalContractorDevelopment = developmentActualSpent + totalMonthlyDeduction2;
+    
+    monthlyMaintenanceSavings = avgMonthlyMaintenance - totalContractorMaintenance;
+    monthlyDevelopmentSavings = avgMonthlyDevelopment - totalContractorDevelopment;
+    
+    maintenanceSavingsPercent = (monthlyMaintenanceSavings / avgMonthlyMaintenance) * 100;
+    developmentSavingsPercent = (monthlyDevelopmentSavings / avgMonthlyDevelopment) * 100;
+    
+    var newMonthlyMaintenanceCost = totalContractorMaintenance;
+    var newMonthlyDevelopmentCost = totalContractorDevelopment;
+    
+    var totalMaintenanceSavings6Months = monthlyMaintenanceSavings * 6;
+    var totalDevelopmentSavings6Months = monthlyDevelopmentSavings * 6;
+    var totalSavings6Months = totalMaintenanceSavings6Months + totalDevelopmentSavings6Months;
+    
+    var totalOriginalCost6Months = actualMaintenanceCost + actualDevelopmentCost;
+    var totalNewCost6Months = (newMonthlyMaintenanceCost * 6) + (newMonthlyDevelopmentCost * 6);
+    
+    var totalSavingsPercent6Months = (totalSavings6Months / totalOriginalCost6Months) * 100;
+
+    var html = `
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="margin: 0;">📊 Executive Dashboard</h2>
+        <div>
+          <button class="btn btn-success btn-save-monthly" onclick="saveMonthlyData()" style="font-size: 0.85rem; padding: 6px 14px;">
+            💾 Save This Month
+          </button>
+          <button class="btn btn-info" onclick="loadMonthlyHistory()" style="font-size: 0.85rem; padding: 6px 14px;">
+            📊 View History
+          </button>
+        </div>
+      </div>
+      
+      <div class="dashboard-stats-row">
+        <div class="stat-card blue">
+          <div class="stat-icon">🔧Total Work Orders</div>
+          <div class="stat-number">${data.totalWO || 0}</div>
+          <div class="stat-sub">
+            <span class="badge-open">● ${data.openWO || 0} Open</span>
+            <span class="badge-closed">● ${data.closedWO || 0} Closed</span>
+          </div>
+        </div>
+
+        <div class="stat-card green">
+          <div class="stat-icon">🏢Total Sites</div>
+          <div class="stat-number">${data.totalSites || 0}</div>
+          <div class="stat-sub">Active Locations</div>
+        </div>
+
+        <div class="stat-card" style="
+          background: ${totalSavingsPercent6Months >= 5 ? 'linear-gradient(135deg, #065f46, #047857)' : 
+                      totalSavingsPercent6Months >= 2 ? 'linear-gradient(135deg, #1e3a5f, #2563eb)' : 
+                      totalSavingsPercent6Months >= 1 ? 'linear-gradient(135deg, #5f3a1e, #d97706)' : 
+                      'linear-gradient(135deg, #5f1e1e, #dc2626)'};
+          border: none; 
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); 
+          border-radius: 16px; 
+          padding: 18px 16px;
+          transition: all 0.3s ease;
+        ">
+          <div class="stat-icon" style="color: #fbbf24; font-size: 1.8rem;">🏆</div>
+          <div class="stat-number" style="color: #ffffff; font-size: 2rem; font-weight: 700;">${totalSavingsPercent6Months.toFixed(1)}%</div>
+          <div class="stat-label" style="color: #d1d5db; font-weight: 600; font-size: 0.75rem; text-transform: none;">Total Savings (6 Months)</div>
+          <div class="stat-sub" style="color: #fbbf24; opacity: 0.9; font-size: 0.85rem; justify-content: center; gap: 6px;">
+            ${totalSavings6Months > 0 ? '✅ Saving ' : '⚠️ Loss '} 
+            ${Math.abs(totalSavings6Months).toFixed(0)} SAR/6mo
+          </div>
+          <div class="stat-sub" style="color: #d1d5db; opacity: 0.8; font-size: 0.75rem; justify-content: center;">
+            📅 Monthly: ${(totalSavings6Months / 6).toFixed(0)} SAR
+          </div>
+          <div style="margin-top: 8px; background: rgba(255,255,255,0.2); border-radius: 8px; height: 6px;">
+            <div style="width: ${Math.min(Math.max(totalSavingsPercent6Months, 0), 100)}%; background: #fbbf24; border-radius: 8px; height: 6px;"></div>
+          </div>
+          <div style="margin-top: 8px; font-size: 0.6rem; color: #d1d5db; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;">
+            <span>📊 Total Original: ${totalOriginalCost6Months.toFixed(0)}</span>
+            <span>📉 Total New: ${totalNewCost6Months.toFixed(0)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="dashboard-stats-row" style="grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+        <div class="stat-card red" style="grid-column: span 3; background: linear-gradient(135deg, #7f1d1d, #dc2626); border: none; box-shadow: 0 4px 20px rgba(220, 38, 38, 0.4); border-radius: 16px; padding: 20px 16px;">
+          <div class="stat-icon" style="color: #fca5a5; font-size: 1.8rem;">💰Total Contractor Cost</div>
+          <div class="stat-number" style="color: #ffffff; font-size: 2.8rem; font-weight: 700;">${totalContractorCost.toLocaleString()}</div>
+          <div class="stat-sub" style="color: #fecaca;">الأجرة + القطع (SAR)</div>
+        </div>
+      </div>
+
+      <div class="dashboard-stats-row">
+        <div class="stat-card indigo" style="background: linear-gradient(135deg, #3730a3, #6366f1); border: none; box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3); border-radius: 16px; padding: 18px 16px;">
+          <div class="stat-icon" style="color: #c7d2fe;">👷Total Labor (Contractor)</div>
+          <div class="stat-number" style="color: #ffffff;">${totalLabor.toLocaleString()}</div>
+          <div class="stat-sub" style="color: #a5b4fc;">إجمالي أجرة اليد (SAR)</div>
+        </div>
+
+        <div class="stat-card teal">
+          <div class="stat-icon">📦Total Parts Dev+WO (Contractor)</div>
+          <div class="stat-number">${totalParts.toLocaleString()}</div>
+          <div class="stat-sub">إجمالي قطع المقاول (SAR)</div>
+        </div>
+      </div>
+
+      <div class="dashboard-stats-row">
+        <div class="stat-card purple">
+          <div class="stat-icon">🧩 Parts (Development ) Contractor</div>
+          <div class="stat-number">${contractorPartsDev.toLocaleString()}</div>
+          <div class="stat-sub">قطع اشتراها المقاول (SAR)</div>
+        </div>
+
+        <div class="stat-card orange">
+          <div class="stat-icon">🧩Parts (Work Orders) Contractor</div>
+          <div class="stat-number">${contractorPartsWO.toLocaleString()}</div>
+          <div class="stat-sub">قطع اشتراها المقاول (SAR)</div>
+        </div>
+      </div>
+
+      <div class="dashboard-stats-row">
+        <div class="stat-card green">
+          <div class="stat-icon">🏗️ Development Labor Contractor</div>
+          <div class="stat-number">${contractorDev.toLocaleString()}</div>
+          <div class="stat-sub">أجرة يد المقاول (SAR)</div>
+        </div>
+
+        <div class="stat-card blue">
+          <div class="stat-icon">🔧Work Orders Labor (Contractor)</div>
+          <div class="stat-number">${contractorWO.toLocaleString()}</div>
+          <div class="stat-sub">أجرة يد المقاول (SAR)</div>
+        </div>
+      </div>
+
+    <div class="stat-card" style="
+      background: linear-gradient(135deg, ${maintenanceSavingsPercent >= 10 ? '#1e3a5f' : maintenanceSavingsPercent >= 0 ? '#1e3a5f' : '#5f1e1e'}, ${maintenanceSavingsPercent >= 10 ? '#2563eb' : maintenanceSavingsPercent >= 0 ? '#2563eb' : '#dc2626'});
+      border: none;
+      box-shadow: 0 4px 16px rgba(30, 58, 95, 0.3);
+      border-radius: 16px;
+      padding: 18px 16px;
+      transition: all 0.3s ease;
+    ">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <div class="stat-icon" style="color: #93c5fd; font-size: 1.6rem;">🔧</div>
+          <div class="stat-label" style="color: #d1d5db; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">
+            Maintenance Savings
+          </div>
+        </div>
+      </div>
+      
+      <div class="stat-number" style="color: #ffffff; font-size: 2.8rem; font-weight: 700; margin-top: 4px;">
+        ${maintenanceSavingsPercent.toFixed(1)}%
+      </div>
+      
+      <div style="color: #93c5fd; font-size: 1.2rem; font-weight: 500; margin-top: -4px;">
+        ${monthlyMaintenanceSavings > 0 ? '+' : ''}${monthlyMaintenanceSavings.toFixed(0)} <span style="font-size: 0.8rem; opacity: 0.7;">SAR/mo</span>
+      </div>
+      
+      <div style="margin-top: 12px; display: flex; justify-content: space-between; color: #d1d5db; font-size: 0.7rem;">
+        <span>📊 Avg Monthly: ${avgMonthlyMaintenance.toFixed(0)} SAR</span>
+        <span>📉 After: ${totalContractorMaintenance.toFixed(0)} SAR</span>
+      </div>
+      
+      <div style="margin-top: 4px; display: flex; justify-content: space-between; color: #d1d5db; font-size: 0.65rem;">
+        <span>👷 Contractor: ${(contractorWO + contractorPartsWO).toFixed(0)} SAR</span>
+        <span>📈 +Bonus: ${totalMonthlyDeduction.toFixed(0)} SAR</span>
+      </div>
+      
+      <div style="margin-top: 8px; background: rgba(255,255,255,0.2); border-radius: 8px; height: 6px;">
+        <div style="width: ${Math.min(Math.max(maintenanceSavingsPercent, 0), 100)}%; background: ${maintenanceSavingsPercent >= 0 ? '#93c5fd' : '#fca5a5'}; border-radius: 8px; height: 6px;"></div>
+      </div>
+      
+      <div style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
+        <span style="background: rgba(255,255,255,0.1); color: #d1d5db; padding: 2px 8px; border-radius: 10px; font-size: 0.55rem;">
+          🔧 ${data.totalWO || 0} WO
+        </span>
+        <span style="background: rgba(255,255,255,0.1); color: #d1d5db; padding: 2px 8px; border-radius: 10px; font-size: 0.55rem;">
+          📊 ${maintenanceSavingsPercent.toFixed(1)}% Savings
+        </span>
+      </div>
+    </div>
+
+        <div class="stat-card" style="
+          background: linear-gradient(135deg, ${developmentSavingsPercent >= 3 ? '#065f46' : developmentSavingsPercent >= 0 ? '#065f46' : '#5f1e1e'}, ${developmentSavingsPercent >= 3 ? '#047857' : developmentSavingsPercent >= 0 ? '#047857' : '#dc2626'});
+          border: none;
+          box-shadow: 0 4px 16px rgba(4, 120, 87, 0.3);
+          border-radius: 16px;
+          padding: 18px 16px;
+          transition: all 0.3s ease;
+        ">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+              <div class="stat-icon" style="color: #fbbf24; font-size: 1.6rem;">🏗️</div>
+              <div class="stat-label" style="color: #d1d5db; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">
+                Development Savings
+              </div>
+            </div>
+          </div>
+          
+          <div class="stat-number" style="color: #ffffff; font-size: 2.8rem; font-weight: 700; margin-top: 4px;">
+            ${developmentSavingsPercent.toFixed(1)}%
+          </div>
+          
+          <div style="color: #fbbf24; font-size: 1.2rem; font-weight: 500; margin-top: -4px;">
+            ${monthlyDevelopmentSavings > 0 ? '+' : ''}${monthlyDevelopmentSavings.toFixed(0)} <span style="font-size: 0.8rem; opacity: 0.7;">SAR/mo</span>
+          </div>
+          
+          <div style="margin-top: 12px; display: flex; justify-content: space-between; color: #d1d5db; font-size: 0.7rem;">
+            <span>📊 Avg Monthly: ${avgMonthlyDevelopment.toFixed(0)} SAR</span>
+            <span>📉 After: ${totalContractorDevelopment.toFixed(0)} SAR</span>
+          </div>
+          
+          <div style="margin-top: 4px; display: flex; justify-content: space-between; color: #d1d5db; font-size: 0.65rem;">
+            <span>👷 Contractor: ${currentContractorDevelopment.toFixed(0)} SAR</span>
+            <span>📈 +Bonus: ${totalMonthlyDeduction.toFixed(0)} SAR</span>
+          </div>
+          
+          <div style="margin-top: 8px; background: rgba(255,255,255,0.2); border-radius: 8px; height: 6px;">
+            <div style="width: ${Math.min(Math.max(developmentSavingsPercent, 0), 100)}%; background: ${developmentSavingsPercent >= 0 ? '#fbbf24' : '#fca5a5'}; border-radius: 8px; height: 6px;"></div>
+          </div>
+          
+          <div style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
+            <span style="background: rgba(255,255,255,0.1); color: #d1d5db; padding: 2px 8px; border-radius: 10px; font-size: 0.55rem;">
+              🏗️ ${data.totalDevProjects || 0} Projects
+            </span>
+            <span style="background: rgba(255,255,255,0.1); color: #d1d5db; padding: 2px 8px; border-radius: 10px; font-size: 0.55rem;">
+              📊 ${developmentSavingsPercent.toFixed(1)}% Savings
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="dashboard-stats-row" style="grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div class="stat-card orange">
+          <div class="stat-icon">💰</div>
+          <div class="stat-number">${(data.totalCompanyCost || 0).toLocaleString()}</div>
+          <div class="stat-label">Total Cost</div>
+          <div class="stat-sub">SAR</div>
+        </div>
+
+        <div class="stat-card blue">
+          <div class="stat-icon">🏢</div>
+          <div class="stat-number">${(data.companyPartsCost || 0).toLocaleString()}</div>
+          <div class="stat-label">Company Purchases</div>
+          <div class="stat-sub">إجمالي مشتريات الشركة (SAR)</div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+          <span>📊 Monthly Report (Last 6 Months)</span>
+          <button class="btn btn-sm btn-light" onclick="loadMonthlyReport()">🔄 Refresh</button>
+        </div>
+        <div class="card-body" id="monthlyReportContainer">
+          <div class="text-center"><div class="spinner-border text-dark"></div><p>Loading report...</p></div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+          <span>🏗️ Completed Development Projects</span>
+          <button class="btn btn-sm btn-light" onclick="loadCompletedDevProjects()">🔄 Refresh</button>
+        </div>
+        <div class="card-body" id="completedDevContainer">
+          <div class="text-center"><div class="spinner-border text-success"></div><p>Loading completed projects...</p></div>
+        </div>
+      </div>
+
+      <div class="row g-4 mb-4">
+        <div class="col-md-8">
+          <div class="card shadow-sm h-100">
+            <div class="card-header bg-success text-white">
+              <span>📊 Last 6 Months Completion Rate</span>
+            </div>
+            <div class="card-body">
+              <div id="sixMonthsChart"></div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="col-md-4">
+          <div class="card shadow-sm h-100">
+            <div class="card-header bg-primary text-white">
+              <span>📅 Monthly Completion Rate</span>
+            </div>
+            <div class="card-body text-center">
+              <h3 id="monthlyCompletionRate">0%</h3>
+              <div class="progress" style="height: 20px; border-radius: 10px;">
+                <div id="monthlyProgressBar" class="progress-bar bg-success progress-bar-striped" 
+                     style="width: 0%; border-radius: 10px; font-weight: bold;">
+                  0%
+                </div>
+              </div>
+              <div class="mt-2">
+                <span class="badge bg-success">✅ <span id="monthlyCompleted">0</span>/<span id="monthlyTotal">0</span></span>
+                <span class="badge bg-info">📅 <span id="monthlyLabel">July 2026</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dashboard-stats-row">
+        <div class="stat-card blue" style="padding: 12px 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 13px; font-weight: 600; color: #1e293b;">🏗️ Development Activity</span>
+            <button class="btn btn-sm btn-light" onclick="loadProjectActivity()" style="padding: 1px 8px; font-size: 10px; border-radius: 12px;">🔄</button>
+          </div>
+          <div id="projectActivityContainer" class="scroll-container">
+            <div class="text-center" style="padding: 10px 0;">
+              <div class="spinner-border text-primary" style="width:18px;height:18px;"></div>
+              <p style="font-size:11px;color:#9ca3af;margin:4px 0 0;">Loading...</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-card green" style="padding: 12px 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 13px; font-weight: 600; color: #1e293b;">🔧 Work Orders Per Site</span>
+            <button class="btn btn-sm btn-light" onclick="loadWorkOrdersPerSite()" style="padding: 1px 8px; font-size: 10px; border-radius: 12px;">🔄</button>
+          </div>
+          <div id="workOrdersPerSiteContainer" class="scroll-container">
+            <div class="text-center" style="padding: 10px 0;">
+              <div class="spinner-border text-success" style="width:18px;height:18px;"></div>
+              <p style="font-size:11px;color:#9ca3af;margin:4px 0 0;">Loading...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-dark text-white">👷 Contractor Monthly Report</div>
+        <div class="card-body" id="contractorReportContainer">
+          <div class="text-center"><div class="spinner-border text-dark"></div><p>Loading contractor report...</p></div>
+        </div>
+      </div>
+    `;
+    content.innerHTML = html;
+    loadSiteTasks();
+    loadCompletedDevProjects();
+    loadContractorReport();
+    loadCompletionRates();
+    loadMonthlyReport();
+    loadProjectActivity();
+    loadWorkOrdersPerSite();
+    
+  })
+  .catch(function(err) {
+    var content = document.getElementById("content");
+    content.innerHTML = '<div class="alert alert-danger">❌ Error: ' + err.message + '</div>';
+  });
+}
+
+// ===== حفظ بيانات الشهر =====
+function saveMonthlyData() {
+  customConfirm('📌 Are you sure you want to save this month\'s data?', function(confirmed) {
+    if (!confirmed) return;
+    
+    var btn = document.querySelector('.btn-save-monthly');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '⏳ Saving...';
+    }
+    
+    google.script.run
+      .withSuccessHandler(function(msg) {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '💾 Save This Month';
+        }
+        customAlert('✅ Data saved successfully! Click "📊 View History" to see the saved data.', '✅ Success');
+      })
+      .withFailureHandler(function(err) {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '💾 Save This Month';
+        }
+        customAlert('❌ Error saving data: ' + err.message, '❌ Error');
+      })
+      .saveMonthlySavings();
+  });
+}
+
+// ===== عرض تاريخ التوفير =====
+function loadMonthlyHistory() {
+  var container = document.getElementById('monthlyHistoryContainer');
+  if (!container) {
+    var content = document.getElementById('content');
+    var historyDiv = document.createElement('div');
+    historyDiv.id = 'monthlyHistoryContainer';
+    historyDiv.className = 'card shadow-sm mb-4';
+    historyDiv.style.display = 'none';
+    content.appendChild(historyDiv);
+  }
+  
+  var container = document.getElementById('monthlyHistoryContainer');
+  container.style.display = 'block';
+  container.innerHTML = `
+    <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+      <span>📊 Monthly Savings History</span>
+      <button class="btn btn-sm btn-light" onclick="document.getElementById('monthlyHistoryContainer').style.display='none'">✕ Close</button>
+    </div>
+    <div class="card-body">
+      <div class="text-center"><div class="spinner-border"></div><p>Loading history...</p></div>
+    </div>
+  `;
+  
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (!data || data.length === 0) {
+        container.querySelector('.card-body').innerHTML = `
+          <p class="text-muted text-center">📭 No saved data yet. Save this month first.</p>
+        `;
+        return;
+      }
+      
+      var html = `
+        <div class="table-responsive">
+          <table class="table table-bordered table-hover" style="font-size: 12px;">
+            <thead style="background: #1e293b; color: white;">
+              <tr>
+                <th>Month</th>
+                <th>Total Labor</th>
+                <th>Total Parts</th>
+                <th>Total Cost</th>
+                <th>Maintenance Savings</th>
+                <th>Dev Savings</th>
+                <th>Maint %</th>
+                <th>Dev %</th>
+                <th>Total %</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      
+      data.forEach(function(item) {
+        html += `
+          <tr>
+            <td><strong>${item.month} ${item.year}</strong></td>
+            <td>${item.totalLabor.toFixed(0)}</td>
+            <td>${item.totalParts.toFixed(0)}</td>
+            <td>${item.totalCost.toFixed(0)}</td>
+            <td style="color: ${item.maintenanceSavings >= 0 ? '#059669' : '#dc2626'}">
+              ${item.maintenanceSavings >= 0 ? '+' : ''}${item.maintenanceSavings.toFixed(0)}
+            </td>
+            <td style="color: ${item.developmentSavings >= 0 ? '#059669' : '#dc2626'}">
+              ${item.developmentSavings >= 0 ? '+' : ''}${item.developmentSavings.toFixed(0)}
+            </td>
+            <td>${item.maintenancePercent.toFixed(1)}%</td>
+            <td>${item.developmentPercent.toFixed(1)}%</td>
+            <td>${item.totalPercent.toFixed(1)}%</td>
+          </tr>
+        `;
+      });
+      
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+      
+      container.querySelector('.card-body').innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      container.querySelector('.card-body').innerHTML = `
+        <div class="alert alert-danger">❌ Error: ${err.message}</div>
+      `;
+    })
+    .getMonthlySavingsHistory();
+}
+
+// ================= LOAD MONTHLY REPORT =================
+function loadMonthlyReport() {
+  var container = document.getElementById('monthlyReportContainer');
+  if (!container) return;
+  
+  container.innerHTML = `
+    <div class="text-center py-3">
+      <div class="spinner-border text-primary"></div>
+      <p>Loading monthly report...</p>
+    </div>
+  `;
+  
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (!data || data.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center">📭 No data available</p>';
+        return;
+      }
+      
+      var html = `
+        <div class="table-responsive">
+          <table class="table table-bordered table-hover" style="font-size: 12px;">
+            <thead style="background-color: #0f172a; color: white;">
+              <tr>
+                <th style="min-width: 140px;">Category</th>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var report = data[i];
+        var isCurrentMonth = (i === data.length - 1);
+        var highlight = isCurrentMonth ? 'style="background-color: #1e293b; color: #fbbf24;"' : '';
+        html += `<th class="text-center" ${highlight}>${report.month}</th>`;
+      }
+      
+      html += `
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa; font-weight: bold;">
+                <td>🔧 Work Orders</td>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var wo = data[i].workOrders || {};
+        html += `<td class="text-center">${wo.total || 0}</td>`;
+      }
+      
+      html += `
+              </tr>
+              <tr>
+                <td style="padding-left: 30px;">✅ Closed</td>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var wo = data[i].workOrders || {};
+        html += `<td class="text-center">${wo.closed || 0}</td>`;
+      }
+      
+      html += `
+              </tr>
+              <tr>
+                <td style="padding-left: 30px;">🔄 Open</td>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var wo = data[i].workOrders || {};
+        html += `<td class="text-center">${wo.open || 0}</td>`;
+      }
+      
+      html += `
+              </tr>
+              <tr>
+                <td style="padding-left: 30px;">👷 Contractor WO</td>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var wo = data[i].workOrders || {};
+        html += `<td class="text-center">${wo.contractor || 0}</td>`;
+      }
+      
+      html += `
+              </tr>
+              <tr>
+                <td style="padding-left: 30px;">👤 Staff WO</td>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var wo = data[i].workOrders || {};
+        html += `<td class="text-center">${wo.staff || 0}</td>`;
+      }
+      
+      html += `
+              </tr>
+              <tr style="background-color: #f8f9fa; font-weight: bold;">
+                <td>🏗️ Development</td>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var dev = data[i].development || {};
+        html += `<td class="text-center">${dev.total || 0}</td>`;
+      }
+      
+      html += `
+              </tr>
+              <tr>
+                <td style="padding-left: 30px;">✅ Closed</td>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var dev = data[i].development || {};
+        html += `<td class="text-center">${dev.closed || 0}</td>`;
+      }
+      
+      html += `
+              </tr>
+              <tr>
+                <td style="padding-left: 30px;">🔄 Open</td>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var dev = data[i].development || {};
+        html += `<td class="text-center">${dev.open || 0}</td>`;
+      }
+      
+      html += `
+              </tr>
+              <tr style="background-color: #f8f9fa; font-weight: bold;">
+                <td>💰 Costs</td>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var costs = data[i].costs || {};
+        html += `<td class="text-center">${(costs.totalCost || 0).toLocaleString()}</td>`;
+      }
+      
+      html += `
+              </tr>
+              <tr>
+                <td style="padding-left: 30px;">📋 WO Cost</td>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var costs = data[i].costs || {};
+        html += `<td class="text-center">${(costs.woCost || 0).toLocaleString()}</td>`;
+      }
+      
+      html += `
+              </tr>
+              <tr>
+                <td style="padding-left: 30px;">🏗️ Dev Cost</td>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var costs = data[i].costs || {};
+        html += `<td class="text-center">${(costs.devCost || 0).toLocaleString()}</td>`;
+      }
+      
+      html += `
+              </tr>
+              <tr style="background-color: #f8f9fa; font-weight: bold;">
+                <td>📦 Parts</td>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        html += `<td class="text-center">-</td>`;
+      }
+      
+      html += `
+              </tr>
+              <tr>
+                <td style="padding-left: 30px;">🏢 Company Parts</td>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var parts = data[i].parts || {};
+        html += `<td class="text-center">${(parts.companyParts || 0).toLocaleString()}</td>`;
+      }
+      
+      html += `
+              </tr>
+              <tr>
+                <td style="padding-left: 30px;">👷 Contractor Parts</td>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var parts = data[i].parts || {};
+        html += `<td class="text-center">${(parts.contractorParts || 0).toLocaleString()}</td>`;
+      }
+      
+      html += `
+              </tr>
+              <tr style="background-color: #f8f9fa; font-weight: bold;">
+                <td>👷 Total Contractor Cost</td>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var costs = data[i].costs || {};
+        html += `<td class="text-center">${(costs.contractorCost || 0).toLocaleString()}</td>`;
+      }
+      
+      html += `
+              </tr>
+              <tr style="background-color: #f8f9fa; font-weight: bold;">
+                <td>📊 Completion Rate</td>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var rate = data[i].completionRate || 0;
+        var color = rate >= 75 ? '#10b981' : rate >= 50 ? '#f59e0b' : '#ef4444';
+        html += `<td class="text-center" style="color: ${color}; font-weight: bold;">${rate}%</td>`;
+      }
+      
+      html += `
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="mt-3 text-muted text-center" style="font-size: 12px;">
+          📌 <strong>Highlighted month</strong> = Current Month &nbsp;|&nbsp; 
+          🔄 Data updates automatically based on Reported Date
+        </div>
+      `;
+      
+      container.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      container.innerHTML = `
+        <div class="alert alert-danger">
+          ❌ Error: ${err.message}
+          <br>
+          <button class="btn btn-sm btn-primary mt-2" onclick="loadMonthlyReport()">🔄 Retry</button>
+        </div>
+      `;
+    })
+    .getLastSixMonthsReport();
+}
+
+// ================= DEVELOPMENT PROJECTS MONTHLY REPORT =================
+function loadCompletedDevProjects() {
+  var container = document.getElementById('completedDevContainer');
+  if (!container) return;
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+
+      console.log("📊 Development Projects Monthly:", data);
+
+      if (!data || data.length === 0) {
+        container.innerHTML =
+          '<p class="text-muted text-center">📭 No development projects found</p>';
+        return;
+      }
+
+      var today = new Date();
+      var currentYear = today.getFullYear();
+      var currentMonth = today.getMonth();
+
+      var monthName = today.toLocaleString('default', {
+        month: 'long'
+      }) + ' ' + currentYear;
+
+      var completedProjects = data.filter(function(project) {
+
+        var status = String(project.status || '')
+          .trim()
+          .toLowerCase();
+
+        if (status !== 'completed' && status !== 'closed') {
+          return false;
+        }
+
+        if (!project.endDate) {
+          return false;
+        }
+
+        var projectDate = new Date(project.endDate);
+
+        if (isNaN(projectDate.getTime())) {
+          return false;
+        }
+
+        return (
+          projectDate.getFullYear() === currentYear &&
+          projectDate.getMonth() === currentMonth
+        );
+      });
+
+      if (completedProjects.length === 0) {
+
+        container.innerHTML = `
+          <div class="text-center text-muted py-4">
+            <div style="font-size: 35px;">📭</div>
+            <p class="mb-1">
+              No completed development projects for
+              <strong>${monthName}</strong>
+            </p>
+            <small>
+              Completed projects from previous months are retained in the sheet.
+            </small>
+          </div>
+        `;
+
+        return;
+      }
+
+      var grandTotal = 0;
+
+      completedProjects.forEach(function(project) {
+        grandTotal += Number(project.totalCost) || 0;
+      });
+
+      var html = `
+        <div class="card shadow-sm mb-4">
+
+          <div class="card-header bg-success text-white
+                      d-flex justify-content-between
+                      align-items-center">
+
+            <strong>📅 ${monthName}</strong>
+
+            <span class="badge bg-light text-dark">
+              ${completedProjects.length}
+              Completed Project${completedProjects.length !== 1 ? 's' : ''}
+            </span>
+
+          </div>
+
+          <div class="card-body p-0">
+
+            <div class="table-responsive">
+
+              <table class="table table-striped table-hover mb-0"
+                     style="font-size: 14px;">
+
+                <thead style="background-color: #198754; color: white;">
+
+                  <tr>
+                    <th>#</th>
+                    <th>Project ID</th>
+                    <th>Project Name</th>
+                    <th>Description</th>
+                    <th>Contractor</th>
+                    <th>Total Cost (SAR)</th>
+                  </tr>
+
+                </thead>
+
+                <tbody>
+      `;
+
+      completedProjects.forEach(function(project, index) {
+
+        var projectCost = Number(project.totalCost) || 0;
+
+        html += `
+          <tr>
+
+            <td>${index + 1}</td>
+
+            <td>
+              <strong>${project.id || '-'}</strong>
+            </td>
+
+            <td>
+              ${project.name || '-'}
+            </td>
+
+            <td>
+              ${project.description || '-'}
+            </td>
+
+            <td>
+              ${project.contractor || '-'}
+            </td>
+
+            <td>
+              ${projectCost.toLocaleString()} SAR
+            </td>
+
+          </tr>
+        `;
+      });
+
+      html += `
+                </tbody>
+
+              </table>
+
+            </div>
+
+          </div>
+
+          <div class="card-footer bg-light text-center">
+
+            <strong>
+              💰 ${monthName} Total:
+              ${grandTotal.toLocaleString()} SAR
+            </strong>
+
+            <span class="text-muted ms-2">
+              (${completedProjects.length} Completed Projects)
+            </span>
+
+          </div>
+
+        </div>
+      `;
+
+      container.innerHTML = html;
+    })
+
+    .withFailureHandler(function(err) {
+
+      console.error(
+        "❌ Error loading development projects:",
+        err
+      );
+
+      container.innerHTML = `
+        <div class="alert alert-danger">
+
+          ❌ Error: ${err.message || 'Unknown'}
+
+          <br>
+
+          <button
+            class="btn btn-sm btn-primary mt-2"
+            onclick="loadCompletedDevProjects()">
+            🔄 Retry
+          </button>
+
+        </div>
+      `;
+    })
+
+    .getDevProjects();
+}
+
+// ================= SITE TASKS =================
+function loadSiteTasks() {
+  var container = document.getElementById('siteTasksContainer');
+  if (!container) return;
+  
+  google.script.run
+    .withSuccessHandler(function(result) {
+      console.log("📊 Site Tasks:", result);
+      var summary = {};
+      try { summary = JSON.parse(result); } catch(e) { summary = {}; }
+      
+      var sites = Object.keys(summary);
+      if (sites.length === 0) {
+        container.innerHTML = `
+          <div class="text-center text-muted py-4">
+            <p>📭 No site tasks found</p>
+            <button class="btn btn-sm btn-primary" onclick="openSiteTaskModal()">➕ Add Task</button>
+          </div>
+        `;
+        return;
+      }
+      
+      var html = `
+        <div class="table-responsive">
+          <table class="table table-striped table-hover" style="font-size: 14px;">
+            <thead style="background-color: #0d6efd; color: white;">
+              <tr>
+                <th>#</th>
+                <th>ID</th>
+                <th>Site Name</th>
+                <th>Task Description</th>
+                <th>Start Date</th>
+                <th>Close Date</th>
+                <th>Amount (SAR)</th>
+                <th>Status</th>
+                <th>Assigned To</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      
+      var rowNumber = 0;
+      var grandTotal = 0;
+      
+      for (var s in summary) {
+        var data = summary[s];
+        var tasks = data.tasks || [];
+        
+        for (var i = 0; i < tasks.length; i++) {
+          var task = tasks[i];
+          rowNumber++;
+          
+          var isClosed = (task.status === 'Closed');
+          var statusBadge = isClosed 
+            ? '<span class="badge bg-success">✅ Closed</span>' 
+            : '<span class="badge bg-warning text-dark">🔄 Open</span>';
+          
+          var startDate = task.startDate ? new Date(task.startDate).toLocaleDateString() : '-';
+          var closeDate = task.closeDate ? new Date(task.closeDate).toLocaleDateString() : '-';
+          var amount = isClosed ? task.amount : '-';
+          
+          if (isClosed) grandTotal += Number(task.amount) || 0;
+          
+          var actionButton = isClosed 
+            ? '✅ Closed' 
+            : `<button class="btn btn-sm btn-danger" onclick="closeSiteTaskFromDashboard('${task.id}')">🔒 Close</button>`;
+          
+          html += `
+            <tr>
+              <td>${rowNumber}</td>
+              <td><strong>${task.id || '-'}</strong></td>
+              <td>${s}</td>
+              <td>${task.description || '-'}</td>
+              <td>${startDate}</td>
+              <td>${closeDate}</td>
+              <td>${amount}</td>
+              <td>${statusBadge}</td>
+              <td>${task.assignedTo || '-'}</td>
+              <td>${actionButton}</td>
+            </tr>
+          `;
+        }
+      }
+      
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+      
+      if (grandTotal > 0) {
+        html += `
+          <div class="card bg-success text-white mt-3">
+            <div class="card-body text-center">
+              <h5>💰 Total Cost of Closed Tasks</h5>
+              <h3>${grandTotal.toLocaleString()} SAR</h3>
+            </div>
+          </div>
+        `;
+      }
+      
+      container.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      container.innerHTML = `
+        <div class="alert alert-danger">
+          ❌ Error: ${err.message || 'Unknown'}
+          <br>
+          <button class="btn btn-sm btn-primary mt-2" onclick="loadSiteTasks()">🔄 Retry</button>
+        </div>
+      `;
+    })
+    .getSiteTasksSummary();
+}
+
+// ================= CONTRACTOR MONTHLY REPORT =================
+function loadContractorReport() {
+  var container = document.getElementById('contractorReportContainer');
+  if (!container) return;
+  
+  google.script.run
+    .withSuccessHandler(function(data) {
+      console.log("📊 Contractor Report:", data);
+      
+      var contractors = Object.keys(data);
+      if (contractors.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center">📭 No contractor data found</p>';
+        return;
+      }
+      
+      var html = `
+        <div class="table-responsive">
+          <table class="table table-striped table-hover" style="font-size: 14px;">
+            <thead style="background-color: #212529; color: white;">
+              <tr>
+                <th>#</th>
+                <th>Contractor Name</th>
+                <th>Monthly Total (SAR)</th>
+                <th>Months</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      
+      var rowNumber = 0;
+      var grandTotal = 0;
+      
+      contractors.sort(function(a, b) {
+        return (data[b].total || 0) - (data[a].total || 0);
+      });
+      
+      for (var i = 0; i < contractors.length; i++) {
+        var contractor = contractors[i];
+        var info = data[contractor];
+        rowNumber++;
+        grandTotal += info.total || 0;
+        
+        var monthsHtml = '';
+        var monthKeys = Object.keys(info.months || {});
+        monthKeys.sort();
+        for (var j = 0; j < monthKeys.length; j++) {
+          var key = monthKeys[j];
+          var month = info.months[key];
+          monthsHtml += `<span class="badge bg-secondary me-1">${month.name}: ${month.total.toLocaleString()} SAR</span><br>`;
+        }
+        
+        html += `
+          <tr>
+            <td>${rowNumber}</td>
+            <td><strong>${contractor}</strong></td>
+            <td style="font-weight: 700; color: #198754;">${(info.total || 0).toLocaleString()} SAR</td>
+            <td>${monthsHtml}</td>
+          </tr>
+        `;
+      }
+      
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+      
+      html += `
+        <div class="card bg-dark text-white mt-3">
+          <div class="card-body text-center">
+            <h5>💰 Total Contractors Cost</h5>
+            <h3>${grandTotal.toLocaleString()} SAR</h3>
+            <small>${contractors.length} Contractors</small>
+          </div>
+        </div>
+      `;
+      
+      container.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      console.error("❌ Error loading contractor report:", err);
+      container.innerHTML = `
+        <div class="alert alert-danger">
+          ❌ Error: ${err.message || 'Unknown'}
+          <br>
+          <button class="btn btn-sm btn-primary mt-2" onclick="loadContractorReport()">🔄 Retry</button>
+        </div>
+      `;
+    })
+    .getContractorMonthlyReport();
+}
+
+function loadCompletionRates() {
+  google.script.run
+    .withSuccessHandler(function(data) {
+      console.log("📊 Monthly Rate Data:", data);
+      document.getElementById('monthlyCompletionRate').textContent = data.rate + '%';
+      document.getElementById('monthlyProgressBar').style.width = data.rate + '%';
+      document.getElementById('monthlyProgressBar').textContent = data.rate + '%';
+      document.getElementById('monthlyCompleted').textContent = data.completed;
+      document.getElementById('monthlyTotal').textContent = data.total;
+      document.getElementById('monthlyLabel').textContent = data.month;
+    })
+    .getMonthlyWorkOrderCompletionRate();
+  
+  google.script.run
+    .withSuccessHandler(function(data) {
+      console.log("📊 Last 6 Months Data:", data);
+      var html = '';
+      for (var i = 0; i < data.length; i++) {
+        var item = data[i];
+        var barColor = item.rate >= 75 ? 'bg-success' : item.rate >= 50 ? 'bg-warning' : 'bg-danger';
+        html += `
+          <div class="mb-2">
+            <div class="d-flex justify-content-between">
+              <span>${item.month}</span>
+              <span>${item.rate}% (${item.completed}/${item.total})</span>
+            </div>
+            <div class="progress" style="height: 15px; border-radius: 8px;">
+              <div class="progress-bar ${barColor} progress-bar-striped" 
+                   style="width: ${item.rate}%; border-radius: 8px; font-size: 10px;">
+                ${item.rate}%
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      document.getElementById('sixMonthsChart').innerHTML = html;
+    })
+    .getLastSixMonthsWorkOrderCompletionRate();
+}
+
+// ================= CLOSE SITE TASK FROM DASHBOARD =================
+function closeSiteTaskFromDashboard(taskId) {
+  customConfirm("Are you sure you want to close this task?", function(confirmed) {
+    if (!confirmed) return;
+    
+    customPrompt("💰 Enter total cost for this task (SAR):", function(amount) {
+      if (amount === null || amount === undefined) return;
+      
+      amount = amount.replace(/,/g, '').trim();
+      
+      if (isNaN(amount) || amount < 0) {
+        customAlert("⚠️ Please enter a valid amount (0 or more)", "خطأ");
+        return;
+      }
+      
+      google.script.run
+        .withSuccessHandler(function(msg) {
+          customAlert(msg, "✅ نجاح");
+          loadSiteTasks();
+        })
+        .withFailureHandler(function(err) {
+          customAlert("❌ Error: " + err.message, "خطأ");
+        })
+        .closeSiteTask(taskId, { 
+          amount: amount,
+          closeDate: new Date().toISOString().split('T')[0]
+        });
+    });
+  });
+}
+
+// ================= SITES =================
+function renderSites() {
+  var content = document.getElementById("content");
+  content.innerHTML = `
+    <h2>🏗️ Sites</h2>
+    <div class="d-flex gap-2 mb-3">
+      <button class="btn btn-warning" onclick="openSiteTaskModal()">🏗️ Site Tasks</button>
+      <button class="btn btn-primary" onclick="openSiteModal()">+ Add Site</button>
+    </div>
+    <div id="sitesContainer">
+      <div class="text-center"><div class="spinner-border"></div><p>Loading sites...</p></div>
+    </div>
+  `;
+  
+  google.script.run
+    .withSuccessHandler(function(data) {
+      var container = document.getElementById("sitesContainer");
+      if (!data || data.length < 2) {
+        container.innerHTML = '<p class="text-muted">No sites found</p>';
+        return;
+      }
+      
+      var rows = '';
+      for (var i = 1; i < data.length; i++) {
+        var row = data[i];
+        rows += `
+          <tr>
+            <td>${row[0] || ''}</td>
+            <td>${row[1] || ''}</td>
+            <td>${row[2] || ''}</td>
+            <td><span class="badge ${row[3] === 'Active' ? 'bg-success' : 'bg-secondary'}">${row[3] || ''}</span></td>
+          </tr>
+        `;
+      }
+      
+      container.innerHTML = `
+        <table class="table table-striped">
+          <thead><tr><th>ID</th><th>Name</th><th>Region</th><th>Status</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById("sitesContainer").innerHTML = '<div class="alert alert-danger">❌ Error: ' + err.message + '</div>';
+    })
+    .getSites();
+}
+
+function renderVehicleReport(data) {
+  try {
+    if (!data || !data.summary) {
+      console.warn("⚠️ No data received");
+      document.getElementById("content").innerHTML = `
+        <div class="alert alert-warning">⚠️ No data available. Please try again.</div>
+      `;
+      return;
+    }
+
+    var summary = data.summary || {};
+    var top10 = data.top10Vehicles || [];
+    var problems = data.problemBreakdown || [];
+
+    var content = document.getElementById("content");
+    if (!content) return;
+
+    content.innerHTML = `
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+          <h2 class="fw-bold mb-1">🚗 Vehicle Maintenance Management Report</h2>
+          <div class="text-muted">Vehicle maintenance, issues and performance overview</div>
+        </div>
+        <div>
+          <button class="btn btn-primary" onclick="loadVehicleManagementReport()">🔄 Refresh</button>
+        </div>
+      </div>
+
+      <!-- KPI STATS -->
+      <div class="row g-4 mb-4">
+        <div class="col-md-4">
+          <div class="card p-3 text-center border-primary shadow-sm">
+            <div style="font-size:24px;">📋</div>
+            <div style="font-size:24px; font-weight:700;">${summary.totalIssues || 0}</div>
+            <div class="text-muted">Total Issues</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card p-3 text-center border-success shadow-sm">
+            <div style="font-size:24px;">🚘</div>
+            <div style="font-size:24px; font-weight:700;">${summary.totalVehicles || 0}</div>
+            <div class="text-muted">Total Vehicles</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card p-3 text-center border-warning shadow-sm">
+            <div style="font-size:24px;">🛞</div>
+            <div style="font-size:24px; font-weight:700;">${summary.tireIssues || 0}</div>
+            <div class="text-muted">Tire Issues</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TABLES ROW -->
+      <div class="row g-4 mb-4">
+        <!-- Top 10 -->
+        <div class="col-md-6">
+          <div class="card h-100 p-3 shadow-sm">
+            <h5 class="fw-bold mb-3">📈 Top 10 Vehicles by Issues</h5>
+            <div class="table-responsive">
+              <table class="table table-hover align-middle">
+                <thead>
+                  <tr><th>#</th><th>Vehicle</th><th>Issues</th></tr>
+                </thead>
+                <tbody>
+                  ${top10.length > 0 ? top10.map((item, idx) => `
+                    <tr>
+                      <td><strong>${idx + 1}</strong></td>
+                      <td><strong>${item.plate || 'Unknown'}</strong></td>
+                      <td><span class="badge bg-primary">${item.totalIssues || 0}</span></td>
+                    </tr>
+                  `).join('') : '<tr><td colspan="3" class="text-center text-muted">No data</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Problems Breakdown -->
+        <div class="col-md-6">
+          <div class="card h-100 p-3 shadow-sm">
+            <h5 class="fw-bold mb-3">🔎 Problems Breakdown</h5>
+            <div class="table-responsive">
+              <table class="table table-hover align-middle">
+                <thead>
+                  <tr><th>Problem</th><th>Count</th></tr>
+                </thead>
+                <tbody>
+                  ${problems.length > 0 ? problems.map(item => `
+                    <tr>
+                      <td><strong>${item.issue || 'Unknown'}</strong></td>
+                      <td><span class="badge bg-danger">${item.count || 0}</span></td>
+                    </tr>
+                  `).join('') : '<tr><td colspan="2" class="text-center text-muted">No data</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    console.error("Error rendering UI:", error);
+  }
+}
+// =============================================
+// RENDER WORK ORDERS (مع الصور - ترتيب الأعمدة الأصلي)
+// =============================================
+function renderWorkOrders() {
+  var content = document.getElementById("content");
+  if (!content) return;
+
+  content.innerHTML = `
+    <h2>🔧 Work Orders</h2>
+    <button class="btn btn-primary mb-3" onclick="openWOModal()">+ New WO</button>
+    <div id="woContainer">
+      <div class="text-center">
+        <div class="spinner-border"></div>
+        <p>Loading work orders...</p>
+      </div>
+    </div>
+  `;
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+      var container = document.getElementById("woContainer");
+      if (!data || data.length === 0) {
+        container.innerHTML = '<p class="text-muted">No work orders found</p>';
+        return;
+      }
+
+      var rows = '';
+      for (var i = 0; i < data.length; i++) {
+        var row = data[i];
+        var status = row[3] || 'Open';
+        var isClosed = (status === 'Closed');
+
+        // معالجة الصورة
+        var imageHtml = '';
+        var imageData = row[5] || '';
+
+        if (imageData && imageData.length > 50) {
+          var imgSrc = imageData;
+          if (!imgSrc.startsWith('data:image')) {
+            imgSrc = 'data:image/jpeg;base64,' + imgSrc;
+          }
+          imageHtml = `<img src="${imgSrc}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;cursor:pointer;" onclick="viewFullImage('${imgSrc}')" title="🖱️ Click to enlarge" />`;
+        } else {
+          imageHtml = `<span class="text-muted">📷 No Image</span>`;
+        }
+
+        rows += `
+          <tr>
+            <td><strong>${row[0] || ''}</strong></td>
+            <td>${row[1] || ''}</td>
+            <td>${row[2] || ''}</td>
+            <td>${row[4] || ''}</td>
+            <td>${imageHtml}</td>
+            <td>
+              <span class="badge ${isClosed ? 'bg-success' : 'bg-warning'}">
+                ${status}
+              </span>
+            </td>
+            <td>
+              ${isClosed ? '✅ Closed' : `<button class="btn btn-sm btn-danger mb-1" onclick="closeWorkOrder('${row[0]}')">🔒 Close</button>`}
+              <button class="btn btn-sm btn-info" onclick="openPurchaseModal('Work Order','${row[0]}')">📦 Parts</button>
+            </td>
+          </tr>
+        `;
+      }
+
+      container.innerHTML = `
+        <div class="table-responsive">
+          <table class="table table-striped table-hover">
+            <thead>
+              <tr>
+                <th>WO No</th>
+                <th>Site</th>
+                <th>Category</th>
+                <th>Description</th>
+                <th>Image</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+        </div>
+      `;
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById("woContainer").innerHTML = '<div class="alert alert-danger">❌ Error: ' + err.message + '</div>';
+    })
+    .getWorkOrders();
+}
+
+// ================= VIEW FULL IMAGE =================
+function viewFullImage(imageSrc) {
+  var modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999;
+    cursor: pointer;
+  `;
+  modal.onclick = function() { this.remove(); };
+  var img = document.createElement('img');
+  img.src = imageSrc;
+  img.style.cssText = `
+    max-width: 90%;
+    max-height: 90%;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+    object-fit: contain;
+  `;
+  img.onclick = function(e) { e.stopPropagation(); };
+  modal.appendChild(img);
+  document.body.appendChild(modal);
+}
+
+// ================= VIEW WORK ORDER DETAILS =================
+function viewWorkOrderDetails(woNo) {
+  if (!woNo) {
+    customAlert("❌ Invalid Work Order number", "خطأ");
+    return;
+  }
+  
+  google.script.run
+    .withSuccessHandler(function(wo) {
+      if (!wo) {
+        customAlert("❌ Work Order not found", "خطأ");
+        return;
+      }
+      
+      var imageHtml = '';
+      if (wo.image && wo.image.length > 50) {
+        var imgSrc = wo.image;
+        if (!imgSrc.startsWith('data:image')) {
+          imgSrc = 'data:image/jpeg;base64,' + imgSrc;
+        }
+        imageHtml = `
+          <div style="text-align:center;margin-top:10px;">
+            <img src="${imgSrc}" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid #ddd;cursor:pointer;" onclick="viewFullImage('${imgSrc}')" title="🖱️ Click to view full size" />
+          </div>
+        `;
+      } else {
+        imageHtml = `<p style="color:#6c757d;text-align:center;">📷 No image attached</p>`;
+      }
+      
+      var message = `
+        <div style="text-align:left;font-size:14px;line-height:1.8;">
+          <table style="width:100%;border-collapse:collapse;">
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;width:40%;">🔧 WO No:</td>
+            <td style="padding:4px 8px;">${wo.woNo || '-'}</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">🏢 Site:</td>
+            <td style="padding:4px 8px;">${wo.site || '-'}</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">📍 Area:</td>
+            <td style="padding:4px 8px;">${wo.area || '-'}</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">📂 Category:</td>
+            <td style="padding:4px 8px;">${wo.category || '-'}</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">📝 Description:</td>
+            <td style="padding:4px 8px;">${wo.description || '-'}</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">⚡ Priority:</td>
+            <td style="padding:4px 8px;"><span class="badge ${wo.priority === 'High' ? 'bg-danger' : wo.priority === 'Medium' ? 'bg-warning' : 'bg-info'}">${wo.priority || 'Normal'}</span></td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">📊 Status:</td>
+            <td style="padding:4px 8px;"><span class="badge ${wo.status === 'Closed' ? 'bg-success' : 'bg-warning'}">${wo.status || 'Open'}</span></td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">👤 Assigned To:</td>
+            <td style="padding:4px 8px;">${wo.assignedTo || 'N/A'}</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">🔨 Contractor:</td>
+            <td style="padding:4px 8px;">${wo.contractor || 'N/A'}</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">💰 Final Cost:</td>
+            <td style="padding:4px 8px;font-weight:bold;color:#198754;">${(wo.cost || 0).toLocaleString()} SAR</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">💰 Contractor Cost:</td>
+            <td style="padding:4px 8px;font-weight:bold;color:#dc3545;">${(wo.contractorCost || 0).toLocaleString()} SAR</td></tr>
+            ${wo.partsUsed ? `<tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">📦 Parts Used:</td><td style="padding:4px 8px;">${wo.partsUsed}</td></tr>` : ''}
+            ${wo.closingNotes ? `<tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">📝 Closing Notes:</td><td style="padding:4px 8px;font-style:italic;">${wo.closingNotes}</td></tr>` : ''}
+          </table>
+          ${imageHtml}
+        </div>
+      `;
+      
+      customAlert(message, `📋 Work Order: ${wo.woNo}`);
+    })
+    .withFailureHandler(function(err) {
+      customAlert("❌ Error loading work order details: " + err.message, "خطأ");
+    })
+    .getWorkOrderDetails(woNo);
+}
+
+// ================= OPEN WO MODAL =================
+function openWOModal() {
+  var modalElement = document.getElementById('woModal');
+  if (!modalElement) {
+    console.error("❌ woModal not found!");
+    return;
+  }
+  
+  var fields = ['woSite', 'woArea', 'woDescription', 'woAssignedTo', 'woContractor', 'woDate', 'woImage'];
+  fields.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  
+  var category = document.getElementById('woCategory');
+  if (category) category.value = 'Plumbing';
+  
+  var priority = document.getElementById('woPriority');
+  if (priority) priority.value = 'Medium';
+  
+  var modal = new bootstrap.Modal(modalElement);
+  modal.show();
+}
+// ============================================================
+// GENERATE FINANCIAL REPORT
+// ============================================================
+function generateFinancialReport(period) {
+  var container = document.getElementById('financialReportResult');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div class="text-center py-4">
+      <div class="spinner-border text-primary"></div>
+      <p class="mt-2">Generating ${period} report...</p>
+    </div>
+  `;
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+      console.log("📊 Financial Report Data:", data);
+      renderFinancialReportResult(data, period);
+    })
+    .withFailureHandler(function(err) {
+      container.innerHTML = `
+        <div class="alert alert-danger">❌ Error: ${err.message}</div>
+      `;
+    })
+    .getFinancialReport(period);
+}
+// ============================================================
+// RENDER FINANCIAL REPORTS PAGE
+// ============================================================
+function renderFinancialReports() {
+  var content = document.getElementById("content");
+  if (!content) return;
+
+  content.innerHTML = `
+    <h2 class="fw-bold mb-3">📊 Financial Reports</h2>
+    <p class="text-muted">Select a period to generate a financial and administrative report</p>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-3">
+        <button class="btn btn-primary w-100 py-3" onclick="generateFinancialReport('month')">
+          📅 Monthly
+        </button>
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-success w-100 py-3" onclick="generateFinancialReport('3months')">
+          📅 3 Months
+        </button>
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-warning w-100 py-3" onclick="generateFinancialReport('6months')">
+          📅 6 Months
+        </button>
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-dark w-100 py-3" onclick="generateFinancialReport('year')">
+          📅 Yearly
+        </button>
+      </div>
+    </div>
+
+    <div id="financialReportResult">
+      <div class="text-center text-muted py-5">
+        <span style="font-size: 48px;">📊</span>
+        <p>Select a period above to generate the report</p>
+      </div>
+    </div>
+  `;
+}
+// ============================================================
+// GENERATE FINANCIAL REPORT
+// ============================================================
+function generateFinancialReport(period) {
+    // عرض مؤشر التحميل
+    var resultDiv = document.getElementById('financialReportResult');
+    if (resultDiv) {
+        resultDiv.innerHTML = `
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3">جاري إنشاء التقرير...</p>
+            </div>
+        `;
+    }
+    
+    // استدعاء الدالة الخلفية
+    google.script.run
+        .withSuccessHandler(function(result) {
+            renderFinancialReportResult(result);
+        })
+        .withFailureHandler(function(error) {
+            console.error('Error generating report:', error);
+            if (resultDiv) {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        خطأ في إنشاء التقرير: ${error.message}
+                    </div>
+                `;
+            }
+        })
+        .getFinancialReport(period);
+}
+
+// ============================================================
+// RENDER FINANCIAL REPORT RESULT (ENGLISH VERSION)
+// ============================================================
+function renderFinancialReportResult(result) {
+    try {
+        var container = document.getElementById('financialReportResult');
+        if (!container) return;
+        
+        if (result.error) {
+            container.innerHTML = `<div class="alert alert-danger">${result.error}</div>`;
+            return;
+        }
+        
+        var periodNames = {
+            'month': 'Monthly',
+            '3months': '3 Months',
+            '6months': '6 Months',
+            'year': 'Yearly'
+        };
+        var periodName = periodNames[result.period] || result.period || 'Monthly';
+        
+        var html = `
+            <div class="report-container">
+                <!-- Report Header -->
+                <div class="report-header text-center mb-4">
+                    <h3 class="fw-bold">📊 Financial Report - ${periodName}</h3>
+                    <p class="text-muted">${result.monthsUsed ? 'Period: ' + result.monthsUsed.join(' - ') : ''}</p>
+                    <hr>
+                </div>
+                
+                <!-- Summary Cards -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3 col-6">
+                        <div class="card text-center shadow-sm summary-card">
+                            <div class="card-body">
+                                <h5 class="text-muted">Work Orders</h5>
+                                <h3 class="text-primary">${result.totalWO || 0}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="card text-center shadow-sm summary-card">
+                            <div class="card-body">
+                                <h5 class="text-muted">Projects</h5>
+                                <h3 class="text-success">${result.totalProjects || 0}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="card text-center shadow-sm summary-card">
+                            <div class="card-body">
+                                <h5 class="text-muted">Sites</h5>
+                                <h3 class="text-info">${result.totalSites || 0}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="card text-center shadow-sm summary-card">
+                            <div class="card-body">
+                                <h5 class="text-muted">Total Contractor Cost</h5>
+                                <h3 class="text-warning">${formatNumber(result.totalContractorCost || 0)}</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Detailed Cost Table -->
+                <div class="card shadow-sm">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">📋 Cost Details</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Item</th>
+                                        <th class="text-end">Amount (SAR)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Contractor Labor - Work Orders</td>
+                                        <td class="text-end">${formatNumber(result.contractorWO || 0)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Contractor Labor - Development Projects</td>
+                                        <td class="text-end">${formatNumber(result.contractorDev || 0)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Parts - Work Orders</td>
+                                        <td class="text-end">${formatNumber(result.contractorPartsWO || 0)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Parts - Development Projects</td>
+                                        <td class="text-end">${formatNumber(result.contractorPartsDev || 0)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Total Labor</td>
+                                        <td class="text-end">${formatNumber(result.totalLabor || 0)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Total Parts</td>
+                                        <td class="text-end">${formatNumber(result.totalParts || 0)}</td>
+                                    </tr>
+                                    <tr class="table-warning fw-bold">
+                                        <td>🟡 Total Contractor Cost</td>
+                                        <td class="text-end">${formatNumber(result.totalContractorCost || 0)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Company Parts</td>
+                                        <td class="text-end">${formatNumber(result.companyPartsCost || 0)}</td>
+                                    </tr>
+                                    <tr class="table-success fw-bold">
+                                        <td>🟢 Total Company Cost</td>
+                                        <td class="text-end">${formatNumber(result.totalCompanyCost || 0)}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Sites List -->
+                ${result.sitesList ? `
+                <div class="card shadow-sm mt-3">
+                    <div class="card-body">
+                        <h6 class="text-muted">📍 Sites Included</h6>
+                        <p class="mb-0">${result.sitesList}</p>
+                    </div>
+                </div>
+                ` : ''}
+                
+                <!-- Report Footer -->
+                <div class="text-center text-muted mt-4">
+                    <small>Report generated: ${new Date().toLocaleString('en-US')}</small>
+                </div>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+        
+        // Update active button
+        var buttons = document.querySelectorAll('[onclick^="generateFinancialReport"]');
+        buttons.forEach(function(btn) {
+            btn.classList.remove('active');
+            if (btn.getAttribute('onclick').includes("'" + result.period + "'")) {
+                btn.classList.add('active');
+                btn.style.border = '3px solid #000';
+            } else {
+                btn.style.border = 'none';
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error in renderFinancialReportResult:', error);
+        var container = document.getElementById('financialReportResult');
+        if (container) {
+            container.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Error displaying report: ${error.message}
+                </div>
+            `;
+        }
+    }
+}
+
+// ============================================================
+// GENERATE FINANCIAL REPORT
+// ============================================================
+function generateFinancialReport(period) {
+    var resultDiv = document.getElementById('financialReportResult');
+    if (resultDiv) {
+        resultDiv.innerHTML = `
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3">Generating report...</p>
+            </div>
+        `;
+    }
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            renderFinancialReportResult(result);
+        })
+        .withFailureHandler(function(error) {
+            console.error('Error:', error);
+            if (resultDiv) {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Error: ${error.message}
+                    </div>
+                `;
+            }
+        })
+        .getFinancialReport(period);
+}
+
+// ============================================================
+// HELPER: FORMAT NUMBERS
+// ============================================================
+function formatNumber(number) {
+    if (number === undefined || number === null || isNaN(number)) return '0';
+    return Number(number).toLocaleString('en-US', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+    });
+}
+
+// ================= GALLERY =================
+function renderGallery() {
+  var content = document.getElementById("content");
+  content.innerHTML = `
+    <h2>🖼️ Gallery</h2>
+    <p class="text-muted">Click on any image to view full size</p>
+    <div id="galleryContainer">
+      <div class="text-center"><div class="spinner-border"></div><p>Loading images...</p></div>
+    </div>
+  `;
+  
+  google.script.run
+    .withSuccessHandler(function(data) {
+      console.log("✅ Gallery Data received:", data);
+      console.log("📊 Number of images:", data ? data.length : 0);
+      
+      var container = document.getElementById("galleryContainer");
+      if (!data || data.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center">📭 No images found</p>';
+        return;
+      }
+      
+      var html = '<div class="row g-3">';
+      var count = 0;
+      
+      for (var i = 0; i < data.length; i++) {
+        var item = data[i];
+        var imageData = item.image || '';
+        var source = item.source || '';
+        var reference = item.reference || '';
+        var site = item.site || '';
+        
+        if (imageData && imageData.length > 10) {
+          if (!imageData.startsWith("data:image")) {
+            imageData = "data:image/jpeg;base64," + imageData;
+          }
+          count++;
+          
+          var badgeColor = '';
+          if (source === 'Work Order') badgeColor = 'bg-danger';
+          else if (source === 'Development Project') badgeColor = 'bg-success';
+          else if (source === 'Site Task') badgeColor = 'bg-info';
+          else badgeColor = 'bg-secondary';
+          
+          html += `
+            <div class="col-md-3 col-sm-4 col-6">
+              <div class="card gallery-card shadow-sm h-100">
+                <img src="${imageData}" 
+                     class="card-img-top gallery-img" 
+                     style="height:200px;object-fit:cover;cursor:pointer;border-radius:8px 8px 0 0;"
+                     onclick="viewFullImage('${imageData}')"
+                     loading="lazy"
+                     alt="${reference}">
+                <div class="card-body text-center p-2">
+                  <small class="text-muted">📋 ${reference}</small>
+                  ${site ? `<br><small class="text-muted">📍 ${site}</small>` : ''}
+                  <br><span class="badge ${badgeColor}" style="font-size:10px;">${source}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+      }
+      
+      html += '</div>';
+      if (count === 0) {
+        html = '<p class="text-muted text-center">📭 No images found</p>';
+      }
+      
+      container.innerHTML = html;
+      console.log("✅ Gallery rendered with " + count + " images");
+    })
+    .withFailureHandler(function(err) {
+      console.error("❌ Gallery Error:", err);
+      document.getElementById("galleryContainer").innerHTML = '<div class="alert alert-danger">❌ Error: ' + err.message + '</div>';
+    })
+    .getGalleryImages();
+}
+
+// ================= DEVELOPMENT PROJECTS =================
+function renderDevProjects() {
+  var content = document.getElementById("content");
+  content.innerHTML = `
+    <h2>🏗️ Development Projects</h2>
+    <button class="btn btn-primary mb-3" onclick="openDevProjectModal()">+ New Project</button>
+    <div id="devContainer">
+      <div class="text-center">
+        <div class="spinner-border"></div>
+        <p>Loading projects...</p>
+      </div>
+    </div>
+  `;
+  
+  google.script.run
+    .withSuccessHandler(function(data) {
+      var container = document.getElementById("devContainer");
+      if (!data || data.length === 0) {
+        container.innerHTML = '<p class="text-muted">No development projects found</p>';
+        return;
+      }
+      
+      var rows = '';
+      for (var i = 0; i < data.length; i++) {
+        var project = data[i];
+        var isClosed = (project.status === 'Closed' || project.status === 'closed' || project.status === 'Completed');
+        var statusBadge = isClosed 
+          ? '<span class="badge bg-success">✅ Closed</span>' 
+          : '<span class="badge bg-warning text-dark">🔄 Active</span>';
+        
+        rows += `
+          <tr>
+            <td>${project.id || ''}</td>
+            <td>${project.name || ''}</td>
+            <td>${project.description || '-'}</td>
+            <td>${statusBadge}</td>
+            <td>${(project.totalCost || 0).toLocaleString()} SAR</td>
+            <td>
+              ${isClosed ? '✅ Closed' : `<button class="btn btn-sm btn-danger mb-1" onclick="closeDevProject('${project.id}')">🔒 Close</button>`}
+              <button class="btn btn-sm btn-info" onclick="openPurchaseModal('Development Project','${project.id}')">📦 Parts</button>
+            </td>
+          </tr>
+        `;
+      }
+      
+      container.innerHTML = `
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Project</th>
+              <th>Description</th>
+              <th>Status</th>
+              <th>Total Cost</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      `;
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById("devContainer").innerHTML = '<div class="alert alert-danger">❌ Error: ' + err.message + '</div>';
+    })
+    .getDevProjects();
+}
+
+// ================= CLOSE DEVELOPMENT PROJECT =================
+function closeDevProject(projectId) {
+  customConfirm("Are you sure you want to close this project?", function(confirmed) {
+    if (!confirmed) return;
+    
+    customPrompt("💰 Enter total project cost (SAR):", function(totalCost) {
+      if (totalCost === null || totalCost === undefined) return;
+      
+      totalCost = totalCost.replace(/,/g, '').trim();
+      if (isNaN(totalCost) || totalCost < 0) {
+        customAlert("⚠️ Please enter a valid amount (0 or more)", "خطأ");
+        return;
+      }
+      
+      customPrompt("💰 Enter contractor cost (SAR):", function(contractorCost) {
+        if (contractorCost === null || contractorCost === undefined) return;
+        
+        contractorCost = contractorCost.replace(/,/g, '').trim();
+        if (isNaN(contractorCost) || contractorCost < 0) {
+          customAlert("⚠️ Please enter a valid amount (0 or more)", "خطأ");
+          return;
+        }
+        
+        customPrompt("📝 Enter closing notes:", function(notes) {
+          if (notes === null || notes === undefined) return;
+          if (notes.trim() === "") {
+            customAlert("⚠️ Please enter some notes before closing", "خطأ");
+            return;
+          }
+          
+          google.script.run
+            .withSuccessHandler(function(msg) {
+              customAlert(msg, "✅ نجاح");
+              loadPage('devprojects');
+            })
+            .withFailureHandler(function(err) {
+              customAlert("❌ Error: " + err.message, "خطأ");
+            })
+            .closeDevProject(projectId, { 
+              totalCost: totalCost,
+              contractorCost: contractorCost,
+              notes: notes
+            });
+        });
+      });
+    });
+  });
+}
+
+// ================= CLOSE WORK ORDER =================
+function closeWorkOrder(woNo) {
+  customConfirm("Are you sure you want to close this work order?", function(confirmed) {
+    if (!confirmed) return;
+    
+    customPrompt("💰 Enter final cost (SAR):", function(totalCost) {
+      if (totalCost === null || totalCost === undefined) return;
+      
+      totalCost = totalCost.replace(/,/g, '').trim();
+      if (isNaN(totalCost) || totalCost < 0) {
+        customAlert("⚠️ Please enter a valid amount (0 or more)", "خطأ");
+        return;
+      }
+      
+      customPrompt("💰 Enter contractor cost (SAR):", function(contractorCost) {
+        if (contractorCost === null || contractorCost === undefined) return;
+        
+        contractorCost = contractorCost.replace(/,/g, '').trim();
+        if (isNaN(contractorCost) || contractorCost < 0) {
+          customAlert("⚠️ Please enter a valid amount (0 or more)", "خطأ");
+          return;
+        }
+        
+        customPrompt("📝 Enter closing notes:", function(notes) {
+          if (notes === null || notes === undefined) return;
+          if (notes.trim() === "") {
+            customAlert("⚠️ Please enter some notes before closing", "خطأ");
+            return;
+          }
+          
+          google.script.run
+            .withSuccessHandler(function(msg) {
+              customAlert(msg, "✅ نجاح");
+              loadPage('workorders');
+            })
+            .withFailureHandler(function(err) {
+              customAlert("❌ Error: " + err.message, "خطأ");
+            })
+            .closeWorkOrder(woNo, { 
+              finalCost: totalCost,
+              contractorCost: contractorCost,
+              notes: notes
+            });
+        });
+      });
+    });
+  });
+}
+
+// ================= OPEN MODALS =================
+function openSiteTaskModal() {
+  var modalElement = document.getElementById('siteTaskModal');
+  if (!modalElement) {
+    console.error("❌ siteTaskModal not found!");
+    return;
+  }
+  
+  var fields = ['siteTaskSite', 'siteTaskDesc', 'siteTaskStartDate', 'siteTaskAssigned', 'siteTaskMessage'];
+  fields.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  
+  var fileInput = document.getElementById('siteTaskImage');
+  if (fileInput) fileInput.value = '';
+  
+  var modal = new bootstrap.Modal(modalElement);
+  modal.show();
+}
+
+function openSiteModal() {
+  var modalElement = document.getElementById('siteModal');
+  if (!modalElement) {
+    console.error("❌ siteModal not found!");
+    return;
+  }
+  var siteName = document.getElementById('siteName');
+  var siteRegion = document.getElementById('siteRegion');
+  if (siteName) siteName.value = '';
+  if (siteRegion) siteRegion.value = '';
+  
+  var modal = new bootstrap.Modal(modalElement);
+  modal.show();
+}
+
+function openDevProjectModal() {
+  var modalElement = document.getElementById('devProjectModal');
+  if (!modalElement) {
+    console.error("❌ devProjectModal not found!");
+    return;
+  }
+  
+  var fields = ['devProjectName', 'devProjectSite', 'devProjectDesc', 
+                'devProjectContractor', 'devProjectBudget', 
+                'devProjectStartDate', 'devProjectEndDate', 'devProjectMessage'];
+  fields.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  
+  var fileInput = document.getElementById('devProjectImage');
+  if (fileInput) fileInput.value = '';
+  
+  var status = document.getElementById('devProjectStatus');
+  if (status) status.value = 'Planned';
+  
+  var modal = new bootstrap.Modal(modalElement);
+  modal.show();
+}
+
+function openPurchaseModal(type, referenceId) {
+  var modalElement = document.getElementById('purchaseModal');
+  if (!modalElement) {
+    console.error("❌ purchaseModal not found!");
+    return;
+  }
+  
+  var purchaseType = document.getElementById("purchaseType");
+  var purchaseReference = document.getElementById("purchaseReference");
+  var purchaseItem = document.getElementById("purchaseItem");
+  var purchaseQty = document.getElementById("purchaseQty");
+  var purchaseCost = document.getElementById("purchaseCost");
+  var purchaseSupplier = document.getElementById("purchaseSupplier");
+  var purchaseDate = document.getElementById("purchaseDate");
+  var purchaseNotes = document.getElementById("purchaseNotes");
+  
+  if (purchaseType) purchaseType.value = type || "General";
+  if (purchaseReference) purchaseReference.value = referenceId || "";
+  if (purchaseItem) purchaseItem.value = "";
+  if (purchaseQty) purchaseQty.value = "";
+  if (purchaseCost) purchaseCost.value = "";
+  if (purchaseSupplier) purchaseSupplier.value = "";
+  if (purchaseDate) purchaseDate.value = "";
+  if (purchaseNotes) purchaseNotes.value = "";
+  
+  var modal = new bootstrap.Modal(modalElement);
+  modal.show();
+}
+
+// ================= SAVE FUNCTIONS =================
+function savePurchaseForm() {
+  var purchaseItem = document.getElementById("purchaseItem");
+  if (!purchaseItem || !purchaseItem.value) {
+    customAlert("⚠️ Enter item name", "تنبيه");
+    return;
+  }
+  
+  var data = {
+    type: document.getElementById("purchaseType")?.value || "General",
+    referenceId: document.getElementById("purchaseReference")?.value || "",
+    itemName: purchaseItem.value,
+    quantity: document.getElementById("purchaseQty")?.value || 0,
+    unitCost: document.getElementById("purchaseCost")?.value || 0,
+    supplier: document.getElementById("purchaseSupplier")?.value || "",
+    purchasedBy: document.getElementById("purchaseBy")?.value || "Company",
+    purchaseDate: document.getElementById("purchaseDate")?.value || "",
+    notes: document.getElementById("purchaseNotes")?.value || ""
+  };
+  
+  google.script.run
+    .withSuccessHandler(function(msg) {
+      customAlert(msg, "✅ نجاح");
+      var modal = bootstrap.Modal.getInstance(document.getElementById("purchaseModal"));
+      if (modal) modal.hide();
+    })
+    .withFailureHandler(function(err) {
+      customAlert("❌ Error: " + err.message, "خطأ");
+    })
+    .savePurchase(data);
+}
+
+function saveSiteForm() {
+  console.log("✅ saveSiteForm called!");
+  
+  var siteName = document.getElementById('siteName');
+  var siteRegion = document.getElementById('siteRegion');
+  
+  if (!siteName || !siteName.value) {
+    customAlert("⚠️ Please enter site name", "تنبيه");
+    return;
+  }
+  
+  var data = {
+    site: siteName.value,
+    region: siteRegion ? siteRegion.value : ""
+  };
+  
+  google.script.run
+    .withSuccessHandler(function(msg) {
+      customAlert(msg, "✅ نجاح");
+      var modal = bootstrap.Modal.getInstance(document.getElementById('siteModal'));
+      if (modal) modal.hide();
+      loadPage('sites');
+    })
+    .withFailureHandler(function(err) {
+      customAlert("❌ Error: " + err.message, "خطأ");
+    })
+    .saveSite(data);
+}
+
+function saveWorkOrderForm() {
+  console.log("✅ saveWorkOrderForm called!");
+  
+  var site = document.getElementById('woSite')?.value || "";
+  var area = document.getElementById('woArea')?.value || "";
+  var category = document.getElementById('woCategory')?.value || "";
+  var priority = document.getElementById('woPriority')?.value || "";
+  var description = document.getElementById('woDescription')?.value || "";
+  var assignedTo = document.getElementById('woAssignedTo')?.value || "";
+  var contractor = document.getElementById('woContractor')?.value || "";
+  
+  var fileInput = document.getElementById('woImage');
+  var file = fileInput ? fileInput.files[0] : null;
+
+  var data = {
+    site: site,
+    area: area,
+    category: category,
+    priority: priority,
+    description: description,
+    assignedTo: assignedTo,
+    contractor: contractor,
+    image: ""
+  };
+
+  if (file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      data.image = e.target.result;
+      sendWorkOrder(data);
+    };
+    reader.readAsDataURL(file);
+  } else {
+    sendWorkOrder(data);
+  }
+}
+
+function sendWorkOrder(data) {
+  google.script.run
+    .withSuccessHandler(function(msg) {
+      console.log("✅ Success:", msg);
+      customAlert(msg, "✅ نجاح");
+      var modal = bootstrap.Modal.getInstance(document.getElementById('woModal'));
+      if (modal) modal.hide();
+      loadPage('workorders');
+    })
+    .withFailureHandler(function(err) {
+      console.log("❌ Error:", err);
+      customAlert("❌ Error: " + err.message, "خطأ");
+    })
+    .saveWorkOrder(data);
+}
+
+function saveSiteTaskForm() {
+  console.log("✅ saveSiteTaskForm called!");
+  
+  var site = document.getElementById('siteTaskSite')?.value || "";
+  var description = document.getElementById('siteTaskDesc')?.value || "";
+  var startDate = document.getElementById('siteTaskStartDate')?.value || "";
+  var assignedTo = document.getElementById('siteTaskAssigned')?.value || "";
+  var notes = document.getElementById('siteTaskMessage')?.value || "";
+  
+  var fileInput = document.getElementById('siteTaskImage');
+  var file = fileInput ? fileInput.files[0] : null;
+
+  var data = {
+    site: site,
+    description: description,
+    startDate: startDate,
+    assignedTo: assignedTo,
+    notes: notes,
+    image: ""
+  };
+
+  if (file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      data.image = e.target.result;
+      sendSiteTask(data);
+    };
+    reader.readAsDataURL(file);
+  } else {
+    sendSiteTask(data);
+  }
+}
+
+function sendSiteTask(data) {
+  google.script.run
+    .withSuccessHandler(function(msg) {
+      console.log("✅ Success:", msg);
+      customAlert(msg, "✅ نجاح");
+      var modal = bootstrap.Modal.getInstance(document.getElementById('siteTaskModal'));
+      if (modal) modal.hide();
+      loadPage('sites');
+    })
+    .withFailureHandler(function(err) {
+      console.log("❌ Error:", err);
+      customAlert("❌ Error: " + err.message, "خطأ");
+    })
+    .saveSiteTask(data);
+}
+
+function saveDevProjectForm() {
+  console.log("✅ saveDevProjectForm called!");
+  
+  var projectName = document.getElementById('devProjectName')?.value || "";
+  var site = document.getElementById('devProjectSite')?.value || "";
+  var description = document.getElementById('devProjectDesc')?.value || "";
+  var contractor = document.getElementById('devProjectContractor')?.value || "";
+  var budget = document.getElementById('devProjectBudget')?.value || 0;
+  var status = document.getElementById('devProjectStatus')?.value || "Planned";
+  var startDate = document.getElementById('devProjectStartDate')?.value || "";
+  var endDate = document.getElementById('devProjectEndDate')?.value || "";
+  
+  var fileInput = document.getElementById('devProjectImage');
+  var file = fileInput ? fileInput.files[0] : null;
+
+  var data = {
+    projectName: projectName,
+    site: site,
+    description: description,
+    contractor: contractor,
+    budget: budget,
+    status: status,
+    startDate: startDate,
+    endDate: endDate,
+    image: ""
+  };
+
+  if (file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      data.image = e.target.result;
+      sendDevProject(data);
+    };
+    reader.readAsDataURL(file);
+  } else {
+    sendDevProject(data);
+  }
+}
+
+function sendDevProject(data) {
+  google.script.run
+    .withSuccessHandler(function(msg) {
+      console.log("✅ Success:", msg);
+      customAlert(msg, "✅ نجاح");
+      var modal = bootstrap.Modal.getInstance(document.getElementById('devProjectModal'));
+      if (modal) modal.hide();
+      loadPage('devprojects');
+    })
+    .withFailureHandler(function(err) {
+      console.log("❌ Error:", err);
+      customAlert("❌ Error: " + err.message, "خطأ");
+    })
+    .saveDevProject(data);
+}
+
+// ================= LOAD PROJECT ACTIVITY =================
+function loadProjectActivity() {
+  var container = document.getElementById('projectActivityContainer');
+  if (!container) return;
+  
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (!data || data.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:#9ca3af;font-size:12px;margin:0;padding:8px 0;">📭 No data</p>';
+        return;
+      }
+      
+      var html = `
+        <table class="mini-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Project</th>
+              <th>Act</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var project = data[i];
+        var statusBadge = project.status === 'closed' || project.status === 'completed' 
+          ? '<span class="status-closed">✅</span>' 
+          : '<span class="status-open">🔄</span>';
+        
+        html += `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${project.name}</td>
+            <td><span class="badge-act">${project.activityCount}</span></td>
+            <td>${statusBadge}</td>
+          </tr>
+        `;
+      }
+      
+      html += `
+          </tbody>
+        </table>
+      `;
+      
+      container.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      container.innerHTML = '<p style="text-align:center;color:#ef4444;font-size:12px;padding:8px 0;">❌ ' + err.message + '</p>';
+    })
+    .getProjectActivity();
+}
+
+// ================= LOAD WORK ORDERS PER SITE =================
+function loadWorkOrdersPerSite() {
+  var container = document.getElementById('workOrdersPerSiteContainer');
+  if (!container) return;
+  
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (!data || data.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:#9ca3af;font-size:12px;margin:0;padding:8px 0;">📭 No data</p>';
+        return;
+      }
+      
+      var maxCount = data[0] ? data[0].count : 1;
+      
+      var html = `
+        <table class="mini-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Site</th>
+              <th>WO</th>
+              <th>Progress</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      
+      for (var i = 0; i < data.length; i++) {
+        var item = data[i];
+        var percent = Math.round((item.count / maxCount) * 100);
+        
+        html += `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${item.site}</td>
+            <td><span class="badge-wo">${item.count}</span></td>
+            <td>
+              <div class="progress-bar-mini">
+                <div class="fill" style="width:${percent}%;"></div>
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+      
+      html += `
+          </tbody>
+        </table>
+      `;
+      
+      container.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      container.innerHTML = '<p style="text-align:center;color:#ef4444;font-size:12px;padding:8px 0;">❌ ' + err.message + '</p>';
+    })
+    .getWorkOrdersPerSite();
+}
+
+
+
+// ================= AUTO LOAD =================
+document.addEventListener("DOMContentLoaded", function() {
+  console.log("🚀 DOM ready - loading login page...");
+  showLoginPage();
+});
+</script>
+
+</body>
+</html>

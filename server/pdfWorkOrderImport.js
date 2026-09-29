@@ -52,13 +52,58 @@ function extractLineItems(text) {
       quantity: Number(parts[3]),
       unit_price: Number(parts[4]),
       total: Number(parts[5]),
+      index: m.index,
     });
   }
 
   return items;
 }
 
-function parseRows(text, filename = "upload.pdf") {
+function normalizeSiteName(value, knownSites = []) {
+  const raw = clean(value);
+  if (!raw) return { site: "", area: "" };
+  const norm = raw.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const sites = [...knownSites].filter(Boolean).map((name) => ({
+    name: clean(name),
+    norm: clean(name).toLowerCase().replace(/[^a-z0-9]+/g, "")
+  })).sort((a,b) => b.norm.length - a.norm.length);
+
+  const exact = sites.find((s) => s.norm === norm);
+  if (exact) return { site: exact.name, area: "" };
+
+  const prefix = sites.find((s) => norm.startsWith(s.norm) && norm.length > s.norm.length);
+  if (prefix) {
+    const remainder = raw.slice(raw.toLowerCase().indexOf(prefix.name.toLowerCase()) + prefix.name.length).replace(/^[-,:\s]+/, "");
+    return { site: prefix.name, area: clean(remainder) };
+  }
+
+  const compact = raw.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const fuzzy = sites.find((s) => {
+    const a = s.norm, b = compact;
+    if (a.length < 5 || b.length < 5) return false;
+    const distance = levenshtein(a, b);
+    return distance <= Math.max(1, Math.floor(Math.min(a.length,b.length) * 0.12));
+  });
+  return fuzzy ? { site: fuzzy.name, area: "" } : { site: raw, area: "" };
+}
+
+function levenshtein(a, b) {
+  const prev = Array.from({length:b.length + 1}, (_,i) => i);
+  for (let i=1;i<=a.length;i++) {
+    const cur = [i];
+    for (let j=1;j<=b.length;j++) {
+      cur[j] = Math.min(
+        cur[j-1] + 1,
+        prev[j] + 1,
+        prev[j-1] + (a[i-1] === b[j-1] ? 0 : 1)
+      );
+    }
+    for (let j=0;j<cur.length;j++) prev[j]=cur[j];
+  }
+  return prev[b.length];
+}
+
+function parseRows(text, filename = "upload.pdf", knownSites = []) {
   const source = String(text || "").replace(/\r/g, "");
   const flat = clean(source);
   const rows = [];
@@ -117,40 +162,85 @@ function parseRows(text, filename = "upload.pdf") {
 
   if (current) rows.push(current);
 
-  // Some camp-maintenance PDFs are not work-order forms. They are a
-  // "Requested by / Site / Date / Subject" summary followed by a cost table.
-  // Treat the whole document as one work order instead of requiring a WO number.
+  // Camp-maintenance PDFs are often cost-summary tables rather than standard WO forms.
+  // pdf-parse can flatten the table, so Site/Subject text may appear between item rows.
+  // We must split the document into site sections and NEVER import the flattened text
+  // as one fake WO.
   if (!rows.length) {
-    const requestedBy = match(flat, [/requested\s*by\s*:\s*(.+?)(?=\s+site\s*:|\s+subject\s*:|$)/i]);
-    const siteHeader = match(flat, [/site\s*:\s*(.+?)(?=\s+\d{1,2}[-\/]\w+[-\/]?\d{2,4}|\s+subject\s*:|$)/i]);
-    const subject = match(flat, [/subject\s*:\s*(.+)$/i]);
+    const requestedBy = match(flat, [/requested\s*by\s*\s*:?\s*(.+?)(?=\s+site\s*:|\s+subject\s*:|$)/i]);
+    const subject = match(flat, [/subject\s*:\s*(.+?)(?=\s+\d+\s+.+?\s+(?:Pcs|Pc|L\.s|L\.m|m2|m3|m|Kg|Set|Nos?)\s+\d)/i]);
     const reportDate = dateValue(flat);
     const items = extractLineItems(flat);
 
-    if (items.length || subject || siteHeader) {
-      const subjectSite = subject.match(/\b(?:requirement|requi?rment)\b\s+(.+?)(?:\s*$)/i)?.[1] || "";
-      const site = subjectSite ? clean(subjectSite) : (siteHeader || "All Site");
-      const woBase = `PDF-${reportDate.replace(/-/g, "") || "UNDATED"}-${slug(site || filename).slice(0, 40)}`;
-      const itemText = items.map((x) =>
+    const candidateNames = [
+      ...knownSites,
+      "Alhalifah Alsabiyah",
+      "Alhaddar Diran",
+      "Al-Quwayiyiah Wadi Bida"
+    ].filter(Boolean);
+
+    const markers = [];
+    for (const name of candidateNames) {
+      const re = new RegExp(slug(name).replace(/-/g, "[\\s-]*"), "ig");
+      let m;
+      while ((m = re.exec(flat))) markers.push({ raw: m[0], index: m.index, name });
+    }
+
+    markers.sort((a,b) => a.index - b.index);
+    const uniqueMarkers = [];
+    for (const marker of markers) {
+      if (!uniqueMarkers.some((x) => Math.abs(x.index - marker.index) < marker.raw.length && x.name === marker.name)) {
+        uniqueMarkers.push(marker);
+      }
+    }
+
+    const sections = [];
+    if (uniqueMarkers.length) {
+      for (let i=0; i<uniqueMarkers.length; i++) {
+        const marker = uniqueMarkers[i];
+        const end = uniqueMarkers[i+1]?.index ?? flat.length;
+        const sectionText = flat.slice(marker.index, end);
+        const sectionItems = items.filter((item) => item.index >= marker.index && item.index < end);
+        if (sectionItems.length) sections.push({ rawSite: marker.name, text: sectionText, items: sectionItems });
+      }
+    }
+
+    if (!sections.length && items.length) {
+      const subjectSite = subject?.match(/\\b(?:requirement|requi?rment)\\b\\s+(.+?)(?:\\s*$)/i)?.[1] || "";
+      const fallbackSite = subjectSite || match(flat, [/site\\s*:\\s*(.+?)(?=\\s+subject\\s*:|\\s+\\d+\\s+|$)/i]);
+      sections.push({ rawSite: fallbackSite || "", text: flat, items });
+    }
+
+    for (let i=0; i<sections.length; i++) {
+      const section = sections[i];
+      const mapped = normalizeSiteName(section.rawSite, knownSites);
+      const site = mapped.site;
+      const area = mapped.area || "";
+      const sectionItems = section.items || [];
+      const itemText = sectionItems.map((x) =>
         `${x.no}. ${x.description} | Unit: ${x.unit} | Qty: ${x.quantity} | Unit Price: ${x.unit_price} | Total: ${x.total}`
       ).join("\n");
-      const grandTotal = items.reduce((sum, x) => sum + x.total, 0);
+      const grandTotal = sectionItems.reduce((sum, x) => sum + x.total, 0);
+      const datePart = reportDate.replace(/-/g, "") || "UNDATED";
+      const woBase = `PDF-${datePart}-${slug(site || section.rawSite || filename).slice(0, 40)}-${i+1}`;
 
       rows.push({
         wo_no: woBase,
         site,
-        area: "",
+        area,
         category: "Camp Maintenance",
         priority: "Medium",
-        description: subject || "Camp requirement imported from PDF",
+        description: clean(subject) || "Camp requirement imported from PDF",
         assigned_to: requestedBy || "",
         is_contractor: 0,
         contractor_name: "",
         performed_by: "",
         reported_date: reportDate,
+        final_cost: grandTotal,
+        parts_cost: 0,
         parts_used: itemText
           ? `Line items:\n${itemText}\nGrand Total: ${grandTotal}`
-          : "",
+          : ""
       });
     }
   }
@@ -198,11 +288,28 @@ async function extract(req) {
     throw new Error("Only PDF files are supported");
   }
   const parsed = await pdfParse(buffer);
+  let knownSites = [];
+  try {
+    const siteResult = await query("SELECT name FROM sites WHERE name IS NOT NULL ORDER BY LENGTH(name) DESC");
+    knownSites = (siteResult.rows || []).map((r) => r.name).filter(Boolean);
+  } catch (e) {
+    console.warn("[PDFWorkOrderImport:sites]", e.message);
+  }
+  const rows = parseRows(parsed.text, filename, knownSites);
+  const warnings = [];
+  if (!rows.length) warnings.push("No structured line items were detected.");
+  rows.forEach((r) => {
+    if (!r.site || r.site === "Unknown" || /^all site$/i.test(r.site)) warnings.push(`Site could not be mapped for ${r.wo_no}`);
+    if (/^PDF-UNDATED-/i.test(r.wo_no)) warnings.push(`Missing date for ${r.wo_no}`);
+    if (!r.description || /Imported from PDF/i.test(r.description)) warnings.push(`Description needs review for ${r.wo_no}`);
+  });
   return {
     filename,
     pages: parsed.numpages || 0,
     text: parsed.text || "",
-    rows: parseRows(parsed.text, filename),
+    rows,
+    warnings,
+    valid: rows.length > 0 && warnings.length === 0,
   };
 }
 
@@ -217,6 +324,8 @@ export function mountPdfWorkOrderImport(app) {
         count: r.rows.length,
         rows: r.rows,
         extractedTextLength: r.text.length,
+        warnings: r.warnings,
+        valid: r.valid,
       });
     } catch (e) {
       console.error("[PDFWorkOrderImport:preview]", e);
@@ -230,7 +339,15 @@ export function mountPdfWorkOrderImport(app) {
       if (!r.rows.length) {
         return res.status(400).json({
           success: false,
-          error: "No Work Orders could be detected in this PDF.",
+          error: "No structured Work Orders could be detected in this PDF.",
+        });
+      }
+      if (!r.valid) {
+        return res.status(400).json({
+          success: false,
+          error: "PDF preview is not valid for import. Review the detected Site/Date/Description fields first.",
+          warnings: r.warnings,
+          rows: r.rows,
         });
       }
 

@@ -287,7 +287,7 @@ export default function GMDashboardExecutive() {
 
       {section === 'financial' && (
         <div>
-          <div style={{ marginTop: 200, background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 20 }}>
+          <div style={{ marginTop: 20, background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 20 }}>
             <h2 style={{ marginTop: 0 }}>📈 Baseline vs Actual by Month</h2>
             {reportMonths.length ? (
               <ResponsiveContainer width="100%" height={320}>

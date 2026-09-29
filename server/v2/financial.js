@@ -7,6 +7,27 @@ export async function getFinancialReportV2({from=null,to=null}={}){
   if(to){params.push(to);where.push("month_start <= $"+params.length);}
   const baseline=(await v2Query("SELECT month_start,maintenance_baseline,development_baseline FROM fleet_erp_v2.baseline_monthly "+(where.length?"WHERE "+where.join(" AND "):"")+" ORDER BY month_start",params)).rows;
   const rows=[];
+  // MonthlySavings reference is the authoritative financial source and preserves the Google Sheet values for every month.
+  try {
+    const ref=(await v2Query("SELECT month,year,contractor_wo,contractor_dev,parts_wo,parts_dev,total_labor,total_parts,total_cost,maintenance_savings,development_savings FROM ref_monthly_savings ORDER BY year::int, id")).rows;
+    if(ref.length){
+      const fromKey=from ? String(from).slice(0,7) : null;
+      const toKey=to ? String(to).slice(0,7) : null;
+      const monthNames={january:'01',february:'02',march:'03',april:'04',may:'05',june:'06',july:'07',august:'08',september:'09',october:'10',november:'11',december:'12',jan:'01',feb:'02',mar:'03',apr:'04',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
+      const rows=ref.map(r=>{
+        const mn=String(r.month||'').trim().toLowerCase(); const key=String(r.year||'')+'-'+(monthNames[mn]||'01');
+        const contractorWO=Number(r.contractor_wo||0),contractorDev=Number(r.contractor_dev||0),partsWO=Number(r.parts_wo||0),partsDev=Number(r.parts_dev||0);
+        const totalLabor=Number(r.total_labor||0),totalParts=Number(r.total_parts||0),totalCost=Number(r.total_cost||0);
+        const maintenanceSavings=Number(r.maintenance_savings||0),developmentSavings=Number(r.development_savings||0);
+        const maintenanceBaseline=20577,developmentBaseline=132551,totalBaseline=maintenanceBaseline+developmentBaseline;
+        return {month:key,year:Number(r.year),contractorWO,contractorDev,partsWO,partsDev,totalLabor,totalParts,totalCost,maintenanceSavings,developmentSavings,
+          maintenancePct:maintenanceSavings/maintenanceBaseline*100,developmentPct:developmentSavings/developmentBaseline*100,totalSavingsPct:(maintenanceSavings+developmentSavings)/totalBaseline*100,
+          actual:totalCost,salary:0,maintenanceBaseline,developmentBaseline,totalBaseline,savings:maintenanceSavings+developmentSavings,savingsPercent:(maintenanceSavings+developmentSavings)/totalBaseline*100};
+      }).filter(r=>(!fromKey||r.month>=fromKey)&&(!toKey||r.month<=toKey));
+      const totals=rows.reduce((a,r)=>({baseline:a.baseline+r.totalBaseline,actual:a.actual+r.totalCost,savings:a.savings+r.savings}),{baseline:0,actual:0,savings:0});
+      return {rules:{source:"MonthlySavings / Google Sheet reference",actual:"Total Cost from reference",savings:"Reference Maintenance Savings + Development Savings",savingsPercent:"Total Savings / Total Baseline * 100"},months:rows,totals:{...totals,savingsPercent:totals.baseline?totals.savings/totals.baseline*100:0,months:rows.length}};
+    }
+  } catch (_) { /* fall back to existing DB calculation */ }
   for(const b of baseline){
     const d=new Date(String(b.month_start)+"T00:00:00Z");const y=d.getUTCFullYear(),m=d.getUTCMonth()+1;
     const start=y+"-"+String(m).padStart(2,"0")+"-01";

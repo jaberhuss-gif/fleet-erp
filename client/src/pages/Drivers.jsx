@@ -3,13 +3,13 @@ import api from '../api/client';
 import { exportToCSV } from '../api/export';
 import { printContent } from '../api/print';
 
-export default function Drivers() {
+export default function Drivers({ initialAction = null }) {
   const [drivers, setDrivers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(initialAction === 'add');
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');

@@ -7,17 +7,6 @@ import { printContent } from '../api/print';
 const money = value => `${Number(value || 0).toLocaleString()} SAR`;
 const pct = (value, total) => total > 0 ? Math.round((value / total) * 100) : 0;
 
-function KPI({ label, value, note, tone = 'blue' }) {
-  return (
-    <div style={{ background: 'var(--card-bg, #fff)', border: '1px solid var(--border-color, #e2e8f0)', borderRadius: 14, padding: 18, minHeight: 108, boxShadow: '0 2px 8px rgba(15,23,42,.05)' }}>
-      <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: '#64748b' }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 800, color: tone === 'red' ? '#dc2626' : tone === 'green' ? '#059669' : tone === 'amber' ? '#d97706' : '#1d4ed8', marginTop: 8 }}>{value}</div>
-      {note && <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>{note}</div>}
-    </div>
-  );
-}
-
-
 function BuildingGMDetail({ view, selectedMonths, records, monthLabel }) {
   const monthSet = new Set(selectedMonths);
   const key = value => String(value || '').slice(0, 7);
@@ -73,57 +62,6 @@ function BuildingGMDetail({ view, selectedMonths, records, monthLabel }) {
           </table>
         </div>
       )}
-    </div>
-  );
-}
-
-function MonthlyBuildingCards({ rows }) {
-  const months = rows.filter(row => row.month === '2026-07' || row.month === '2026-08');
-
-  if (!months.length) return null;
-
-  return (
-    <div style={{ marginBottom: 20 }}>
-      <div style={{ marginBottom: 12 }}>
-        <h2 style={{ margin: 0 }}>Building Maintenance & Projects — July & August 2026</h2>
-        <div style={{ color: '#64748b', fontSize: 12, marginTop: 5 }}>
-          Same Apps Script calculation logic: Maintenance = Contractor WO + Contractor Parts + Maintenance Salary; Projects = Contractor Development + Development Parts + Development Salary; Savings = Baseline − Actual.
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 16 }}>
-        {months.map(row => {
-          const maintenanceBaseline = 20577;
-          const developmentBaseline = 132551;
-          const totalBaseline = maintenanceBaseline + developmentBaseline;
-          const maintActual = Number(row.maintActual || 0);
-          const devActual = Number(row.devActual || 0);
-          const maintSavings = Number(row.maintSavings ?? (maintenanceBaseline - maintActual));
-          const devSavings = Number(row.devSavings ?? (developmentBaseline - devActual));
-          const totalActual = maintActual + devActual + Number(row.otherPurchases || 0);
-          const totalSavings = Number(row.totalSavings ?? (maintSavings + devSavings));
-          const totalSavingsPct = Number(row.totalSavingsPct ?? ((totalSavings / totalBaseline) * 100));
-          const monthLabel = row.month === '2026-07' ? 'July 2026' : 'August 2026';
-
-          return (
-            <div key={row.month} style={{ background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 18 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                <h3 style={{ margin: 0 }}>{monthLabel}</h3>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>{totalSavingsPct.toFixed(1)}% savings</span>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 10 }}>
-                <KPI label="Maintenance Actual" value={money(maintActual)} note={`${row.employeeWOCount || 0} internal WO • ${row.contractorWOCount || 0} contractor WO`} />
-                <KPI label="Maintenance Savings" value={money(maintSavings)} note={`${Number(row.maintPct || (maintenanceBaseline ? maintSavings / maintenanceBaseline * 100 : 0)).toFixed(1)}% vs baseline`} tone="green" />
-                <KPI label="Projects Actual" value={money(devActual)} note={`${Number(row.internalProjectCount || 0) + Number(row.contractorProjectCount || 0)} projects`} />
-                <KPI label="Projects Savings" value={money(devSavings)} note={`${Number(row.devPct || (developmentBaseline ? devSavings / developmentBaseline * 100 : 0)).toFixed(1)}% vs baseline`} tone="green" />
-                <KPI label="Total Actual" value={money(totalActual)} note={Number(row.otherPurchases || 0) ? `Other purchases ${money(row.otherPurchases)}` : 'Maintenance + Projects'} tone="amber" />
-                <KPI label="Total Savings" value={money(totalSavings)} note={`Baseline ${money(totalBaseline)}`} tone="green" />
-              </div>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -243,8 +181,6 @@ export default function GMDashboardExecutive() {
             <KPI label="Actual Cost" value={money(grand.totalActual)} note={`Baseline ${money(grand.totalBaseline)}`} />
           </div>
 
-          <MonthlyBuildingCards rows={reportMonths} />
-
           <div style={{ marginBottom: 20, background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 18 }}>
             <h2 style={{ margin: '0 0 6px' }}>Building Maintenance & Projects</h2>
             <div style={{ color: '#64748b', fontSize: 12, marginBottom: 14 }}>
@@ -308,7 +244,7 @@ export default function GMDashboardExecutive() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 16 }}>
-            <div style={{ background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 20 }}>
+            <div>
               <h2 style={{ marginTop: 0 }}>Operational Snapshot</h2>
               <div style={{ display: 'grid', gap: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Maintenance W.O. Cost</span><strong>{money(building?.workOrders?.totalCost)}</strong></div>
@@ -317,7 +253,7 @@ export default function GMDashboardExecutive() {
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Closed Tickets</span><strong>{ticketSummary.closed || 0}</strong></div>
               </div>
             </div>
-            <div style={{ background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 20 }}>
+            <div>
               <h2 style={{ marginTop: 0 }}>Management Attention</h2>
               <div style={{ display: 'grid', gap: 10 }}>
                 <div>🚗 <strong>{vehicles.urgent || 0}</strong> vehicles require immediate maintenance attention.</div>
@@ -338,7 +274,7 @@ export default function GMDashboardExecutive() {
             <KPI label="Oil Overdue" value={vehicles.urgent || 0} note="Immediate action" tone="red" />
             <KPI label="Warning" value={vehicles.warning || 0} note="Approaching service threshold" tone="amber" />
           </div>
-          <div style={{ background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 20 }}>
+          <div>
             <h2 style={{ marginTop: 0 }}>Fleet Management Summary</h2>
             <p style={{ color: '#64748b' }}>Vehicle details, KM records, maintenance history, inspections and driver issue reporting are managed from the Fleet / Vehicles module. GM access remains read-only.</p>
             {alerts && <div style={{ marginTop: 16 }}><strong>Current vehicle alert data is available.</strong> Use Fleet / Vehicles for the detailed list.</div>}
@@ -347,7 +283,7 @@ export default function GMDashboardExecutive() {
       )}
 
       {section === 'financial' && (
-        <div style={{ background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 20 }}>
+        <div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14 }}>
             <KPI label="Total Baseline" value={money(grand.totalBaseline)} />
             <KPI label="Total Actual" value={money(grand.totalActual)} tone="green" />
@@ -376,9 +312,7 @@ export default function GMDashboardExecutive() {
               <div className="alert alert-info">No monthly financial data available.</div>
             )}
           </div>
-          <div style={{ marginTop: 14, padding: 14, background: '#f8fafc', borderRadius: 10, color: '#475569' }}>
-            Detailed Financial Report remains available through the Reports module. This GM view shows executive figures plus the monthly cost chart.
-          </div>
+          
         </div>
       )}
     </div>

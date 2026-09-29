@@ -1,44 +1,46 @@
 import { useState } from 'react';
-import BuildingDashboard from './BuildingDashboard';
 import WorkOrders from './WorkOrders';
 import Projects from './Projects';
 import Purchases from './Purchases';
 
 export default function BuildingMaintenance({ user, access = {} }) {
-  const canView = (module) => user?.role === 'Owner' || !!access?.[module]?.can_view;
+  const [sub, setSub] = useState(null);
 
-  const tabs = [
-    { id: 'dashboard', module: 'building', label: 'Dashboard' },
-    { id: 'work-orders', module: 'building', label: 'Work Orders' },
-    { id: 'projects', module: 'projects', label: 'Projects' },
-    { id: 'purchases', module: 'purchase_requests', label: 'Purchases' }
-  ].filter(t => canView(t.module));
+  if (sub === 'work-orders') {
+    return (
+      <div>
+        <button className="btn btn-warning" onClick={() => setSub(null)}>Back</button>
+        <WorkOrders user={user} access={access} />
+      </div>
+    );
+  }
 
-  const [sub, setSub] = useState(() => tabs[0]?.id || 'dashboard');
-  const current = tabs.find(t => t.id === sub) || tabs[0];
+  if (sub === 'projects') {
+    return (
+      <div>
+        <button className="btn btn-warning" onClick={() => setSub(null)}>Back</button>
+        <Projects user={user} access={access} />
+      </div>
+    );
+  }
 
-  if (!current) {
-    return <div className="alert alert-error">No Building / Maintenance section has been assigned.</div>;
+  if (sub === 'purchases') {
+    return (
+      <div>
+        <button className="btn btn-warning" onClick={() => setSub(null)}>Back</button>
+        <Purchases user={user} access={access} />
+      </div>
+    );
   }
 
   return (
-    <div>
-      <div className="sub-nav">
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            className={sub === t.id ? 'sub-btn active' : 'sub-btn'}
-            onClick={() => setSub(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
+    <div className="panel">
+      <h2>Building Maintenance</h2>
+      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '20px' }}>
+        <button className="btn btn-primary" onClick={() => setSub('work-orders')}>Work Orders</button>
+        <button className="btn btn-primary" onClick={() => setSub('projects')}>Projects</button>
+        <button className="btn btn-primary" onClick={() => setSub('purchases')}>Purchases</button>
       </div>
-
-      {sub === 'dashboard' && <BuildingDashboard />}
-      {sub === 'work-orders' && <WorkOrders user={user} access={access} />}
-      {sub === 'projects' && <Projects user={user} access={access} />}
-      {sub === 'purchases' && <Purchases user={user} access={access} />}
     </div>
   );
 }

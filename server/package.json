@@ -14,7 +14,9 @@
     "firebase-admin": "^13.5.0",
     "fleet-erp-monorepo": "file:..",
     "jsonwebtoken": "^9.0.3",
-    "pg": "^8.23.0"
+    "pg": "^8.23.0",
+    "busboy": "^1.6.0",
+    "pdf-parse": "^1.1.1"
   },
   "license": "ISC"
 }

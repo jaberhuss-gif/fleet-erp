@@ -5,14 +5,14 @@ import { exportToCSV } from '../api/export';
 import * as XLSX from 'xlsx';
 import ExcelImportButton from '../components/ExcelImportButton';
 
-export default function Projects({ user, access = {} }) {
+export default function Projects({ user, access = {}, entryOnly = false }) {
   const canWork = user?.role === 'Owner' || !!access?.projects?.can_work;
   const [projects, setProjects] = useState([]);
   const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(entryOnly);
   const [editing, setEditing] = useState(null);
   const [filterSite, setFilterSite] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -40,7 +40,7 @@ export default function Projects({ user, access = {} }) {
     setForm({ name: '', description: '', site: '', projectType: 'Development', status: 'Not Started',
       budget: 0, spent: 0, startDate: '', endDate: '', manager: '', contractor: '', notes: '' });
     setEditing(null);
-    setShowForm(false);
+    setShowForm(entryOnly);
   };
 
   const handleSubmit = async (e) => {
@@ -148,7 +148,7 @@ export default function Projects({ user, access = {} }) {
   const remaining = totalBudget - totalSpent;
 
   return (
-    <div className="panel">
+    <div className={entryOnly ? "panel building-entry-only" : "panel"}>
       <div style={{ background: 'linear-gradient(135deg, #7c3aed, #a78bfa)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
           <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Projects</h2>
         </div>
@@ -184,7 +184,7 @@ export default function Projects({ user, access = {} }) {
       </div>
 
       {showForm && canWork && (
-        <form onSubmit={handleSubmit} style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
+        <form className="building-entry-form" onSubmit={handleSubmit} style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
           <h3>{editing ? 'Edit Project' : 'New Project'}</h3>
           <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
             <div className="form-group"><label>Project Name *</label><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></div>

@@ -465,20 +465,6 @@ function BuildingMaintenanceReport() {
   };
   const sites = [...new Set((report?.orders || []).map(o => o.site).filter(Boolean))].sort();
 
-  const sheetHeaders = report?.monthlySavingsHeaders || [];
-  const sheetRows = report?.monthlySavingsRows || [];
-  const monthTokens = (() => {
-    const [y, m] = String(selectedMonth || '').split('-').map(Number);
-    if (!y || !m) return [];
-    const names = ['', 'january','february','march','april','may','june','july','august','september','october','november','december'];
-    const short = ['', 'jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
-    return [String(selectedMonth), `${y}-${String(m).padStart(2,'0')}`, `${names[m]} ${y}`, `${short[m]} ${y}`, `${m}/${y}`, `${String(m).padStart(2,'0')}/${y}`];
-  })();
-  const selectedSheetRows = sheetRows.filter(row => {
-    if (!monthTokens.length) return true;
-    const text = row.join(' ').toLowerCase();
-    return monthTokens.some(token => text.includes(token.toLowerCase()));
-  });
   const detail = [...(selected.contractors || []), ...(selected.employees || [])]
     .sort((a, b) => b.amount - a.amount);
 
@@ -491,7 +477,7 @@ function BuildingMaintenanceReport() {
         <div style={{ background: 'linear-gradient(135deg, #059669, #10b981)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
           <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>🏢 General Maintenance — Monthly Control</h2>
           <div style={{ marginTop: 6, fontSize: 13, opacity: .95 }}>
-            Ordinary maintenance only · Projects excluded · Each month is calculated independently
+            ERP database only · Ordinary maintenance only · Projects excluded · Each month is calculated independently
           </div>
         </div>
 
@@ -578,8 +564,7 @@ function BuildingMaintenanceReport() {
         </div>
       </div>
 
-      {sheetHeaders.length > 0 && (
-        <div className="panel" style={{ marginBottom: '20px' }}>
+      <div className="panel" style={{ marginBottom: '20px' }}>
           <div style={{ background: '#f1f5f9', padding: '12px 16px', borderRadius: '8px 8px 0 0', fontWeight: 700 }}>
             Google Sheet — MonthlySavings (Temporary Source)
           </div>

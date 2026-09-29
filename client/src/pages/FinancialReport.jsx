@@ -45,21 +45,21 @@ export default function FinancialReport() {
     ...m,
     contractorWO: Number(m.contractorWO || 0),
     partsWO: Number(m.partsWO || 0),
-    salaryMaint: Number(m.salaryMaint || SALARY_MAINT),
+    salaryMaint: Number(m.salaryMaint ?? 0),
     contractorDev: Number(m.contractorDev || 0),
     partsDev: Number(m.partsDev || 0),
-    salaryDev: Number(m.salaryDev || SALARY_DEV),
+    salaryDev: Number(m.salaryDev ?? 0),
     employeeWOCount: Number(m.employeeWOCount || 0),
     contractorWOCount: Number(m.contractorWOCount || 0),
     internalProjectCount: Number(m.internalProjectCount || 0),
     contractorProjectCount: Number(m.contractorProjectCount || 0),
-    maintActual: Number(m.contractorWO || 0) + Number(m.partsWO || 0) + Number(m.salaryMaint || SALARY_MAINT),
-    devActual: Number(m.contractorDev || 0) + Number(m.partsDev || 0) + Number(m.salaryDev || SALARY_DEV),
-    maintSavings: MAINT_BASELINE - (Number(m.contractorWO || 0) + Number(m.partsWO || 0) + Number(m.salaryMaint || SALARY_MAINT)),
-    devSavings: DEV_BASELINE - (Number(m.contractorDev || 0) + Number(m.partsDev || 0) + Number(m.salaryDev || SALARY_DEV)),
-    maintPct: ((MAINT_BASELINE - (Number(m.contractorWO || 0) + Number(m.partsWO || 0) + Number(m.salaryMaint || SALARY_MAINT))) / MAINT_BASELINE) * 100,
-    devPct: ((DEV_BASELINE - (Number(m.contractorDev || 0) + Number(m.partsDev || 0) + Number(m.salaryDev || SALARY_DEV))) / DEV_BASELINE) * 100,
-    totalSavingsPct: (((MAINT_BASELINE + DEV_BASELINE) - (Number(m.contractorWO || 0) + Number(m.partsWO || 0) + Number(m.salaryMaint || SALARY_MAINT)) - (Number(m.contractorDev || 0) + Number(m.partsDev || 0) + Number(m.salaryDev || SALARY_DEV))) / (MAINT_BASELINE + DEV_BASELINE)) * 100
+    maintActual: Number(m.totalCost ?? (Number(m.contractorWO || 0) + Number(m.partsWO || 0))),
+    devActual: Number(m.developmentActual ?? (Number(m.contractorDev || 0) + Number(m.partsDev || 0))),
+    maintSavings: Number(m.maintenanceSavings ?? (MAINT_BASELINE - Number(m.contractorWO || 0) - Number(m.partsWO || 0))),
+    devSavings: Number(m.developmentSavings ?? (DEV_BASELINE - Number(m.contractorDev || 0) - Number(m.partsDev || 0))),
+    maintPct: Number(m.maintenancePct ?? 0),
+    devPct: Number(m.developmentPct ?? 0),
+    totalSavingsPct: Number(m.totalSavingsPct ?? (((MAINT_BASELINE + DEV_BASELINE) - Number(m.contractorWO || 0) - Number(m.partsWO || 0) - Number(m.contractorDev || 0) - Number(m.partsDev || 0)) / (MAINT_BASELINE + DEV_BASELINE)) * 100)
   }));
 
   const maintBaselineTotal = MAINT_BASELINE * monthCount;
@@ -72,13 +72,13 @@ export default function FinancialReport() {
 
   const contractorWOTotal = activeSum(m => m.contractorWO);
   const partsWOTotal = activeSum(m => m.partsWO);
-  const salaryMaintTotal = SALARY_MAINT * monthCount;
-  const maintActualTotal = contractorWOTotal + partsWOTotal + salaryMaintTotal;
+  const salaryMaintTotal = activeSum(m => m.salaryMaint);
+  const maintActualTotal = activeSum(m => Number(m.maintActual || 0));
 
   const contractorDevTotal = activeSum(m => m.contractorDev);
   const partsDevTotal = activeSum(m => m.partsDev);
-  const salaryDevTotal = SALARY_DEV * monthCount;
-  const devActualTotal = contractorDevTotal + partsDevTotal + salaryDevTotal;
+  const salaryDevTotal = activeSum(m => m.salaryDev);
+  const devActualTotal = activeSum(m => Number(m.devActual || 0));
 
   const totalActual = maintActualTotal + devActualTotal;
   const maintSavingsTotal = maintBaselineTotal - maintActualTotal;
@@ -133,8 +133,8 @@ export default function FinancialReport() {
       {/* Formula Explanation */}
       <div style={{ marginBottom: '20px', padding: '14px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>
         <strong>📐 Formula:</strong><br />
-        <strong>Maintenance:</strong> Actual = Contractor WO + Parts WO + Salary (2,200) | Savings = Baseline (20,577) − Actual<br />
-        <strong>Development:</strong> Actual = Contractor Dev + Parts Dev + Salary (2,200) | Savings = Baseline (132,551) − Actual<br />
+        <strong>Maintenance:</strong> Contractor WO + Parts WO, Savings and % follow the MonthlySavings / Google Sheet reference<br />
+        <strong>Development:</strong> Contractor Dev + Parts Dev, Savings and % follow the MonthlySavings / Google Sheet reference<br />
         <strong>Parts WO:</strong> Contractor purchases linked to same-month WOs only | <strong>Parts Dev:</strong> Purchases linked to same-month Dev Projects<br />
         <strong>Note:</strong> Salary included in Actual, NOT in Baseline. Cross-month purchases excluded.
       </div>

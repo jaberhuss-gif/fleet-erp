@@ -12,7 +12,6 @@ import Notifications from './pages/Notifications';
 import AuditLog from './pages/AuditLog';
 import Backup from './pages/Backup';
 import Troubleshooter from './pages/Troubleshooter';
-import MyTickets from './pages/MyTickets';
 import FleetTicketViewer from './pages/FleetTicketViewer';
 import AdvancedReports from './pages/AdvancedReports';
 import OperationsHub from './pages/OperationsHub';
@@ -27,8 +26,6 @@ const OWNER_ONLY_TABS = new Set(['drivers', 'users', 'audit', 'backup']);
 
 const TAB_MODULES = {
   gm: ['gm'],
-  // Support & Service is a container: show it when the Owner grants any service module.
-  // The individual sub-sections are still controlled by their own access flags.
   'support-service': ['support', 'building', 'projects', 'warehouse', 'purchase_requests'],
   operations: ['building'],
   warehouse: ['warehouse', 'purchase_requests'],
@@ -48,7 +45,6 @@ const TAB_LABELS = {
   fleet: '🚗 Fleet',
   troubleshooter: '🧠 Troubleshooter',
   reports: 'Reports',
-  mytickets: '📋 My Tickets',
   'fleet-tickets': '🚗 Vehicle Tickets',
   'advanced-reports': '📊 Advanced Reports',
   'daily-submitted': '📋 Daily KM — Submitted',
@@ -130,24 +126,22 @@ export default function App() {
 
   const canViewModule = (module) => {
     if (user?.role === 'Owner') return true;
-
     return !!access?.[module]?.can_view;
   };
 
   const canViewTab = (target) => {
     if (OWNER_ONLY_TABS.has(target)) return user?.role === 'Owner';
     if (user?.role === 'Owner') return true;
-    // Vehicle Tickets accessibility is driven by the RBAC fleet_tickets module
-    // (Owner, SupportManager, SSM, FleetSupervisor, FleetViewer). Do not hardcode
-    // a role list here: that previously hid the tab from authorized roles.
-    //
-    // General Tickets is driven by the tickets module (GM, Accountant, ...).
     const modules = TAB_MODULES[target] || [];
     return modules.some(canViewModule);
   };
 
   const allowedTabs = useMemo(() => {
-    const tabs = ['gm', 'support-service', 'operations', 'warehouse', 'building-maintenance', 'fleet', 'daily-submitted', 'daily-missing', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
+    const allTabs = ['gm', 'support-service', 'operations', 'warehouse', 'building-maintenance', 'fleet', 'daily-submitted', 'daily-missing', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
+    const isDriver = user?.role === 'Driver';
+    const tabs = isDriver
+      ? allTabs.filter(t => !['daily-submitted', 'daily-missing'].includes(t))
+      : allTabs;
     const visible = tabs.filter(canViewTab);
     if (user?.role === 'Owner') {
       return [...visible, 'drivers', 'users', 'audit', 'backup'];
@@ -225,96 +219,92 @@ export default function App() {
       <DailyKmGate user={user} />
 
       <div className="erp-shell">
+        <aside className="erp-sidebar">
+          <div className="erp-sidebar-title">Navigation</div>
 
-      <aside className="erp-sidebar">
-        <div className="erp-sidebar-title">Navigation</div>
-
-        <div className="erp-nav-group">
-          <div className="erp-nav-heading">Fleet</div>
-          {['fleet','daily-submitted','daily-missing','fleet-tickets'].filter(t => allowedTabs.includes(t)).map(t => (
-            <button key={t} className={(tab === t || (t === 'fleet' && tab === 'vehicle-details')) ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
-              {TAB_LABELS[t]}
-            </button>
-          ))}
-        </div>
-
-        {['operations','building-maintenance'].some(t => allowedTabs.includes(t)) && (
           <div className="erp-nav-group">
-            {['operations','building-maintenance'].filter(t => allowedTabs.includes(t)).map(t => (
-              <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
+            <div className="erp-nav-heading">Fleet</div>
+            {['fleet','daily-submitted','daily-missing','fleet-tickets'].filter(t => allowedTabs.includes(t)).map(t => (
+              <button key={t} className={(tab === t || (t === 'fleet' && tab === 'vehicle-details')) ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
                 {TAB_LABELS[t]}
               </button>
             ))}
           </div>
-        )}
 
-        {['support-service','tickets','troubleshooter'].some(t => allowedTabs.includes(t)) && (
-          <div className="erp-nav-group">
-            <div className="erp-nav-heading">Support & Service</div>
-            {['support-service','tickets','troubleshooter'].filter(t => allowedTabs.includes(t)).map(t => (
-              <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
-                {TAB_LABELS[t]}
+          {['operations','building-maintenance'].some(t => allowedTabs.includes(t)) && (
+            <div className="erp-nav-group">
+              {['operations','building-maintenance'].filter(t => allowedTabs.includes(t)).map(t => (
+                <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
+                  {TAB_LABELS[t]}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {['support-service','tickets','troubleshooter'].some(t => allowedTabs.includes(t)) && (
+            <div className="erp-nav-group">
+              <div className="erp-nav-heading">Support & Service</div>
+              {['support-service','tickets','troubleshooter'].filter(t => allowedTabs.includes(t)).map(t => (
+                <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
+                  {TAB_LABELS[t]}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {['reports','advanced-reports'].some(t => allowedTabs.includes(t)) && (
+            <div className="erp-nav-group">
+              <div className="erp-nav-heading">Reports</div>
+              {['reports','advanced-reports'].filter(t => allowedTabs.includes(t)).map(t => (
+                <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
+                  {TAB_LABELS[t]}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {user.role === 'Owner' && (
+            <div className="erp-nav-group">
+              <div className="erp-nav-heading">Administration</div>
+              {['drivers','users','audit','backup'].map(t => (
+                <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
+                  {TAB_LABELS[t]}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {allowedTabs.includes('gm') && (
+            <div className="erp-nav-group">
+              <div className="erp-nav-heading">Management</div>
+              <button className={tab === 'gm' ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange('gm')}>
+                {TAB_LABELS.gm}
               </button>
-            ))}
-          </div>
-        )}
+            </div>
+          )}
+        </aside>
 
-        {['reports','advanced-reports'].some(t => allowedTabs.includes(t)) && (
-          <div className="erp-nav-group">
-            <div className="erp-nav-heading">Reports</div>
-            {['reports','advanced-reports'].filter(t => allowedTabs.includes(t)).map(t => (
-              <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
-                {TAB_LABELS[t]}
-              </button>
-            ))}
-        </div>
-        )}
-
-        {user.role === 'Owner' && (
-          <div className="erp-nav-group">
-            <div className="erp-nav-heading">Administration</div>
-            {['drivers','users','audit','backup'].map(t => (
-              <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
-                {TAB_LABELS[t]}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {allowedTabs.includes('gm') && (
-          <div className="erp-nav-group">
-            <div className="erp-nav-heading">Management</div>
-            <button className={tab === 'gm' ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange('gm')}>
-              {TAB_LABELS.gm}
-            </button>
-          </div>
-        )}
-      </aside>
         <main className="main">
-        {tab === 'gm' && <GMDashboard />}
-        {tab === 'support-service' && <SupportServiceHub user={user} access={access || {}} />}
-        {tab === 'operations' && <OperationsHub user={user} access={access || {}} />}
-        {tab === 'warehouse' && <WarehouseHub user={user} access={access || {}} />}
-        {tab === 'building-maintenance' && canViewModule('building') && <BuildingMaintenancePage user={user} access={access || {}} />}
-        {tab === 'fleet' && canViewModule('fleet') && (
-          <FleetHub
-            user={user}
-            access={access || {}}
-            onViewVehicle={handleViewVehicle}
-          />
-        )}
-        {tab === 'vehicle-details' && viewingVehicleId && <VehicleDetails vehicleId={viewingVehicleId} onBack={handleBackToVehicles} />}
-        {tab === 'troubleshooter' && <Troubleshooter />}
-        {tab === 'fleet-tickets' && <FleetTicketViewer user={user} />}
-        {tab === 'tickets' && canViewModule('tickets') && <Tickets user={user} access={access || {}} />}
-        {tab === 'advanced-reports' && <AdvancedReports />}
-        {tab === 'daily-submitted' && <DailyKmSubmitted />}
-        {tab === 'daily-missing' && <DailyKmMissing user={user} />}
-        {tab === 'reports' && <Reports />}
-        {tab === 'drivers' && user.role === 'Owner' && <Drivers />}
-        {tab === 'users' && user.role === 'Owner' && <Users />}
-        {tab === 'audit' && user.role === 'Owner' && <AuditLog />}
-        {tab === 'backup' && user.role === 'Owner' && <Backup />}
+          {tab === 'gm' && <GMDashboard />}
+          {tab === 'support-service' && <SupportServiceHub user={user} access={access || {}} />}
+          {tab === 'operations' && <OperationsHub user={user} access={access || {}} />}
+          {tab === 'warehouse' && <WarehouseHub user={user} access={access || {}} />}
+          {tab === 'building-maintenance' && canViewModule('building') && <BuildingMaintenancePage user={user} access={access || {}} />}
+          {tab === 'fleet' && canViewModule('fleet') && (
+            <FleetHub user={user} access={access || {}} onViewVehicle={handleViewVehicle} />
+          )}
+          {tab === 'vehicle-details' && viewingVehicleId && <VehicleDetails vehicleId={viewingVehicleId} onBack={handleBackToVehicles} />}
+          {tab === 'troubleshooter' && <Troubleshooter />}
+          {tab === 'fleet-tickets' && <FleetTicketViewer user={user} />}
+          {tab === 'tickets' && canViewModule('tickets') && <Tickets user={user} access={access || {}} />}
+          {tab === 'advanced-reports' && <AdvancedReports />}
+          {tab === 'daily-submitted' && <DailyKmSubmitted />}
+          {tab === 'daily-missing' && <DailyKmMissing user={user} />}
+          {tab === 'reports' && <Reports />}
+          {tab === 'drivers' && user.role === 'Owner' && <Drivers />}
+          {tab === 'users' && user.role === 'Owner' && <Users />}
+          {tab === 'audit' && user.role === 'Owner' && <AuditLog />}
+          {tab === 'backup' && user.role === 'Owner' && <Backup />}
         </main>
       </div>
     </div>

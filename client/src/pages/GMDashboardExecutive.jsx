@@ -17,41 +17,160 @@ function KPI({ label, value, note, tone = 'blue' }) {
   );
 }
 
-function SelectedPeriodResult({ rows, selectedMonths, monthLabel }) {
+function SelectedPeriodResult({ rows, selectedMonths, monthLabel, activeCard, setActiveCard }) {
   if (!selectedMonths.length) return null;
   const chosen = rows.filter(r => selectedMonths.includes(r.month));
   const n = selectedMonths.length;
   const sum = field => chosen.reduce((s, r) => s + Number(r[field] || 0), 0);
-  const maintBaseline = 20577 * n;
-  const devBaseline = 132551 * n;
-  const totalBaseline = maintBaseline + devBaseline;
-  const contractorWO = sum('contractorWO'); const partsWO = sum('partsWO'); const salaryMaint = sum('salaryMaint');
+  const maintBaseline = sum('maintenanceBaseline') || 20577 * n;
+  const devBaseline = sum('developmentBaseline') || 132551 * n;
+  const contractorWO = sum('contractorWO');
+  const partsWO = sum('partsWO');
+  const salaryMaint = sum('salaryMaint') || 2200 * n;
+  const contractorDev = sum('contractorDev');
+  const partsDev = sum('partsDev');
+  const salaryDev = sum('salaryDev') || 2200 * n;
+  const contractorPartsWO = sum('contractorPartsWO') || partsWO;
+  const contractorPartsDev = sum('contractorPartsDev') || partsDev;
+  const contractorLabor = contractorWO + contractorDev;
+  const contractorParts = contractorPartsWO + contractorPartsDev;
+  const contractorTotal = contractorLabor + contractorParts;
   const maintActual = contractorWO + partsWO + salaryMaint;
-  const contractorDev = sum('contractorDev'); const partsDev = sum('partsDev'); const salaryDev = sum('salaryDev');
   const devActual = contractorDev + partsDev + salaryDev;
   const purchases = sum('otherPurchases');
   const totalActual = maintActual + devActual + purchases;
-  const maintSavings = maintBaseline - maintActual; const devSavings = devBaseline - devActual; const totalSavings = maintSavings + devSavings;
+  const maintSavings = maintBaseline - maintActual;
+  const devSavings = devBaseline - devActual;
+  const totalSavings = maintSavings + devSavings;
   const totalWO = sum('employeeWOCount') + sum('contractorWOCount');
-  const contractorWOCount = sum('contractorWOCount'); const employeeWOCount = sum('employeeWOCount');
+  const contractorWOCount = sum('contractorWOCount');
+  const employeeWOCount = sum('employeeWOCount');
   const totalProjects = sum('internalProjectCount') + sum('contractorProjectCount');
-  const contractorProjects = sum('contractorProjectCount'); const internalProjects = sum('internalProjectCount');
+  const contractorProjects = sum('contractorProjectCount');
+  const internalProjects = sum('internalProjectCount');
   const label = selectedMonths.map(monthLabel).join(' • ');
+
+  const details = {
+    'work-orders': {
+      title: '🔧 Work Orders',
+      items: [
+        ['Total Work Orders', totalWO],
+        ['Closed', sum('closedWOCount')],
+        ['Open', sum('openWOCount')],
+        ['Contractor Work Orders', contractorWOCount],
+        ['Internal / Staff Work Orders', employeeWOCount],
+        ['Contractor WO Labor', money(contractorWO)],
+      ]
+    },
+    'contractor-cost': {
+      title: '💰 Total Contractor Cost',
+      items: [
+        ['Total Contractor Cost', money(contractorTotal)],
+        ['WO Labor', money(contractorWO)],
+        ['Development Labor', money(contractorDev)],
+        ['WO Parts', money(contractorPartsWO)],
+        ['Development Parts', money(contractorPartsDev)],
+        ['Total Labor', money(contractorLabor)],
+        ['Total Parts', money(contractorParts)],
+      ]
+    },
+    'labor': {
+      title: '👷 Total Labor (Contractor)',
+      items: [
+        ['Total Labor', money(contractorLabor)],
+        ['Work Orders Labor', money(contractorWO)],
+        ['Development Labor', money(contractorDev)],
+      ]
+    },
+    'parts': {
+      title: '📦 Total Parts (Contractor)',
+      items: [
+        ['Total Parts', money(contractorParts)],
+        ['Work Orders Parts', money(contractorPartsWO)],
+        ['Development Parts', money(contractorPartsDev)],
+      ]
+    },
+    'maintenance': {
+      title: '🔧 Maintenance',
+      items: [
+        ['Baseline', money(maintBaseline)],
+        ['Contractor WO', money(contractorWO)],
+        ['Contractor Parts', money(partsWO)],
+        ['Salary', money(salaryMaint)],
+        ['Actual', money(maintActual)],
+        ['Savings', money(maintSavings)],
+        ['Savings %', `${maintBaseline ? (maintSavings / maintBaseline * 100).toFixed(1) : '0.0'}%`],
+      ]
+    },
+    'development': {
+      title: '🏗️ Development',
+      items: [
+        ['Projects', totalProjects],
+        ['Internal Projects', internalProjects],
+        ['Contractor Projects', contractorProjects],
+        ['Baseline', money(devBaseline)],
+        ['Contractor Labor', money(contractorDev)],
+        ['Contractor Parts', money(partsDev)],
+        ['Salary', money(salaryDev)],
+        ['Actual', money(devActual)],
+        ['Savings', money(devSavings)],
+        ['Savings %', `${devBaseline ? (devSavings / devBaseline * 100).toFixed(1) : '0.0'}%`],
+      ]
+    },
+    'purchases': {
+      title: '🏢 Company Purchases',
+      items: [['Total Purchases', money(purchases)]]
+    },
+    'savings': {
+      title: '🏆 Total Savings',
+      items: [
+        ['Maintenance Savings', money(maintSavings)],
+        ['Development Savings', money(devSavings)],
+        ['Total Savings', money(totalSavings)],
+      ]
+    },
+  };
+
+  const Card = ({ id, label, value, note, tone }) => (
+    <button type="button" onClick={() => setActiveCard(activeCard === id ? null : id)}
+      style={{ textAlign:'left', background:'var(--card-bg,#fff)', border:'1px solid var(--border-color,#e2e8f0)', borderRadius:14, padding:16, minHeight:108, cursor:'pointer', boxShadow: activeCard === id ? '0 0 0 2px #2563eb' : 'none' }}>
+      <div style={{fontSize:12,fontWeight:700,textTransform:'uppercase',color:'#64748b'}}>{label}</div>
+      <div style={{fontSize:24,fontWeight:800,marginTop:7,color: tone === 'green' ? '#059669' : tone === 'amber' ? '#d97706' : '#1d4ed8'}}>{value}</div>
+      <div style={{fontSize:12,color:'#64748b',marginTop:4}}>{note}</div>
+      <div style={{fontSize:11,color:'#2563eb',marginTop:8}}>Click for details →</div>
+    </button>
+  );
+
   return (
-    <div style={{ marginBottom: 20, background: 'var(--card-bg,#fff)', border: '1px solid var(--border-color,#e2e8f0)', borderRadius: 14, padding: 18 }}>
-      <h2 style={{ margin: '0 0 4px' }}>Selected Period Results</h2>
-      <div style={{ color: '#64748b', fontSize: 12, marginBottom: 14 }}>{label}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 10 }}>
-        <KPI label="Maintenance Actual" value={money(maintActual)} note={'WO ' + money(contractorWO) + ' • Parts ' + money(partsWO) + ' • Salary ' + money(salaryMaint)} />
-        <KPI label="Maintenance Savings" value={money(maintSavings)} note={(maintBaseline ? (maintSavings / maintBaseline * 100).toFixed(1) : '0.0') + '% vs baseline'} tone="green" />
-        <KPI label="Work Orders" value={totalWO} note={employeeWOCount + ' internal • ' + contractorWOCount + ' contractor'} />
-        <KPI label="Projects Actual" value={money(devActual)} note={'Contractor ' + money(contractorDev) + ' • Parts ' + money(partsDev) + ' • Salary ' + money(salaryDev)} />
-        <KPI label="Projects Savings" value={money(devSavings)} note={(devBaseline ? (devSavings / devBaseline * 100).toFixed(1) : '0.0') + '% vs baseline'} tone="green" />
-        <KPI label="Projects" value={totalProjects} note={internalProjects + ' internal • ' + contractorProjects + ' contractor'} />
-        <KPI label="Purchases" value={money(purchases)} note="Other purchases included in period" tone="amber" />
-        <KPI label="Total Actual" value={money(totalActual)} note="Maintenance + Projects + Purchases" tone="amber" />
-        <KPI label="Total Savings" value={money(totalSavings)} note={(totalBaseline ? (totalSavings / totalBaseline * 100).toFixed(1) : '0.0') + '% vs combined baseline'} tone="green" />
+    <div style={{marginBottom:20,background:'var(--card-bg,#fff)',border:'1px solid var(--border-color,#e2e8f0)',borderRadius:14,padding:18}}>
+      <h2 style={{margin:'0 0 4px'}}>Selected Period Results</h2>
+      <div style={{color:'#64748b',fontSize:12,marginBottom:14}}>{label}</div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:10}}>
+        <Card id="work-orders" label="🔧 Work Orders" value={totalWO} note={`${employeeWOCount} internal • ${contractorWOCount} contractor`} />
+        <Card id="contractor-cost" label="💰 Total Contractor Cost" value={money(contractorTotal)} note="Labor + Parts" tone="amber" />
+        <Card id="labor" label="👷 Total Labor" value={money(contractorLabor)} note={`WO ${money(contractorWO)} • Development ${money(contractorDev)}`} />
+        <Card id="parts" label="📦 Total Parts" value={money(contractorParts)} note={`WO ${money(contractorPartsWO)} • Development ${money(contractorPartsDev)}`} />
+        <Card id="maintenance" label="🔧 Maintenance" value={money(maintActual)} note={`Baseline ${money(maintBaseline)} • Savings ${money(maintSavings)}`} />
+        <Card id="development" label="🏗️ Development" value={money(devActual)} note={`Baseline ${money(devBaseline)} • Savings ${money(devSavings)}`} />
+        <Card id="purchases" label="🏢 Company Purchases" value={money(purchases)} note="Company purchases in selected period" tone="amber" />
+        <Card id="savings" label="🏆 Total Savings" value={money(totalSavings)} note={`${totalBaseline ? (totalSavings / (maintBaseline + devBaseline) * 100).toFixed(1) : '0.0'}% vs baseline`} tone="green" />
       </div>
+      {activeCard && details[activeCard] && (
+        <div style={{marginTop:16,padding:16,borderTop:'1px solid #e2e8f0'}}>
+          <h3 style={{margin:'0 0 10px'}}>{details[activeCard].title} — {label}</h3>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:8}}>
+            {details[activeCard].items.map(([k,v]) => (
+              <div key={k} style={{padding:12,border:'1px solid #e2e8f0',borderRadius:10}}>
+                <div style={{fontSize:12,color:'#64748b'}}>{k}</div>
+                <div style={{fontSize:20,fontWeight:800,marginTop:4}}>{v}</div>
+              </div>
+            ))}
+          </div>
+          {activeCard === 'work-orders' && (
+            <div style={{marginTop:12,color:'#64748b',fontSize:12}}>The selected period controls every figure above. Monthly source rows remain the reconciliation source for the detailed report.</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -124,7 +243,7 @@ export default function GMDashboardExecutive() {
   const [monthFinancial, setMonthFinancial] = useState(null);
   const [buildingView, setBuildingView] = useState(null);
   const [buildingRecords, setBuildingRecords] = useState({ workOrders: [], projects: [], purchases: [] });
-  const [selectedMonths, setSelectedMonths] = useState([]);
+  const [selectedMonths, setSelectedMonths] = useState([]);\n  const [activeCard, setActiveCard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [updated, setUpdated] = useState(null);
@@ -250,7 +369,7 @@ export default function GMDashboardExecutive() {
             </div>
           </div>
 
-          <SelectedPeriodResult rows={reportMonths} selectedMonths={selectedMonths} monthLabel={monthLabel} />
+          <SelectedPeriodResult rows={reportMonths} selectedMonths={selectedMonths} monthLabel={monthLabel} activeCard={activeCard} setActiveCard={setActiveCard} />
 
           {buildingView && (
             <BuildingGMDetail

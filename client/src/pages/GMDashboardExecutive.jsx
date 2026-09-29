@@ -30,8 +30,8 @@ function SelectedPeriodResult({ rows, selectedMonths, monthLabel, activeCard, se
   const contractorDev = sum('contractorDev');
   const partsDev = sum('partsDev');
   const salaryDev = sum('salaryDev') || 2200 * n;
-  const contractorPartsWO = sum('contractorPartsWO') || partsWO;
-  const contractorPartsDev = sum('contractorPartsDev') || partsDev;
+  const contractorPartsWO = sum('contractorPartsWO');
+  const contractorPartsDev = sum('contractorPartsDev');
   const contractorLabor = contractorWO + contractorDev;
   const contractorParts = contractorPartsWO + contractorPartsDev;
   const contractorTotal = contractorLabor + contractorParts;
@@ -48,7 +48,7 @@ function SelectedPeriodResult({ rows, selectedMonths, monthLabel, activeCard, se
   const totalProjects = sum('internalProjectCount') + sum('contractorProjectCount');
   const contractorProjects = sum('contractorProjectCount');
   const internalProjects = sum('internalProjectCount');
-  const label = selectedMonths.map(monthLabel).join(' • ');
+  const totalBaseline = maintBaseline + devBaseline;\n  const label = selectedMonths.map(monthLabel).join(' • ');
 
   const details = {
     'work-orders': {
@@ -153,7 +153,7 @@ function SelectedPeriodResult({ rows, selectedMonths, monthLabel, activeCard, se
         <Card id="maintenance" label="🔧 Maintenance" value={money(maintActual)} note={`Baseline ${money(maintBaseline)} • Savings ${money(maintSavings)}`} />
         <Card id="development" label="🏗️ Development" value={money(devActual)} note={`Baseline ${money(devBaseline)} • Savings ${money(devSavings)}`} />
         <Card id="purchases" label="🏢 Company Purchases" value={money(purchases)} note="Company purchases in selected period" tone="amber" />
-        <Card id="savings" label="🏆 Total Savings" value={money(totalSavings)} note={`${totalBaseline ? (totalSavings / (maintBaseline + devBaseline) * 100).toFixed(1) : '0.0'}% vs baseline`} tone="green" />
+        <Card id="savings" label="🏆 Total Savings" value={money(totalSavings)} note={`${totalBaseline ? (totalSavings / totalBaseline * 100).toFixed(1) : '0.0'}% vs baseline`} tone="green" />
       </div>
       {activeCard && details[activeCard] && (
         <div style={{marginTop:16,padding:16,borderTop:'1px solid #e2e8f0'}}>

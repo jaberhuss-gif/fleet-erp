@@ -210,33 +210,7 @@ export default function App() {
     <div className="app">
       <header className="header">
         <h1>Fleet ERP</h1>
-        <nav className="nav">
-          {allowedTabs.filter(t => !OWNER_ONLY_TABS.has(t)).map(t => (
-            <button
-              key={t}
-              className={(tab === t || (t === 'fleet' && tab === 'vehicle-details')) ? 'nav-btn active' : 'nav-btn'}
-              onClick={() => handleTabChange(t)}
-            >
-              {TAB_LABELS[t]}
-            </button>
-          ))}
-          {user.role === 'Owner' && (
-            <span className="owner-only-nav">
-              <span style={{ opacity: 0.55, margin: '0 4px' }}>|</span>
-              {allowedTabs.filter(t => OWNER_ONLY_TABS.has(t)).map(t => (
-                <button
-                  key={t}
-                  className={tab === t ? 'nav-btn active owner-only' : 'nav-btn owner-only'}
-                  onClick={() => handleTabChange(t)}
-                >
-                  {TAB_LABELS[t]}
-                </button>
-              ))}
-            </span>
-          )}
-        </nav>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'white' }}>
+        <div className="header-user-tools">
           <button className="theme-toggle" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}>
             {theme === 'light' ? '🌙' : '☀️'}
           </button>
@@ -253,7 +227,74 @@ export default function App() {
 
       <DailyKmGate user={user} />
 
-      <main className="main">
+      <div className="erp-shell">
+
+      <aside className="erp-sidebar">
+        <div className="erp-sidebar-title">Navigation</div>
+
+        <div className="erp-nav-group">
+          <div className="erp-nav-heading">Fleet</div>
+          {['fleet','daily-submitted','daily-missing','fleet-tickets'].filter(t => allowedTabs.includes(t)).map(t => (
+            <button key={t} className={(tab === t || (t === 'fleet' && tab === 'vehicle-details')) ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
+              {TAB_LABELS[t]}
+            </button>
+          ))}
+        </div>
+
+        {['warehouse','operations','building-maintenance'].some(t => allowedTabs.includes(t)) && (
+          <div className="erp-nav-group">
+            <div className="erp-nav-heading">Building / Warehouse</div>
+            {['operations','building-maintenance','warehouse'].filter(t => allowedTabs.includes(t)).map(t => (
+              <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
+                {TAB_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {['support-service','tickets','troubleshooter'].some(t => allowedTabs.includes(t)) && (
+          <div className="erp-nav-group">
+            <div className="erp-nav-heading">Support & Service</div>
+            {['support-service','tickets','troubleshooter'].filter(t => allowedTabs.includes(t)).map(t => (
+              <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
+                {TAB_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {['reports','advanced-reports'].some(t => allowedTabs.includes(t)) && (
+          <div className="erp-nav-group">
+            <div className="erp-nav-heading">Reports</div>
+            {['reports','advanced-reports'].filter(t => allowedTabs.includes(t)).map(t => (
+              <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
+                {TAB_LABELS[t]}
+              </button>
+            ))}
+        </div>
+        )}
+
+        {user.role === 'Owner' && (
+          <div className="erp-nav-group">
+            <div className="erp-nav-heading">Administration</div>
+            {['drivers','users','audit','backup'].map(t => (
+              <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
+                {TAB_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {allowedTabs.includes('gm') && (
+          <div className="erp-nav-group">
+            <div className="erp-nav-heading">Management</div>
+            <button className={tab === 'gm' ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange('gm')}>
+              {TAB_LABELS.gm}
+            </button>
+          </div>
+        )}
+      </aside>
+        <main className="main">
         {tab === 'gm' && <GMDashboard />}
         {tab === 'support-service' && <SupportServiceHub user={user} access={access || {}} />}
         {tab === 'operations' && <OperationsHub user={user} access={access || {}} />}
@@ -278,7 +319,8 @@ export default function App() {
         {tab === 'users' && user.role === 'Owner' && <Users />}
         {tab === 'audit' && user.role === 'Owner' && <AuditLog />}
         {tab === 'backup' && user.role === 'Owner' && <Backup />}
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

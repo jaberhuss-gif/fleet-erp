@@ -2,13 +2,13 @@
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
 
-export default function Purchases() {
+export default function Purchases({ entryOnly = false, onBack }) {
   const [purchases, setPurchases] = useState([]);
   const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(entryOnly);
   const [filterMonth, setFilterMonth] = useState('all');
   const [filterType, setFilterType] = useState('all');
   const [filterPurchasedBy, setFilterPurchasedBy] = useState('all');
@@ -32,7 +32,7 @@ export default function Purchases() {
   const resetForm = () => {
     setForm({ type: 'Work Order', referenceNo: '', itemName: '', quantity: 1, unitCost: 0,
       supplier: '', purchasedBy: 'Company', purchaseDate: '', notes: '' });
-    setShowForm(false);
+    if (entryOnly) { onBack?.(); return; }\n    setShowForm(false);
   };
 
   const handleSubmit = async (e) => {
@@ -75,7 +75,7 @@ export default function Purchases() {
       <div className="panel">
         <div style={{ background: 'linear-gradient(135deg, #047857, #34d399)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>New Purchase</h2>
-          <button type="button" className="btn btn-warning" onClick={resetForm}>Back to Purchases</button>
+          <button type="button" className="btn btn-warning" onClick={() => entryOnly ? onBack?.() : resetForm()}>Back to Building Maintenance</button>
         </div>
         {message && <div className="alert alert-success">{message}</div>}
         {error && <div className="alert alert-error">{error}</div>}

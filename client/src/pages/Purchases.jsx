@@ -69,41 +69,15 @@ export default function Purchases() {
   const companyCost = filtered.filter(p => p.purchased_by === 'Company').reduce((s, p) => s + Number(p.total_cost || 0), 0);
   const contractorCost = filtered.filter(p => p.purchased_by === 'Contractor').reduce((s, p) => s + Number(p.total_cost || 0), 0);
 
-  return (
-    <div className="panel">
-      <div style={{ background: 'linear-gradient(135deg, #047857, #34d399)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
-          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Purchases</h2>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-        
-        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "purchases", [{key:"purchase_no",label:"PUR #"},{key:"purchase_date",label:"Date"},{key:"type",label:"Type"},{key:"reference_no",label:"Reference"},{key:"item_name",label:"Item"},{key:"quantity",label:"Qty"},{key:"unit_cost",label:"Unit Cost"},{key:"total_cost",label:"Total"},{key:"supplier",label:"Supplier"},{key:"purchased_by",label:"Paid By"}])}>Export CSV</button><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
-          {showForm ? 'Cancel' : '+ New Purchase'}
-        </button>
-      </div>
 
-      {message && <div className="alert alert-success">{message}</div>}
-      {error && <div className="alert alert-error">{error}</div>}
-
-      {/* Summary */}
-      <div className="cards-grid" style={{ marginBottom: '16px' }}>
-        <div className="card success">
-          <h3>Total Purchases</h3>
-          <div className="big-number" style={{ color: '#16a34a' }}>{totalCost.toLocaleString()}</div>
-          <div className="sub">SAR ({filtered.length} items)</div>
+  if (showForm) {
+    return (
+      <div className="panel">
+        <div style={{ background: 'linear-gradient(135deg, #047857, #34d399)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff', marginBottom: '16px' }}>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>New Purchase</h2>
         </div>
-        <div className="card">
-          <h3>Company Paid</h3>
-          <div className="big-number" style={{ color: '#1e3a8a' }}>{companyCost.toLocaleString()}</div>
-          <div className="sub">SAR</div>
-        </div>
-        <div className="card warning">
-          <h3>Contractor Paid</h3>
-          <div className="big-number" style={{ color: '#f59e0b' }}>{contractorCost.toLocaleString()}</div>
-          <div className="sub">SAR</div>
-        </div>
-      </div>
-
-      {showForm && (
+        {message && <div className="alert alert-success">{message}</div>}
+        {error && <div className="alert alert-error">{error}</div>}
         <form onSubmit={handleSubmit} style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
           <h3>New Purchase</h3>
           <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
@@ -138,7 +112,44 @@ export default function Purchases() {
             <button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button>
           </div>
         </form>
-      )}
+
+      </div>
+    );
+  }
+
+  return (
+    <div className="panel">
+      <div style={{ background: 'linear-gradient(135deg, #047857, #34d399)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Purchases</h2>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+        
+        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "purchases", [{key:"purchase_no",label:"PUR #"},{key:"purchase_date",label:"Date"},{key:"type",label:"Type"},{key:"reference_no",label:"Reference"},{key:"item_name",label:"Item"},{key:"quantity",label:"Qty"},{key:"unit_cost",label:"Unit Cost"},{key:"total_cost",label:"Total"},{key:"supplier",label:"Supplier"},{key:"purchased_by",label:"Paid By"}])}>Export CSV</button><button className="btn btn-primary" onClick={() => setShowForm(true)}>
+          {showForm ? 'Cancel' : '+ New Purchase'}
+        </button>
+      </div>
+
+      {message && <div className="alert alert-success">{message}</div>}
+      {error && <div className="alert alert-error">{error}</div>}
+
+      {/* Summary */}
+      <div className="cards-grid" style={{ marginBottom: '16px' }}>
+        <div className="card success">
+          <h3>Total Purchases</h3>
+          <div className="big-number" style={{ color: '#16a34a' }}>{totalCost.toLocaleString()}</div>
+          <div className="sub">SAR ({filtered.length} items)</div>
+        </div>
+        <div className="card">
+          <h3>Company Paid</h3>
+          <div className="big-number" style={{ color: '#1e3a8a' }}>{companyCost.toLocaleString()}</div>
+          <div className="sub">SAR</div>
+        </div>
+        <div className="card warning">
+          <h3>Contractor Paid</h3>
+          <div className="big-number" style={{ color: '#f59e0b' }}>{contractorCost.toLocaleString()}</div>
+          <div className="sub">SAR</div>
+        </div>
+      </div>
 
       {/* Filters */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '16px', background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>

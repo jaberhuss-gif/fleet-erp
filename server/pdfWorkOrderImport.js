@@ -12,12 +12,22 @@ const match = (line, patterns) => {
 };
 
 const dateValue = (v) => {
-  const m = clean(v).match(/(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}|\d{1,2}[-\/]\d{1,2}[-\/]\d{4})/);
-  if (!m) return "";
-  const p = m[1].replace(/\//g, "-").split("-");
-  return p[0].length === 4
-    ? `${p[0]}-${String(p[1]).padStart(2, "0")}-${String(p[2]).padStart(2, "0")}`
-    : `${p[2]}-${String(p[1]).padStart(2, "0")}-${String(p[0]).padStart(2, "0")}`;
+  const value = clean(v);
+  const numeric = value.match(/(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}|\d{1,2}[-\/]\d{1,2}[-\/]\d{4})/);
+  if (numeric) {
+    const p = numeric[1].replace(/\//g, "-").split("-");
+    return p[0].length === 4
+      ? `${p[0]}-${String(p[1]).padStart(2, "0")}-${String(p[2]).padStart(2, "0")}`
+      : `${p[2]}-${String(p[1]).padStart(2, "0")}-${String(p[0]).padStart(2, "0")}`;
+  }
+  const named = value.match(/\b(\d{1,2})[-\s]([A-Za-z]{3,9})[-\s](\d{2,4})\b/);
+  if (!named) return "";
+  const months = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+  const month = months[named[2].slice(0,3).toLowerCase()];
+  if (!month) return "";
+  let year = Number(named[3]);
+  if (year < 100) year += 2000;
+  return `${year}-${String(month).padStart(2, "0")}-${String(named[1]).padStart(2, "0")}`;
 };
 
 const slug = (v) =>
@@ -206,7 +216,7 @@ function parseRows(text, filename = "upload.pdf", knownSites = []) {
     }
 
     if (!sections.length && items.length) {
-      const subjectSite = subject?.match(/\\b(?:requirement|requi?rment)\\b\\s+(.+?)(?:\\s*$)/i)?.[1] || "";
+      const subjectSite = subject?.match(/\b(?:requirement|requi?rment)\b\s+(.+?)(?:\s*$)/i)?.[1] || "";
       const fallbackSite = subjectSite || match(flat, [/site\\s*:\\s*(.+?)(?=\\s+subject\\s*:|\\s+\\d+\\s+|$)/i]);
       sections.push({ rawSite: fallbackSite || "", text: flat, items });
     }

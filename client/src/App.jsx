@@ -16,6 +16,7 @@ import MyTickets from './pages/MyTickets';
 import FleetTicketViewer from './pages/FleetTicketViewer';
 import AdvancedReports from './pages/AdvancedReports';
 import OperationsHub from './pages/OperationsHub';
+import BuildingMaintenancePage from './pages/BuildingMaintenance';
 import api from './api/client';
 import DailyKmGate from './components/DailyKmGate';
 import DailyKmSubmitted from './pages/DailyKmSubmitted';
@@ -32,6 +33,7 @@ const TAB_MODULES = {
   // and purchase requests. It is deliberately separate from Fleet. Visibility
   // is driven only by the RBAC modules below — no role list is hardcoded here.
   operations: ['building', 'projects', 'warehouse', 'purchase_requests'],
+  'building-maintenance': ['building'],
   fleet: ['fleet'],
   troubleshooter: ['troubleshooter'],
   'fleet-tickets': ['fleet_tickets'],
@@ -54,6 +56,7 @@ const TAB_LABELS = {
   'daily-missing': '⚠️ Daily KM — Missing',
   'support-service': '🛠️ Support & Service',
   operations: '🏢 Operations',
+  'building-maintenance': '🔧 Building Maintenance',
   drivers: '👨‍🔧 Driver',
   users: 'Users',
   audit: 'Audit Log',
@@ -144,7 +147,7 @@ export default function App() {
   };
 
   const allowedTabs = useMemo(() => {
-    const tabs = ['gm', 'support-service', 'operations', 'fleet', 'daily-submitted', 'daily-missing', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
+    const tabs = ['gm', 'support-service', 'operations', 'building-maintenance', 'fleet', 'daily-submitted', 'daily-missing', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
     const visible = tabs.filter(canViewTab);
     if (user?.role === 'Owner') {
       return [...visible, 'drivers', 'users', 'audit', 'backup'];
@@ -251,6 +254,7 @@ export default function App() {
         {tab === 'gm' && <GMDashboard />}
         {tab === 'support-service' && <SupportServiceHub user={user} access={access || {}} />}
         {tab === 'operations' && <OperationsHub user={user} access={access || {}} />}
+        {tab === 'building-maintenance' && canViewModule('building') && <BuildingMaintenancePage user={user} access={access || {}} />}
         {tab === 'fleet' && canViewModule('fleet') && (
           <FleetHub
             user={user}

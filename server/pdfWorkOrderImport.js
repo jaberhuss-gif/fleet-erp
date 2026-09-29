@@ -249,8 +249,8 @@ export function mountPdfWorkOrderImport(app) {
         await query(
           `INSERT INTO work_orders
              (wo_no,site,area,category,priority,description,assigned_to,is_contractor,
-              contractor_name,performed_by,reported_date,parts_used,status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'Closed')`,
+              contractor_name,performed_by,reported_date,parts_used,final_cost,parts_cost,status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'Closed')`,
           [
             row.wo_no,
             row.site,
@@ -264,6 +264,8 @@ export function mountPdfWorkOrderImport(app) {
             row.performed_by,
             row.reported_date || null,
             row.parts_used,
+            Number(row.final_cost || 0),
+            Number(row.parts_cost || 0),
           ]
         );
         imported++;

@@ -1,7 +1,7 @@
 import express from "express";
 import {ensureV2Schema,v2Enabled} from "./db.js";
 import {getFinancialReportV2} from "./financial.js";
-import {upsertDailySubmission,upsertDailyKm,createMaintenanceWorkOrder,updateMaintenanceWorkOrder,closeMaintenanceWorkOrder,deleteMaintenanceWorkOrder,addMaintenancePart,createProject,addProjectPart,listDailyExceptions} from "./workflow.js";
+import {upsertDailySubmission,upsertDailyKm,createMaintenanceWorkOrder,updateMaintenanceWorkOrder,closeMaintenanceWorkOrder,deleteMaintenanceWorkOrder,addMaintenancePart,createProject,updateProject,deleteProject,addProjectPart,listDailyExceptions} from "./workflow.js";
 import {listVehicles,getVehicle,updateVehicle,recordOilChange,createVehicle,listDrivers,createDriver,listSites,createSite,listProjects,listMaintenance,listWarehouse,seedWarehouseLocations,listPurchaseRequests,createPurchaseRequest,listTickets,createTicket,listVehicleAlerts,refreshVehicleAlerts,closeVehicleAlert,getVehicle360,getFleetDashboard} from "./services.js";
 import {buildFmmsMigrationPreview} from "./fmms-preview.js";
 import {previewLegacyVehicleMigration,migrateLegacyVehicles} from "./legacy-vehicle-migration.js";
@@ -51,6 +51,8 @@ r.post("/vehicles/:id/oil-change",async(req,res)=>{try{const vehicle=await recor
  r.delete("/maintenance/work-orders/:id",async(req,res)=>{try{res.json({success:await deleteMaintenanceWorkOrder(req.params.id)});}catch(e){res.status(400).json({success:false,error:e.message});}});
  r.post("/maintenance/parts",async(req,res)=>{try{res.json({success:true,row:await addMaintenancePart(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});
  r.post("/projects",async(req,res)=>{try{res.json({success:true,row:await createProject(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});
+ r.put("/projects/:id",async(req,res)=>{try{const row=await updateProject(req.params.id,req.body||{});if(!row)return res.status(404).json({success:false,error:"Project not found"});res.json({success:true,row});}catch(e){res.status(400).json({success:false,error:e.message});}});
+ r.delete("/projects/:id",async(req,res)=>{try{res.json({success:await deleteProject(req.params.id)});}catch(e){res.status(400).json({success:false,error:e.message});}});
  r.post("/projects/parts",async(req,res)=>{try{res.json({success:true,row:await addProjectPart(req.body)});}catch(e){res.status(400).json({success:false,error:e.message});}});
  r.get("/daily-exceptions/:date",async(req,res)=>{try{res.json({success:true,...await listDailyExceptions(req.params.date)});}catch(e){res.status(500).json({success:false,error:e.message});}});
  app.use("/api/v2",r);

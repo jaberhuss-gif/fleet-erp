@@ -29,8 +29,12 @@ export default function Projects({ user, access = {} }) {
   const load = async () => {
     try {
       setLoading(true);
-      const [p, s] = await Promise.all([api.get('/projects'), api.get('/sites')]);
-      setProjects(p.data.projects || []);
+      const [p, s] = await Promise.all([api.get('/v2/projects'), api.get('/v2/sites')]);
+      setProjects((p.data.projects || []).map(x => ({
+        ...x, name:x.name || x.description || x.project_no, site:x.site_name || '',
+        project_type:'Development', manager:'', budget:Number(x.budget || x.contractor_cost || 0),
+        spent:Number(x.contractor_cost || 0)
+      })));
       setSites(s.data.sites || []);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -48,11 +52,17 @@ export default function Projects({ user, access = {} }) {
     setMessage(''); setError('');
     try {
       if (editing) {
-        await api.put('/projects/' + editing.id, form);
-        setMessage('Project updated');
+        setError('Editing an existing V2 project is not enabled yet.');
+        return;
       } else {
-        await api.post('/projects', form);
-        setMessage('Project created');
+        await api.post('/v2/projects', {
+          siteId: sites.find(s => s.name === form.site)?.id || null,
+          name: form.name, description: form.description || form.name,
+          startDate: form.startDate || null, endDate: form.endDate || null,
+          status: form.status, contractor: form.contractor,
+          contractorCost: Number(form.spent || form.budget || 0), budget: Number(form.budget || 0)
+        });
+        setMessage('Project created'); 
       }
       resetForm();
       load();

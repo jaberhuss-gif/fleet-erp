@@ -4,7 +4,7 @@ import { exportToCSV } from '../api/export';
 import { printContent } from '../api/print';
 import ExcelImportButton from '../components/ExcelImportButton';
 
-export default function Vehicles({ onViewVehicle, canWork = false }) {
+export default function Vehicles({ onViewVehicle, canWork = false, initialAction = null }) {
   const [vehicles, setVehicles] = useState([]);
   const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -13,7 +13,7 @@ export default function Vehicles({ onViewVehicle, canWork = false }) {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterLocation, setFilterLocation] = useState('all');
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(initialAction === 'add');
   const [editing, setEditing] = useState(null);
   const [quickEdit, setQuickEdit] = useState(null);
   const [quickKm, setQuickKm] = useState('');

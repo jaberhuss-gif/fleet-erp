@@ -2,13 +2,13 @@
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
 
-export default function Purchases() {
+export default function Purchases({ entryOnly = false }) {
   const [purchases, setPurchases] = useState([]);
   const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(entryOnly);
   const [filterMonth, setFilterMonth] = useState('all');
   const [filterType, setFilterType] = useState('all');
   const [filterPurchasedBy, setFilterPurchasedBy] = useState('all');
@@ -32,7 +32,7 @@ export default function Purchases() {
   const resetForm = () => {
     setForm({ type: 'Work Order', referenceNo: '', itemName: '', quantity: 1, unitCost: 0,
       supplier: '', purchasedBy: 'Company', purchaseDate: '', notes: '' });
-    setShowForm(false);
+    setShowForm(entryOnly);
   };
 
   const handleSubmit = async (e) => {
@@ -70,7 +70,7 @@ export default function Purchases() {
   const contractorCost = filtered.filter(p => p.purchased_by === 'Contractor').reduce((s, p) => s + Number(p.total_cost || 0), 0);
 
   return (
-    <div className="panel">
+    <div className={entryOnly ? "panel building-entry-only" : "panel"}>
       <div style={{ background: 'linear-gradient(135deg, #047857, #34d399)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
           <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Purchases</h2>
         </div>
@@ -104,7 +104,7 @@ export default function Purchases() {
       </div>
 
       {showForm && (
-        <form onSubmit={handleSubmit} style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
+        <form className="building-entry-form" onSubmit={handleSubmit} style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
           <h3>New Purchase</h3>
           <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
             <div className="form-group"><label>Type</label>

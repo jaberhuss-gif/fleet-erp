@@ -30,8 +30,8 @@ function SelectedPeriodResult({ rows, selectedMonths, monthLabel, activeCard, se
   const contractorDev = sum('contractorDev');
   const partsDev = sum('partsDev');
   const salaryDev = sum('salaryDev') || 2200 * n;
-  const contractorPartsWO = sum('contractorPartsWO');
-  const contractorPartsDev = sum('contractorPartsDev');
+  const contractorPartsWO = sum('partsWO');
+  const contractorPartsDev = sum('partsDev');
   const contractorLabor = contractorWO + contractorDev;
   const contractorParts = contractorPartsWO + contractorPartsDev;
   const contractorTotal = contractorLabor + contractorParts;
@@ -155,6 +155,33 @@ function SelectedPeriodResult({ rows, selectedMonths, monthLabel, activeCard, se
         <Card id="development" label="🏗️ Development" value={money(devActual)} note={`Baseline ${money(devBaseline)} • Savings ${money(devSavings)}`} />
         <Card id="purchases" label="🏢 Company Purchases" value={money(purchases)} note="Company purchases in selected period" tone="amber" />
         <Card id="savings" label="🏆 Total Savings" value={money(totalSavings)} note={`${totalBaseline ? (totalSavings / totalBaseline * 100).toFixed(1) : '0.0'}% vs baseline`} tone="green" />
+      </div>
+      <div style={{marginTop:16,borderTop:'1px solid #e2e8f0',paddingTop:16,overflowX:'auto'}}>
+        <h3 style={{margin:'0 0 10px'}}>Monthly Financial Breakdown</h3>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+          <thead><tr>
+            {['Month','WO Cost','Dev Cost','Company Purchases','Contractor Parts','Contractor Total','Total Actual'].map(h => <th key={h} style={{textAlign:'left',padding:'9px 8px',borderBottom:'1px solid #cbd5e1',whiteSpace:'nowrap'}}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {chosen.map(r => {
+              const wo = Number(r.contractorWO || 0);
+              const dev = Number(r.contractorDev || 0);
+              const company = Number(r.otherPurchases || 0);
+              const parts = Number(r.partsWO || 0) + Number(r.partsDev || 0);
+              const contractor = wo + dev + parts;
+              const actual = Number(r.maintActual || 0) + Number(r.devActual || 0) + company;
+              return <tr key={r.month}>
+                <td style={{padding:'8px',borderBottom:'1px solid #e2e8f0'}}>{monthLabel(r.month)}</td>
+                <td style={{padding:'8px',borderBottom:'1px solid #e2e8f0'}}>{money(wo)}</td>
+                <td style={{padding:'8px',borderBottom:'1px solid #e2e8f0'}}>{money(dev)}</td>
+                <td style={{padding:'8px',borderBottom:'1px solid #e2e8f0'}}>{money(company)}</td>
+                <td style={{padding:'8px',borderBottom:'1px solid #e2e8f0'}}>{money(parts)}</td>
+                <td style={{padding:'8px',borderBottom:'1px solid #e2e8f0',fontWeight:700}}>{money(contractor)}</td>
+                <td style={{padding:'8px',borderBottom:'1px solid #e2e8f0',fontWeight:700}}>{money(actual)}</td>
+              </tr>;
+            })}
+          </tbody>
+        </table>
       </div>
       {activeCard && details[activeCard] && (
         <div style={{marginTop:16,padding:16,borderTop:'1px solid #e2e8f0'}}>

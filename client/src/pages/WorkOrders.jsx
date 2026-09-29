@@ -108,7 +108,7 @@ export default function WorkOrders({ user, access = {} }) {
       const response = await api.post('/work-orders/import-pdf/preview', fd, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      setPdfPreview(response.data);
+      setPdfPreview({ ...response.data, file });
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     } finally {

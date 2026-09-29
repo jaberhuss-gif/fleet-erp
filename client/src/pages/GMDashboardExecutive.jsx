@@ -48,7 +48,8 @@ function SelectedPeriodResult({ rows, selectedMonths, monthLabel, activeCard, se
   const totalProjects = sum('internalProjectCount') + sum('contractorProjectCount');
   const contractorProjects = sum('contractorProjectCount');
   const internalProjects = sum('internalProjectCount');
-  const totalBaseline = maintBaseline + devBaseline;\n  const label = selectedMonths.map(monthLabel).join(' • ');
+  const totalBaseline = maintBaseline + devBaseline;
+  const label = selectedMonths.map(monthLabel).join(' • ');
 
   const details = {
     'work-orders': {
@@ -243,7 +244,8 @@ export default function GMDashboardExecutive() {
   const [monthFinancial, setMonthFinancial] = useState(null);
   const [buildingView, setBuildingView] = useState(null);
   const [buildingRecords, setBuildingRecords] = useState({ workOrders: [], projects: [], purchases: [] });
-  const [selectedMonths, setSelectedMonths] = useState([]);\n  const [activeCard, setActiveCard] = useState(null);
+  const [selectedMonths, setSelectedMonths] = useState([]);
+  const [activeCard, setActiveCard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [updated, setUpdated] = useState(null);

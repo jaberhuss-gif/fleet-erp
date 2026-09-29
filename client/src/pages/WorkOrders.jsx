@@ -1,7 +1,6 @@
-﻿import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect } from 'react';
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
-import ExcelImportButton from '../components/ExcelImportButton';
 
 export default function WorkOrders({ user, access = {} }) {
   const canWork = user?.role === 'Owner' || !!access?.building?.can_work;
@@ -24,9 +23,8 @@ export default function WorkOrders({ user, access = {} }) {
   const [closeForm, setCloseForm] = useState({
     finalCost: 0, contractorCost: 0, laborCost: 0, partsCost: 0, closingNotes: ''
   });
-  const [pdfPreview, setPdfPreview] = useState(null);
-  const [pdfLoading, setPdfLoading] = useState(false);
-  const pdfInputRef = useRef(null);
+
+  const normalizeSiteName = (name) => name === 'Wadi Beddah' ? 'Wadi Bida' : name;
 
   useEffect(() => { load(); }, []);
 
@@ -35,12 +33,12 @@ export default function WorkOrders({ user, access = {} }) {
       setLoading(true);
       const [o, s] = await Promise.all([api.get('/v2/maintenance'), api.get('/v2/sites')]);
       setOrders((o.data.workOrders || []).map(x => ({
-        ...x, site: x.site_name || '', assigned_to: x.contractor_name || '',
+        ...x, site: normalizeSiteName(x.site_name || ''), assigned_to: x.performed_by || x.contractor_name || '',
         final_cost: Number(x.final_cost || 0), labor_cost: Number(x.internal_labor_cost || 0),
         parts_cost: Number(x.parts_cost || 0), completed_date: x.completion_date || '',
         contractor_name: x.contractor_name || '', closing_notes: x.closing_notes || ''
       })));
-      setSites(s.data.sites || []);
+      setSites((s.data.sites || []).map(site => ({ ...site, name: normalizeSiteName(site.name) })));
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
@@ -112,52 +110,6 @@ export default function WorkOrders({ user, access = {} }) {
     } catch (e) { setError(e.message); }
   };
 
-  const handlePdfSelected = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    if (!/\.pdf$/i.test(file.name)) {
-      setError('Please select a PDF file.');
-      return;
-    }
-    setError('');
-    setMessage('');
-    setPdfLoading(true);
-    try {
-      const data = new FormData();
-      data.append('file', file);
-      const response = await api.post('/v2/maintenance/import-pdf/preview', data, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setPdfPreview({ ...response.data, file });
-    } catch (e) {
-      setError(e.response?.data?.error || e.message);
-    } finally {
-      setPdfLoading(false);
-    }
-  };
-
-  const handlePdfImport = async () => {
-    if (!pdfPreview?.file) return;
-    setError('');
-    setMessage('');
-    setPdfLoading(true);
-    try {
-      const data = new FormData();
-      data.append('file', pdfPreview.file);
-      const response = await api.post('/v2/maintenance/import-pdf', data, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setMessage(`PDF imported: ${response.data.imported} new, ${response.data.skipped} already existed.`);
-      setPdfPreview(null);
-      load();
-    } catch (e) {
-      setError(e.response?.data?.error || e.message);
-    } finally {
-      setPdfLoading(false);
-    }
-  };
-
   const handleDelete = async (id) => {
     if (!confirm('Delete this work order?')) return;
     try {
@@ -182,6 +134,90 @@ export default function WorkOrders({ user, access = {} }) {
   const totalLaborCost = filtered.reduce((s, o) => s + Number(o.labor_cost || 0), 0);
   const totalPartsCost = filtered.reduce((s, o) => s + Number(o.parts_cost || 0), 0);
 
+  if (showForm && canWork) {
+    return (
+      <div className="panel">
+        <div style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>{editing ? 'Edit Work Order' : 'New Work Order'}</h2>
+          <button type="button" className="btn btn-warning" onClick={resetForm}>Back to Work Orders</button>
+        </div>
+        {message && <div className="alert alert-success">{message}</div>}
+        {error && <div className="alert alert-error">{error}</div>}
+                <form onSubmit={handleSubmit} style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
+                  <h3>{editing ? 'Edit Work Order' : 'New Work Order'}</h3>
+                  <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+                    <div className="form-group">
+                      <label>Site *</label>
+                      <select value={form.site} onChange={e => setForm({ ...form, site: e.target.value })} required>
+                        <option value="">-- Select Site --</option>
+                        {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group"><label>Area</label><input value={form.area} onChange={e => setForm({ ...form, area: e.target.value })} placeholder="e.g. GYM, Kitchen" /></div>
+                    <div className="form-group"><label>Category *</label>
+                      <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
+                        <option value="General">General</option>
+                        <option value="Carpentry">Carpentry</option>
+                        <option value="Plumbing">Plumbing</option>
+                        <option value="Electrical">Electrical</option>
+                        <option value="HVAC">HVAC</option>
+                        <option value="Mechanical">Mechanical</option>
+                        <option value="Painting">Painting</option>
+                        <option value="Civil">Civil</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div className="form-group"><label>Priority</label>
+                      <select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}>
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                        <option value="Urgent">Urgent</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Assigned To</label>
+                      <input
+                        value={form.assignedTo}
+                        onChange={e => setForm({ ...form, assignedTo: e.target.value })}
+                        disabled={user?.role !== 'Owner'}
+                        placeholder={user?.role === 'Owner' ? 'Only Owner can issue assignment' : 'Owner-only assignment'}
+                      />
+                      {user?.role !== 'Owner' && (
+                        <div style={{fontSize:11,color:'#64748b',marginTop:4}}>Assignment orders can only be issued or changed by Owner.</div>
+                      )}
+                    </div>
+                    <div className="form-group"><label>Reported Date</label><input type="date" value={form.reportedDate} onChange={e => setForm({ ...form, reportedDate: e.target.value })} /></div>
+                    <div className="form-group">
+                      <label>Executor Type</label>
+                      <select value={form.isContractor ? '1' : '0'} onChange={e => setForm({ ...form, isContractor: e.target.value === '1' })}>
+                        <option value="0">Internal (Company Employees)</option>
+                        <option value="1">Contractor</option>
+                      </select>
+                    </div>
+                    {form.isContractor && (
+                      <div className="form-group"><label>Contractor Name *</label><input value={form.contractorName} onChange={e => setForm({ ...form, contractorName: e.target.value })} required /></div>
+                    )}
+                    <div className="form-group">
+                      <label>Who Worked / Executor *</label>
+                      <input value={form.performedBy} onChange={e => setForm({ ...form, performedBy: e.target.value })}
+                        placeholder={form.isContractor ? 'Contractor / crew name' : 'Employee name'} required />
+                    </div>
+                  </div>
+                  <div className="form-group"><label>Description *</label><textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} required></textarea></div>
+                  <div className="form-group"><label>Parts Used</label><input value={form.partsUsed} onChange={e => setForm({ ...form, partsUsed: e.target.value })} /></div>
+                  <div className="btn-row">
+                    <button type="submit" className="btn btn-success">{editing ? 'Update' : 'Save'}</button>
+                    <button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button>
+                  </div>
+                </form>
+              )}
+        
+        
+      </div>
+    );
+  }
+
   return (
     <div className="panel">
       <div style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
@@ -190,63 +226,14 @@ export default function WorkOrders({ user, access = {} }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         
         <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "work-orders", [{key:"wo_no",label:"WO #"},{key:"site",label:"Site"},{key:"category",label:"Category"},{key:"description",label:"Description"},{key:"assigned_to",label:"Assigned To"},{key:"status",label:"Status"},{key:"reported_date",label:"Reported"},{key:"completed_date",label:"Completed"},{key:"final_cost",label:"Cost"}])}>Export CSV</button>{canWork && <>
-          <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
+          <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(true); }}>
             {showForm ? 'Cancel' : '+ New Work Order'}
-          </button>
-          <ExcelImportButton endpoint="/work-orders" kind="home-maintenance" onImported={load} label="Import Excel" />
-          <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" style={{ display: 'none' }} onChange={handlePdfSelected} />
-          <button className="btn btn-warning" disabled={pdfLoading} onClick={() => pdfInputRef.current?.click()}>
-            {pdfLoading ? 'Reading PDF...' : 'Import PDF'}
           </button>
         </>}
       </div>
 
       {message && <div className="alert alert-success">{message}</div>}
       {error && <div className="alert alert-error">{error}</div>}
-
-      {pdfPreview && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
-          <div style={{ background: '#fff', padding: '24px', borderRadius: '10px', width: '92%', maxWidth: '1100px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ marginTop: 0 }}>PDF Work Order Preview</h3>
-            <div style={{ marginBottom: '12px', color: '#64748b' }}>
-              {pdfPreview.filename} · {pdfPreview.pages} pages · {pdfPreview.count} Work Orders detected
-            </div>
-            {pdfPreview.count === 0 ? (
-              <div className="alert alert-error">No structured Work Orders were detected in this PDF.</div>
-            ) : (
-              <>
-                {pdfPreview.valid === false && (
-                  <div className="alert alert-error" style={{ marginBottom: '12px' }}>
-                    <strong>Import blocked.</strong> The PDF structure needs review before anything can be written to the database.
-                    {pdfPreview.warnings?.length > 0 && (
-                      <ul style={{ margin: '8px 0 0 18px' }}>
-                        {pdfPreview.warnings.map((w, i) => <li key={i}>{w}</li>)}
-                      </ul>
-                    )}
-                  </div>
-                )}
-                <div style={{ overflowX: 'auto' }}>
-                  <table>
-                    <thead><tr><th>WO #</th><th>Site</th><th>Area</th><th>Category</th><th>Description</th><th>Performed By</th><th>Contractor</th><th>Date</th></tr></thead>
-                    <tbody>{pdfPreview.rows.map((r, i) => (
-                      <tr key={r.wo_no || i}>
-                        <td>{r.wo_no}</td><td>{r.site}</td><td>{r.area}</td><td>{r.category}</td>
-                        <td>{r.description}</td><td>{r.performed_by}</td><td>{r.contractor_name}</td><td>{r.reported_date}</td>
-                      </tr>
-                    ))}</tbody>
-                  </table>
-                </div>
-              </>
-            )}
-            <div className="btn-row" style={{ marginTop: '16px' }}>
-              <button className="btn btn-success" disabled={pdfLoading || !pdfPreview.count || pdfPreview.valid !== true} onClick={handlePdfImport}>
-                {pdfLoading ? 'Importing...' : 'Confirm Import'}
-              </button>
-              <button className="btn btn-warning" disabled={pdfLoading} onClick={() => setPdfPreview(null)}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Cost Summary */}
       <div className="cards-grid" style={{ marginBottom: '16px' }}>
@@ -438,8 +425,8 @@ export default function WorkOrders({ user, access = {} }) {
                   {o.status === 'Open' && canWork && (
                     <button className="btn btn-success" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleClose(o)}>Close</button>
                   )}
-                  {canWork && <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleEdit(o)}>Edit</button>}
-                  {canWork && <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(o.id)}>Delete</button>}
+                  {canWork && o.status !== 'Closed' && <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleEdit(o)}>Edit</button>}
+                  {canWork && o.status !== 'Closed' && <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(o.id)}>Delete</button>}
                 </td>
               </tr>
             ))}

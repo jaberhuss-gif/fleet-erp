@@ -196,19 +196,30 @@ export default function WorkOrders({ user, access = {} }) {
               {pdfPreview.filename} · {pdfPreview.pages} pages · {pdfPreview.count} Work Orders detected
             </div>
             {pdfPreview.count === 0 ? (
-              <div className="alert alert-error">No Work Orders were detected in this PDF.</div>
+              <div className="alert alert-error">No structured Work Orders were detected in this PDF.</div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table>
-                  <thead><tr><th>WO #</th><th>Site</th><th>Area</th><th>Category</th><th>Description</th><th>Performed By</th><th>Contractor</th><th>Date</th></tr></thead>
-                  <tbody>{pdfPreview.rows.map((r, i) => (
-                    <tr key={r.wo_no || i}>
-                      <td>{r.wo_no}</td><td>{r.site}</td><td>{r.area}</td><td>{r.category}</td>
-                      <td>{r.description}</td><td>{r.performed_by}</td><td>{r.contractor_name}</td><td>{r.reported_date}</td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-              </div>
+              <>
+                {pdfPreview.valid === false && (
+                  <div className="alert alert-error" style={{ marginBottom: '12px' }}>
+                    <strong>Import blocked.</strong> The PDF structure needs review before anything can be written to the database.
+                    {pdfPreview.warnings?.length > 0 && (
+                      <ul style={{ margin: '8px 0 0 18px' }}>
+                        {pdfPreview.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                )}
+                <div style={{ overflowX: 'auto' }}>
+                  <table>
+                    <thead><tr><th>WO #</th><th>Site</th><th>Area</th><th>Category</th><th>Description</th><th>Performed By</th><th>Contractor</th><th>Date</th></tr></thead>
+                    <tbody>{pdfPreview.rows.map((r, i) => (
+                      <tr key={r.wo_no || i}>
+                        <td>{r.wo_no}</td><td>{r.site}</td><td>{r.area}</td><td>{r.category}</td>
+                        <td>{r.description}</td><td>{r.performed_by}</td><td>{r.contractor_name}</td><td>{r.reported_date}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
               </>
             )}
             <div className="btn-row" style={{ marginTop: '16px' }}>

@@ -153,7 +153,7 @@
     "status": "Closed",
     "total_cost": 15200,
     "contractor_cost": 15200,
-    "contractor": "AL Jodood"
+    "contractor": "Al Jodood"
   },
   {
     "project_no": "PRJ-0014",
@@ -273,6 +273,6 @@
     "status": "In Progress",
     "total_cost": 0,
     "contractor_cost": 0,
-    "contractor": "Al jodood"
+    "contractor": "Al Jodood"
   }
 ]

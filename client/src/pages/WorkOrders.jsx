@@ -2,14 +2,14 @@
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
 
-export default function WorkOrders({ user, access = {} }) {
+export default function WorkOrders({ user, access = {}, entryOnly = false, onBack }) {
   const canWork = user?.role === 'Owner' || !!access?.building?.can_work;
   const [orders, setOrders] = useState([]);
   const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(entryOnly);
   const [editing, setEditing] = useState(null);
   const [closing, setClosing] = useState(null);
   const [filterSite, setFilterSite] = useState('all');
@@ -48,7 +48,7 @@ export default function WorkOrders({ user, access = {} }) {
       description: '', assignedTo: '', isContractor: false, contractorName: '',
       performedBy: '', reportedDate: '', partsUsed: '' });
     setEditing(null);
-    setShowForm(false);
+    if (entryOnly) { onBack?.(); return; }\n    setShowForm(false);
   };
 
   const handleSubmit = async (e) => {
@@ -139,7 +139,7 @@ export default function WorkOrders({ user, access = {} }) {
       <div className="panel">
         <div style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>{editing ? 'Edit Work Order' : 'New Work Order'}</h2>
-          <button type="button" className="btn btn-warning" onClick={resetForm}>Back to Work Orders</button>
+          <button type="button" className="btn btn-warning" onClick={() => entryOnly ? onBack?.() : resetForm()}>Back to Building Maintenance</button>
         </div>
         {message && <div className="alert alert-success">{message}</div>}
         {error && <div className="alert alert-error">{error}</div>}

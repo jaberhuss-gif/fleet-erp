@@ -2,6 +2,7 @@
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
 import ExcelImportButton from '../components/ExcelImportButton';
+import { useRef } from 'react';
 
 export default function WorkOrders({ user, access = {} }) {
   const canWork = user?.role === 'Owner' || !!access?.building?.can_work;
@@ -16,6 +17,9 @@ export default function WorkOrders({ user, access = {} }) {
   const [filterSite, setFilterSite] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [search, setSearch] = useState('');
+  const [pdfPreview, setPdfPreview] = useState(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const pdfInputRef = useRef(null);
   const [form, setForm] = useState({
     site: '', area: '', category: 'General', priority: 'Medium',
     description: '', assignedTo: '', isContractor: false, contractorName: '',
@@ -93,6 +97,44 @@ export default function WorkOrders({ user, access = {} }) {
     } catch (e) { setError(e.message); }
   };
 
+  const handlePdfSelected = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setError(''); setMessage(''); setPdfLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const response = await api.post('/work-orders/import-pdf/preview', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setPdfPreview(response.data);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const handlePdfImport = async () => {
+    if (!pdfPreview?.file) return;
+    setPdfLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', pdfPreview.file);
+      const response = await api.post('/work-orders/import-pdf', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setMessage(`PDF imported: ${response.data.imported} new Work Orders, ${response.data.skipped} existing.`);
+      setPdfPreview(null);
+      load();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   const handleDelete = async (id) => {
     if (!confirm('Delete this work order?')) return;
     try {
@@ -126,11 +168,32 @@ export default function WorkOrders({ user, access = {} }) {
         
         <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "work-orders", [{key:"wo_no",label:"WO #"},{key:"site",label:"Site"},{key:"category",label:"Category"},{key:"description",label:"Description"},{key:"assigned_to",label:"Assigned To"},{key:"status",label:"Status"},{key:"reported_date",label:"Reported"},{key:"completed_date",label:"Completed"},{key:"final_cost",label:"Cost"}])}>Export CSV</button>{canWork && <><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
           {showForm ? 'Cancel' : '+ New Work Order'}
-        </button><ExcelImportButton endpoint="/work-orders" kind="home-maintenance" onImported={load} label="Import Excel" /></>}
+        </button><ExcelImportButton endpoint="/work-orders" kind="home-maintenance" onImported={load} label="Import Excel" /><input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" onChange={handlePdfSelected} style={{ display: 'none' }} /><button className="btn btn-secondary" type="button" onClick={() => pdfInputRef.current?.click()} disabled={pdfLoading}>{pdfLoading ? 'Reading PDF...' : 'Import PDF'}</button></>}
       </div>
 
       {message && <div className="alert alert-success">{message}</div>}
       {error && <div className="alert alert-error">{error}</div>}
+
+      {pdfPreview && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200 }}>
+          <div style={{ background: '#fff', padding: '22px', borderRadius: '10px', width: '94%', maxWidth: '1100px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ marginTop: 0 }}>PDF Work Order Preview</h3>
+            <p style={{ color: '#64748b' }}>{pdfPreview.filename} — {pdfPreview.pages} pages — {pdfPreview.count} Work Orders detected</p>
+            {pdfPreview.count > 0 ? (
+              <table>
+                <thead><tr><th>WO #</th><th>Site</th><th>Category</th><th>Description</th><th>Performed By</th><th>Date</th></tr></thead>
+                <tbody>{pdfPreview.rows.slice(0, 100).map((r, i) => (
+                  <tr key={r.wo_no || i}><td>{r.wo_no}</td><td>{r.site}</td><td>{r.category}</td><td>{r.description}</td><td>{r.performed_by}</td><td>{r.reported_date}</td></tr>
+                ))}</tbody>
+              </table>
+            ) : <div className="alert alert-warning">No Work Orders were detected. We need the actual PDF format to map its fields.</div>}
+            <div className="btn-row" style={{ marginTop: 16 }}>
+              {pdfPreview.count > 0 && <button className="btn btn-success" onClick={handlePdfImport} disabled={pdfLoading}>Import {pdfPreview.count} Work Orders</button>}
+              <button className="btn btn-warning" onClick={() => setPdfPreview(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cost Summary */}
       <div className="cards-grid" style={{ marginBottom: '16px' }}>

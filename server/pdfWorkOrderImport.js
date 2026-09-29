@@ -186,9 +186,9 @@ function parseRows(text, filename = "upload.pdf", knownSites = []) {
   if (!rows.length) {
     const requestedBy = match(flat, [/requested\s*by\s*\s*:?\s*(.+?)(?=\s+site\s*:|\s+subject\s*:|$)/i]);
     const subject = match(flat, [/subject\s*:\s*(.+?)(?=\s+\d+\s+.+?\s+(?:Pcs|Pc|L\.s|L\.m|m2|m3|m|Kg|Set|Nos?)\s+\d)/i]);
-    // Monthly contractor summaries often put only the month/year in the PDF title.
-    // If the body has no full date, use the filename month as the reporting month (day 01).
-    const reportDate = dateValue(flat) || dateValue(filename);
+    // Contractor monthly summaries do not set the Work Order date automatically.
+    // The user enters the actual request date when creating/confirming the WO.
+    const reportDate = "";
     const items = extractLineItems(flat);
 
     const candidateNames = [
@@ -198,36 +198,69 @@ function parseRows(text, filename = "upload.pdf", knownSites = []) {
       "Al-Quwayiyiah Wadi Bida"
     ].filter(Boolean);
 
-    const markers = [];
-    for (const name of candidateNames) {
-      const re = new RegExp(slug(name).replace(/-/g, "[\\s-]*"), "ig");
-      let m;
-      while ((m = re.exec(flat))) markers.push({ raw: m[0], index: m.index, name });
-    }
+    // IMPORTANT: pdf-parse preserves page boundaries as form-feed characters in
+    // the extracted text. A monthly contractor PDF can contain one complete
+    // site/work-order table per page. Parse each page independently first so
+    // page 3 is never swallowed into page 2 just because both pages were
+    // flattened into one string.
+    const pages = source.split(/\\f/).map((p) => clean(p)).filter(Boolean);
+    const pageSections = [];
 
-    markers.sort((a,b) => a.index - b.index);
-    const uniqueMarkers = [];
-    for (const marker of markers) {
-      if (!uniqueMarkers.some((x) => Math.abs(x.index - marker.index) < marker.raw.length && x.name === marker.name)) {
-        uniqueMarkers.push(marker);
+    const siteRegexFor = (pageText) => {
+      for (const name of candidateNames) {
+        const re = new RegExp(slug(name).replace(/-/g, "[\\s-]*"), "i");
+        const m = pageText.match(re);
+        if (m) return { rawSite: name, index: m.index ?? 0 };
       }
+      const explicit = pageText.match(/(?:site|location|camp|project\\s*site)\\s*[:#-]\\s*([^\\n]+?)(?=\\s+subject\\s*:|\\s+requested\\s+by|\\s+\\d+\\s+.+?\\s+(?:Pcs|Pc|L\\.s|L\\.m|m2|m3|m|Kg|Set|Nos?)\\s+\\d|$)/i);
+      return explicit ? { rawSite: clean(explicit[1]), index: explicit.index ?? 0 } : { rawSite: "", index: -1 };
+    };
+
+    for (const pageText of pages) {
+      const pageItems = extractLineItems(pageText);
+      if (!pageItems.length) continue;
+
+      const siteInfo = siteRegexFor(pageText);
+      pageSections.push({
+        rawSite: siteInfo.rawSite,
+        text: pageText,
+        items: pageItems,
+      });
     }
 
-    const sections = [];
-    if (uniqueMarkers.length) {
+    // Fallback for PDFs where pdf-parse does not preserve form-feed page breaks.
+    if (!pageSections.length && items.length) {
+      const markers = [];
+      for (const name of candidateNames) {
+        const re = new RegExp(slug(name).replace(/-/g, "[\\s-]*"), "ig");
+        let m;
+        while ((m = re.exec(flat))) markers.push({ raw: m[0], index: m.index, name });
+      }
+      markers.sort((a,b) => a.index - b.index);
+
+      const uniqueMarkers = [];
+      for (const marker of markers) {
+        if (!uniqueMarkers.some((x) => Math.abs(x.index - marker.index) < Math.max(marker.raw.length, x.raw.length))) {
+          uniqueMarkers.push(marker);
+        }
+      }
+
       for (let i=0; i<uniqueMarkers.length; i++) {
         const marker = uniqueMarkers[i];
         const end = uniqueMarkers[i+1]?.index ?? flat.length;
         const sectionText = flat.slice(marker.index, end);
         const sectionItems = items.filter((item) => item.index >= marker.index && item.index < end);
-        if (sectionItems.length) sections.push({ rawSite: marker.name, text: sectionText, items: sectionItems });
+        if (sectionItems.length) {
+          pageSections.push({ rawSite: marker.name, text: sectionText, items: sectionItems });
+        }
       }
     }
 
+    let sections = pageSections;
     if (!sections.length && items.length) {
-      const subjectSite = subject?.match(/\b(?:requirement|requi?rment)\b\s+(.+?)(?:\s*$)/i)?.[1] || "";
+      const subjectSite = subject?.match(/\\b(?:requirement|requi?rment)\\b\\s+(.+?)(?:\\s*$)/i)?.[1] || "";
       const fallbackSite = subjectSite || match(flat, [/site\\s*:\\s*(.+?)(?=\\s+subject\\s*:|\\s+\\d+\\s+|$)/i]);
-      sections.push({ rawSite: fallbackSite || "", text: flat, items });
+      sections = [{ rawSite: fallbackSite || "", text: flat, items }];
     }
 
     for (let i=0; i<sections.length; i++) {
@@ -240,7 +273,7 @@ function parseRows(text, filename = "upload.pdf", knownSites = []) {
         `${x.no}. ${x.description} | Unit: ${x.unit} | Qty: ${x.quantity} | Unit Price: ${x.unit_price} | Total: ${x.total}`
       ).join("\n");
       const grandTotal = sectionItems.reduce((sum, x) => sum + x.total, 0);
-      const datePart = reportDate.replace(/-/g, "") || "UNDATED";
+      const datePart = "UNDATED";
       const woBase = `PDF-${datePart}-${slug(site || section.rawSite || filename).slice(0, 40)}-${i+1}`;
 
       rows.push({

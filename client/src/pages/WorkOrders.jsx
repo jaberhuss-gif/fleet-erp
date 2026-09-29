@@ -151,6 +151,13 @@ export default function WorkOrders({ user, access = {}, entryOnly = false }) {
     } catch (e) { setError(e.message); }
   };
 
+  const currentMonth = (() => {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  })();
+
+  const monthlyOrders = orders.filter(o => String(o.reported_date || '').slice(0, 7) === currentMonth);
+
   const filtered = orders.filter(o => {
     const matchSearch = search === '' ||
       (o.wo_no || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -325,6 +332,36 @@ export default function WorkOrders({ user, access = {}, entryOnly = false }) {
             <button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button>
           </div>
         </form>
+      )}
+
+      {entryOnly && (
+        <div className="building-monthly-table" style={{ marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', gap: '10px', flexWrap: 'wrap' }}>
+            <h3 style={{ margin: 0 }}>Work Orders — Current Month ({currentMonth})</h3>
+            <span style={{ color: '#64748b', fontSize: '13px' }}>{monthlyOrders.length} record(s)</span>
+          </div>
+          {loading ? <div className="loading">Loading...</div> : monthlyOrders.length === 0 ? (
+            <div className="alert alert-info">No work orders recorded for {currentMonth}.</div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table>
+                <thead><tr>
+                  <th>WO #</th><th>Date</th><th>Site</th><th>Area</th><th>Category</th>
+                  <th>Description</th><th>Performed By</th><th>Contractor</th><th>Status</th><th>Cost (SAR)</th>
+                </tr></thead>
+                <tbody>{monthlyOrders.map(o => (
+                  <tr key={o.id}>
+                    <td style={{ fontWeight: 'bold' }}>{o.wo_no}</td>
+                    <td>{o.reported_date || '-'}</td><td>{o.site || '-'}</td><td>{o.area || '-'}</td>
+                    <td>{o.category || '-'}</td><td>{o.description || '-'}</td>
+                    <td>{o.performed_by || o.assigned_to || '-'}</td><td>{o.contractor_name || '-'}</td>
+                    <td>{o.status || '-'}</td><td>{Number(o.final_cost || 0).toLocaleString()}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Closing Modal */}

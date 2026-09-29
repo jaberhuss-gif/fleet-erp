@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import React from 'react';
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
@@ -150,9 +150,8 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
     return matchSite && matchStatus;
   });
 
-  const totalBudget = filtered.reduce((s, p) => s + Number(p.budget || 0), 0);
-  const totalSpent = filtered.reduce((s, p) => s + Number(p.spent || 0), 0);
-  const remaining = totalBudget - totalSpent;
+  const totalCost = filtered.reduce((s, p) => s + Number(p.total_cost ?? p.spent ?? 0), 0);
+  const contractorCost = filtered.reduce((s, p) => s + Number(p.contractor_cost ?? (p.contractor ? (p.total_cost ?? p.spent ?? 0) : 0)), 0);
 
   return (
     <div className={entryOnly ? "panel building-entry-only" : "panel"}>
@@ -177,20 +176,18 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
       {/* Summary */}
       <div className="cards-grid" style={{ marginBottom: '16px' }}>
         <div className="card">
-          <h3>Total Budget</h3>
-          <div className="big-number" style={{ color: '#1e3a8a' }}>{totalBudget.toLocaleString()}</div>
-          <div className="sub">SAR</div>
+          <h3>Total Projects</h3>
+          <div className="big-number" style={{ color: '#1e3a8a' }}>{filtered.length.toLocaleString()}</div>
+          <div className="sub">records</div>
         </div>
         <div className="card warning">
-          <h3>Total Spent</h3>
-          <div className="big-number" style={{ color: '#f59e0b' }}>{totalSpent.toLocaleString()}</div>
+          <h3>Total Cost</h3>
+          <div className="big-number" style={{ color: '#f59e0b' }}>{totalCost.toLocaleString()}</div>
           <div className="sub">SAR</div>
         </div>
-        <div className={remaining >= 0 ? 'card success' : 'card danger'}>
-          <h3>Remaining</h3>
-          <div className="big-number" style={{ color: remaining >= 0 ? '#16a34a' : '#dc2626' }}>
-            {remaining.toLocaleString()}
-          </div>
+        <div className="card success">
+          <h3>Contractor Cost</h3>
+          <div className="big-number" style={{ color: '#16a34a' }}>{contractorCost.toLocaleString()}</div>
           <div className="sub">SAR</div>
         </div>
       </div>
@@ -284,7 +281,9 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
             <option value="all">All</option>
             <option value="Active">Active</option>
+            <option value="In Progress">In Progress</option>
             <option value="On Hold">On Hold</option>
+            <option value="Closed">Closed</option>
             <option value="Completed">Completed</option>
             <option value="Cancelled">Cancelled</option>
           </select>
@@ -299,8 +298,8 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
         <table>
           <thead>
             <tr>
-              <th>Project #</th><th>Name</th><th>Site</th><th>Type</th><th>Manager</th>
-              <th>Budget</th><th>Spent</th><th>Progress</th><th>Status</th><th>Actions</th>
+              <th>Project #</th><th>Location</th><th>Description</th><th>Start Date</th><th>End Date</th>
+              <th>Status</th><th>Total Cost</th><th>Contractor Cost</th><th>Contractor</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -310,16 +309,14 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
                 <React.Fragment key={p.id}>
                   <tr>
                     <td style={{ fontWeight: 'bold' }}>{p.project_no}</td>
-                    <td style={{ fontWeight: 'bold' }}>{p.name}</td>
-                    <td>{p.site}</td><td>{p.project_type}</td><td>{p.manager || '-'}</td>
-                    <td>{Number(p.budget || 0).toLocaleString()}</td><td>{Number(p.spent || 0).toLocaleString()}</td>
-                    <td style={{ minWidth: '120px' }}>
-                      <div style={{ background: '#e2e8f0', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
-                        <div style={{ background: pct > 90 ? '#dc2626' : pct > 70 ? '#f59e0b' : '#16a34a', width: pct + '%', height: '100%' }}></div>
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>{pct.toFixed(0)}%</div>
-                    </td>
-                    <td><span className={'status-badge ' + (p.status === 'Completed' ? 'status-safe' : p.status === 'Cancelled' ? 'status-urgent' : 'status-warning')}>{p.status}</span></td>
+                    <td>{p.site || '-'}</td>
+                    <td style={{ minWidth: '260px' }}>{p.description || '-'}</td>
+                    <td>{p.start_date || '-'}</td>
+                    <td>{p.end_date || '-'}</td>
+                    <td><span className={'status-badge ' + (p.status === 'Closed' || p.status === 'Completed' ? 'status-safe' : p.status === 'Cancelled' ? 'status-urgent' : 'status-warning')}>{p.status || '-'}</span></td>
+                    <td>{Number(p.total_cost ?? p.spent ?? 0).toLocaleString()}</td>
+                    <td>{Number(p.contractor_cost ?? (p.contractor ? (p.total_cost ?? p.spent ?? 0) : 0)).toLocaleString()}</td>
+                    <td>{p.contractor || '-'}</td>
                     <td>
                       <button className="btn btn-primary" style={{padding:'6px 10px',fontSize:'12px',marginRight:'4px'}} onClick={() => openProjectId === p.id ? setOpenProjectId(null) : loadItems(p.id)}>{openProjectId === p.id ? 'Hide Items' : 'Items'}</button>
                       {canWork && <button className="btn btn-primary" style={{padding:'6px 10px',fontSize:'12px',marginRight:'4px'}} onClick={() => handleEdit(p)}>Edit</button>}

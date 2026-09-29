@@ -2,13 +2,13 @@
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
 
-export default function Purchases({ entryOnly = false, onBack }) {
+export default function Purchases() {
   const [purchases, setPurchases] = useState([]);
   const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [showForm, setShowForm] = useState(entryOnly);
+  const [showForm, setShowForm] = useState(false);
   const [filterMonth, setFilterMonth] = useState('all');
   const [filterType, setFilterType] = useState('all');
   const [filterPurchasedBy, setFilterPurchasedBy] = useState('all');
@@ -32,7 +32,6 @@ export default function Purchases({ entryOnly = false, onBack }) {
   const resetForm = () => {
     setForm({ type: 'Work Order', referenceNo: '', itemName: '', quantity: 1, unitCost: 0,
       supplier: '', purchasedBy: 'Company', purchaseDate: '', notes: '' });
-    if (entryOnly) { onBack?.(); return; }
     setShowForm(false);
   };
 
@@ -70,49 +69,6 @@ export default function Purchases({ entryOnly = false, onBack }) {
   const companyCost = filtered.filter(p => p.purchased_by === 'Company').reduce((s, p) => s + Number(p.total_cost || 0), 0);
   const contractorCost = filtered.filter(p => p.purchased_by === 'Contractor').reduce((s, p) => s + Number(p.total_cost || 0), 0);
 
-
-  if (showForm) {
-    return (
-      <div className="panel">
-        <div style={{ background: 'linear-gradient(135deg, #047857, #34d399)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>New Purchase</h2>
-          <button type="button" className="btn btn-warning" onClick={() => entryOnly ? onBack?.() : resetForm()}>Back to Building Maintenance</button>
-        </div>
-        {message && <div className="alert alert-success">{message}</div>}
-        {error && <div className="alert alert-error">{error}</div>}
-        <form onSubmit={handleSubmit} style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
-          <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-            <div className="form-group"><label>Type</label>
-              <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
-                <option value="Work Order">Work Order</option>
-                <option value="General">General</option>
-                <option value="Inventory">Inventory</option>
-              </select>
-            </div>
-            <div className="form-group"><label>Reference #</label><input value={form.referenceNo} onChange={e => setForm({ ...form, referenceNo: e.target.value })} placeholder="WO # or Project #" /></div>
-            <div className="form-group"><label>Item Name *</label><input value={form.itemName} onChange={e => setForm({ ...form, itemName: e.target.value })} required /></div>
-            <div className="form-group"><label>Quantity</label><input type="number" value={form.quantity} onChange={e => setForm({ ...form, quantity: Number(e.target.value) })} /></div>
-            <div className="form-group"><label>Unit Cost (SAR)</label><input type="number" value={form.unitCost} onChange={e => setForm({ ...form, unitCost: Number(e.target.value) })} /></div>
-            <div className="form-group"><label>Supplier</label><input value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })} /></div>
-            <div className="form-group"><label>Purchased By</label>
-              <select value={form.purchasedBy} onChange={e => setForm({ ...form, purchasedBy: e.target.value })}>
-                <option value="Company">Company</option>
-                <option value="Contractor">Contractor</option>
-              </select>
-            </div>
-            <div className="form-group"><label>Purchase Date</label><input type="date" value={form.purchaseDate} onChange={e => setForm({ ...form, purchaseDate: e.target.value })} /></div>
-          </div>
-          <div className="form-group"><label>Notes</label><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2}></textarea></div>
-          <div className="btn-row">
-            <button type="submit" className="btn btn-success">Save Purchase</button>
-            <button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button>
-          </div>
-        </form>
-
-      </div>
-    );
-  }
-
   return (
     <div className="panel">
       <div style={{ background: 'linear-gradient(135deg, #047857, #34d399)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
@@ -120,7 +76,7 @@ export default function Purchases({ entryOnly = false, onBack }) {
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         
-        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "purchases", [{key:"purchase_no",label:"PUR #"},{key:"purchase_date",label:"Date"},{key:"type",label:"Type"},{key:"reference_no",label:"Reference"},{key:"item_name",label:"Item"},{key:"quantity",label:"Qty"},{key:"unit_cost",label:"Unit Cost"},{key:"total_cost",label:"Total"},{key:"supplier",label:"Supplier"},{key:"purchased_by",label:"Paid By"}])}>Export CSV</button><button className="btn btn-primary" onClick={() => setShowForm(true)}>
+        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "purchases", [{key:"purchase_no",label:"PUR #"},{key:"purchase_date",label:"Date"},{key:"type",label:"Type"},{key:"reference_no",label:"Reference"},{key:"item_name",label:"Item"},{key:"quantity",label:"Qty"},{key:"unit_cost",label:"Unit Cost"},{key:"total_cost",label:"Total"},{key:"supplier",label:"Supplier"},{key:"purchased_by",label:"Paid By"}])}>Export CSV</button><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
           {showForm ? 'Cancel' : '+ New Purchase'}
         </button>
       </div>
@@ -146,6 +102,43 @@ export default function Purchases({ entryOnly = false, onBack }) {
           <div className="sub">SAR</div>
         </div>
       </div>
+
+      {showForm && (
+        <form onSubmit={handleSubmit} style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
+          <h3>New Purchase</h3>
+          <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+            <div className="form-group"><label>Type</label>
+              <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                <option value="Work Order">Work Order</option>
+                <option value="General">General</option>
+                <option value="Inventory">Inventory</option>
+              </select>
+            </div>
+            <div className="form-group"><label>Reference #</label><input value={form.referenceNo} onChange={e => setForm({ ...form, referenceNo: e.target.value })} placeholder="WO # or Project #" /></div>
+            <div className="form-group"><label>Item Name *</label><input value={form.itemName} onChange={e => setForm({ ...form, itemName: e.target.value })} required /></div>
+            <div className="form-group"><label>Quantity</label><input type="number" value={form.quantity} onChange={e => setForm({ ...form, quantity: Number(e.target.value) })} /></div>
+            <div className="form-group"><label>Unit Cost (SAR)</label><input type="number" value={form.unitCost} onChange={e => setForm({ ...form, unitCost: Number(e.target.value) })} /></div>
+            <div className="form-group"><label>Supplier</label><input value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })} /></div>
+            <div className="form-group"><label>Purchased By</label>
+              <select value={form.purchasedBy} onChange={e => setForm({ ...form, purchasedBy: e.target.value })}>
+                <option value="Company">Company</option>
+                <option value="Contractor">Contractor</option>
+              </select>
+            </div>
+            <div className="form-group"><label>Purchase Date</label><input type="date" value={form.purchaseDate} onChange={e => setForm({ ...form, purchaseDate: e.target.value })} /></div>
+          </div>
+          <div className="form-group"><label>Notes</label><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2}></textarea></div>
+          {form.type === 'Project' && (
+            <div className="alert alert-info">
+              Project purchases must be recorded through an approved Purchase Request.
+            </div>
+          )}
+          <div className="btn-row">
+            <button type="submit" className="btn btn-success">Save Purchase</button>
+            <button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button>
+          </div>
+        </form>
+      )}
 
       {/* Filters */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '16px', background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>

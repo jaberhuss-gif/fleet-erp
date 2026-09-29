@@ -203,7 +203,7 @@ function parseRows(text, filename = "upload.pdf", knownSites = []) {
     // site/work-order table per page. Parse each page independently first so
     // page 3 is never swallowed into page 2 just because both pages were
     // flattened into one string.
-    const pages = source.split(/\\f/).map((p) => clean(p)).filter(Boolean);
+    const pages = source.split(/\f/).map((p) => clean(p)).filter(Boolean);
     const pageSections = [];
 
     const siteRegexFor = (pageText) => {
@@ -212,7 +212,7 @@ function parseRows(text, filename = "upload.pdf", knownSites = []) {
         const m = pageText.match(re);
         if (m) return { rawSite: name, index: m.index ?? 0 };
       }
-      const explicit = pageText.match(/(?:site|location|camp|project\\s*site)\\s*[:#-]\\s*([^\\n]+?)(?=\\s+subject\\s*:|\\s+requested\\s+by|\\s+\\d+\\s+.+?\\s+(?:Pcs|Pc|L\\.s|L\\.m|m2|m3|m|Kg|Set|Nos?)\\s+\\d|$)/i);
+      const explicit = pageText.match(/(?:site|location|camp|project\s*site)\s*[:#-]\s*([^\n]+?)(?=\s+subject\s*:|\s+requested\s+by|\s+\d+\s+.+?\s+(?:Pcs|Pc|L\.s|L\.m|m2|m3|m|Kg|Set|Nos?)\s+\d|$)/i);
       return explicit ? { rawSite: clean(explicit[1]), index: explicit.index ?? 0 } : { rawSite: "", index: -1 };
     };
 
@@ -258,8 +258,8 @@ function parseRows(text, filename = "upload.pdf", knownSites = []) {
 
     let sections = pageSections;
     if (!sections.length && items.length) {
-      const subjectSite = subject?.match(/\\b(?:requirement|requi?rment)\\b\\s+(.+?)(?:\\s*$)/i)?.[1] || "";
-      const fallbackSite = subjectSite || match(flat, [/site\\s*:\\s*(.+?)(?=\\s+subject\\s*:|\\s+\\d+\\s+|$)/i]);
+      const subjectSite = subject?.match(/\b(?:requirement|requi?rment)\b\s+(.+?)(?:\s*$)/i)?.[1] || "";
+      const fallbackSite = subjectSite || match(flat, [/site\s*:\s*(.+?)(?=\s+subject\s*:|\s+\d+\s+|$)/i]);
       sections = [{ rawSite: fallbackSite || "", text: flat, items }];
     }
 

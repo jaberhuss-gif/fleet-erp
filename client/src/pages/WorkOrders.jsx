@@ -175,6 +175,11 @@ export default function WorkOrders({ user, access = {}, entryOnly = false }) {
 
   return (
     <div className={entryOnly ? "panel building-entry-only" : "panel"}>
+      <style>{`
+        .building-entry-only > *:not(.building-entry-form):not(.building-monthly-table) { display: none !important; }
+        .building-entry-only > .building-entry-form,
+        .building-entry-only > .building-monthly-table { display: block !important; }
+      `}</style>
       <div style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
           <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Work Orders</h2>
         </div>

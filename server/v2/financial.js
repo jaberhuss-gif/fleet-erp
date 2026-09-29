@@ -13,11 +13,11 @@ export async function getFinancialReportV2({from=null,to=null}={}){
     const next=new Date(Date.UTC(y,m,1)).toISOString().slice(0,10);
     const maintenance=(await v2Query(
       "SELECT COALESCE(SUM(contractor_cost),0) contractor_wo,COALESCE(SUM(internal_labor_cost),0) internal_wo,"+
-      "(SELECT COALESCE(SUM(mp.total_price),0) FROM fleet_erp_v2.maintenance_parts mp JOIN fleet_erp_v2.maintenance_work_orders mw ON mw.id=mp.work_order_id WHERE mw.reported_date >= $1 AND mw.reported_date < $2) parts_wo "+
+      "(SELECT COALESCE(SUM(mp.total_cost),0) FROM fleet_erp_v2.maintenance_purchases mp JOIN fleet_erp_v2.maintenance_work_orders mw ON mw.id=mp.work_order_id WHERE mw.reported_date >= $1 AND mw.reported_date < $2 AND lower(mp.supplier_type)='contractor') parts_wo "+
       "FROM fleet_erp_v2.maintenance_work_orders WHERE reported_date >= $1 AND reported_date < $2",[start,next])).rows[0];
     const development=(await v2Query(
       "SELECT COALESCE(SUM(contractor_cost),0) contractor_dev,COALESCE(SUM(internal_labor_cost),0) internal_dev,"+
-      "(SELECT COALESCE(SUM(pp.total_price),0) FROM fleet_erp_v2.project_parts pp JOIN fleet_erp_v2.projects p ON p.id=pp.project_id WHERE p.start_date >= $1 AND p.start_date < $2) parts_dev "+
+      "(SELECT COALESCE(SUM(pp.total_cost),0) FROM fleet_erp_v2.project_purchases pp JOIN fleet_erp_v2.projects p ON p.id=pp.project_id WHERE p.start_date >= $1 AND p.start_date < $2 AND lower(pp.supplier_type)='contractor') parts_dev "+
       "FROM fleet_erp_v2.projects WHERE start_date IS NOT NULL AND start_date >= $1 AND start_date < $2",[start,next])).rows[0];
     const salary=Number(settings.maintenance_salary_monthly)+Number(settings.development_salary_monthly);
     const contractorWO=Number(maintenance.contractor_wo),contractorDev=Number(development.contractor_dev);

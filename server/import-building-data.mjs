@@ -107,6 +107,9 @@ await q(`CREATE TABLE IF NOT EXISTS projects (
   contractor TEXT, month TEXT, year TEXT, notes TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
 
+await q(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS contractor_cost NUMERIC DEFAULT 0`);
+await q(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS internal_labor_cost NUMERIC DEFAULT 0`);
+
 await q(`CREATE TABLE IF NOT EXISTS purchases (
   id SERIAL PRIMARY KEY, purchase_no TEXT UNIQUE, type TEXT, reference_no TEXT,
   item_name TEXT, quantity NUMERIC DEFAULT 1, unit_cost NUMERIC DEFAULT 0,

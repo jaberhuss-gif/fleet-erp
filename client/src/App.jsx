@@ -56,7 +56,7 @@ const TAB_LABELS = {
   'support-service': '🛠️ Support & Service',
   operations: '🏢 Operations',
   warehouse: '📦 Warehouse',
-  'building-maintenance': '🔧 Building Maintenance',
+  'building-maintenance': '📊 Building Maintenance Monthly Report',
   drivers: '👨‍🔧 Driver',
   users: 'Users',
   audit: 'Audit Log',

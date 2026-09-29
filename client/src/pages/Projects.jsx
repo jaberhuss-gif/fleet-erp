@@ -90,7 +90,7 @@ export default function Projects({ user, access = {} }) {
   const loadItems = async (projectId) => {
     try {
       setItemsLoading(true);
-      const r = await api.get('/projects/' + projectId + '/items');
+      const r = await api.get('/v2/projects/' + projectId + '/items');
       setItems(r.data.items || []);
       setOpenProjectId(projectId);
     } catch (e) { setError(e.response?.data?.error || e.message); }
@@ -99,7 +99,7 @@ export default function Projects({ user, access = {} }) {
 
   const updateItemStatus = async (item, status) => {
     try {
-      const r = await api.put('/project-items/' + item.id, { status, actualAmount:item.actual_amount || 0, notes:item.notes || '' });
+      const r = await api.put('/v2/projects/parts/' + item.id, { status, actualAmount:item.actual_amount || 0, notes:item.notes || '' });
       setItems(prev => prev.map(x => x.id === item.id ? r.data.item : x));
     } catch (e) { setError(e.response?.data?.error || e.message); }
   };

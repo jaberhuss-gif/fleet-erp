@@ -1,5 +1,4 @@
 ﻿import { useState, useEffect } from 'react';
-import React from 'react';
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
 
@@ -14,9 +13,6 @@ export default function Projects({ user, access = {} }) {
   const [editing, setEditing] = useState(null);
   const [filterSite, setFilterSite] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [openProjectId, setOpenProjectId] = useState(null);
-  const [items, setItems] = useState([]);
-  const [itemsLoading, setItemsLoading] = useState(false);
   const [form, setForm] = useState({
     name: '', description: '', site: '', projectType: 'Development', status: 'Not Started',
     budget: 0, spent: 0, startDate: '', endDate: '', manager: '', contractor: '', notes: ''
@@ -296,36 +292,10 @@ export default function Projects({ user, access = {} }) {
                     </td>
                     <td><span className={'status-badge ' + (p.status === 'Completed' ? 'status-safe' : p.status === 'Cancelled' ? 'status-urgent' : 'status-warning')}>{p.status}</span></td>
                     <td>
-                      <button className="btn btn-primary" style={{padding:'6px 10px',fontSize:'12px',marginRight:'4px'}} onClick={() => openProjectId === p.id ? setOpenProjectId(null) : loadItems(p.id)}>{openProjectId === p.id ? 'Hide Items' : 'Items'}</button>
                       {canWork && <button className="btn btn-primary" style={{padding:'6px 10px',fontSize:'12px',marginRight:'4px'}} onClick={() => handleEdit(p)}>Edit</button>}
                       {canWork && <button className="btn btn-danger" style={{padding:'6px 10px',fontSize:'12px'}} onClick={() => handleDelete(p.id)}>Delete</button>}
                     </td>
                   </tr>
-                  {openProjectId === p.id && (
-                    <tr><td colSpan="10">
-                      <div style={{padding:12,background:'#f8fafc'}}>
-                        <div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap'}}>
-                          <strong style={{marginRight:'auto'}}>Project Items — {p.name}</strong>
-                          <button className="btn btn-success" onClick={() => exportItemsExcel(p)}>Export Excel</button>
-                          <button className="btn btn-primary" onClick={() => exportItemsPDF(p)}>Export PDF</button>
-                        </div>
-                        {itemsLoading ? <div>Loading items...</div> : items.length === 0 ? <div>No imported items.</div> : (
-                          <table><thead><tr><th>Sr.</th><th>Section</th><th>Item</th><th>Unit</th><th>Qty</th><th>Price</th><th>Cost</th><th>Status</th><th>Actual Amount</th><th>Notes</th><th>Action</th></tr></thead>
-                          <tbody>{items.map(item => <tr key={item.id}>
-                            <td>{item.sr_no}</td><td>{item.section || '-'}</td><td>{item.item}</td><td>{item.unit}</td><td>{item.quantity}</td><td>{item.price}</td><td>{item.cost}</td>
-                            <td><select value={item.status || 'Not Started'} onChange={e => updateItemStatus(item,e.target.value)}>
-                              <option>Not Started</option><option>In Progress</option><option>Completed</option><option>On Hold</option>
-                            </select></td>
-                            <td>{item.actual_amount || 0}</td><td>{item.notes || '-'}</td>
-                            <td style={{whiteSpace:'nowrap'}}>
-  {item.status === 'Completed' && Number(item.actual_amount || 0) > 0 && String(item.notes || '').trim() ? (
-    <button className="btn btn-warning" style={{padding:'5px 8px'}} onClick={() => reopenItem(item)}>Reopen</button>
-  ) : (
-    <button className="btn btn-success" style={{padding:'5px 8px'}} onClick={() => closeItem(item)}>Close</button>
-  )}
-</td>
-                          </tr>)}</tbody></table>
-                        )}
                       </div>
                     </td></tr>
                   )}

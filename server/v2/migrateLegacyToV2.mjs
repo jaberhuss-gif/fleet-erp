@@ -1,7 +1,7 @@
 import { query } from "../postgres.js";
 import { v2Query, v2Transaction } from "./db.js";
 
-const MARKER = "legacy-main-to-v2-complete-v2";
+const MARKER = "legacy-main-to-v2-complete-v3-building-reconcile";
 
 function s(v) { return v == null ? "" : String(v).trim(); }
 function n(v, d = 0) { const x = Number(v); return Number.isFinite(x) ? x : d; }
@@ -176,14 +176,34 @@ export async function migrateLegacyToV2() {
       counts.projects = (await rows("projects")).length;
     }
 
-    // Purchases.
+    // Purchases: keep the sheet's Work Order vs Development Project split and
+    // link each source purchase to its V2 record. Company-paid purchases remain
+    // visible in the purchase pages but are excluded by the financial report's
+    // contractor-parts rule.
     if (await tableExists("purchases")) {
       for (const r of await rows("purchases")) {
-        const ref = s(r.reference_no);
-        await v2Query(`INSERT INTO fleet_erp_v2.maintenance_purchases
-          (legacy_purchase_ref,item_name,quantity,unit_cost,supplier_type,supplier_name,purchase_date)
-          VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(legacy_purchase_ref) DO UPDATE SET item_name=EXCLUDED.item_name,quantity=EXCLUDED.quantity,unit_cost=EXCLUDED.unit_cost,supplier_type=EXCLUDED.supplier_type,supplier_name=EXCLUDED.supplier_name,purchase_date=EXCLUDED.purchase_date`,
-          [s(r.purchase_no||r.reference_no||`LEGACY-PURCHASE-${r.id}`),s(r.item_name),n(r.quantity,1),n(r.unit_cost),s(r.purchased_by)||"Company",s(r.supplier),date(r.purchase_date)]);
+        const ref = s(r.purchase_no || r.reference_no || `LEGACY-PURCHASE-${r.id}`);
+        const type = s(r.type).toLowerCase();
+        const supplierType = s(r.purchased_by) || "Company";
+        if (type === "development project") {
+          const project = await v2Query("SELECT id FROM fleet_erp_v2.projects WHERE project_no=$1 LIMIT 1", [s(r.reference_no)]);
+          await v2Query(`INSERT INTO fleet_erp_v2.project_purchases
+            (legacy_purchase_ref,project_id,item_name,quantity,unit_cost,supplier_type,supplier_name,purchase_date)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+            ON CONFLICT(legacy_purchase_ref) DO UPDATE SET project_id=EXCLUDED.project_id,item_name=EXCLUDED.item_name,
+            quantity=EXCLUDED.quantity,unit_cost=EXCLUDED.unit_cost,supplier_type=EXCLUDED.supplier_type,
+            supplier_name=EXCLUDED.supplier_name,purchase_date=EXCLUDED.purchase_date`,
+            [ref,project.rows[0]?.id || null,s(r.item_name),n(r.quantity,1),n(r.unit_cost),supplierType,s(r.supplier),date(r.purchase_date)]);
+        } else {
+          const wo = await v2Query("SELECT id FROM fleet_erp_v2.maintenance_work_orders WHERE wo_no=$1 LIMIT 1", [s(r.reference_no)]);
+          await v2Query(`INSERT INTO fleet_erp_v2.maintenance_purchases
+            (legacy_purchase_ref,work_order_id,item_name,quantity,unit_cost,supplier_type,supplier_name,purchase_date)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+            ON CONFLICT(legacy_purchase_ref) DO UPDATE SET work_order_id=EXCLUDED.work_order_id,item_name=EXCLUDED.item_name,
+            quantity=EXCLUDED.quantity,unit_cost=EXCLUDED.unit_cost,supplier_type=EXCLUDED.supplier_type,
+            supplier_name=EXCLUDED.supplier_name,purchase_date=EXCLUDED.purchase_date`,
+            [ref,wo.rows[0]?.id || null,s(r.item_name),n(r.quantity,1),n(r.unit_cost),supplierType,s(r.supplier),date(r.purchase_date)]);
+        }
       }
       counts.purchases = (await rows("purchases")).length;
     }

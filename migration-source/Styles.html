@@ -1,0 +1,473 @@
+<style>
+  /* ================= القائمة الجانبية ================= */
+  .sidebar {
+    background: #0f172a;
+    color: #fff;
+    height: 100vh;
+    padding: 20px;
+    position: sticky;
+    top: 0;
+    overflow-y: auto;
+  }
+  .sidebar h4 {
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: -0.5px;
+    margin-bottom: 25px;
+  }
+  .sidebar h4 span {
+    color: #60a5fa;
+  }
+  .nav-link {
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 12px 14px;
+    border-radius: 12px;
+    margin-bottom: 4px;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .nav-link:hover {
+    background: #1e293b;
+    color: #fff;
+    transform: translateX(4px);
+  }
+  .nav-link .icon {
+    font-size: 18px;
+  }
+
+  /* ================= كروت Dashboard الحديثة ================= */
+  /* الصف الأول: الإحصائيات الأساسية */
+  .dashboard-stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+
+  /* الصف الثاني: التكاليف والمصاريف */
+  .dashboard-stats-row:last-of-type {
+    margin-bottom: 30px;
+  }
+
+  .stat-card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 20px 18px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    border-left: 5px solid;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.10);
+  }
+
+  .stat-card .stat-icon {
+    font-size: 26px;
+    margin-bottom: 6px;
+    display: inline-block;
+  }
+
+  .stat-card .stat-number {
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+  }
+
+  .stat-card .stat-label {
+    font-size: 13px;
+    color: #6b7280;
+    font-weight: 600;
+    margin-top: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .stat-card .stat-sub {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-top: 8px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .stat-card .stat-sub .badge-open {
+    color: #f59e0b;
+    font-weight: 600;
+  }
+  .stat-card .stat-sub .badge-closed {
+    color: #10b981;
+    font-weight: 600;
+  }
+  .stat-card .stat-sub .badge-active {
+    color: #3b82f6;
+    font-weight: 600;
+  }
+
+  /* ألوان الكروت */
+  .stat-card.blue { border-left-color: #3b82f6; }
+  .stat-card.blue .stat-number { color: #3b82f6; }
+
+  .stat-card.green { border-left-color: #10b981; }
+  .stat-card.green .stat-number { color: #10b981; }
+
+  .stat-card.purple { border-left-color: #8b5cf6; }
+  .stat-card.purple .stat-number { color: #8b5cf6; }
+
+  .stat-card.orange { border-left-color: #f59e0b; }
+  .stat-card.orange .stat-number { color: #f59e0b; }
+
+  .stat-card.red { border-left-color: #ef4444; }
+  .stat-card.red .stat-number { color: #ef4444; }
+
+  .stat-card.teal { border-left-color: #14b8a6; }
+  .stat-card.teal .stat-number { color: #14b8a6; }
+
+  .stat-card.pink { border-left-color: #ec4899; }
+  .stat-card.pink .stat-number { color: #ec4899; }
+
+  /* دائرة خلفية */
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    top: -40px;
+    right: -40px;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    opacity: 0.04;
+    pointer-events: none;
+  }
+  .stat-card.blue::after { background: #3b82f6; }
+  .stat-card.green::after { background: #10b981; }
+  .stat-card.purple::after { background: #8b5cf6; }
+  .stat-card.orange::after { background: #f59e0b; }
+  .stat-card.red::after { background: #ef4444; }
+  .stat-card.teal::after { background: #14b8a6; }
+  .stat-card.pink::after { background: #ec4899; }
+
+  /* ================= باقي العناصر ================= */
+  .card {
+    border-radius: 16px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+    border: none;
+    overflow: hidden;
+  }
+  .card-header {
+    font-weight: 600;
+    padding: 14px 20px;
+    border: none;
+  }
+  .card-header .btn-light {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: #fff;
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 20px;
+  }
+  .card-header .btn-light:hover {
+    background: rgba(255,255,255,0.3);
+  }
+
+  .table {
+    background: #fff;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 0;
+  }
+  .table thead {
+    background: #f1f5f9;
+    color: #1e293b;
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .table thead th {
+    padding: 12px 16px;
+    border: none;
+  }
+  .table tbody td {
+    padding: 12px 16px;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .table tbody tr:hover {
+    background: #f8fafc;
+  }
+  .table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  /* ================= أزرار ================= */
+  .btn-primary {
+    background: #3b82f6;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 20px;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+  .btn-primary:hover {
+    background: #2563eb;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  }
+  .btn-success {
+    background: #10b981;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 20px;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+  .btn-success:hover {
+    background: #059669;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  }
+  .btn-warning {
+    background: #f59e0b;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 20px;
+    font-weight: 500;
+    color: #fff;
+    transition: all 0.2s;
+  }
+  .btn-warning:hover {
+    background: #d97706;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+    color: #fff;
+  }
+  .btn-danger {
+    background: #ef4444;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 20px;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+  .btn-danger:hover {
+    background: #dc2626;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+  }
+  .btn-info {
+    background: #8b5cf6;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 20px;
+    font-weight: 500;
+    color: #fff;
+    transition: all 0.2s;
+  }
+  .btn-info:hover {
+    background: #7c3aed;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+    color: #fff;
+  }
+
+  /* ================= Badges ================= */
+  .badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-weight: 500;
+    font-size: 12px;
+  }
+  .badge.bg-success { background: #10b981 !important; }
+  .badge.bg-warning { background: #f59e0b !important; color: #fff; }
+  .badge.bg-danger { background: #ef4444 !important; }
+  .badge.bg-info { background: #8b5cf6 !important; }
+  .badge.bg-secondary { background: #94a3b8 !important; }
+
+  /* ================= كروت التكاليف في Dashboard ================= */
+  .cost-summary-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 16px 20px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+  }
+  .cost-summary-card .label {
+    font-size: 14px;
+    color: #6b7280;
+    font-weight: 500;
+  }
+  .cost-summary-card .amount {
+    font-size: 22px;
+    font-weight: 700;
+  }
+  .cost-summary-card .amount.green { color: #10b981; }
+  .cost-summary-card .amount.red { color: #ef4444; }
+  .cost-summary-card .amount.blue { color: #3b82f6; }
+  .cost-summary-card .amount.purple { color: #8b5cf6; }
+
+  /* ================= Responsive ================= */
+  @media (max-width: 768px) {
+    .sidebar {
+      height: auto;
+      padding: 15px;
+    }
+    .dashboard-stats-row {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .stat-card .stat-number {
+      font-size: 24px;
+    }
+  }
+  @media (max-width: 480px) {
+    .dashboard-stats-row {
+      grid-template-columns: 1fr;
+    }
+  }
+    /* ============================================================
+     CSS لتقارير الصيانة المالية (Financial Reports)
+     ============================================================ */
+
+  /* تنسيق بطاقات التقرير */
+  .report-container {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+    margin-top: 20px;
+  }
+
+  .report-header {
+    border-bottom: 2px solid #f1f5f9;
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+  }
+
+  .report-header h3 {
+    color: #0f172a;
+    font-weight: 700;
+  }
+
+  /* بطاقات الملخص في التقرير */
+  .summary-card {
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 20px 16px;
+    text-align: center;
+    transition: all 0.3s ease;
+    border: 1px solid #e2e8f0;
+    height: 100%;
+  }
+
+  .summary-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+    border-color: #3b82f6;
+  }
+
+  .summary-card .summary-number {
+    font-size: 32px;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.2;
+  }
+
+  .summary-card .summary-label {
+    font-size: 13px;
+    color: #64748b;
+    font-weight: 500;
+    margin-top: 4px;
+  }
+
+  /* تنسيق الأزرار النشطة */
+  .btn.active {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 3px #000, 0 4px 12px rgba(0, 0, 0, 0.15);
+    position: relative;
+    z-index: 1;
+  }
+
+  /* تحسين الجدول في التقرير */
+  .report-container .table {
+    background: #fff;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .report-container .table thead {
+    background: #f1f5f9;
+  }
+
+  .report-container .table thead th {
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: #1e293b;
+    padding: 12px 16px;
+    border: none;
+  }
+
+  .report-container .table tbody td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+  }
+
+  .report-container .table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .report-container .table tbody tr:hover {
+    background: #f8fafc;
+  }
+
+  /* صفوف مميزة */
+  .report-container .table-warning td {
+    background-color: #fef3c7 !important;
+    font-weight: 600;
+  }
+
+  .report-container .table-success td {
+    background-color: #d1fae5 !important;
+    font-weight: 600;
+  }
+
+  .report-container .table-info td {
+    background-color: #dbeafe !important;
+  }
+
+  /* تنسيق معلومات الفترة والمواقع */
+  .period-info, .sites-info {
+    background: #f8fafc;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+  }
+
+  .period-info i, .sites-info i {
+    color: #3b82f6;
+    margin-left: 6px;
+  }
+
+  /* تنسيق مؤشر التحميل */
+  .spinner-border {
+    width: 3rem;
+    height: 3rem;
+  }
+
+  </style>

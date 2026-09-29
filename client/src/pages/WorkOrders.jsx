@@ -33,8 +33,13 @@ export default function WorkOrders({ user, access = {} }) {
   const load = async () => {
     try {
       setLoading(true);
-      const [o, s] = await Promise.all([api.get('/work-orders'), api.get('/sites')]);
-      setOrders(o.data.orders || []);
+      const [o, s] = await Promise.all([api.get('/v2/maintenance'), api.get('/v2/sites')]);
+      setOrders((o.data.workOrders || []).map(x => ({
+        ...x, site: x.site_name || '', assigned_to: x.contractor_name || '',
+        final_cost: Number(x.final_cost || 0), labor_cost: Number(x.internal_labor_cost || 0),
+        parts_cost: Number(x.parts_cost || 0), completed_date: x.completion_date || '',
+        contractor_name: x.contractor_name || '', closing_notes: x.closing_notes || ''
+      })));
       setSites(s.data.sites || []);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -53,11 +58,22 @@ export default function WorkOrders({ user, access = {} }) {
     setMessage(''); setError('');
     try {
       if (editing) {
-        await api.put('/work-orders/' + editing.id, form);
+        await api.put('/v2/maintenance/work-orders/' + editing.id, {
+          siteId: sites.find(s => s.name === form.site)?.id || null,
+          category: form.category, priority: form.priority, description: form.description,
+          reportedDate: form.reportedDate || null, contractorName: form.isContractor ? form.contractorName : null,
+          internalLaborCost: 0, contractorCost: 0, closingNotes: ''
+        });
         setMessage('Work order updated');
       } else {
-        await api.post('/work-orders', form);
-        setMessage('Work order created');
+        await api.post('/v2/maintenance/work-orders', {
+          siteId: sites.find(s => s.name === form.site)?.id || null,
+          category: form.category, priority: form.priority, description: form.description,
+          reportedDate: form.reportedDate || undefined,
+          contractorName: form.isContractor ? form.contractorName : '',
+          contractorCost: 0, internalLaborCost: 0
+        });
+        setMessage('Work order created'); 
       }
       resetForm();
       load();
@@ -89,7 +105,7 @@ export default function WorkOrders({ user, access = {} }) {
 
   const handleCloseSubmit = async () => {
     try {
-      await api.put('/work-orders/' + closing.id + '/close', closeForm);
+      await api.put('/v2/maintenance/work-orders/' + closing.id + '/close', { finalTotal: Number(closeForm.finalCost || 0), contractorCost: Number(closeForm.contractorCost || 0), internalLaborCost: Number(closeForm.laborCost || 0), closingNotes: closeForm.closingNotes });
       setMessage('Work order closed');
       setClosing(null);
       load();
@@ -145,7 +161,7 @@ export default function WorkOrders({ user, access = {} }) {
   const handleDelete = async (id) => {
     if (!confirm('Delete this work order?')) return;
     try {
-      await api.delete('/work-orders/' + id);
+      await api.delete('/v2/maintenance/work-orders/' + id);
       setMessage('Work order deleted');
       load();
     } catch (e) { setError(e.message); }

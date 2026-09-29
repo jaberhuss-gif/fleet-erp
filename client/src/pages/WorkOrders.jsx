@@ -126,7 +126,7 @@ export default function WorkOrders({ user, access = {} }) {
     try {
       const data = new FormData();
       data.append('file', file);
-      const response = await api.post('/work-orders/import-pdf/preview', data, {
+      const response = await api.post('/v2/maintenance/import-pdf/preview', data, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       setPdfPreview({ ...response.data, file });
@@ -145,7 +145,7 @@ export default function WorkOrders({ user, access = {} }) {
     try {
       const data = new FormData();
       data.append('file', pdfPreview.file);
-      const response = await api.post('/work-orders/import-pdf', data, {
+      const response = await api.post('/v2/maintenance/import-pdf', data, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       setMessage(`PDF imported: ${response.data.imported} new, ${response.data.skipped} already existed.`);

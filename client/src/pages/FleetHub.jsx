@@ -5,7 +5,6 @@ import Vehicles from './Vehicles';
 import VehicleMaintenance from './VehicleMaintenance';
 import ReportIssue from './ReportIssue';
 import SmartReportIssue from './SmartReportIssue';
-import FleetTicketViewer from './FleetTicketViewer';
 
 const FLEET_ACTIONS = [
   {
@@ -41,8 +40,8 @@ const FLEET_ACTIONS = [
   {
     id: 'issue',
     label: '🛠️ Maintenance Issue Report',
-    title: 'Maintenance Issue Report',
-    description: 'Report a vehicle maintenance problem and create a maintenance ticket.'
+    title: 'Report a Vehicle Problem',
+    description: 'Report a vehicle problem and create a maintenance ticket.'
   },
   {
     id: 'smart-issue',
@@ -66,16 +65,20 @@ export default function FleetHub({ user, access }) {
     );
   }
 
+  const isDriver = user?.role === 'Driver';
+
   const visibleActions = FLEET_ACTIONS.filter(item => {
-    // Driver records are still controlled by the existing Owner-only
-    // Drivers module. This keeps the Fleet shortcut from changing RBAC.
+    // Drivers only need the three driver-facing Fleet functions.
+    if (isDriver) return ['daily-km', 'issue', 'smart-issue'].includes(item.id);
+
+    // Driver records remain Owner-only.
     if (item.id === 'add-driver') return user?.role === 'Owner';
     return true;
   });
 
   const safeSection = visibleActions.some(s => s.id === section)
     ? section
-    : (visibleActions[0]?.id || 'readings');
+    : (visibleActions[0]?.id || 'daily-km');
 
   const current = visibleActions.find(s => s.id === safeSection) || visibleActions[0];
 
@@ -90,7 +93,9 @@ export default function FleetHub({ user, access }) {
         <div>
           <h1 style={{ margin: 0 }}>🚗 Fleet</h1>
           <p style={{ margin: '6px 0 0', color: '#64748b' }}>
-            Fleet vehicle and driver data entry, editing and maintenance actions.
+            {isDriver
+              ? 'Driver tools: Daily KM, vehicle problem reporting and Smart reporting.'
+              : 'Fleet vehicle and driver data entry, editing and maintenance actions.'}
           </p>
         </div>
       </div>

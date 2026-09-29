@@ -209,9 +209,10 @@ export default function WorkOrders({ user, access = {} }) {
                   ))}</tbody>
                 </table>
               </div>
+              </>
             )}
             <div className="btn-row" style={{ marginTop: '16px' }}>
-              <button className="btn btn-success" disabled={pdfLoading || !pdfPreview.count} onClick={handlePdfImport}>
+              <button className="btn btn-success" disabled={pdfLoading || !pdfPreview.count || pdfPreview.valid !== true} onClick={handlePdfImport}>
                 {pdfLoading ? 'Importing...' : 'Confirm Import'}
               </button>
               <button className="btn btn-warning" disabled={pdfLoading} onClick={() => setPdfPreview(null)}>Cancel</button>

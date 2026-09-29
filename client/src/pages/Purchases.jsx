@@ -55,6 +55,16 @@ export default function Purchases({ entryOnly = false }) {
     } catch (e) { setError(e.message); }
   };
 
+  const currentMonth = (() => {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  })();
+
+  const monthlyPurchases = purchases.filter(p => {
+    const dateMonth = String(p.purchase_date || '').slice(0, 7);
+    return dateMonth === currentMonth || String(p.month || '') === currentMonth;
+  });
+
   const months = [...new Set(purchases.map(p => p.month).filter(Boolean))].sort().reverse();
   const types = [...new Set(purchases.map(p => p.type).filter(Boolean))].sort();
 
@@ -138,6 +148,36 @@ export default function Purchases({ entryOnly = false }) {
             <button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button>
           </div>
         </form>
+      )}
+
+      {entryOnly && (
+        <div className="building-monthly-table" style={{ marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', gap: '10px', flexWrap: 'wrap' }}>
+            <h3 style={{ margin: 0 }}>Purchases — Current Month ({currentMonth})</h3>
+            <span style={{ color: '#64748b', fontSize: '13px' }}>{monthlyPurchases.length} record(s)</span>
+          </div>
+          {loading ? <div className="loading">Loading...</div> : monthlyPurchases.length === 0 ? (
+            <div className="alert alert-info">No purchases recorded for {currentMonth}.</div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table>
+                <thead><tr>
+                  <th>PUR #</th><th>Date</th><th>Type</th><th>Reference</th><th>Item</th>
+                  <th>Qty</th><th>Unit Cost</th><th>Total</th><th>Supplier</th><th>Paid By</th>
+                </tr></thead>
+                <tbody>{monthlyPurchases.map(p => (
+                  <tr key={p.id}>
+                    <td style={{ fontWeight: 'bold' }}>{p.purchase_no}</td><td>{p.purchase_date || '-'}</td>
+                    <td>{p.type || '-'}</td><td>{p.reference_no || '-'}</td><td>{p.item_name || '-'}</td>
+                    <td>{p.quantity ?? 0}</td><td>{Number(p.unit_cost || 0).toLocaleString()}</td>
+                    <td style={{ fontWeight: 'bold' }}>{Number(p.total_cost || 0).toLocaleString()}</td>
+                    <td>{p.supplier || '-'}</td><td>{p.purchased_by || '-'}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Filters */}

@@ -2,8 +2,6 @@
 import React from 'react';
 import api from '../api/client';
 import { exportToCSV } from '../api/export';
-import * as XLSX from 'xlsx';
-import ExcelImportButton from '../components/ExcelImportButton';
 
 export default function Projects({ user, access = {} }) {
   const canWork = user?.role === 'Owner' || !!access?.projects?.can_work;
@@ -24,6 +22,8 @@ export default function Projects({ user, access = {} }) {
     budget: 0, spent: 0, startDate: '', endDate: '', manager: '', contractor: '', notes: ''
   });
 
+  const normalizeSiteName = (name) => name === 'Wadi Beddah' ? 'Wadi Bida' : name;
+
   useEffect(() => { load(); }, []);
 
   const load = async () => {
@@ -31,11 +31,11 @@ export default function Projects({ user, access = {} }) {
       setLoading(true);
       const [p, s] = await Promise.all([api.get('/v2/projects'), api.get('/v2/sites')]);
       setProjects((p.data.projects || []).map(x => ({
-        ...x, name:x.name || x.description || x.project_no, site:x.site_name || '',
+        ...x, name:x.name || x.description || x.project_no, site:normalizeSiteName(x.site_name || ''),
         project_type:'Development', manager:'', budget:Number(x.budget || x.contractor_cost || 0),
         spent:Number(x.contractor_cost || 0)
       })));
-      setSites(s.data.sites || []);
+      setSites((s.data.sites || []).map(site => ({ ...site, name: normalizeSiteName(site.name) })));
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
@@ -87,63 +87,6 @@ export default function Projects({ user, access = {} }) {
     setShowForm(true);
   };
 
-  const loadItems = async (projectId) => {
-    try {
-      setItemsLoading(true);
-      const r = await api.get('/v2/projects/' + projectId + '/items');
-      setItems(r.data.items || []);
-      setOpenProjectId(projectId);
-    } catch (e) { setError(e.response?.data?.error || e.message); }
-    finally { setItemsLoading(false); }
-  };
-
-  const updateItemStatus = async (item, status) => {
-    try {
-      const r = await api.put('/v2/projects/parts/' + item.id, { status, actualAmount:item.actual_amount || 0, notes:item.notes || '' });
-      setItems(prev => prev.map(x => x.id === item.id ? r.data.item : x));
-    } catch (e) { setError(e.response?.data?.error || e.message); }
-  };
-
-  const closeItem = async (item) => {
-    const amount = window.prompt('Actual amount (SAR):', String(item.actual_amount || 0));
-    if (amount === null) return;
-    const notes = window.prompt('Closing notes:', item.notes || '') ?? '';
-    try {
-      const r = await api.put('/project-items/' + item.id + '/close', { actualAmount:Number(amount) || 0, notes });
-      setItems(prev => prev.map(x => x.id === item.id ? r.data.item : x));
-    } catch (e) { setError(e.response?.data?.error || e.message); }
-  };
-
-  const reopenItem = async (item) => {
-    if (!window.confirm('Reopen this item so it can be edited and closed again?')) return;
-    try {
-      const r = await api.put('/project-items/' + item.id + '/reopen');
-      setItems(prev => prev.map(x => x.id === item.id ? r.data.item : x));
-    } catch (e) { setError(e.response?.data?.error || e.message); }
-  };
-
-  const exportItemsExcel = (project) => {
-    const rows = items.map(x => ({
-      Sr: x.sr_no, Section:x.section, Item:x.item, Unit:x.unit, Quantity:x.quantity,
-      Price:x.price, Cost:x.cost, Status:x.status, 'Actual Amount':x.actual_amount, Notes:x.notes
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Project Items');
-    XLSX.writeFile(wb, (project.name || 'Project') + '-Items.xlsx');
-  };
-
-  const exportItemsPDF = (project) => {
-    const win = window.open('', '_blank');
-    if (!win) return;
-    const esc = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    win.document.write('<html><head><title>' + esc(project.name) + '</title><style>body{font-family:Arial;padding:24px}table{border-collapse:collapse;width:100%;font-size:11px}th,td{border:1px solid #999;padding:6px;text-align:left}th{background:#eee}.meta{margin-bottom:16px}.system-name{font-size:18px;font-weight:700;margin-bottom:3px}.system-sub{font-size:11px;color:#666;margin-bottom:14px}</style></head><body><div class="system-name">Fleet &amp; Camp Maintenance ERP</div><div class="system-sub">System Generated Report</div>');
-    win.document.write('<h2>' + esc(project.name) + '</h2><div class="meta">Site: ' + esc(project.site) + '</div><table><thead><tr><th>Sr.</th><th>Section</th><th>Item</th><th>Unit</th><th>Qty</th><th>Price</th><th>Cost</th><th>Status</th><th>Actual Amount</th><th>Notes</th></tr></thead><tbody>');
-    items.forEach(x => win.document.write('<tr><td>'+esc(x.sr_no)+'</td><td>'+esc(x.section)+'</td><td>'+esc(x.item)+'</td><td>'+esc(x.unit)+'</td><td>'+esc(x.quantity)+'</td><td>'+esc(x.price)+'</td><td>'+esc(x.cost)+'</td><td>'+esc(x.status)+'</td><td>'+esc(x.actual_amount)+'</td><td>'+esc(x.notes)+'</td></tr>'));
-    win.document.write('</tbody></table><script>window.onload=function(){window.print();}</script></body></html>');
-    win.document.close();
-  };
-
   const handleDelete = async (id) => {
     if (!confirm('Delete this project?')) return;
     try {
@@ -163,6 +106,64 @@ export default function Projects({ user, access = {} }) {
   const totalSpent = filtered.reduce((s, p) => s + Number(p.spent || 0), 0);
   const remaining = totalBudget - totalSpent;
 
+  if (showForm && canWork) {
+    return (
+      <div className="panel">
+        <div style={{ background: 'linear-gradient(135deg, #7c3aed, #a78bfa)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>{editing ? 'Edit Project' : 'New Project'}</h2>
+          <button type="button" className="btn btn-warning" onClick={resetForm}>Back to Projects</button>
+        </div>
+        {message && <div className="alert alert-success">{message}</div>}
+        {error && <div className="alert alert-error">{error}</div>}
+                <form onSubmit={handleSubmit} style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
+                  <h3>{editing ? 'Edit Project' : 'New Project'}</h3>
+                  <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+                    <div className="form-group"><label>Project Name *</label><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></div>
+                    <div className="form-group">
+                      <label>Site *</label>
+                      <select value={form.site} onChange={e => setForm({ ...form, site: e.target.value })} required>
+                        <option value="">-- Select Site --</option>
+                        {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group"><label>Type</label>
+                      <select value={form.projectType} onChange={e => setForm({ ...form, projectType: e.target.value })}>
+                        <option value="Development">Development</option>
+                        <option value="Renovation">Renovation</option>
+                        <option value="Expansion">Expansion</option>
+                        <option value="Maintenance">Maintenance</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div className="form-group"><label>Status</label>
+                      <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
+                        <option value="Not Started">Not Started</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="On Hold">On Hold</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                    </div>
+                    <div className="form-group"><label>Budget (SAR)</label><input type="number" value={form.budget} onChange={e => setForm({ ...form, budget: Number(e.target.value) })} /></div>
+                    <div className="form-group"><label>Spent (SAR)</label><input type="number" value={form.spent} onChange={e => setForm({ ...form, spent: Number(e.target.value) })} /></div>
+                    <div className="form-group"><label>Start Date</label><input type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} /></div>
+                    <div className="form-group"><label>End Date</label><input type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} /></div>
+                    <div className="form-group"><label>Manager</label><input value={form.manager} onChange={e => setForm({ ...form, manager: e.target.value })} /></div>
+                    <div className="form-group"><label>Contractor</label><input value={form.contractor} onChange={e => setForm({ ...form, contractor: e.target.value })} /></div>
+                  </div>
+                  <div className="form-group"><label>Description</label><textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3}></textarea></div>
+                  <div className="btn-row">
+                    <button type="submit" className="btn btn-success">{editing ? 'Update' : 'Save'}</button>
+                    <button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button>
+                  </div>
+                </form>
+              )}
+        
+        
+      </div>
+    );
+  }
+
   return (
     <div className="panel">
       <div style={{ background: 'linear-gradient(135deg, #7c3aed, #a78bfa)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
@@ -170,9 +171,9 @@ export default function Projects({ user, access = {} }) {
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         
-        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "projects", [{key:"project_no",label:"Project #"},{key:"name",label:"Name"},{key:"site",label:"Site"},{key:"project_type",label:"Type"},{key:"manager",label:"Manager"},{key:"budget",label:"Budget"},{key:"spent",label:"Spent"},{key:"status",label:"Status"}])}>Export CSV</button>{canWork && <><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
-          {showForm ? 'Cancel' : '+ New Project'}
-        </button><ExcelImportButton endpoint="/projects" kind="projects" onImported={load} label="Import Excel" /></>}
+        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "projects", [{key:"project_no",label:"Project #"},{key:"name",label:"Name"},{key:"site",label:"Site"},{key:"project_type",label:"Type"},{key:"manager",label:"Manager"},{key:"budget",label:"Budget"},{key:"spent",label:"Spent"},{key:"status",label:"Status"}])}>Export CSV</button>{canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(true); }}>
+          + New Project
+        </button>}
       </div>
 
       {message && <div className="alert alert-success">{message}</div>}

@@ -1419,3 +1419,46 @@ tr:hover td { background:rgba(20,184,166,.045) !important; }
     page-break-inside: auto !important;
   }
 }
+
+/* ===== LEFT GROUPED NAVIGATION ===== */
+.header { position: sticky; top: 0; z-index: 60; }
+.header-user-tools { display:flex; align-items:center; gap:12px; color:white; }
+.erp-shell { display:flex; align-items:stretch; min-height:calc(100vh - 70px); }
+.erp-sidebar {
+  width:250px; flex:0 0 250px; background:var(--bg-secondary);
+  border-right:1px solid var(--border-color); padding:20px 14px;
+  position:sticky; top:70px; height:calc(100vh - 70px); overflow-y:auto;
+  box-shadow:2px 0 10px rgba(15,23,42,.05);
+}
+.erp-sidebar-title {
+  font-size:12px; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--text-muted); font-weight:700; padding:0 10px 14px;
+}
+.erp-nav-group { margin-bottom:20px; }
+.erp-nav-heading {
+  font-size:16px; font-weight:800; color:var(--text-primary);
+  padding:8px 10px; margin-bottom:4px; border-bottom:1px solid var(--border-color);
+}
+.erp-nav-btn {
+  width:100%; display:block; text-align:left; border:0; background:transparent;
+  color:var(--text-secondary); padding:9px 12px; border-radius:8px;
+  cursor:pointer; font:600 13px 'Segoe UI',Tahoma,Arial,sans-serif; margin:2px 0;
+}
+.erp-nav-btn:hover { background:var(--bg-tertiary); color:var(--text-primary); }
+.erp-nav-btn.active {
+  background:linear-gradient(135deg,#0f766e,#0891b2); color:#fff;
+  box-shadow:0 4px 12px rgba(8,145,178,.18);
+}
+.erp-shell > .main { flex:1; min-width:0; max-width:none; }
+@media (max-width:900px) {
+  .erp-shell { display:block; }
+  .erp-sidebar {
+    width:100%; height:auto; position:relative; top:auto;
+    border-right:0; border-bottom:1px solid var(--border-color);
+    display:flex; gap:12px; overflow-x:auto; padding:10px;
+  }
+  .erp-sidebar-title { display:none; }
+  .erp-nav-group { flex:0 0 auto; margin:0; min-width:170px; }
+  .erp-nav-heading { padding:5px 8px; }
+  .erp-nav-btn { white-space:nowrap; }
+}

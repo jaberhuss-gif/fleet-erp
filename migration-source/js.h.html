@@ -1,0 +1,1281 @@
+<script>
+// ================= LOAD PAGE =================
+function loadPage(page) {
+  var content = document.getElementById("content");
+  if (!content) return;
+  
+  if (page === "dashboard") renderDashboard();
+  else if (page === "sites") renderSites();
+  else if (page === "workorders") renderWorkOrders();
+  else if (page === "reports") renderReports();
+  else if (page === "gallery") renderGallery();
+  else if (page === "devprojects") renderDevProjects();
+  else content.innerHTML = "<h2>Page not found</h2>";
+}
+
+// ================= RENDER DASHBOARD =================
+function renderDashboard() {
+  google.script.run
+    .withSuccessHandler(drawDashboard)
+    .getDashboardData();
+}
+
+// ================= DRAW DASHBOARD =================
+function drawDashboard(data) {
+  document.getElementById("content").innerHTML = `
+<div class="container-fluid">
+<div class="dashboard-header">
+    <div class="row align-items-center">
+        <div class="col-lg-8">
+            <h2>📊 Executive Dashboard</h2>
+            <p class="mb-0">Maintenance & Projects Management System</p>
+        </div>
+        <div class="col-lg-4 text-end">
+            <h4 class="mb-0">${new Date().toLocaleDateString()}</h4>
+        </div>
+    </div>
+</div>
+
+<div class="card alert-card shadow mb-4">
+  <div class="card-header bg-gradient-primary text-white d-flex justify-content-between align-items-center">
+    <div><span class="me-2">🚨</span> Management Alerts</div>
+    <div><span id="alertTimestamp" class="badge bg-light text-dark">🕐 ${new Date().toLocaleTimeString()}</span></div>
+  </div>
+  <div class="card-body" id="alertsContainer"></div>
+</div>
+
+<div class="row g-4 mb-4">
+<div class="col-lg-3 col-md-6"><div class="card kpi-card h-100"><div class="card-body text-center"><div class="kpi-icon bg-blue">🛠</div><div class="kpi-title">Work Orders</div><div class="kpi-number">${data.totalWO}</div></div></div></div>
+<div class="col-lg-3 col-md-6"><div class="card kpi-card h-100"><div class="card-body text-center"><div class="kpi-icon bg-green">🏗</div><div class="kpi-title">Projects</div><div class="kpi-number">${data.totalProjects}</div></div></div></div>
+<div class="col-lg-3 col-md-6"><div class="card kpi-card h-100"><div class="card-body text-center"><div class="kpi-icon bg-orange">🚧</div><div class="kpi-title">Development</div><div class="kpi-number">${data.totalDevProjects}</div></div></div></div>
+<div class="col-lg-3 col-md-6"><div class="card kpi-card h-100"><div class="card-body text-center"><div class="kpi-icon bg-purple">📍</div><div class="kpi-title">Sites</div><div class="kpi-number">${data.totalSites}</div></div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+<div class="col-lg-3 col-md-6"><div class="card kpi-card"><div class="card-body text-center"><div class="kpi-icon bg-red">💰</div><div class="kpi-title">Maintenance Cost</div><div class="kpi-number">${data.maintenanceCost.toLocaleString()} SAR</div></div></div></div>
+<div class="col-lg-3 col-md-6"><div class="card kpi-card"><div class="card-body text-center"><div class="kpi-icon bg-blue">🏗</div><div class="kpi-title">Development Cost</div><div class="kpi-number">${data.developmentCost.toLocaleString()} SAR</div></div></div></div>
+<div class="col-lg-3 col-md-6"><div class="card kpi-card"><div class="card-body text-center"><div class="kpi-icon bg-teal">👷</div><div class="kpi-title">Contractor Cost</div><div class="kpi-number">${data.contractorCost.toLocaleString()} SAR</div></div></div></div>
+<div class="col-lg-3 col-md-6"><div class="card kpi-card"><div class="card-body text-center"><div class="kpi-icon bg-dark">💵</div><div class="kpi-title">Total Company Cost</div><div class="kpi-number">${data.totalCompanyCost.toLocaleString()} SAR</div></div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-header bg-dark text-white">👷 Contractors Financial Report</div>
+      <div class="card-body" id="contractorDashboardContainer"><div class="text-center text-muted">Loading contractors data...</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= SITE TASKS SUMMARY ================= -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+    <span>🏗️ Site Tasks Summary</span>
+    <button class="btn btn-sm btn-light" onclick="refreshSiteTasks()">🔄 Refresh</button>
+  </div>
+  <div class="card-body" id="siteTasksContainer">
+    <div class="text-center">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <p class="mt-2 text-muted">Loading site tasks...</p>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mt-4">
+<div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-header bg-primary text-white">📊 Work Orders Status</div><div class="card-body"><div style="height:320px"><canvas id="woStatusChart"></canvas></div></div></div></div>
+<div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-header bg-success text-white">💰 Cost Comparison</div><div class="card-body"><div style="height:320px"><canvas id="costComparisonChart"></canvas></div></div></div></div>
+</div>
+
+<div class="row g-4 mt-4">
+<div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-header bg-dark text-white">🛠 Top Work Orders</div><div class="card-body"><div class="table-responsive"><table class="table table-hover"><thead><tr><th>WO</th><th>Site</th><th>Category</th><th>Cost</th></tr></thead><tbody id="topWorkOrdersTable"></tbody></table></div></div></div></div>
+<div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-header bg-primary text-white">🏗 Top Development Projects</div><div class="card-body"><div class="table-responsive"><table class="table table-hover"><thead><tr><th>Project</th><th>Status</th><th>Cost</th></tr></thead><tbody id="topDevProjectsTable"></tbody></table></div></div></div></div>
+</div>
+
+<div class="row g-4 mt-3">
+<div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-header bg-success text-white">👷 Top Contractors</div><div class="card-body"><table class="table table-hover"><tbody id="topContractorsTable"></tbody></table></div></div></div>
+<div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-header bg-warning">📦 Top Used Parts</div><div class="card-body"><table class="table table-hover"><tbody id="topUsedPartsTable"></tbody></table></div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-md-4"><div class="card kpi-card h-100" style="border-left: 5px solid #dc3545;"><div class="card-body text-center"><div class="kpi-icon bg-red" style="width:50px;height:50px;font-size:20px;">🔧</div><div class="kpi-title">Work Orders (Contractors)</div><div class="kpi-number" style="font-size:24px;" id="contractorWOCost">0 SAR</div><small class="text-muted">Total contractor cost in work orders</small></div></div></div>
+  <div class="col-md-4"><div class="card kpi-card h-100" style="border-left: 5px solid #007bff;"><div class="card-body text-center"><div class="kpi-icon bg-blue" style="width:50px;height:50px;font-size:20px;">🏗</div><div class="kpi-title">Projects (Contractors)</div><div class="kpi-number" style="font-size:24px;" id="contractorProjectCost">0 SAR</div><small class="text-muted">Total contractor cost in projects</small></div></div></div>
+  <div class="col-md-4"><div class="card kpi-card h-100" style="border-left: 5px solid #f59e0b;"><div class="card-body text-center"><div class="kpi-icon bg-orange" style="width:50px;height:50px;font-size:20px;">🚧</div><div class="kpi-title">Development (Contractors)</div><div class="kpi-number" style="font-size:24px;" id="contractorDevCost">0 SAR</div><small class="text-muted">Total contractor cost in development</small></div></div></div>
+</div>
+
+<div class="row mt-4"><div class="col-12"><div class="card shadow-sm"><div class="card-header bg-secondary text-white">🕒 Recent Activities</div><div class="card-body"><ul id="recentActivitiesList" class="mb-0"></ul></div></div></div></div>
+</div>
+`;
+
+  drawDashboardCharts(data);
+  loadContractorDashboard();
+  
+  setTimeout(function() {
+    renderSiteTasks();
+  }, 500);
+
+  if (data.topWorkOrders) renderTopWorkOrders(data.topWorkOrders);
+  if (data.topDevProjects) renderTopDevProjects(data.topDevProjects);
+  if (data.topContractors) renderTopContractors(data.topContractors);
+  if (data.topUsedParts) renderTopUsedParts(data.topUsedParts);
+  if (data.recentActivities) renderRecentActivities(data.recentActivities);
+  
+  updateAlerts(data);
+}
+
+// ================= RENDER SITE TASKS =================
+function renderSiteTasks() {
+    var container = document.getElementById('siteTasksContainer');
+    if (!container) {
+        console.log("⚠️ siteTasksContainer not found!");
+        return;
+    }
+    
+    container.innerHTML = `
+        <div class="text-center py-3">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2 text-muted">جاري تحميل مهام المواقع...</p>
+        </div>
+    `;
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            console.log("📊 Site Tasks Result:", result);
+            
+            var summary = {};
+            try {
+                summary = typeof result === 'string' ? JSON.parse(result) : result;
+            } catch(e) {
+                console.error("Parse error:", e);
+                summary = {};
+            }
+            
+            var sites = Object.keys(summary);
+            
+            if (sites.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-muted py-4">
+                        <p>📭 لا توجد مهام في المواقع</p>
+                        <button class="btn btn-sm btn-primary" onclick="openSiteTaskModal()">
+                            ➕ إضافة مهمة
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+            
+            var html = '';
+            var grandTotal = 0;
+            
+            for (var i = 0; i < sites.length; i++) {
+                var site = sites[i];
+                var data = summary[site];
+                var total = data.total || 0;
+                var completed = data.completed || 0;
+                var totalCost = data.totalCost || 0;
+                grandTotal += totalCost;
+                
+                html += `
+                    <div class="card mb-2 shadow-sm">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <strong>📍 ${site}</strong>
+                            <div>
+                                <span class="badge ${completed === total && total > 0 ? 'bg-success' : 'bg-warning'}">
+                                    ${completed === total && total > 0 ? '✅ مكتمل' : '🔄 قيد التنفيذ'}
+                                </span>
+                                <span class="badge bg-info">💰 ${totalCost} SAR</span>
+                                <span class="badge bg-secondary">${completed}/${total}</span>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>المهمة</th>
+                                            <th>التاريخ</th>
+                                            <th>المبلغ</th>
+                                            <th>الحالة</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                `;
+                
+                for (var j = 0; j < data.tasks.length; j++) {
+                    var task = data.tasks[j];
+                    var isClosed = task.status === 'Closed';
+                    var startDate = task.startDate ? new Date(task.startDate).toLocaleDateString() : '-';
+                    
+                    html += `
+                        <tr>
+                            <td>${task.description || '-'}</td>
+                            <td>${startDate}</td>
+                            <td>${isClosed ? task.amount + ' SAR' : '-'}</td>
+                            <td>
+                                <span class="badge ${isClosed ? 'bg-success' : 'bg-warning'}">
+                                    ${task.status || 'Open'}
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                }
+                
+                html += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            html += `
+                <div class="card bg-success text-white">
+                    <div class="card-body text-center">
+                        <h5>💰 إجمالي تكاليف مهام المواقع</h5>
+                        <h3>${grandTotal} SAR</h3>
+                    </div>
+                </div>
+            `;
+            
+            container.innerHTML = html;
+        })
+        .withFailureHandler(function(err) {
+            console.error("❌ Error:", err);
+            container.innerHTML = `
+                <div class="alert alert-danger text-center">
+                    ❌ خطأ: ${err.message || 'غير معروف'}
+                    <br>
+                    <button class="btn btn-sm btn-primary mt-2" onclick="renderSiteTasks()">
+                        🔄 إعادة المحاولة
+                    </button>
+                </div>
+            `;
+        })
+        .getSiteTasksSummary();
+}
+
+// ================= REFRESH SITE TASKS =================
+function refreshSiteTasks() {
+    console.log("🔄 Refreshing site tasks...");
+    renderSiteTasks();
+}
+
+// ================= SITES =================
+function renderSites() {
+  google.script.run
+    .withSuccessHandler(function(data) {
+      var rows = "";
+      for (var i = 1; i < data.length; i++) {
+        var row = data[i];
+        rows += `
+          <tr>
+            <td>${row[0] || ""}</td>
+            <td>${row[1] || ""}</td>
+            <td>${row[2] || ""}</td>
+            <td><span class="badge ${row[3] === 'Active' ? 'bg-success' : 'bg-secondary'}">${row[3] || ""}</span></td>
+          </tr>
+        `;
+      }
+      var html = `
+        <h2>🏗️ Sites</h2>
+        <div class="d-flex gap-2 mb-3">
+          <button class="btn btn-warning" onclick="openSiteTaskModal()">🏗️ Site Tasks</button>
+          <button class="btn btn-primary" onclick="openSiteModal()">+ Add Site</button>
+        </div>
+        <table class="table">
+          <thead><tr><th>ID</th><th>Name</th><th>Region</th><th>Status</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="4">No sites</td></tr>'}</tbody>
+        </table>
+      `;
+      document.getElementById("content").innerHTML = html;
+    })
+    .getSites();
+}
+
+// ================= WORK ORDERS =================
+function renderWorkOrders() {
+  document.getElementById("content").innerHTML = "Loading...";
+  
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (!data || data.length === 0) {
+        document.getElementById("content").innerHTML = "No work orders found!";
+        return;
+      }
+      
+      var rows = "";
+      for (var i = 0; i < data.length; i++) {
+        var row = data[i];
+        var status = row[3] || "Open";
+        var isClosed = (status === "Closed");
+        
+        var imageData = row[5] || "";
+        var imageHtml = "-";
+        if (imageData) {
+          if (!imageData.startsWith("data:image")) {
+            imageData = "data:image/jpeg;base64," + imageData;
+          }
+          imageHtml = `<img src="${imageData}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;cursor:pointer;" onclick="viewFullImage('${imageData}')" title="🖱️ Click to enlarge">`;
+        }
+        
+        rows += `
+          <tr>
+            <td>${row[0] || ""}</td>
+            <td>${row[1] || ""}</td>
+            <td>${row[2] || ""}</td>
+            <td>${row[4] || ""}</td>
+            <td><span class="badge ${isClosed ? 'bg-success' : 'bg-warning'}">${status}</span></td>
+            <td>${imageHtml}</td>
+            <td>
+              ${isClosed ? "✅ Closed" : `<button class="btn btn-sm btn-danger" onclick="closeWO('${row[0]}')">🔒 Close</button>`}
+              <button class="btn btn-sm btn-secondary" onclick="viewWorkOrderDetails('${row[0]}')">👁️ View</button>
+            </td>
+          </tr>
+        `;
+      }
+      
+      var html = `
+        <h2>🔧 Work Orders</h2>
+        <button class="btn btn-primary mb-3" onclick="openWOModal()">+ New WO</button>
+        <table class="table">
+          <thead><tr><th>WO No</th><th>Site</th><th>Category</th><th>Description</th><th>Status</th><th>Image</th><th>Action</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+      document.getElementById("content").innerHTML = html;
+    })
+    .getWorkOrders();
+}
+
+// ================= VIEW FULL IMAGE =================
+function viewFullImage(imageSrc) {
+  var modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999;
+    cursor: pointer;
+  `;
+  modal.onclick = function() { this.remove(); };
+  var img = document.createElement('img');
+  img.src = imageSrc;
+  img.style.cssText = `
+    max-width: 90%;
+    max-height: 90%;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+    object-fit: contain;
+  `;
+  img.onclick = function(e) { e.stopPropagation(); };
+  modal.appendChild(img);
+  document.body.appendChild(modal);
+}
+
+// ================= VIEW WORK ORDER DETAILS =================
+function viewWorkOrderDetails(woNo) {
+  if (!woNo) {
+    customAlert("❌ Invalid Work Order number", "خطأ");
+    return;
+  }
+  
+  google.script.run
+    .withSuccessHandler(function(wo) {
+      if (!wo) {
+        customAlert("❌ Work Order not found", "خطأ");
+        return;
+      }
+      
+      var imageHtml = '';
+      if (wo.image && wo.image.length > 50) {
+        var imgSrc = wo.image;
+        if (!imgSrc.startsWith('data:image')) {
+          imgSrc = 'data:image/jpeg;base64,' + imgSrc;
+        }
+        imageHtml = `
+          <div style="text-align:center;margin-top:10px;">
+            <img src="${imgSrc}" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid #ddd;cursor:pointer;" onclick="viewFullImage('${imgSrc}')" title="🖱️ Click to view full size" />
+          </div>
+        `;
+      } else {
+        imageHtml = `<p style="color:#6c757d;text-align:center;">📷 No image attached</p>`;
+      }
+      
+      var message = `
+        <div style="text-align:left;font-size:14px;line-height:1.8;">
+          <table style="width:100%;border-collapse:collapse;">
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;width:40%;">🔧 WO No:</td>
+            <td style="padding:4px 8px;">${wo.woNo || '-'}</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">🏢 Site:</td>
+            <td style="padding:4px 8px;">${wo.site || '-'}</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">📍 Area:</td>
+            <td style="padding:4px 8px;">${wo.area || '-'}</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">📂 Category:</td>
+            <td style="padding:4px 8px;">${wo.category || '-'}</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">📝 Description:</td>
+            <td style="padding:4px 8px;">${wo.description || '-'}</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">⚡ Priority:</td>
+            <td style="padding:4px 8px;"><span class="badge ${wo.priority === 'High' ? 'bg-danger' : wo.priority === 'Medium' ? 'bg-warning' : 'bg-info'}">${wo.priority || 'Normal'}</span></td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">📊 Status:</td>
+            <td style="padding:4px 8px;"><span class="badge ${wo.status === 'Closed' ? 'bg-success' : 'bg-warning'}">${wo.status || 'Open'}</span></td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">👤 Assigned To:</td>
+            <td style="padding:4px 8px;">${wo.assignedTo || 'N/A'}</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">🔨 Contractor:</td>
+            <td style="padding:4px 8px;">${wo.contractor || 'N/A'}</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">💰 Final Cost:</td>
+            <td style="padding:4px 8px;font-weight:bold;color:#198754;">${(wo.cost || 0).toLocaleString()} SAR</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">💰 Contractor Cost:</td>
+            <td style="padding:4px 8px;font-weight:bold;color:#dc3545;">${(wo.contractorCost || 0).toLocaleString()} SAR</td></tr>
+            ${wo.partsUsed ? `<tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">📦 Parts Used:</td><td style="padding:4px 8px;">${wo.partsUsed}</td></tr>` : ''}
+            ${wo.closingNotes ? `<tr><td style="padding:4px 8px;font-weight:bold;color:#0d6efd;">📝 Closing Notes:</td><td style="padding:4px 8px;font-style:italic;">${wo.closingNotes}</td></tr>` : ''}
+          </table>
+          ${imageHtml}
+        </div>
+      `;
+      
+      customAlert(message, `📋 Work Order: ${wo.woNo}`);
+    })
+    .withFailureHandler(function(err) {
+      customAlert("❌ Error loading work order details: " + err.message, "خطأ");
+    })
+    .getWorkOrderDetails(woNo);
+}
+
+// ================= REPORTS =================
+function renderReports() {
+  var html = `
+    <h2>📈 Reports</h2>
+    <div class="row gap-2">
+      <button class="btn btn-primary col-md-2" onclick="generateReport('month')">📅 Monthly</button>
+      <button class="btn btn-success col-md-2" onclick="generateReport('3months')">📅 3 Months</button>
+      <button class="btn btn-warning col-md-2" onclick="generateReport('6months')">📅 6 Months</button>
+      <button class="btn btn-dark col-md-2" onclick="generateReport('year')">📅 Yearly</button>
+    </div>
+    <div id="reportResult" class="mt-4"></div>
+  `;
+  document.getElementById("content").innerHTML = html;
+}
+
+function generateReport(period) {
+  document.getElementById("reportResult").innerHTML = "⏳ Generating...";
+  google.script.run
+    .withSuccessHandler(function(data) {
+      var html = `
+        <div class="card p-3">
+          <h4>📊 ${period} Report</h4>
+          <p><strong>Work Orders:</strong> ${data.woCount || 0}</p>
+          <p><strong>WO Total Cost:</strong> ${data.woTotalCost || 0}</p>
+          <p><strong>Projects:</strong> ${data.projCount || 0}</p>
+          <p><strong>Projects Total Cost:</strong> ${data.projTotalCost || 0}</p>
+        </div>
+      `;
+      document.getElementById("reportResult").innerHTML = html;
+    })
+    .getPeriodicReport(period);
+}
+
+// ================= GALLERY =================
+function renderGallery() {
+  document.getElementById("content").innerHTML = `
+    <h2>🖼️ Gallery</h2>
+    <p class="text-muted">Click on any image to view full size</p>
+    <div id="galleryContainer">
+      <div class="text-center"><div class="spinner-border"></div><p>Loading images...</p></div>
+    </div>
+  `;
+  
+  google.script.run
+    .withSuccessHandler(function(data) {
+      var container = document.getElementById("galleryContainer");
+      if (!data || data.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center">📭 No images found</p>';
+        return;
+      }
+      
+      var html = '<div class="row g-3">';
+      var count = 0;
+      
+      for (var i = 0; i < data.length; i++) {
+        var item = data[i];
+        var imageData = item.image || '';
+        var source = item.source || '';
+        var reference = item.reference || '';
+        var site = item.site || '';
+        
+        if (imageData && imageData.length > 50) {
+          if (!imageData.startsWith("data:image")) {
+            imageData = "data:image/jpeg;base64," + imageData;
+          }
+          count++;
+          
+          var badgeColor = '';
+          if (source === 'Work Order') badgeColor = 'bg-danger';
+          else if (source === 'Development Project') badgeColor = 'bg-success';
+          else if (source === 'Site Task') badgeColor = 'bg-info';
+          else badgeColor = 'bg-secondary';
+          
+          html += `
+            <div class="col-md-3 col-sm-4 col-6">
+              <div class="card gallery-card shadow-sm h-100">
+                <img src="${imageData}" 
+                     class="card-img-top gallery-img" 
+                     style="height:200px;object-fit:cover;cursor:pointer;border-radius:8px 8px 0 0;"
+                     onclick="viewFullImage('${imageData}')"
+                     loading="lazy"
+                     alt="${reference}">
+                <div class="card-body text-center p-2">
+                  <small class="text-muted">📋 ${reference}</small>
+                  ${site ? `<br><small class="text-muted">📍 ${site}</small>` : ''}
+                  <br><span class="badge ${badgeColor}" style="font-size:10px;">${source}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+      }
+      
+      html += '</div>';
+      if (count === 0) {
+        html = '<p class="text-muted text-center">📭 No images found</p>';
+      }
+      
+      container.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById("galleryContainer").innerHTML = '<div class="alert alert-danger">❌ Error: ' + err.message + '</div>';
+    })
+    .getGalleryImages();
+}
+
+// ================= MODAL FUNCTIONS =================
+function openSiteModal() {
+  clearModal("siteModal");
+  new bootstrap.Modal(document.getElementById('siteModal')).show();
+}
+
+function openWOModal() {
+  clearModal("woModal");
+  document.getElementById("woImage").value = "";
+  new bootstrap.Modal(document.getElementById('woModal')).show();
+}
+
+// ================= SAVE FUNCTIONS =================
+function saveSite() {
+  var data = {
+    site: document.getElementById("siteName").value,
+    region: document.getElementById("siteRegion").value
+  };
+  google.script.run
+    .withSuccessHandler(function(msg) {
+      alert(msg);
+      bootstrap.Modal.getInstance(document.getElementById('siteModal')).hide();
+      loadPage('sites');
+    })
+    .saveSite(data);
+}
+
+function saveWO() {
+  var site = document.getElementById("woSite").value.trim();
+  var area = document.getElementById("woArea").value.trim();
+  var category = document.getElementById("woCategory").value;
+  var priority = document.getElementById("woPriority").value;
+  var description = document.getElementById("woDescription").value.trim();
+  var assignedTo = document.getElementById("woAssignedTo").value.trim();
+  var contractor = document.getElementById("woContractor").value.trim();
+  var date = document.getElementById("woDate").value;
+  
+  var fileInput = document.getElementById("woImage");
+  var file = fileInput ? fileInput.files[0] : null;
+
+  if (!site) {
+    alert("⚠️ Please enter a site name.");
+    return;
+  }
+
+  var data = {
+    site: site,
+    area: area,
+    category: category,
+    priority: priority,
+    description: description,
+    assignedTo: assignedTo,
+    contractor: contractor,
+    date: date,
+    image: ""
+  };
+
+  if (file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      data.image = e.target.result;
+      sendWO(data);
+    };
+    reader.readAsDataURL(file);
+  } else {
+    sendWO(data);
+  }
+}
+
+function sendWO(data) {
+  google.script.run
+    .withSuccessHandler(function(msg) {
+      alert(msg);
+      clearModal("woModal");
+      bootstrap.Modal.getInstance(document.getElementById('woModal')).hide();
+      loadPage('workorders');
+    })
+    .withFailureHandler(function(err) {
+      alert("❌ Error: " + err.message);
+    })
+    .saveWorkOrder(data);
+}
+
+function closeWO(woNo) {
+  var totalCost = prompt("💰 Enter total final cost (SAR):");
+  if (totalCost === null) return;
+  
+  var contractorCost = prompt("💰 Enter contractor cost (SAR):");
+  if (contractorCost === null) return;
+  
+  var notes = prompt("📝 Enter closing notes:");
+  if (notes === null) return;
+  
+  google.script.run
+    .withSuccessHandler(function(msg) {
+      alert(msg);
+      loadPage('workorders');
+    })
+    .closeWorkOrder(woNo, { 
+      finalCost: totalCost, 
+      contractorCost: contractorCost,
+      notes: notes 
+    });
+}
+
+// ================= CLEAR MODAL =================
+function clearModal(modalId){
+  const modal = document.getElementById(modalId);
+  if(!modal) return;
+  modal.querySelectorAll("input, textarea, select").forEach(function(el){
+    switch(el.type){
+      case "checkbox":
+      case "radio":
+        el.checked = false;
+        break;
+      case "file":
+        el.value = "";
+        break;
+      default:
+        el.value = "";
+    }
+  });
+}
+
+// ================= DEVELOPMENT PROJECTS =================
+function renderDevProjects() {
+  document.getElementById("content").innerHTML = "Loading...";
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+      var rows = "";
+      if (!data || data.length === 0) {
+        rows = '<tr><td colspan="9" class="text-center text-muted">No Data</td></tr>';
+      } else {
+        for (var i = 0; i < data.length; i++) {
+          var project = data[i];
+          var id = project.id || "";
+          var name = project.name || "";
+          var description = project.description || "";
+          var status = project.status || "Active";
+          var totalCost = project.totalCost || 0;
+          var tasksCost = project.tasksCost || 0;
+          var partsCost = project.partsCost || 0;
+          var contractor = project.contractor || "";
+          var isCompleted = (status === "Completed");
+
+          rows += `
+            <tr>
+              <td><strong>${id}</strong></td>
+              <td>${name}</td>
+              <td>${description ? description.substring(0, 30) + '...' : '-'}</td>
+              <td>${contractor || '-'}</td>
+              <td><span class="badge ${isCompleted ? 'bg-success' : 'bg-warning'}">${status}</span></td>
+              <td>${Number(tasksCost).toLocaleString()} SAR</td>
+              <td>${Number(partsCost).toLocaleString()} SAR</td>
+              <td><strong>${Number(totalCost).toLocaleString()} SAR</strong></td>
+              <td>
+                <button class="btn btn-sm btn-primary" onclick="openDevTaskModal('${id}')">🛠️ Tasks</button>
+                <button class="btn btn-sm btn-success" onclick="openDevPartsModal('${id}')">📦 Parts</button>
+                ${isCompleted ? "✅ Closed" : `<button class="btn btn-sm btn-danger" onclick="closeDevProject('${id}')">🔒 Close</button>`}
+              </td>
+            </tr>
+          `;
+        }
+      }
+
+      var html = `
+        <h2>🏗️ Development Projects</h2>
+        <div class="d-flex justify-content-between mb-3">
+          <p class="text-muted">Manage development projects (new doors, AC, electrical, etc.)</p>
+          <button class="btn btn-primary" onclick="openDevProjectModal()">+ New Project</button>
+        </div>
+
+        <table class="table table-striped table-hover">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Project</th>
+              <th>Description</th>
+              <th>Contractor</th>
+              <th>Status</th>
+              <th>Tasks Cost</th>
+              <th>Parts Cost</th>
+              <th>Total Cost</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+      document.getElementById("content").innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById("content").innerHTML =
+        '<div class="alert alert-danger">❌ ' + (err.message || JSON.stringify(err)) + '</div>';
+    })
+    .getDevProjects();
+}
+
+function openDevTaskModal(projectId) {
+  document.getElementById("devTaskProjectId").value = projectId;
+  document.getElementById("devTaskName").value = "";
+  document.getElementById("devTaskCost").value = "";
+  document.getElementById("devTaskContractor").value = "";
+  document.getElementById("devTaskStatus").value = "Pending";
+  document.getElementById("devTaskMessage").innerHTML = "";
+
+  google.script.run
+    .withSuccessHandler(renderDevTaskList)
+    .getDevTasks(projectId);
+
+  new bootstrap.Modal(document.getElementById("devTaskModal")).show();
+}
+
+function renderDevTaskList(tasks) {
+  let html = "";
+  if (!tasks || tasks.length === 0) {
+    html = `<div class="text-muted">No Tasks Found</div>`;
+  } else {
+    html = `
+      <table class="table table-sm table-bordered">
+        <thead><tr><th>Task</th><th>Cost</th><th>Contractor</th><th>Status</th></tr></thead>
+        <tbody>
+    `;
+    tasks.forEach(function(task) {
+      html += `<tr><td>${task.taskName}</td><td>${task.cost}</td><td>${task.contractor}</td><td>${task.status}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+  document.getElementById("devTaskList").innerHTML = html;
+}
+
+function openDevPartsModal(projectId) {
+  document.getElementById("devPartProjectId").value = projectId;
+  document.getElementById("devPartName").value = "";
+  document.getElementById("devPartQty").value = "";
+  document.getElementById("devPartPrice").value = "";
+  document.getElementById("devPartSource").value = "Company";
+  document.getElementById("devPartMessage").innerHTML = "";
+
+  google.script.run
+    .withSuccessHandler(renderDevPartList)
+    .getDevProjectParts(projectId);
+
+  new bootstrap.Modal(document.getElementById("devPartsModal")).show();
+}
+
+function renderDevPartList(parts) {
+  let html = "";
+  if (!parts || parts.length === 0) {
+    html = "<div class='text-muted'>No parts added yet.</div>";
+  } else {
+    html = `
+      <table class="table table-sm table-bordered">
+        <thead><tr><th>Part</th><th>Qty</th><th>Unit</th><th>Total</th><th>Source</th></tr></thead>
+        <tbody>
+    `;
+    parts.forEach(function(p){
+      html += `<tr><td>${p.partName}</td><td>${p.quantity}</td><td>${p.unitPrice}</td><td>${p.totalPrice}</td><td>${p.source}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+  document.getElementById("devPartList").innerHTML = html;
+}
+
+function openDevProjectModal() {
+    document.getElementById('devProjectName').value = "";
+    document.getElementById('devProjectSite').value = "";
+    document.getElementById('devProjectDesc').value = "";
+    document.getElementById('devProjectContractor').value = "";
+    document.getElementById('devProjectBudget').value = "";
+    document.getElementById('devProjectStatus').value = "Planned";
+    document.getElementById('devProjectStartDate').value = "";
+    document.getElementById('devProjectEndDate').value = "";
+    document.getElementById('devProjectImage').value = "";
+    document.getElementById('devProjectMessage').innerHTML = "";
+    new bootstrap.Modal(document.getElementById('devProjectModal')).show();
+}
+
+function saveDevProject() {
+    var data = {
+        projectName: document.getElementById('devProjectName').value,
+        site: document.getElementById('devProjectSite').value,
+        description: document.getElementById('devProjectDesc').value,
+        contractor: document.getElementById('devProjectContractor').value,
+        budget: document.getElementById('devProjectBudget').value,
+        status: document.getElementById('devProjectStatus').value,
+        startDate: document.getElementById('devProjectStartDate').value,
+        endDate: document.getElementById('devProjectEndDate').value,
+        image: document.getElementById('devProjectImage')?.value || ''
+    };
+    
+    google.script.run
+        .withSuccessHandler(function(msg) {
+            document.getElementById('devProjectMessage').innerHTML = '<div class="alert alert-success">✅ ' + msg + '</div>';
+            setTimeout(function() {
+                bootstrap.Modal.getInstance(document.getElementById('devProjectModal')).hide();
+                loadPage('devprojects');
+            }, 1500);
+        })
+        .withFailureHandler(function(err) {
+            document.getElementById('devProjectMessage').innerHTML = '<div class="alert alert-danger">❌ ' + err.message + '</div>';
+        })
+        .saveDevProject(data);
+}
+
+function saveDevTask() {
+  var projectId = document.getElementById("devTaskProjectId").value;
+  var taskName = document.getElementById("devTaskName").value.trim();
+  var cost = document.getElementById("devTaskCost").value;
+  var contractor = document.getElementById("devTaskContractor").value.trim();
+  var status = document.getElementById("devTaskStatus").value;
+  
+  if (!taskName) {
+    document.getElementById("devTaskMessage").innerHTML = '<div class="alert alert-warning">⚠️ Please enter task name</div>';
+    return;
+  }
+  
+  var data = {
+    projectId: projectId,
+    taskName: taskName,
+    cost: cost || 0,
+    contractor: contractor,
+    status: status
+  };
+  
+  google.script.run
+    .withSuccessHandler(function(msg) {
+      document.getElementById("devTaskMessage").innerHTML = '<div class="alert alert-success">✅ ' + msg + '</div>';
+      setTimeout(function() {
+        bootstrap.Modal.getInstance(document.getElementById('devTaskModal')).hide();
+        loadPage('devprojects');
+      }, 1500);
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById("devTaskMessage").innerHTML = '<div class="alert alert-danger">❌ ' + err.message + '</div>';
+    })
+    .saveDevTask(data);
+}
+
+function saveDevPart() {
+  const data = {
+    projectId: document.getElementById("devPartProjectId").value,
+    partName: document.getElementById("devPartName").value,
+    quantity: document.getElementById("devPartQty").value,
+    unitPrice: document.getElementById("devPartPrice").value,
+    source: document.getElementById("devPartSource").value
+  };
+
+  google.script.run
+    .withSuccessHandler(function(msg){
+      document.getElementById("devPartMessage").innerHTML =
+        "<div class='alert alert-success'>" + msg + "</div>";
+
+      google.script.run
+        .withSuccessHandler(renderDevPartList)
+        .getDevProjectParts(data.projectId);
+
+      document.getElementById("devPartName").value = "";
+      document.getElementById("devPartQty").value = "";
+      document.getElementById("devPartPrice").value = "";
+    })
+    .withFailureHandler(function(err){
+      document.getElementById("devPartMessage").innerHTML =
+        "<div class='alert alert-danger'>" + err.message + "</div>";
+    })
+    .saveDevPart(data);
+}
+
+function closeDevProject(projectId) {
+  if (!confirm("Are you sure you want to close this project?")) return;
+  
+  var totalCost = prompt("💰 Enter total project cost (SAR):");
+  if (totalCost === null) return;
+  
+  var contractorCost = prompt("💰 Enter contractor cost (SAR):");
+  if (contractorCost === null) return;
+  
+  google.script.run
+    .withSuccessHandler(function(msg) {
+      alert(msg);
+      loadPage('devprojects');
+    })
+    .withFailureHandler(function(err) {
+      alert("❌ Error: " + err.message);
+    })
+    .closeDevProject(projectId, { 
+      totalCost: totalCost, 
+      contractorCost: contractorCost 
+    });
+}
+
+// ================= SITE TASKS MODAL =================
+function openSiteTaskModal() {
+    document.getElementById('siteTaskSite').value = '';
+    document.getElementById('siteTaskDesc').value = '';
+    document.getElementById('siteTaskStartDate').value = '';
+    document.getElementById('siteTaskAssigned').value = '';
+    document.getElementById('siteTaskMessage').innerHTML = '';
+    
+    // ✅ تنظيف حقل الملف
+    var fileInput = document.getElementById('siteTaskImage');
+    if (fileInput) fileInput.value = '';
+    
+    google.script.run
+        .withSuccessHandler(function(sites) {
+            const dropdown = document.getElementById('siteTaskSite');
+            dropdown.innerHTML = '<option value="">-- Select Site --</option>';
+            if (sites && sites.length > 0) {
+                for (var i = 1; i < sites.length; i++) {
+                    var siteName = sites[i][1] || '';
+                    if (siteName) {
+                        var option = document.createElement('option');
+                        option.value = siteName;
+                        option.textContent = siteName;
+                        dropdown.appendChild(option);
+                    }
+                }
+            }
+        })
+        .getSites();
+    
+    new bootstrap.Modal(document.getElementById('siteTaskModal')).show();
+}
+
+function saveSiteTask() {
+    var site = document.getElementById('siteTaskSite').value;
+    var description = document.getElementById('siteTaskDesc').value.trim();
+    var startDate = document.getElementById('siteTaskStartDate').value;
+    var assignedTo = document.getElementById('siteTaskAssigned').value.trim();
+    var image = document.getElementById('siteTaskImage')?.value || '';
+    var notes = document.getElementById('siteTaskMessage')?.value || '';
+    
+    if (!site) {
+        document.getElementById('siteTaskMessage').innerHTML = 
+            '<div class="alert alert-warning">⚠️ Please select a Site</div>';
+        return;
+    }
+    if (!description) {
+        document.getElementById('siteTaskMessage').innerHTML = 
+            '<div class="alert alert-warning">⚠️ Please enter Task Description</div>';
+        return;
+    }
+    
+    var saveBtn = document.querySelector('#siteTaskModal .btn-success');
+    saveBtn.disabled = true;
+    saveBtn.textContent = '⏳ Adding...';
+    document.getElementById('siteTaskMessage').innerHTML = '';
+    
+    var data = {
+        site: site,
+        description: description,
+        startDate: startDate,
+        assignedTo: assignedTo,
+        image: image,
+        notes: notes
+    };
+    
+    google.script.run
+        .withSuccessHandler(function(response) {
+            document.getElementById('siteTaskMessage').innerHTML = 
+                '<div class="alert alert-success">✅ ' + response + '</div>';
+            saveBtn.disabled = false;
+            saveBtn.textContent = '➕ Add Task';
+            setTimeout(function() {
+                bootstrap.Modal.getInstance(document.getElementById('siteTaskModal')).hide();
+                if (document.getElementById('siteTasksContainer')) {
+                    renderSiteTasks();
+                }
+            }, 1500);
+        })
+        .withFailureHandler(function(err) {
+            document.getElementById('siteTaskMessage').innerHTML = 
+                '<div class="alert alert-danger">❌ Error: ' + err.message + '</div>';
+            saveBtn.disabled = false;
+            saveBtn.textContent = '➕ Add Task';
+        })
+        .saveSiteTask(data);
+}
+
+function closeSiteTask(taskId) {
+    if (!confirm("Are you sure you want to close this task?")) return;
+    
+    var amount = prompt("💰 Enter total cost for this task (SAR):");
+    if (amount === null) return;
+    if (isNaN(amount) || amount <= 0) {
+        alert("⚠️ Please enter a valid amount");
+        return;
+    }
+    
+    var contractorCost = prompt("💰 Enter contractor cost (SAR):");
+    if (contractorCost === null) return;
+    if (isNaN(contractorCost) || contractorCost < 0) {
+        alert("⚠️ Please enter a valid contractor cost");
+        return;
+    }
+    
+    google.script.run
+        .withSuccessHandler(function(msg) {
+            alert(msg);
+            if (document.getElementById('siteTasksContainer')) {
+                renderSiteTasks();
+            }
+        })
+        .withFailureHandler(function(err) {
+            alert("❌ Error: " + err.message);
+        })
+        .closeSiteTask(taskId, { 
+            amount: amount,
+            contractorCost: contractorCost,
+            closeDate: new Date().toISOString().split('T')[0]
+        });
+}
+
+// ================= DRAW CHARTS =================
+function drawDashboardCharts(data) {
+  console.log("drawDashboardCharts");
+}
+
+// ================= LOAD CONTRACTOR DASHBOARD =================
+function loadContractorDashboard() {
+  console.log("loadContractorDashboard");
+}
+
+// ================= RENDER TABLES =================
+function renderTopWorkOrders() {}
+function renderTopDevProjects() {}
+function renderTopContractors() {}
+function renderTopUsedParts() {}
+function renderRecentActivities() {}
+function updateAlerts() {}
+
+// ================= CUSTOM ALERT =================
+function customAlert(message, title) {
+  alert(message);
+}
+
+// ================= CUSTOM CONFIRM =================
+function customConfirm(message, callback) {
+  var result = confirm(message);
+  callback(result);
+}
+
+// ================= CUSTOM PROMPT =================
+function customPrompt(message, callback) {
+  var result = prompt(message);
+  callback(result);
+}
+
+// ================= CLOSE WORK ORDER =================
+function closeWorkOrder(woNo) {
+  if (!confirm("Are you sure you want to close this Work Order?")) {
+    return;
+  }
+
+  var cost = prompt("💰 Enter Final Cost (SAR):");
+  if (cost === null) return;
+  if (isNaN(cost) || cost <= 0) {
+    alert("⚠️ Please enter a valid cost");
+    return;
+  }
+
+  var notes = prompt("📝 Enter Closing Notes:");
+  if (notes === null) {
+    notes = "";
+  }
+
+  google.script.run
+    .withSuccessHandler(function(msg) {
+      alert(msg);
+      renderWorkOrders();
+    })
+    .withFailureHandler(function(err) {
+      alert("❌ Error: " + err.message);
+    })
+    .closeWorkOrder(woNo, { 
+      finalCost: cost, 
+      contractorCost: cost,
+      notes: notes 
+    });
+}
+
+// ================= SAVE SITE TASK FORM =================
+function saveSiteTaskForm() {
+    console.log("✅ saveSiteTaskForm called!");
+    
+    var site = document.getElementById('siteTaskSite').value;
+    var description = document.getElementById('siteTaskDesc').value.trim();
+    var startDate = document.getElementById('siteTaskStartDate').value;
+    var assignedTo = document.getElementById('siteTaskAssigned').value.trim();
+    var notes = document.getElementById('siteTaskMessage')?.value || '';
+    
+    var fileInput = document.getElementById('siteTaskImage');
+    var file = fileInput ? fileInput.files[0] : null;
+    
+    if (!site) {
+        document.getElementById('siteTaskMessage').innerHTML = 
+            '<div class="alert alert-warning">⚠️ Please select a Site</div>';
+        return;
+    }
+    if (!description) {
+        document.getElementById('siteTaskMessage').innerHTML = 
+            '<div class="alert alert-warning">⚠️ Please enter Task Description</div>';
+        return;
+    }
+    
+    var saveBtn = document.querySelector('#siteTaskModal .btn-success');
+    saveBtn.disabled = true;
+    saveBtn.textContent = '⏳ Adding...';
+    document.getElementById('siteTaskMessage').innerHTML = '';
+    
+    var data = {
+        site: site,
+        description: description,
+        startDate: startDate,
+        assignedTo: assignedTo,
+        notes: notes,
+        image: ""
+    };
+    
+    if (file) {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            data.image = e.target.result;
+            sendSiteTask(data, saveBtn);
+        };
+        reader.readAsDataURL(file);
+    } else {
+        sendSiteTask(data, saveBtn);
+    }
+}
+
+// ================= SEND SITE TASK =================
+function sendSiteTask(data, saveBtn) {
+    google.script.run
+        .withSuccessHandler(function(response) {
+            document.getElementById('siteTaskMessage').innerHTML = 
+                '<div class="alert alert-success">✅ ' + response + '</div>';
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = '➕ Add Task';
+            }
+            setTimeout(function() {
+                bootstrap.Modal.getInstance(document.getElementById('siteTaskModal')).hide();
+                if (document.getElementById('siteTasksContainer')) {
+                    renderSiteTasks();
+                }
+            }, 1500);
+        })
+        .withFailureHandler(function(err) {
+            document.getElementById('siteTaskMessage').innerHTML = 
+                '<div class="alert alert-danger">❌ Error: ' + err.message + '</div>';
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = '➕ Add Task';
+            }
+        })
+        .saveSiteTask(data);
+}
+
+// ================= SAVE DEV PROJECT FORM =================
+function saveDevProjectForm() {
+    console.log("✅ saveDevProjectForm called!");
+    
+    var projectName = document.getElementById('devProjectName')?.value || "";
+    var site = document.getElementById('devProjectSite')?.value || "";
+    var description = document.getElementById('devProjectDesc')?.value || "";
+    var contractor = document.getElementById('devProjectContractor')?.value || "";
+    var budget = document.getElementById('devProjectBudget')?.value || 0;
+    var status = document.getElementById('devProjectStatus')?.value || "Planned";
+    var startDate = document.getElementById('devProjectStartDate')?.value || "";
+    var endDate = document.getElementById('devProjectEndDate')?.value || "";
+    
+    var fileInput = document.getElementById('devProjectImage');
+    var file = fileInput ? fileInput.files[0] : null;
+
+    var data = {
+        projectName: projectName,
+        site: site,
+        description: description,
+        contractor: contractor,
+        budget: budget,
+        status: status,
+        startDate: startDate,
+        endDate: endDate,
+        image: ""
+    };
+
+    if (file) {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            data.image = e.target.result;
+            sendDevProject(data);
+        };
+        reader.readAsDataURL(file);
+    } else {
+        sendDevProject(data);
+    }
+}
+
+function sendDevProject(data) {
+    google.script.run
+        .withSuccessHandler(function(msg) {
+            console.log("✅ Success:", msg);
+            customAlert(msg, "✅ نجاح");
+            var modal = bootstrap.Modal.getInstance(document.getElementById('devProjectModal'));
+            if (modal) modal.hide();
+            loadPage('devprojects');
+        })
+        .withFailureHandler(function(err) {
+            console.log("❌ Error:", err);
+            customAlert("❌ Error: " + err.message, "خطأ");
+        })
+        .saveDevProject(data);
+}
+
+// ================= AUTO LOAD DASHBOARD =================
+document.addEventListener("DOMContentLoaded", function() {
+  console.log("🚀 DOM loaded - Loading dashboard...");
+  loadPage("dashboard");
+});
+</script>

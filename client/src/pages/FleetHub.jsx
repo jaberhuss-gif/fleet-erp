@@ -9,6 +9,12 @@ import FleetTicketViewer from './FleetTicketViewer';
 
 const FLEET_ACTIONS = [
   {
+    id: 'daily-km',
+    label: '📏 Add Daily KM',
+    title: 'Daily KM / Odometer Reading',
+    description: 'Enter today’s vehicle odometer reading and review recent readings.'
+  },
+  {
     id: 'add-vehicle',
     label: '🚙 Add Vehicle',
     title: 'Add Vehicle',
@@ -109,6 +115,10 @@ export default function FleetHub({ user, access }) {
           </p>
         </div>
       </div>
+
+      {safeSection === 'daily-km' && (
+        <DriverPortal canWork={fleetWork} />
+      )}
 
       {safeSection === 'add-vehicle' && user?.role === 'Owner' && (
         <Vehicles key="fleet-add-vehicle" canWork={fleetWork} initialAction="add" />

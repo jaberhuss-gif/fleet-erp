@@ -111,6 +111,11 @@ CREATE TABLE IF NOT EXISTS project_parts (
  part_name TEXT NOT NULL, quantity NUMERIC(14,3) NOT NULL DEFAULT 1, unit_price NUMERIC(14,2) NOT NULL DEFAULT 0,
  total_price NUMERIC(14,2) GENERATED ALWAYS AS(quantity * unit_price) STORED
 );
+ALTER TABLE maintenance_purchases ADD COLUMN IF NOT EXISTS legacy_purchase_ref TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS maintenance_purchases_legacy_purchase_ref_uq ON maintenance_purchases(legacy_purchase_ref) WHERE legacy_purchase_ref IS NOT NULL;
+ALTER TABLE project_purchases ADD COLUMN IF NOT EXISTS legacy_purchase_ref TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS project_purchases_legacy_purchase_ref_uq ON project_purchases(legacy_purchase_ref) WHERE legacy_purchase_ref IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS project_purchases (
  id BIGSERIAL PRIMARY KEY, legacy_purchase_ref TEXT UNIQUE, project_id BIGINT REFERENCES projects(id) ON DELETE SET NULL,
  item_name TEXT NOT NULL, quantity NUMERIC(14,3) NOT NULL DEFAULT 1, unit_cost NUMERIC(14,2) NOT NULL DEFAULT 0,

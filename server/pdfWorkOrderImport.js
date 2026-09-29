@@ -21,7 +21,14 @@ const dateValue = (v) => {
       : `${p[2]}-${String(p[1]).padStart(2, "0")}-${String(p[0]).padStart(2, "0")}`;
   }
   const named = value.match(/\b(\d{1,2})[-\s]([A-Za-z]{3,9})[-\s](\d{2,4})\b/);
-  if (!named) return "";
+  if (!named) {
+    const monthYear = value.match(/\b([A-Za-z]{3,9})[-\s](\d{4})\b/);
+    if (!monthYear) return "";
+    const months = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+    const month = months[monthYear[1].slice(0,3).toLowerCase()];
+    if (!month) return "";
+    return `${monthYear[2]}-${String(month).padStart(2, "0")}-01`;
+  }
   const months = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
   const month = months[named[2].slice(0,3).toLowerCase()];
   if (!month) return "";
@@ -179,7 +186,9 @@ function parseRows(text, filename = "upload.pdf", knownSites = []) {
   if (!rows.length) {
     const requestedBy = match(flat, [/requested\s*by\s*\s*:?\s*(.+?)(?=\s+site\s*:|\s+subject\s*:|$)/i]);
     const subject = match(flat, [/subject\s*:\s*(.+?)(?=\s+\d+\s+.+?\s+(?:Pcs|Pc|L\.s|L\.m|m2|m3|m|Kg|Set|Nos?)\s+\d)/i]);
-    const reportDate = dateValue(flat);
+    // Monthly contractor summaries often put only the month/year in the PDF title.
+    // If the body has no full date, use the filename month as the reporting month (day 01).
+    const reportDate = dateValue(flat) || dateValue(filename);
     const items = extractLineItems(flat);
 
     const candidateNames = [

@@ -118,8 +118,7 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
     setMessage(''); setError('');
     try {
       await api.put('/vehicles/' + quickEdit.id, {
-        currentKm: Number(quickKm),
-        lastOilKm: Number(quickOilKm)
+        currentKm: Number(quickKm)
       });
       setMessage('Reading updated for ' + quickEdit.plate);
       setQuickEdit(null);

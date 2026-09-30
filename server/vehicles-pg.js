@@ -167,6 +167,42 @@ export async function updateLastOilChangePG(id, data = {}) {
   }
 
   return transaction(async (client) => {
+    // Resolve the canonical row for this plate before saving. Older imports can
+    // leave duplicate plate rows; editing an empty duplicate must never leave
+    // the real vehicle unchanged.
+    const targetResult = await client.query(
+      `SELECT id, plate_number, plate_code
+       FROM vehicles
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+    const source = targetResult.rows[0];
+    if (!source) throw new Error("Vehicle not found");
+
+    const canonicalResult = await client.query(
+      `SELECT id
+       FROM vehicles
+       WHERE UPPER(TRIM(COALESCE(plate_number, ''))) = UPPER(TRIM(COALESCE($1, '')))
+         AND UPPER(TRIM(COALESCE(plate_code, ''))) = UPPER(TRIM(COALESCE($2, '')))
+       ORDER BY
+         CASE
+           WHEN COALESCE(current_km, 0) > 0
+             OR COALESCE(last_oil_km, 0) > 0
+             OR driver_id IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(driver, '')), '') IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(location, '')), '') IS NOT NULL
+           THEN 1 ELSE 0
+         END DESC,
+         COALESCE(current_km, 0) DESC,
+         COALESCE(updated_at, created_at) DESC NULLS LAST,
+         id DESC
+       LIMIT 1`,
+      [source.plate_number, source.plate_code]
+    );
+    const targetId = canonicalResult.rows[0]?.id;
+    if (!targetId) throw new Error("Vehicle not found");
+
     const updated = await client.query(
       `UPDATE vehicles
        SET last_oil_km = $1,
@@ -174,7 +210,7 @@ export async function updateLastOilChangePG(id, data = {}) {
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $3
        RETURNING *`,
-      [oilKm, oilDate, id]
+      [oilKm, oilDate, targetId]
     );
 
     if (!updated.rows[0]) throw new Error("Vehicle not found");

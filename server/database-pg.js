@@ -310,6 +310,44 @@ export async function updateVehicle(id, data = {}) {
     id
   ]);
 
+  if (result.rowCount && hasLastOilKM) {
+    // Vehicle Edit is an authoritative Last Oil Change edit. Keep the oil history
+    // in sync so no later reconciliation can restore the previous KM value.
+    const latestOil = await query(`
+      SELECT id
+      FROM oil_changes
+      WHERE vehicle_id = $1
+        AND COALESCE(notes, '') NOT ILIKE '%Google Sheet%'
+      ORDER BY oil_change_date DESC NULLS LAST, id DESC
+      LIMIT 1
+    `, [id]);
+
+    if (latestOil.rows[0]) {
+      await query(`
+        UPDATE oil_changes
+        SET oil_change_km = $1,
+            oil_change_date = $2,
+            changed_by = 'ERP',
+            notes = 'ERP Last Oil Change correction'
+        WHERE id = $3
+      `, [
+        lastOilKM,
+        data.lastOilChangeDate ?? data.last_oil_change_date ?? vehicleRow.last_oil_change_date ?? null,
+        latestOil.rows[0].id
+      ]);
+    } else {
+      await query(`
+        INSERT INTO oil_changes
+          (vehicle_id, oil_change_km, oil_change_date, changed_by, notes)
+        VALUES ($1, $2, $3, 'ERP', 'ERP Last Oil Change correction')
+      `, [
+        id,
+        lastOilKM,
+        data.lastOilChangeDate ?? data.last_oil_change_date ?? vehicleRow.last_oil_change_date ?? null
+      ]);
+    }
+  }
+
   if (result.rowCount) {
     const d = driverId
       ? (await query(`SELECT name, phone FROM drivers WHERE id = $1 LIMIT 1`, [driverId])).rows[0]

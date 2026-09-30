@@ -8,7 +8,7 @@ export default function SupportServiceHub({ user, access = {} }) {
     !!access?.[module]?.[mode === 'work' ? 'can_work' : 'can_view'];
 
   const tabs = [
-    { id: 'request', label: '📝 Request Maintenance / Building', title: 'Request Maintenance / Building', show: can('support','work') || can('building','work') },
+    { id: 'request', label: '📝 Request Maintenance / Building', title: 'Request Maintenance / Building', show: user?.role === 'Driver' || can('support','work') || can('building','work') },
     { id: 'warehouse', label: '📦 Warehouse', title: 'Warehouse & Stock', show: can('warehouse') }
   ].filter(t => t.show);
 

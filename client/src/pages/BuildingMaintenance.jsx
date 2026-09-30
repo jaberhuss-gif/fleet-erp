@@ -193,3 +193,8 @@ export default function BuildingMaintenance({ user, access = {} }) {
     </div>
   );
 }
+
+
+// New ERP-native Building Maintenance workspace note:
+// Data source: Vela PostgreSQL through /api/* only.
+// This page intentionally has no dependency on Google Apps Script, Neon, or the legacy FMS.

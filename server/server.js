@@ -686,6 +686,40 @@ function requireRole(...allowedRoles) {
   };
 }
 
+// ===== MANUAL MORNING SYNC =====
+// Automatic schedulers are disabled by default. Owner can run the three
+// operational syncs together from the ERP when the morning sync is required.
+app.post("/api/operations/morning-sync", requireRole("Owner"), async (req, res) => {
+  const startedAt = new Date().toISOString();
+  try {
+    const { runGoogleSheetSyncOnce } = await import("./googleSheetSync.js");
+    const { reconcileAndNotify, checkMaintenanceDue } = await import("./kmDailyNotifications.js");
+    const { closeStaleDailyKmTickets } = await import("./dailyKm.js");
+
+    const sheet = await runGoogleSheetSyncOnce();
+    const dailyKm = await reconcileAndNotify();
+    const staleDailyKm = await closeStaleDailyKmTickets(
+      dailyKm.today,
+      ["Daily Vehicle Submission"]
+    );
+    const maintenance = await checkMaintenanceDue();
+
+    res.json({
+      success: true,
+      startedAt,
+      completedAt: new Date().toISOString(),
+      results: { sheet, dailyKm, staleDailyKm, maintenance }
+    });
+  } catch (error) {
+    console.error("[ManualMorningSync]", error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      startedAt
+    });
+  }
+});
+
 app.get("/api/auth/me", requireAuth, async (req, res) => {
   res.json({ success: true, user: req.user });
 });

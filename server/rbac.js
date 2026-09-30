@@ -389,7 +389,7 @@ export async function requirePermission(req, res, next) {
       req.method === "POST" &&
       pathname === "/api/tickets";
 
-    if (req.user?.role === "Driver" && permission.module === "fleet") return next();
+    // Drivers may submit maintenance/building requests, but do not receive general Support administration access.\n    const isDriverMaintenanceRequest =\n      req.user?.role === "Driver" &&\n      pathname === "/api/maintenance-requests" &&\n      req.method === "POST";\n\n    if (isDriverMaintenanceRequest) return next();\n\n    if (req.user?.role === "Driver" && permission.module === "fleet") return next();
 
     if (isDriverSmartReport) {
       const body = req.body || {};

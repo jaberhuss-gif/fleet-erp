@@ -76,12 +76,12 @@ export async function closePostgres() {
   }
 }
 
-// Start the operational schedulers (Daily KM, Periodic Maintenance) and the
-// optional Google Sheet import from the same backend process. Daily KM and
-// maintenance run independently of the Sheet sync so a Sheet outage cannot stop
-// compliance work. Twilio delivery remains disabled unless TWILIO_ENABLED=true
-// is explicitly set.
-if (process.env.SCHEDULERS_DISABLED !== "true") {
+// Automatic operational schedulers are intentionally disabled.
+// Daily KM, Periodic Maintenance, and Google Sheet synchronization are run
+// manually from the ERP by an Owner when the morning sync is required.
+// To avoid accidental background database usage, schedulers only start if
+// SCHEDULERS_ENABLED=true is explicitly configured.
+if (process.env.SCHEDULERS_ENABLED === "true") {
   setTimeout(async () => {
     try {
       const { startSchedulers } = await import("./scheduler.js");

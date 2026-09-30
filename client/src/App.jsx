@@ -205,6 +205,24 @@ export default function App() {
           <button className="theme-toggle" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}>
             {theme === 'light' ? '🌙' : '☀️'}
           </button>
+          {user?.role === 'Owner' && (
+            <button
+              onClick={async () => {
+                if (!window.confirm('Run the morning sync now? This will sync Google Sheet, Daily KM, and Maintenance.')) return;
+                try {
+                  const res = await api.post('/operations/morning-sync');
+                  alert('Morning sync completed successfully.');
+                  console.log('[Morning Sync]', res.data);
+                } catch (e) {
+                  alert(e.response?.data?.error || e.message || 'Morning sync failed.');
+                }
+              }}
+              style={{ background: '#2563eb', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}
+              title="Run Google Sheet, Daily KM, and Maintenance sync"
+            >
+              🔄 Morning Sync
+            </button>
+          )}
           <Notifications />
           <div style={{ textAlign: 'right', fontSize: '13px' }}>
             <div style={{ fontWeight: 'bold' }}>{user.fullName || user.username}</div>

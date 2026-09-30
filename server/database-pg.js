@@ -164,7 +164,20 @@ export async function getVehicleByPlate(plate) {
            d.id AS relational_driver_id
     FROM vehicles v
     LEFT JOIN drivers d ON d.id = v.driver_id
-    WHERE v.plate_number = $1 AND v.plate_code = $2 LIMIT 1
+    WHERE v.plate_number = $1 AND v.plate_code = $2
+    ORDER BY
+      CASE
+        WHEN COALESCE(v.current_km, 0) > 0
+          OR COALESCE(v.last_oil_km, 0) > 0
+          OR v.driver_id IS NOT NULL
+          OR NULLIF(TRIM(COALESCE(v.driver, '')), '') IS NOT NULL
+          OR NULLIF(TRIM(COALESCE(v.location, '')), '') IS NOT NULL
+        THEN 1 ELSE 0
+      END DESC,
+      COALESCE(v.current_km, 0) DESC,
+      COALESCE(v.updated_at, v.created_at) DESC NULLS LAST,
+      v.id DESC
+    LIMIT 1
   `, [plateNumber, plateCode]);
   const row = result.rows[0];
   if (!row) return null;
@@ -176,12 +189,39 @@ export async function getVehicleByPlate(plate) {
 }
 
 export async function listVehicles() {
+  // A vehicle plate is the business key. Older imports created duplicate rows
+  // for the same plate, including empty "0 KM" rows. Always expose the
+  // canonical row: prefer a row with real vehicle data, then the highest KM,
+  // then the most recently updated row. This prevents the UI from editing or
+  // displaying a stale duplicate record.
   const result = await query(`
-    SELECT v.*, d.name AS relational_driver_name, d.phone AS relational_driver_phone,
+    WITH ranked AS (
+      SELECT
+        v.*,
+        ROW_NUMBER() OVER (
+          PARTITION BY UPPER(TRIM(COALESCE(v.plate_number, ''))),
+                       UPPER(TRIM(COALESCE(v.plate_code, '')))
+          ORDER BY
+            CASE
+              WHEN COALESCE(v.current_km, 0) > 0
+                OR COALESCE(v.last_oil_km, 0) > 0
+                OR v.driver_id IS NOT NULL
+                OR NULLIF(TRIM(COALESCE(v.driver, '')), '') IS NOT NULL
+                OR NULLIF(TRIM(COALESCE(v.location, '')), '') IS NOT NULL
+              THEN 1 ELSE 0
+            END DESC,
+            COALESCE(v.current_km, 0) DESC,
+            COALESCE(v.updated_at, v.created_at) DESC NULLS LAST,
+            v.id DESC
+        ) AS rn
+      FROM vehicles v
+    )
+    SELECT r.*, d.name AS relational_driver_name, d.phone AS relational_driver_phone,
            d.id AS relational_driver_id
-    FROM vehicles v
-    LEFT JOIN drivers d ON d.id = v.driver_id
-    ORDER BY v.plate_number, v.plate_code
+    FROM ranked r
+    LEFT JOIN drivers d ON d.id = r.driver_id
+    WHERE r.rn = 1
+    ORDER BY r.plate_number, r.plate_code
   `);
   return result.rows.map(row => formatVehicle({
     ...row,

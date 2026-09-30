@@ -622,9 +622,18 @@ export async function addReading(vehicleId, data = {}) {
      ORDER BY reading_date DESC, id DESC LIMIT 1`,
     [vehicleId]
   );
-  const odometerKm = latestRow.rows[0]
-    ? numberValue(latestRow.rows[0].reading_km, km)
-    : km;
+  const isTodayReading =
+    String(readingDate).slice(0, 10) === String(riyadhToday).slice(0, 10);
+
+  // A driver's reading for today is authoritative for the vehicle's Current KM.
+  // Do not let an accidental future-dated record prevent today's reading from
+  // updating the live odometer. Backdated readings still derive Current KM from
+  // the newest valid dated reading so they cannot roll the odometer backwards.
+  const odometerKm = isTodayReading
+    ? km
+    : (latestRow.rows[0]
+        ? numberValue(latestRow.rows[0].reading_km, km)
+        : km);
 
   await query(
     `UPDATE vehicles

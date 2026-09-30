@@ -97,9 +97,21 @@ export async function createVehiclePG(data) {
 }
 
 export async function updateVehiclePG(id, data) {
-  // Last Oil Change is ERP-controlled through the dedicated
-  // /vehicles/:id/last-oil-change endpoint (or the official oil-change flow).
-  // Generic vehicle updates must never overwrite it.
+  // Vehicle Edit is also allowed to update Last Oil Change KM when the field
+  // is explicitly supplied. Previously this endpoint silently ignored
+  // lastOilKm, so the UI could report success while the old KM remained.
+  const hasLastOilKm =
+    data.lastOilKm !== undefined ||
+    data.lastOilKM !== undefined ||
+    data.last_oil_km !== undefined ||
+    data.serviceKm !== undefined;
+  const lastOilKm = hasLastOilKm
+    ? Number(data.lastOilKm ?? data.lastOilKM ?? data.last_oil_km ?? data.serviceKm)
+    : null;
+  if (hasLastOilKm && (!Number.isFinite(lastOilKm) || lastOilKm < 0)) {
+    throw new Error("Last Oil Change KM must be a valid non-negative number");
+  }
+
   const result = await query(`
     UPDATE vehicles
     SET
@@ -112,9 +124,14 @@ export async function updateVehiclePG(id, data) {
       driver = COALESCE($8, driver),
       phone = COALESCE($9, phone),
       current_km = COALESCE($10, current_km),
-      oil_change_interval = COALESCE($11, oil_change_interval),
-      status = COALESCE($12, status),
-      meter_updated_at = COALESCE($13, meter_updated_at),
+      last_oil_km = CASE WHEN $11::boolean THEN $12 ELSE last_oil_km END,
+      oil_change_interval = COALESCE($13, oil_change_interval),
+      status = COALESCE($14, status),
+      meter_updated_at = COALESCE($15, meter_updated_at),
+      last_oil_change_date = CASE
+        WHEN $11::boolean THEN $16
+        ELSE last_oil_change_date
+      END,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = $1
     RETURNING *
@@ -129,10 +146,42 @@ export async function updateVehiclePG(id, data) {
     data.driver ?? null,
     data.phone ?? null,
     data.currentKm ?? data.current_km ?? null,
+    hasLastOilKm,
+    lastOilKm,
     data.oilChangeInterval ?? data.oil_change_interval ?? null,
     data.status ?? null,
-    data.meterUpdatedAt ?? data.meter_updated_at ?? null
+    data.meterUpdatedAt ?? data.meter_updated_at ?? null,
+    data.lastOilChangeDate ?? data.last_oil_change_date ?? null
   ]);
+
+  if (result.rows[0] && hasLastOilKm) {
+    const oilDate = data.lastOilChangeDate ?? data.last_oil_change_date ?? null;
+    const latestOil = await query(`
+      SELECT id
+      FROM oil_changes
+      WHERE vehicle_id = $1
+        AND COALESCE(notes, '') NOT ILIKE '%Google Sheet%'
+      ORDER BY oil_change_date DESC NULLS LAST, id DESC
+      LIMIT 1
+    `, [id]);
+
+    if (latestOil.rows[0]) {
+      await query(`
+        UPDATE oil_changes
+        SET oil_change_km = $1,
+            oil_change_date = $2,
+            changed_by = 'ERP',
+            notes = 'ERP Last Oil Change correction'
+        WHERE id = $3
+      `, [lastOilKm, oilDate, latestOil.rows[0].id]);
+    } else {
+      await query(`
+        INSERT INTO oil_changes
+          (vehicle_id, oil_change_km, oil_change_date, changed_by, notes)
+        VALUES ($1, $2, $3, 'ERP', 'ERP Last Oil Change correction')
+      `, [id, lastOilKm, oilDate]);
+    }
+  }
 
   return result.rows[0] || null;
 }

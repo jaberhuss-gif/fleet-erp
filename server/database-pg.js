@@ -243,8 +243,18 @@ export async function updateVehicle(id, data = {}) {
   const currentKM = data.currentKM !== undefined || data.km !== undefined
     ? numberValue(data.currentKM ?? data.km, numberValue(vehicleRow.current_km, 0))
     : numberValue(vehicleRow.current_km, 0);
-  const lastOilKM = data.lastOilKM !== undefined || data.serviceKm !== undefined
-    ? numberValue(data.lastOilKM ?? data.serviceKm, numberValue(vehicleRow.last_oil_km, 0))
+  // Vehicle Edit form sends lastOilKm (camelCase). Accept all existing
+  // spellings so editing a vehicle cannot silently revert the saved oil reading.
+  const hasLastOilKM =
+    data.lastOilKm !== undefined ||
+    data.lastOilKM !== undefined ||
+    data.last_oil_km !== undefined ||
+    data.serviceKm !== undefined;
+  const lastOilKM = hasLastOilKM
+    ? numberValue(
+        data.lastOilKm ?? data.lastOilKM ?? data.last_oil_km ?? data.serviceKm,
+        numberValue(vehicleRow.last_oil_km, 0)
+      )
     : numberValue(vehicleRow.last_oil_km, 0);
   const oilInterval = data.oilChangeInterval !== undefined && data.oilChangeInterval !== null && data.oilChangeInterval !== ""
     ? numberValue(data.oilChangeInterval, 5000)
@@ -296,7 +306,7 @@ export async function updateVehicle(id, data = {}) {
     data.location ?? vehicleRow.location ?? "",
     driverId,
     oilInterval,
-    data.lastOilChangeDate ?? vehicleRow.last_oil_change_date ?? null,
+    data.lastOilChangeDate ?? data.last_oil_change_date ?? vehicleRow.last_oil_change_date ?? null,
     id
   ]);
 

@@ -155,7 +155,14 @@ export default function TireManagement({ user, driverMode=false }) {
       </button>
     </div>}
 
-    {vehicleId && locked && <div className="panel">
+    {vehicleId && locked && driverMode && <div className="panel">
+      <div className="alert alert-warning" style={{margin:0}}>
+        🔒 <strong>System Locked</strong><br/>
+        Initial Tire Survey for this vehicle has already been completed. No further tire inspection entry is available for the driver.
+      </div>
+    </div>}
+
+    {vehicleId && locked && !driverMode && <div className="panel">
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap'}}>
         <div>
           <h2 style={{margin:0}}>🔒 Initial Tire Survey Locked</h2>
@@ -172,7 +179,7 @@ export default function TireManagement({ user, driverMode=false }) {
           <div style={{fontSize:13}}>Pressure: {t.pressure_psi ?? '-'} PSI</div>
         </div>)}
       </div>
-    </div>}
+    </div>
 
     {vehicleId && locked && !driverMode && <div className="panel" style={{marginTop:16}}>
       <h2>🔧 Tire Event</h2>

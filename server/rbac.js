@@ -112,7 +112,8 @@ function getModuleFromPath(pathname) {
     reports: "reports",
     "advanced-reports": "advanced_reports",
     "live-issues": "tickets",
-    voice: "fleet"
+    voice: "fleet",
+    tire: "fleet"
   };
   if (fullPath.includes("/tickets/by-reporter/") || fullPath.includes("/tickets/stats/")) return "mytickets";
   if (fullPath.startsWith("/api/support-manager/")) return "support";

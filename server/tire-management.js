@@ -1,4 +1,4 @@
-import { query } from "./postgres.js";
+import { query, transaction } from "./postgres.js";
 
 const POSITIONS = [
   "Front Left",
@@ -152,16 +152,14 @@ export async function submitInitialSurvey(vehicleId, body, userId) {
     }
   }
 
-  const client = await query("SELECT 1");
-  await query("BEGIN");
-  try {
-    await query(`DELETE FROM tire_assets WHERE vehicle_id=$1`, [vehicleId]);
+  return await transaction(async (tx) => {
+    await tx.query(`DELETE FROM tire_assets WHERE vehicle_id=$1`, [vehicleId]);
 
     for (const tire of tires) {
       const position = clean(tire.position);
       if (!POSITIONS.includes(position)) throw new Error("Invalid tire position: " + position);
       const tireId = clean(tire.tireId) || ("T-" + vehicleId + "-" + Date.now() + "-" + position.replace(/\\s+/g, "-"));
-      const result = await query(`
+      const result = await tx.query(`
         INSERT INTO tire_assets
         (vehicle_id, position, tire_id, manufacturer_serial, brand, model, size,
          tread_depth_mm, pressure_psi, condition_status, condition_notes)
@@ -174,14 +172,14 @@ export async function submitInitialSurvey(vehicleId, body, userId) {
         Number.isFinite(Number(tire.pressurePsi)) ? Number(tire.pressurePsi) : null,
         statusFor(tire), clean(tire.notes) || null
       ]);
-      await query(`
+      await tx.query(`
         INSERT INTO tire_events
         (vehicle_id,tire_asset_id,event_type,position,new_tire_id,manufacturer_serial,notes,created_by)
         VALUES ($1,$2,'INITIAL_SURVEY',$3,$4,$5,$6,$7)
       `, [vehicleId, result.rows[0].id, position, tireId, clean(tire.manufacturerSerial) || null, clean(tire.notes) || null, userId || null]);
     }
 
-    const saved = await query(`
+    const saved = await tx.query(`
       INSERT INTO tire_surveys (vehicle_id,status,photos,notes,submitted_by,submitted_at,updated_at)
       VALUES ($1,'LOCKED',$2,$3,$4,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
       ON CONFLICT(vehicle_id) DO UPDATE SET
@@ -191,12 +189,8 @@ export async function submitInitialSurvey(vehicleId, body, userId) {
       RETURNING *
     `, [vehicleId, JSON.stringify(photos), clean(body.notes) || null, userId || null]);
 
-    await query("COMMIT");
     return await getVehicleTires(vehicleId);
-  } catch (err) {
-    await query("ROLLBACK");
-    throw err;
-  }
+  });
 }
 
 export async function reopenInitialSurvey(vehicleId, userId) {

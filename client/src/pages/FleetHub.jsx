@@ -4,6 +4,7 @@ import Vehicles from './Vehicles';
 import VehicleMaintenance from './VehicleMaintenance';
 import ReportIssue from './ReportIssue';
 import SmartReportIssue from './SmartReportIssue';
+import TireManagement, { TireControlCenter } from './TireManagement';
 import FleetOverview from './FleetOverview';
 import FleetTicketViewer from './FleetTicketViewer';
 

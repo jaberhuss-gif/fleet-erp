@@ -5,6 +5,7 @@ import Vehicles from './Vehicles';
 import VehicleMaintenance from './VehicleMaintenance';
 import ReportIssue from './ReportIssue';
 import SmartReportIssue from './SmartReportIssue';
+import TireManagement, { TireControlCenter } from './TireManagement';
 
 const FLEET_ACTIONS = [
   {
@@ -69,7 +70,7 @@ export default function FleetHub({ user, access }) {
 
   const visibleActions = FLEET_ACTIONS.filter(item => {
     // Drivers only need the three driver-facing Fleet functions.
-    if (isDriver) return ['daily-km', 'issue', 'smart-issue'].includes(item.id);
+    if (isDriver) return ['daily-km', 'tire-management', 'issue', 'smart-issue'].includes(item.id);
 
     // Driver records remain Owner-only.
     if (item.id === 'add-driver') return user?.role === 'Owner';

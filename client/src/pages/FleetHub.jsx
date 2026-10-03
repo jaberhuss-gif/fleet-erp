@@ -44,6 +44,18 @@ const FLEET_SECTIONS = [
     label: '🎫 Fleet Tickets',
     title: 'Fleet Tickets',
     description: 'Separate vehicle Maintenance and Daily KM tickets.'
+  },
+  {
+    id: 'tire',
+    label: '🛞 Tire Survey',
+    title: 'Vehicle Tire Survey',
+    description: 'Initial 6-tire survey, serial numbers, photos and lock control.'
+  },
+  {
+    id: 'tire-control',
+    label: '🛞 Tire Control',
+    title: 'Tire Control Center',
+    description: 'Fleet-wide tire status, serial tracking and Red → Yellow → Green control.'
   }
 ];
 
@@ -67,6 +79,7 @@ export default function FleetHub({ user, access, onViewVehicle }) {
   const visibleSections = FLEET_SECTIONS.filter(s => {
     if (s.id === 'vehicles' || s.id === 'maintenance') return user?.role === 'Owner';
     if (s.id === 'tickets') return user?.role === 'Owner' || !!access?.fleet_tickets?.can_view;
+    if (s.id === 'tire-control') return user?.role === 'Owner';
     return true;
   });
 
@@ -132,6 +145,8 @@ export default function FleetHub({ user, access, onViewVehicle }) {
           {safeSection === 'km' && <DriverPortal canWork={fleetWork} />}
           {safeSection === 'issue' && <ReportIssue canWork={fleetWork} />}
           {safeSection === 'tickets' && <FleetTicketViewer user={user} />}
+          {safeSection === 'tire' && <TireManagement user={user} driverMode={user?.role === 'Driver'} />}
+          {safeSection === 'tire-control' && user?.role === 'Owner' && <TireControlCenter />}
         </>
       )}
     </div>

@@ -116,7 +116,7 @@ export async function getTireControl() {
     LEFT JOIN tire_assets t ON t.vehicle_id=v.id AND t.active=true
     LEFT JOIN LATERAL (
       SELECT
-        COALESCE(pm.next_due_km::text, pm.scheduled_date::text) AS maintenance_due_date,
+        COALESCE(pm.scheduled_date::text, (pm.last_service_date + INTERVAL '180 days')::date::text) AS maintenance_due_date,
         COALESCE(pm.last_service_date::text, pm.completed_date::text, pm.scheduled_date::text) AS maintenance_last_date
       FROM periodic_maintenance pm
       WHERE pm.vehicle_id=v.id

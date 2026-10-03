@@ -193,7 +193,7 @@ export default function TireManagement({ user, driverMode=false }) {
           <div style={{fontSize:13}}>Pressure: {t.pressure_psi ?? '-'} PSI</div>
         </div>)}
       </div>
-    </div>
+    </div>}
 
     {vehicleId && locked && !driverMode && <div className="panel" style={{marginTop:16}}>
       <h2>🔧 Tire Event</h2>

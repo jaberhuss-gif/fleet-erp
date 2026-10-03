@@ -13,6 +13,7 @@ import { mountV2 } from "./v2/index.js";
 import { getKmDailyNotifications, getDailyKmReport, getDriverDailyKmStatus } from "./kmDailyNotifications.js";
 import { updateLastOilChangePG } from "./vehicles-pg.js";
 import { mountPdfWorkOrderImport } from "./pdfWorkOrderImport.js";
+import * as tire from "./tire-control-pg.js";
 
 const { listVehicles:listVehiclesPG, getVehicleById:getVehicleByIdPG, getVehicleByPlate:getVehicleByPlatePG, createVehicle:createVehiclePG, updateVehicle:updateVehiclePG, deleteVehicle:deleteVehiclePG, deleteAllVehicles:deleteAllVehiclesPG, addReading:addReadingPG, listReadings:listReadingsPG, changeOil:changeOilPG, listOilChanges:listOilChangesPG, createTicket:createTicketPG, listTickets:listTicketsPG, closeTicket:closeTicketPG, deleteAllTickets:deleteAllTicketsPG, acknowledgeTicket:acknowledgeTicketPG, closeTicketWithNotes:closeTicketWithNotesPG, listTicketsByReporter:listTicketsByReporterPG, getReporterStats:getReporterStatsPG, listSites:listSitesPG, getSite:getSitePG, createSite:createSitePG, updateSite:updateSitePG, deleteSite:deleteSitePG, getAlerts:getAlertsPG, importVehicles:importVehiclesPG, listWorkOrders:listWorkOrdersPG, getWorkOrder:getWorkOrderPG, createWorkOrder:createWorkOrderPG, updateWorkOrder:updateWorkOrderPG, closeWorkOrder:closeWorkOrderPG, deleteWorkOrder:deleteWorkOrderPG, listProjects:listProjectsPG, getProject:getProjectPG, createProject:createProjectPG, updateProject:updateProjectPG, deleteProject:deleteProjectPG, listProjectItems:listProjectItemsPG, createProjectItem:createProjectItemPG, updateProjectItem:updateProjectItemPG, closeProjectItem:closeProjectItemPG, reopenProjectItem:reopenProjectItemPG, listWorkOrderItems:listWorkOrderItemsPG, createWorkOrderItem:createWorkOrderItemPG, listPurchases:listPurchasesPG, createPurchase:createPurchasePG, deletePurchase:deletePurchasePG, listPurchaseRequests:listPurchaseRequestsPG, createPurchaseRequest:createPurchaseRequestPG, approvePurchaseRequest:approvePurchaseRequestPG, rejectPurchaseRequest:rejectPurchaseRequestPG, recordPurchaseFromRequest:recordPurchaseFromRequestPG, listDrivers:listDriversPG, getDriver:getDriverPG, createDriver:createDriverPG, updateDriver:updateDriverPG, deleteDriver:deleteDriverPG, listInventory:listInventoryPG, getInventoryItem:getInventoryItemPG, createInventoryItem:createInventoryItemPG, updateInventoryItem:updateInventoryItemPG, deleteInventoryItem:deleteInventoryItemPG, stockIn:stockInPG, stockOut:stockOutPG, transferStock:transferStockPG, listStockTransactions:listStockTransactionsPG, getLowStockItems:getLowStockItemsPG, listPeriodicMaintenance:listPeriodicMaintenancePG, getPeriodicMaintenance:getPeriodicMaintenancePG, createPeriodicMaintenance:createPeriodicMaintenancePG, updatePeriodicMaintenance:updatePeriodicMaintenancePG, completePeriodicMaintenance:completePeriodicMaintenancePG, deletePeriodicMaintenance:deletePeriodicMaintenancePG, getPeriodicAlerts:getPeriodicAlertsPG, generateScheduledMaintenance:generateScheduledMaintenancePG, ensureVehicleRepairSchema, createVehicleRepairOrder:createVehicleRepairOrderPG, listVehicleRepairOrders:listVehicleRepairOrdersPG, completeVehicleRepairOrder:completeVehicleRepairOrderPG, closeVehicleRepairOrder:closeVehicleRepairOrderPG, logAction:logActionPG, listAuditLog:listAuditLogPG, getAuditStats:getAuditStatsPG, clearAuditLog:clearAuditLogPG, getBuildingDashboard:getBuildingDashboardPG, getCurrentMonthDashboardFinancial:getCurrentMonthDashboardFinancialPG, getDashboard:getDashboardPG, getMonthlyReport:getMonthlyReportPG, getGeneralMaintenanceReport:getGeneralMaintenanceReportPG, getFinancialReport:getFinancialReportPG }=db;
 
@@ -45,6 +46,48 @@ app.use("/api", async (req, res, next) => {
 });
 
 app.get("/api/health", async (req, res) => res.json({ status: "ok", time: new Date().toISOString() }));
+
+// ===== TIRE CONTROL / SURVEY =====
+app.get("/api/tire-control/vehicle-by-plate", async (req,res)=>{
+  try {
+    const vehicle=await tire.findVehicleByPlate(req.query.plate||"");
+    if(!vehicle) return res.status(404).json({success:false,error:"Vehicle not found"});
+    res.json({success:true,vehicle,state:await tire.getSurveyState(vehicle.id)});
+  } catch(e){ res.status(500).json({success:false,error:e.message}); }
+});
+app.get("/api/tire-control/vehicle/:id", async (req,res)=>{
+  try {
+    const state=await tire.getSurveyState(req.params.id);
+    if(!state) return res.status(404).json({success:false,error:"Vehicle not found"});
+    res.json({success:true,state});
+  } catch(e){ res.status(500).json({success:false,error:e.message}); }
+});
+app.get("/api/tire-control/cards", async (req,res)=>{
+  try { res.json({success:true,cards:await tire.listControlCards()}); }
+  catch(e){ res.status(500).json({success:false,error:e.message}); }
+});
+app.get("/api/tire-surveys/initial-pending", async (req,res)=>{
+  try { res.json({success:true,surveys:await tire.listPendingInitial()}); }
+  catch(e){ res.status(500).json({success:false,error:e.message}); }
+});
+app.post("/api/tire-surveys/initial", async (req,res)=>{
+  try {
+    const survey=await tire.submitInitialSurvey({...req.body,reportedBy:req.user?.id});
+    res.json({success:true,survey});
+  } catch(e){ res.status(400).json({success:false,error:e.message}); }
+});
+app.post("/api/tire-surveys/event", async (req,res)=>{
+  try {
+    const result=await tire.submitTireEvent({...req.body,reportedBy:req.user?.id});
+    res.json({success:true,result});
+  } catch(e){ res.status(400).json({success:false,error:e.message}); }
+});
+app.post("/api/tire-surveys/:id/complete-initial", requireRole("Owner"), async (req,res)=>{
+  try {
+    const result=await tire.completeInitialSurvey(req.params.id,req.body?.tires,req.user?.id);
+    res.json({success:true,result});
+  } catch(e){ res.status(400).json({success:false,error:e.message}); }
+});
 
 // ===== VEHICLES (PostgreSQL Connected) =====
 app.get("/api/vehicles", async (req, res) => {
@@ -1222,6 +1265,7 @@ try {
 }
 
 try { await ensureVehicleRepairSchema(); } catch (e) { console.error("[Schema] vehicle repair schema check failed:", e.message); }
+try { await tire.ensureTireControlSchema(); } catch (e) { console.error("[Schema] tire control schema check failed:", e.message); }
 
 // Additive, idempotent ticket-schema guard. Only missing columns are added;
 // existing tickets and historical data are never modified or removed.

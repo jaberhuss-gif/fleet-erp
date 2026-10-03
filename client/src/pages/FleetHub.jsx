@@ -5,6 +5,8 @@ import Vehicles from './Vehicles';
 import VehicleMaintenance from './VehicleMaintenance';
 import ReportIssue from './ReportIssue';
 import SmartReportIssue from './SmartReportIssue';
+import TireSurvey from './TireSurvey';
+import TireControl from './TireControl';
 
 const FLEET_ACTIONS = [
   {
@@ -48,6 +50,18 @@ const FLEET_ACTIONS = [
     label: '🧠 Smart Report Issue',
     title: 'Smart Report Issue',
     description: 'Use the smart maintenance issue reporting workflow.'
+  },
+  {
+    id: 'tire-survey',
+    label: '🛞 Tire Survey',
+    title: 'Tire Survey',
+    description: 'Initial 6-tire census and tire change / puncture reporting.'
+  },
+  {
+    id: 'tire-control',
+    label: '🛞 Tire Control',
+    title: 'Tire Control Center',
+    description: 'Vehicle tire cards, exceptions and initial survey control.'
   }
 ];
 
@@ -69,10 +83,11 @@ export default function FleetHub({ user, access }) {
 
   const visibleActions = FLEET_ACTIONS.filter(item => {
     // Drivers only need the three driver-facing Fleet functions.
-    if (isDriver) return ['daily-km', 'issue', 'smart-issue'].includes(item.id);
+    if (isDriver) return ['daily-km', 'issue', 'smart-issue', 'tire-survey'].includes(item.id);
 
     // Driver records remain Owner-only.
     if (item.id === 'add-driver') return user?.role === 'Owner';
+    if (item.id === 'tire-control') return user?.role === 'Owner';
     return true;
   });
 
@@ -147,6 +162,14 @@ export default function FleetHub({ user, access }) {
 
       {safeSection === 'smart-issue' && (
         <SmartReportIssue canWork={fleetWork} />
+      )}
+
+      {safeSection === 'tire-survey' && (
+        <TireSurvey user={user} />
+      )}
+
+      {safeSection === 'tire-control' && user?.role === 'Owner' && (
+        <TireControl />
       )}
     </div>
   );

@@ -5,6 +5,7 @@ import Vehicles from './Vehicles';
 import VehicleMaintenance from './VehicleMaintenance';
 import ReportIssue from './ReportIssue';
 import SmartReportIssue from './SmartReportIssue';
+import TireManagement, { TireControlCenter } from './TireManagement';
 
 const FLEET_ACTIONS = [
   {
@@ -48,6 +49,18 @@ const FLEET_ACTIONS = [
     label: '🧠 Smart Report Issue',
     title: 'Smart Report Issue',
     description: 'Use the smart maintenance issue reporting workflow.'
+  },
+  {
+    id: 'tire',
+    label: '🛞 Tire Survey',
+    title: 'Vehicle Tire Survey',
+    description: 'Initial 6-tire survey, serial numbers, photos and lock control.'
+  },
+  {
+    id: 'tire-control',
+    label: '🛞 Tire Control',
+    title: 'Tire Control Center',
+    description: 'Fleet-wide tire status and serial tracking.'
   }
 ];
 
@@ -73,6 +86,7 @@ export default function FleetHub({ user, access }) {
 
     // Driver records remain Owner-only.
     if (item.id === 'add-driver') return user?.role === 'Owner';
+    if (item.id === 'tire-control') return user?.role === 'Owner';
     return true;
   });
 
@@ -147,6 +161,14 @@ export default function FleetHub({ user, access }) {
 
       {safeSection === 'smart-issue' && (
         <SmartReportIssue canWork={fleetWork} />
+      )}
+
+      {safeSection === 'tire' && (
+        <TireManagement user={user} driverMode={isDriver} />
+      )}
+
+      {safeSection === 'tire-control' && user?.role === 'Owner' && (
+        <TireControlCenter />
       )}
     </div>
   );

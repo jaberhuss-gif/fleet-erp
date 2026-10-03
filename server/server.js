@@ -48,6 +48,9 @@ app.use("/api", async (req, res, next) => {
 
 app.get("/api/health", async (req, res) => res.json({ status: "ok", time: new Date().toISOString() }));
 
+// ===== TIRE MANAGEMENT =====
+await mountTireRoutes(app);
+
 // ===== VEHICLES (PostgreSQL Connected) =====
 app.get("/api/vehicles", async (req, res) => {
   try {

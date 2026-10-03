@@ -189,8 +189,8 @@ export async function submitInitialSurvey(vehicleId, body, userId) {
       RETURNING *
     `, [vehicleId, JSON.stringify(photos), clean(body.notes) || null, userId || null]);
 
-    return await getVehicleTires(vehicleId);
-  });
+    return saved.rows[0];
+  }).then(async () => getVehicleTires(vehicleId));
 }
 
 export async function reopenInitialSurvey(vehicleId, userId) {

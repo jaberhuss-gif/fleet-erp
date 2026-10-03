@@ -84,8 +84,21 @@ export async function ensureTireSchema() {
 }
 
 export async function getTireControl() {
+  await query(`
+    ALTER TABLE periodic_maintenance
+      ADD COLUMN IF NOT EXISTS last_service_km INTEGER,
+      ADD COLUMN IF NOT EXISTS last_service_date DATE,
+      ADD COLUMN IF NOT EXISTS next_due_km INTEGER,
+      ADD COLUMN IF NOT EXISTS interval_km INTEGER DEFAULT 5000,
+      ADD COLUMN IF NOT EXISTS interval_days INTEGER DEFAULT 180
+  `);
+
   const vehicles = await query(`
-    SELECT v.id, v.plate, v.driver, v.location,
+    SELECT v.id,
+      COALESCE(NULLIF(v.plate, ''), CONCAT_WS(' ', v.plate_number, v.plate_code)) AS plate,
+      v.plate_number, v.plate_code, v.driver, v.location,
+      v.current_km, v.last_oil_km, v.last_oil_change_date, COALESCE(v.oil_change_interval, 5000) AS oil_change_interval,
+      v.inspection_last_date, v.inspection_due_date,
       s.status AS survey_status, s.submitted_at,
       COALESCE(json_agg(
         json_build_object(
@@ -95,18 +108,54 @@ export async function getTireControl() {
           'pressurePsi', t.pressure_psi, 'status', t.condition_status,
           'notes', t.condition_notes, 'active', t.active
         ) ORDER BY t.position
-      ) FILTER (WHERE t.id IS NOT NULL), '[]'::json) AS tires
+      ) FILTER (WHERE t.id IS NOT NULL), '[]'::json) AS tires,
+      pm.maintenance_due_date,
+      pm.maintenance_last_date
     FROM vehicles v
     LEFT JOIN tire_surveys s ON s.vehicle_id=v.id
     LEFT JOIN tire_assets t ON t.vehicle_id=v.id AND t.active=true
-    GROUP BY v.id, v.plate, v.driver, v.location, s.status, s.submitted_at
-    ORDER BY v.plate
+    LEFT JOIN LATERAL (
+      SELECT
+        COALESCE(pm.next_due_km::text, pm.scheduled_date::text) AS maintenance_due_date,
+        COALESCE(pm.last_service_date::text, pm.completed_date::text, pm.scheduled_date::text) AS maintenance_last_date
+      FROM periodic_maintenance pm
+      WHERE pm.vehicle_id=v.id
+        AND LOWER(COALESCE(pm.type,'')) NOT IN ('oil_change','oil change','oil')
+      ORDER BY CASE WHEN pm.status='Pending' THEN 0 ELSE 1 END,
+        COALESCE(pm.scheduled_date, pm.last_service_date) DESC NULLS LAST, pm.id DESC
+      LIMIT 1
+    ) pm ON TRUE
+    GROUP BY v.id, v.plate, v.plate_number, v.plate_code, v.driver, v.location,
+      v.current_km, v.last_oil_km, v.last_oil_change_date, v.oil_change_interval,
+      v.inspection_last_date, v.inspection_due_date, s.status, s.submitted_at,
+      pm.maintenance_due_date, pm.maintenance_last_date
+    ORDER BY plate
   `);
+  const today = new Date();
+  const dateStatus = (value, warnDays=30) => {
+    if (!value) return "red";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "red";
+    const days = Math.ceil((d.getTime() - today.getTime()) / 86400000);
+    if (days < 0) return "red";
+    if (days <= warnDays) return "yellow";
+    return "green";
+  };
+
   return vehicles.rows.map(v => {
     const tires = (v.tires || []).map(t => ({...t, status: statusFor(t)}));
+    const tireStatus = tires.length < 6 ? "red" : tires.some(t => t.status === "red") ? "red" : tires.some(t => t.status === "yellow") ? "yellow" : "green";
+    const currentKm = Number(v.current_km || 0);
+    const lastOilKm = Number(v.last_oil_km || 0);
+    const oilInterval = Number(v.oil_change_interval || 5000);
+    const kmSinceOil = currentKm - lastOilKm;
+    const oilStatus = (!lastOilKm || !currentKm) ? "red" : kmSinceOil >= oilInterval ? "red" : kmSinceOil >= oilInterval - 500 ? "yellow" : "green";
+    const maintenanceStatus = dateStatus(v.maintenance_due_date, 30);
+    const inspectionStatus = dateStatus(v.inspection_due_date, 30);
+    const overall = [tireStatus, oilStatus, maintenanceStatus, inspectionStatus].includes("red") ? "red" : [tireStatus, oilStatus, maintenanceStatus, inspectionStatus].includes("yellow") ? "yellow" : "green";
     return {
-      ...v,
-      tires,
+      ...v, tires, tireStatus, oilStatus, oilKmRemaining: Math.max(0, oilInterval - kmSinceOil),
+      maintenanceStatus, inspectionStatus, overallStatus: overall,
       red: tires.filter(t => t.status === "red").length,
       yellow: tires.filter(t => t.status === "yellow").length,
       green: tires.filter(t => t.status === "green").length

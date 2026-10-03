@@ -47,6 +47,9 @@ export async function ensureTireSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_tire_assets_vehicle ON tire_assets(vehicle_id);
     CREATE INDEX IF NOT EXISTS idx_tire_assets_active ON tire_assets(vehicle_id, active);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_tire_assets_serial_unique
+      ON tire_assets(manufacturer_serial)
+      WHERE manufacturer_serial IS NOT NULL AND manufacturer_serial <> '';
 
     CREATE TABLE IF NOT EXISTS tire_surveys (
       id BIGSERIAL PRIMARY KEY,
@@ -153,7 +156,7 @@ export async function submitInitialSurvey(vehicleId, body, userId) {
   }
 
   return await transaction(async (tx) => {
-    await tx.query(`DELETE FROM tire_assets WHERE vehicle_id=$1`, [vehicleId]);
+    await tx.query(`UPDATE tire_assets SET active=false, removed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE vehicle_id=$1 AND active=true`, [vehicleId]);
 
     for (const tire of tires) {
       const position = clean(tire.position);
@@ -208,21 +211,79 @@ export async function createTireEvent(vehicleId, body, userId) {
   if (!["PUNCTURE","REPLACEMENT","SPARE","ROTATION","INSPECTION","OTHER"].includes(type)) {
     throw new Error("Invalid tire event type.");
   }
-  const result = await query(`
-    INSERT INTO tire_events
-    (vehicle_id,tire_asset_id,event_type,position,old_tire_id,new_tire_id,manufacturer_serial,notes,created_by)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *
-  `, [
-    vehicleId, body.tireAssetId || null, type, clean(body.position) || null,
-    clean(body.oldTireId) || null, clean(body.newTireId) || null,
-    clean(body.manufacturerSerial) || null, clean(body.notes) || null, userId || null
-  ]);
-  if (body.tireAssetId && (type === "REPLACEMENT" || type === "SPARE")) {
-    await query(`UPDATE tire_assets SET manufacturer_serial=COALESCE($1,manufacturer_serial),
-      condition_notes=COALESCE($2,condition_notes), updated_at=CURRENT_TIMESTAMP WHERE id=$3`,
-      [clean(body.manufacturerSerial) || null, clean(body.notes) || null, body.tireAssetId]);
-  }
-  return result.rows[0];
+
+  const position = clean(body.position) || null;
+  const serial = clean(body.manufacturerSerial) || null;
+
+  return transaction(async (tx) => {
+    let oldAsset = null;
+    if (body.tireAssetId) {
+      const oldResult = await tx.query(
+        `SELECT * FROM tire_assets WHERE id=$1 AND vehicle_id=$2 AND active=true FOR UPDATE`,
+        [body.tireAssetId, vehicleId]
+      );
+      oldAsset = oldResult.rows[0] || null;
+      if (!oldAsset) throw new Error("Active tire not found for this vehicle.");
+    }
+
+    const oldTireId = clean(body.oldTireId) || oldAsset?.tire_id || null;
+    let newAsset = null;
+
+    if (type === "ROTATION") {
+      if (!oldAsset || !position) throw new Error("Rotation requires the active tire and new position.");
+      const duplicate = await tx.query(
+        `SELECT id FROM tire_assets WHERE vehicle_id=$1 AND position=$2 AND active=true AND id<>$3 LIMIT 1`,
+        [vehicleId, position, oldAsset.id]
+      );
+      if (duplicate.rows[0]) throw new Error("Another active tire already occupies this position.");
+      await tx.query(
+        `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
+        [position, oldAsset.id]
+      );
+    }
+
+    if (type === "REPLACEMENT" || type === "SPARE") {
+      if (!position) throw new Error("Replacement/spare event requires a tire position.");
+
+      if (oldAsset) {
+        await tx.query(
+          `UPDATE tire_assets SET active=false, removed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1`,
+          [oldAsset.id]
+        );
+      }
+
+      const newTireId = clean(body.newTireId) || (serial ? "T-" + vehicleId + "-" + Date.now() : "");
+      if (newTireId) {
+        const insert = await tx.query(`
+          INSERT INTO tire_assets
+            (vehicle_id,position,tire_id,manufacturer_serial,brand,model,size,
+             tread_depth_mm,pressure_psi,condition_status,condition_notes)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          RETURNING *
+        `, [
+          vehicleId, position, newTireId, serial,
+          clean(body.brand) || null, clean(body.model) || null, clean(body.size) || null,
+          Number.isFinite(Number(body.treadDepthMm)) ? Number(body.treadDepthMm) : null,
+          Number.isFinite(Number(body.pressurePsi)) ? Number(body.pressurePsi) : null,
+          statusFor(body), clean(body.notes) || null
+        ]);
+        newAsset = insert.rows[0];
+      }
+    }
+
+    const result = await tx.query(`
+      INSERT INTO tire_events
+        (vehicle_id,tire_asset_id,event_type,position,old_tire_id,new_tire_id,manufacturer_serial,notes,created_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      RETURNING *
+    `, [
+      vehicleId, newAsset?.id || oldAsset?.id || null, type, position,
+      oldTireId, newAsset?.tire_id || clean(body.newTireId) || null,
+      serial, clean(body.notes) || null, userId || null
+    ]);
+
+    return { ...result.rows[0], old_tire: oldAsset, new_tire: newAsset };
+  });
 }
 
 export async function mountTireRoutes(app) {

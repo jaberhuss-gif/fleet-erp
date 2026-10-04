@@ -6,8 +6,6 @@ import VehicleMaintenance from './VehicleMaintenance';
 import ReportIssue from './ReportIssue';
 import SmartReportIssue from './SmartReportIssue';
 import TireManagement, { TireControlCenter } from './TireManagement';
-import DailyKmSubmitted from './DailyKmSubmitted';
-import DailyKmMissing from './DailyKmMissing';
 
 const FLEET_ACTIONS = [
   {
@@ -107,8 +105,7 @@ export default function FleetHub({ user, access }) {
   if (user?.role === 'Owner') {
     const ownerGroups = {
       add: ['add-vehicle', 'add-driver'],
-      maintenance: ['readings', 'maintenance', 'issue', 'smart-issue', 'tire', 'tire-control'],
-      km: ['daily-submitted', 'daily-missing']
+      maintenance: ['readings', 'maintenance', 'issue', 'smart-issue', 'tire', 'tire-control']
     };
     const ownerItems = {
       'add-vehicle': { label: '🚙 Add Vehicle', title: 'Add Vehicle', description: 'Add and maintain vehicle master data.' },
@@ -119,8 +116,6 @@ export default function FleetHub({ user, access }) {
       'smart-issue': { label: '🧠 Smart Report Issue', title: 'Smart Report Issue', description: 'Use the smart maintenance issue reporting workflow.' },
       tire: { label: '🛞 Tire Survey', title: 'Tire Survey', description: 'Initial 6-tire survey, serial numbers, photos and lock control.' },
       'tire-control': { label: '🎫 Ticket Control', title: 'Ticket Control', description: 'Vehicle compliance control for tires, oil, 6-month maintenance and annual inspection.' },
-      'daily-submitted': { label: '📋 Daily KM — Submitted', title: 'Daily KM — Submitted', description: 'Review daily vehicle KM submissions received from drivers.' },
-      'daily-missing': { label: '⚠️ Daily KM — Missing', title: 'Daily KM — Missing', description: 'Review vehicles with missing daily KM submissions.' }
     };
     const ownerVisible = ownerGroups[ownerGroup].filter(id => ownerItems[id]);
     const ownerSection = ownerVisible.includes(section) ? section : ownerVisible[0];
@@ -141,18 +136,39 @@ export default function FleetHub({ user, access }) {
         </div>
 
         <div className="sub-nav" style={{ marginBottom: 12 }}>
-          <button className={ownerGroup === 'add' ? 'sub-btn active' : 'sub-btn'} onClick={() => changeOwnerGroup('add')}>➕ Add</button>
-          <button className={ownerGroup === 'maintenance' ? 'sub-btn active' : 'sub-btn'} onClick={() => changeOwnerGroup('maintenance')}>🔧 Vehicle Maintenance</button>
-          <button className={ownerGroup === 'km' ? 'sub-btn active' : 'sub-btn'} onClick={() => changeOwnerGroup('km')}>📏 KM Tracking</button>
+          <button
+            className={ownerGroup === 'add' ? 'sub-btn active' : 'sub-btn'}
+            onClick={() => changeOwnerGroup('add')}
+          >
+            ➕ Add
+          </button>
+          <button
+            className={ownerGroup === 'maintenance' ? 'sub-btn active' : 'sub-btn'}
+            onClick={() => changeOwnerGroup('maintenance')}
+          >
+            🔧 Vehicle Maintenance
+          </button>
         </div>
 
-        <div className="sub-nav" style={{ marginBottom: 18 }}>
-          {ownerVisible.map(id => (
-            <button key={id} className={ownerSection === id ? 'sub-btn active' : 'sub-btn'} onClick={() => setSection(id)}>
-              {ownerItems[id].label}
-            </button>
-          ))}
-        </div>
+        {ownerGroup === 'add' && (
+          <div className="sub-nav" style={{ marginBottom: 18 }}>
+            {ownerVisible.map(id => (
+              <button key={id} className={ownerSection === id ? 'sub-btn active' : 'sub-btn'} onClick={() => setSection(id)}>
+                {ownerItems[id].label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {ownerGroup === 'maintenance' && (
+          <div className="sub-nav" style={{ marginBottom: 18 }}>
+            {ownerVisible.map(id => (
+              <button key={id} className={ownerSection === id ? 'sub-btn active' : 'sub-btn'} onClick={() => setSection(id)}>
+                {ownerItems[id].label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="panel" style={{ marginBottom: 16 }}>
           <h2 style={{ margin: 0 }}>{ownerCurrent.title}</h2>
@@ -167,8 +183,6 @@ export default function FleetHub({ user, access }) {
         {ownerSection === 'smart-issue' && <SmartReportIssue canWork={fleetWork} />}
         {ownerSection === 'tire' && <TireManagement user={user} driverMode={false} />}
         {ownerSection === 'tire-control' && <TireControlCenter />}
-        {ownerSection === 'daily-submitted' && <DailyKmSubmitted />}
-        {ownerSection === 'daily-missing' && <DailyKmMissing user={user} />}
       </div>
     );
   }

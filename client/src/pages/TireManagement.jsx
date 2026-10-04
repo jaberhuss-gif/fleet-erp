@@ -221,14 +221,18 @@ export function TireControlCenter() {
   const [error,setError]=useState('');
   const load=async()=>{try{const r=await api.get('/tire/control');setRows(r.data.vehicles||[]);}catch(e){setError(e.response?.data?.error||e.message);}};
   useEffect(()=>{load();},[]);
+  const sortedRows=useMemo(()=>[...rows].sort((a,b)=>({red:0,yellow:1,green:2}[a.overallStatus||'green']-({red:0,yellow:1,green:2}[b.overallStatus||'green']) || String(a.plate).localeCompare(String(b.plate))),[rows]);
   const totals=useMemo(()=>rows.reduce((a,r)=>({
     red:a.red+(r.overallStatus==='red'?1:0),
     yellow:a.yellow+(r.overallStatus==='yellow'?1:0),
     green:a.green+(r.overallStatus==='green'?1:0)
   }),{red:0,yellow:0,green:0}),[rows]);
   const worst=(r)=>r.overallStatus||'green';
-  const Compliance=({label,status,detail})=><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'9px 10px',borderRadius:9,background:status==='red'?'#fee2e2':status==='yellow'?'#fef3c7':'#dcfce7'}}>
-    <span style={{fontWeight:700}}>{label}</span><span title={detail||''} style={{width:13,height:13,borderRadius:'50%',background:status==='red'?'#dc2626':status==='yellow'?'#eab308':'#16a34a',display:'inline-block'}}/>
+  const Compliance=({label,status,reason})=><div style={{padding:'10px',borderRadius:9,background:status==='red'?'#fee2e2':status==='yellow'?'#fef3c7':'#dcfce7'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+      <span style={{fontWeight:700}}>{label}</span><Badge status={status}/>
+    </div>
+    <div style={{fontSize:12,marginTop:5,color:'#475569'}}>{reason||'No details'}</div>
   </div>;
   return <div className="hub-page">
     <div className="panel">
@@ -236,19 +240,19 @@ export function TireControlCenter() {
       <p style={{color:'#64748b',marginBottom:12}}>كل مركبة بكرت واحد: الإطارات + الزيت + الصيانة كل 6 أشهر + الفحص الدوري السنوي.</p>
       {error&&<div className="alert alert-error">{error}</div>}
       <div style={{display:'flex',gap:12,flexWrap:'wrap',fontWeight:700}}>
-        <span><Badge status="red"/> {totals.red}</span><span><Badge status="yellow"/> {totals.yellow}</span><span><Badge status="green"/> {totals.green}</span>
+        <span><Badge status="red"/> {totals.red}</span><span><Badge status="yellow"/> {totals.yellow}</span><span><Badge status="green"/> {totals.green}</span><span style={{padding:'4px 9px',borderRadius:999,background:'#f1f5f9'}}>TOTAL {rows.length}</span>
       </div>
     </div>
-    {rows.sort((a,b)=>({red:0,yellow:1,green:2}[worst(a)]-({red:0,yellow:1,green:2}[worst(b)]) || String(a.plate).localeCompare(String(b.plate)))).map(r=><div className="panel" key={r.id} style={{marginTop:12,borderLeft:'7px solid '+(worst(r)==='red'?'#dc2626':worst(r)==='yellow'?'#eab308':'#16a34a')}}>
+    {sortedRows.map(r=><div className="panel" key={r.id} style={{marginTop:12,borderLeft:'7px solid '+(worst(r)==='red'?'#dc2626':worst(r)==='yellow'?'#eab308':'#16a34a')}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10}}>
         <div><h2 style={{margin:0,fontSize:24}}>{r.plate}</h2><div style={{color:'#64748b',fontSize:12}}>Vehicle ID: {r.id}</div></div>
         <Badge status={worst(r)}/>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:9,marginTop:14}}>
-        <Compliance label="🛞 Tires" status={r.tireStatus} detail={r.tires?.length+' active tires'}/>
-        <Compliance label="🛢️ Oil" status={r.oilStatus} detail={r.oilKmRemaining+' km remaining'}/>
-        <Compliance label="🔧 6-Month Maintenance" status={r.maintenanceStatus} detail={r.maintenance_due_date||'No due date recorded'}/>
-        <Compliance label="📋 Annual Inspection" status={r.inspectionStatus} detail={r.inspection_due_date||'No due date recorded'}/>
+        <Compliance label="🛞 Tires" status={r.tireStatus} reason={r.tireReason}/>
+        <Compliance label="🛢️ Oil" status={r.oilStatus} reason={r.oilReason}/>
+        <Compliance label="🔧 6-Month Maintenance" status={r.maintenanceStatus} reason={r.maintenanceReason}/>
+        <Compliance label="📋 Annual Inspection" status={r.inspectionStatus} reason={r.inspectionReason}/>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8,marginTop:12}}>
         {(r.tires||[]).map(t=><div key={t.id} style={{border:'1px solid #e2e8f0',padding:9,borderRadius:8}}><strong>{t.position}</strong><div style={{fontSize:12}}>{t.tireId}</div><div style={{fontSize:12}}>{t.serial||'No serial'}</div><div style={{marginTop:4}}><Badge status={t.status}/></div></div>)}

@@ -457,7 +457,6 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
             </tbody>
           </table>
         ) : (
-                  {loading ? <div className="loading">Loading...</div> : (
           <table className="periodic-maintenance-screen-table">
             <thead>
               <tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Completed</th><th>Status</th><th>Technician</th><th>Cost</th><th>Notes</th><th>Actions</th></tr>
@@ -484,8 +483,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
               ))}
             </tbody>
           </table>
-
-        )}        )}
+        )}
 
         <div className="periodic-maintenance-print-table-wrap">
           <table className="periodic-maintenance-print-table">

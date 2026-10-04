@@ -125,6 +125,7 @@ export default function FleetHub({ user, access }) {
       issue: { label: '🛠️ Maintenance Issue Report', title: 'Maintenance Issue Report', description: 'Report a vehicle problem and create a maintenance ticket.' },
       'smart-issue': { label: '🧠 Smart Report Issue', title: 'Smart Report Issue', description: 'Use the smart maintenance issue reporting workflow.' },
       tire: { label: '🛞 Tire Survey', title: 'Tire Survey', description: 'Initial 6-tire survey, serial numbers, photos and lock control.' },
+      'tire-service': { label: '🛞 Tire Service Request', title: 'Tire Service Request', description: 'Submit and manage tire shop, puncture repair or replacement requests.' },
       'tire-control': { label: '🎫 Ticket Control', title: 'Ticket Control', description: 'Vehicle compliance control for tires, oil, 6-month maintenance and annual inspection.' },
       'daily-km-submitted': { label: '📋 Daily KM — Submitted', title: 'Daily KM — Submitted', description: 'View vehicles that submitted a daily KM reading today.' },
       'daily-km-missing': { label: '⚠️ Daily KM — Missing', title: 'Daily KM — Missing', description: 'View vehicles that have not submitted a daily KM reading today.' },

@@ -378,6 +378,524 @@ export async function createTireServiceRequest(vehicleId, body, userId) {
   return result.rows[0];
 }
 
+export async function listTireServiceRequests(filters={}) {
+  const params=[];
+  const where=[];
+  const vehicle=clean(filters.vehicle);
+  const status=clean(filters.status).toUpperCase();
+  if(vehicle){
+    params.push('%'+vehicle+'%');
+    where.push('(COALESCE(v.plate, \'\') ILIKE 
+  const type = clean(body.eventType);
+  if (!["PUNCTURE","REPLACEMENT","SPARE","ROTATION","INSPECTION","OTHER"].includes(type)) {
+    throw new Error("Invalid tire event type.");
+  }
+
+  const position = clean(body.position) || null;
+  const serial = clean(body.manufacturerSerial) || null;
+
+  return transaction(async (tx) => {
+    let oldAsset = null;
+    if (body.tireAssetId) {
+      const oldResult = await tx.query(
+        `SELECT * FROM tire_assets WHERE id=$1 AND vehicle_id=$2 AND active=true FOR UPDATE`,
+        [body.tireAssetId, vehicleId]
+      );
+      oldAsset = oldResult.rows[0] || null;
+      if (!oldAsset) throw new Error("Active tire not found for this vehicle.");
+    }
+
+    const oldTireId = clean(body.oldTireId) || oldAsset?.tire_id || null;
+    let newAsset = null;
+
+    if (type === "ROTATION") {
+      if (!oldAsset || !position) throw new Error("Rotation requires the active tire and new position.");
+      const duplicate = await tx.query(
+        `SELECT id FROM tire_assets WHERE vehicle_id=$1 AND position=$2 AND active=true AND id<>$3 LIMIT 1`,
+        [vehicleId, position, oldAsset.id]
+      );
+      if (duplicate.rows[0]) throw new Error("Another active tire already occupies this position.");
+      await tx.query(
+        `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
+        [position, oldAsset.id]
+      );
+    }
+
+    if (type === "REPLACEMENT" || type === "SPARE") {
+      if (!position) throw new Error("Replacement/spare event requires a tire position.");
+
+      if (oldAsset) {
+        await tx.query(
+          `UPDATE tire_assets SET active=false, removed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1`,
+          [oldAsset.id]
+        );
+      }
+
+      const newTireId = clean(body.newTireId) || (serial ? "T-" + vehicleId + "-" + Date.now() : "");
+      if (newTireId) {
+        const insert = await tx.query(`
+          INSERT INTO tire_assets
+            (vehicle_id,position,tire_id,manufacturer_serial,brand,model,size,
+             tread_depth_mm,pressure_psi,condition_status,condition_notes)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          RETURNING *
+        `, [
+          vehicleId, position, newTireId, serial,
+          clean(body.brand) || null, clean(body.model) || null, clean(body.size) || null,
+          Number.isFinite(Number(body.treadDepthMm)) ? Number(body.treadDepthMm) : null,
+          Number.isFinite(Number(body.pressurePsi)) ? Number(body.pressurePsi) : null,
+          statusFor(body), clean(body.notes) || null
+        ]);
+        newAsset = insert.rows[0];
+      }
+    }
+
+    const result = await tx.query(`
+      INSERT INTO tire_events
+        (vehicle_id,tire_asset_id,event_type,position,old_tire_id,new_tire_id,manufacturer_serial,notes,created_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      RETURNING *
+    `, [
+      vehicleId, newAsset?.id || oldAsset?.id || null, type, position,
+      oldTireId, newAsset?.tire_id || clean(body.newTireId) || null,
+      serial, clean(body.notes) || null, userId || null
+    ]);
+
+    return { ...result.rows[0], old_tire: oldAsset, new_tire: newAsset };
+  });
+}
+
+export async function mountTireRoutes(app) {
+  await ensureTireSchema();
+
+  app.get("/api/tire/control", async (req,res) => {
+    try { res.json({success:true, vehicles: await getTireControl()}); }
+    catch(e){ res.status(500).json({success:false,error:e.message}); }
+  });
+
+  app.get("/api/tire/service-requests", async (req,res) => {
+    try { res.json({success:true,requests:await listTireServiceRequests(req.query)}); }
+    catch(e){ res.status(500).json({success:false,error:e.message}); }
+  });
+
+  app.put("/api/tire/service-requests/:id", async (req,res) => {
+    if (req.user?.role !== "Owner") return res.status(403).json({success:false,error:"Owner only"});
+    try { res.json({success:true,request:await updateTireServiceRequestStatus(req.params.id,req.body.status)}); }
+    catch(e){ res.status(e.statusCode || 400).json({success:false,error:e.message}); }
+  });
+
+  app.get("/api/tire/vehicle/:vehicleId", async (req,res) => {
+    try { res.json({success:true,...await getVehicleTires(req.params.vehicleId)}); }
+    catch(e){ res.status(500).json({success:false,error:e.message}); }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/initial-survey", async (req,res) => {
+    try { res.json({success:true,...await submitInitialSurvey(req.params.vehicleId,req.body,req.user?.id)}); }
+    catch(e){ res.status(e.statusCode || 500).json({success:false,error:e.message}); }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/reopen", async (req,res) => {
+    if (req.user?.role !== "Owner") return res.status(403).json({success:false,error:"Owner only"});
+    try { res.json({success:true,survey:await reopenInitialSurvey(req.params.vehicleId,req.user?.id)}); }
+    catch(e){ res.status(400).json({success:false,error:e.message}); }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/service-request", async (req,res) => {
+    try {
+      res.json({success:true,request:await createTireServiceRequest(req.params.vehicleId,req.body,req.user?.id)});
+    } catch(e) {
+      res.status(e.statusCode || 400).json({success:false,error:e.message});
+    }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/event", async (req,res) => {
+    try { res.json({success:true,event:await createTireEvent(req.params.vehicleId,req.body,req.user?.id)}); }
+    catch(e){ res.status(400).json({success:false,error:e.message}); }
+  });
+}
++params.length+' OR COALESCE(v.plate_number, \'\') ILIKE 
+  const type = clean(body.eventType);
+  if (!["PUNCTURE","REPLACEMENT","SPARE","ROTATION","INSPECTION","OTHER"].includes(type)) {
+    throw new Error("Invalid tire event type.");
+  }
+
+  const position = clean(body.position) || null;
+  const serial = clean(body.manufacturerSerial) || null;
+
+  return transaction(async (tx) => {
+    let oldAsset = null;
+    if (body.tireAssetId) {
+      const oldResult = await tx.query(
+        `SELECT * FROM tire_assets WHERE id=$1 AND vehicle_id=$2 AND active=true FOR UPDATE`,
+        [body.tireAssetId, vehicleId]
+      );
+      oldAsset = oldResult.rows[0] || null;
+      if (!oldAsset) throw new Error("Active tire not found for this vehicle.");
+    }
+
+    const oldTireId = clean(body.oldTireId) || oldAsset?.tire_id || null;
+    let newAsset = null;
+
+    if (type === "ROTATION") {
+      if (!oldAsset || !position) throw new Error("Rotation requires the active tire and new position.");
+      const duplicate = await tx.query(
+        `SELECT id FROM tire_assets WHERE vehicle_id=$1 AND position=$2 AND active=true AND id<>$3 LIMIT 1`,
+        [vehicleId, position, oldAsset.id]
+      );
+      if (duplicate.rows[0]) throw new Error("Another active tire already occupies this position.");
+      await tx.query(
+        `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
+        [position, oldAsset.id]
+      );
+    }
+
+    if (type === "REPLACEMENT" || type === "SPARE") {
+      if (!position) throw new Error("Replacement/spare event requires a tire position.");
+
+      if (oldAsset) {
+        await tx.query(
+          `UPDATE tire_assets SET active=false, removed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1`,
+          [oldAsset.id]
+        );
+      }
+
+      const newTireId = clean(body.newTireId) || (serial ? "T-" + vehicleId + "-" + Date.now() : "");
+      if (newTireId) {
+        const insert = await tx.query(`
+          INSERT INTO tire_assets
+            (vehicle_id,position,tire_id,manufacturer_serial,brand,model,size,
+             tread_depth_mm,pressure_psi,condition_status,condition_notes)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          RETURNING *
+        `, [
+          vehicleId, position, newTireId, serial,
+          clean(body.brand) || null, clean(body.model) || null, clean(body.size) || null,
+          Number.isFinite(Number(body.treadDepthMm)) ? Number(body.treadDepthMm) : null,
+          Number.isFinite(Number(body.pressurePsi)) ? Number(body.pressurePsi) : null,
+          statusFor(body), clean(body.notes) || null
+        ]);
+        newAsset = insert.rows[0];
+      }
+    }
+
+    const result = await tx.query(`
+      INSERT INTO tire_events
+        (vehicle_id,tire_asset_id,event_type,position,old_tire_id,new_tire_id,manufacturer_serial,notes,created_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      RETURNING *
+    `, [
+      vehicleId, newAsset?.id || oldAsset?.id || null, type, position,
+      oldTireId, newAsset?.tire_id || clean(body.newTireId) || null,
+      serial, clean(body.notes) || null, userId || null
+    ]);
+
+    return { ...result.rows[0], old_tire: oldAsset, new_tire: newAsset };
+  });
+}
+
+export async function mountTireRoutes(app) {
+  await ensureTireSchema();
+
+  app.get("/api/tire/control", async (req,res) => {
+    try { res.json({success:true, vehicles: await getTireControl()}); }
+    catch(e){ res.status(500).json({success:false,error:e.message}); }
+  });
+
+  app.get("/api/tire/vehicle/:vehicleId", async (req,res) => {
+    try { res.json({success:true,...await getVehicleTires(req.params.vehicleId)}); }
+    catch(e){ res.status(500).json({success:false,error:e.message}); }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/initial-survey", async (req,res) => {
+    try { res.json({success:true,...await submitInitialSurvey(req.params.vehicleId,req.body,req.user?.id)}); }
+    catch(e){ res.status(e.statusCode || 500).json({success:false,error:e.message}); }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/reopen", async (req,res) => {
+    if (req.user?.role !== "Owner") return res.status(403).json({success:false,error:"Owner only"});
+    try { res.json({success:true,survey:await reopenInitialSurvey(req.params.vehicleId,req.user?.id)}); }
+    catch(e){ res.status(400).json({success:false,error:e.message}); }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/service-request", async (req,res) => {
+    try {
+      res.json({success:true,request:await createTireServiceRequest(req.params.vehicleId,req.body,req.user?.id)});
+    } catch(e) {
+      res.status(e.statusCode || 400).json({success:false,error:e.message});
+    }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/event", async (req,res) => {
+    try { res.json({success:true,event:await createTireEvent(req.params.vehicleId,req.body,req.user?.id)}); }
+    catch(e){ res.status(400).json({success:false,error:e.message}); }
+  });
+}
++params.length+' OR COALESCE(v.plate_code, \'\') ILIKE 
+  const type = clean(body.eventType);
+  if (!["PUNCTURE","REPLACEMENT","SPARE","ROTATION","INSPECTION","OTHER"].includes(type)) {
+    throw new Error("Invalid tire event type.");
+  }
+
+  const position = clean(body.position) || null;
+  const serial = clean(body.manufacturerSerial) || null;
+
+  return transaction(async (tx) => {
+    let oldAsset = null;
+    if (body.tireAssetId) {
+      const oldResult = await tx.query(
+        `SELECT * FROM tire_assets WHERE id=$1 AND vehicle_id=$2 AND active=true FOR UPDATE`,
+        [body.tireAssetId, vehicleId]
+      );
+      oldAsset = oldResult.rows[0] || null;
+      if (!oldAsset) throw new Error("Active tire not found for this vehicle.");
+    }
+
+    const oldTireId = clean(body.oldTireId) || oldAsset?.tire_id || null;
+    let newAsset = null;
+
+    if (type === "ROTATION") {
+      if (!oldAsset || !position) throw new Error("Rotation requires the active tire and new position.");
+      const duplicate = await tx.query(
+        `SELECT id FROM tire_assets WHERE vehicle_id=$1 AND position=$2 AND active=true AND id<>$3 LIMIT 1`,
+        [vehicleId, position, oldAsset.id]
+      );
+      if (duplicate.rows[0]) throw new Error("Another active tire already occupies this position.");
+      await tx.query(
+        `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
+        [position, oldAsset.id]
+      );
+    }
+
+    if (type === "REPLACEMENT" || type === "SPARE") {
+      if (!position) throw new Error("Replacement/spare event requires a tire position.");
+
+      if (oldAsset) {
+        await tx.query(
+          `UPDATE tire_assets SET active=false, removed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1`,
+          [oldAsset.id]
+        );
+      }
+
+      const newTireId = clean(body.newTireId) || (serial ? "T-" + vehicleId + "-" + Date.now() : "");
+      if (newTireId) {
+        const insert = await tx.query(`
+          INSERT INTO tire_assets
+            (vehicle_id,position,tire_id,manufacturer_serial,brand,model,size,
+             tread_depth_mm,pressure_psi,condition_status,condition_notes)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          RETURNING *
+        `, [
+          vehicleId, position, newTireId, serial,
+          clean(body.brand) || null, clean(body.model) || null, clean(body.size) || null,
+          Number.isFinite(Number(body.treadDepthMm)) ? Number(body.treadDepthMm) : null,
+          Number.isFinite(Number(body.pressurePsi)) ? Number(body.pressurePsi) : null,
+          statusFor(body), clean(body.notes) || null
+        ]);
+        newAsset = insert.rows[0];
+      }
+    }
+
+    const result = await tx.query(`
+      INSERT INTO tire_events
+        (vehicle_id,tire_asset_id,event_type,position,old_tire_id,new_tire_id,manufacturer_serial,notes,created_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      RETURNING *
+    `, [
+      vehicleId, newAsset?.id || oldAsset?.id || null, type, position,
+      oldTireId, newAsset?.tire_id || clean(body.newTireId) || null,
+      serial, clean(body.notes) || null, userId || null
+    ]);
+
+    return { ...result.rows[0], old_tire: oldAsset, new_tire: newAsset };
+  });
+}
+
+export async function mountTireRoutes(app) {
+  await ensureTireSchema();
+
+  app.get("/api/tire/control", async (req,res) => {
+    try { res.json({success:true, vehicles: await getTireControl()}); }
+    catch(e){ res.status(500).json({success:false,error:e.message}); }
+  });
+
+  app.get("/api/tire/vehicle/:vehicleId", async (req,res) => {
+    try { res.json({success:true,...await getVehicleTires(req.params.vehicleId)}); }
+    catch(e){ res.status(500).json({success:false,error:e.message}); }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/initial-survey", async (req,res) => {
+    try { res.json({success:true,...await submitInitialSurvey(req.params.vehicleId,req.body,req.user?.id)}); }
+    catch(e){ res.status(e.statusCode || 500).json({success:false,error:e.message}); }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/reopen", async (req,res) => {
+    if (req.user?.role !== "Owner") return res.status(403).json({success:false,error:"Owner only"});
+    try { res.json({success:true,survey:await reopenInitialSurvey(req.params.vehicleId,req.user?.id)}); }
+    catch(e){ res.status(400).json({success:false,error:e.message}); }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/service-request", async (req,res) => {
+    try {
+      res.json({success:true,request:await createTireServiceRequest(req.params.vehicleId,req.body,req.user?.id)});
+    } catch(e) {
+      res.status(e.statusCode || 400).json({success:false,error:e.message});
+    }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/event", async (req,res) => {
+    try { res.json({success:true,event:await createTireEvent(req.params.vehicleId,req.body,req.user?.id)}); }
+    catch(e){ res.status(400).json({success:false,error:e.message}); }
+  });
+}
++params.length+')');
+  }
+  if(status){
+    params.push(status);
+    where.push('UPPER(r.status)=
+  const type = clean(body.eventType);
+  if (!["PUNCTURE","REPLACEMENT","SPARE","ROTATION","INSPECTION","OTHER"].includes(type)) {
+    throw new Error("Invalid tire event type.");
+  }
+
+  const position = clean(body.position) || null;
+  const serial = clean(body.manufacturerSerial) || null;
+
+  return transaction(async (tx) => {
+    let oldAsset = null;
+    if (body.tireAssetId) {
+      const oldResult = await tx.query(
+        `SELECT * FROM tire_assets WHERE id=$1 AND vehicle_id=$2 AND active=true FOR UPDATE`,
+        [body.tireAssetId, vehicleId]
+      );
+      oldAsset = oldResult.rows[0] || null;
+      if (!oldAsset) throw new Error("Active tire not found for this vehicle.");
+    }
+
+    const oldTireId = clean(body.oldTireId) || oldAsset?.tire_id || null;
+    let newAsset = null;
+
+    if (type === "ROTATION") {
+      if (!oldAsset || !position) throw new Error("Rotation requires the active tire and new position.");
+      const duplicate = await tx.query(
+        `SELECT id FROM tire_assets WHERE vehicle_id=$1 AND position=$2 AND active=true AND id<>$3 LIMIT 1`,
+        [vehicleId, position, oldAsset.id]
+      );
+      if (duplicate.rows[0]) throw new Error("Another active tire already occupies this position.");
+      await tx.query(
+        `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
+        [position, oldAsset.id]
+      );
+    }
+
+    if (type === "REPLACEMENT" || type === "SPARE") {
+      if (!position) throw new Error("Replacement/spare event requires a tire position.");
+
+      if (oldAsset) {
+        await tx.query(
+          `UPDATE tire_assets SET active=false, removed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1`,
+          [oldAsset.id]
+        );
+      }
+
+      const newTireId = clean(body.newTireId) || (serial ? "T-" + vehicleId + "-" + Date.now() : "");
+      if (newTireId) {
+        const insert = await tx.query(`
+          INSERT INTO tire_assets
+            (vehicle_id,position,tire_id,manufacturer_serial,brand,model,size,
+             tread_depth_mm,pressure_psi,condition_status,condition_notes)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          RETURNING *
+        `, [
+          vehicleId, position, newTireId, serial,
+          clean(body.brand) || null, clean(body.model) || null, clean(body.size) || null,
+          Number.isFinite(Number(body.treadDepthMm)) ? Number(body.treadDepthMm) : null,
+          Number.isFinite(Number(body.pressurePsi)) ? Number(body.pressurePsi) : null,
+          statusFor(body), clean(body.notes) || null
+        ]);
+        newAsset = insert.rows[0];
+      }
+    }
+
+    const result = await tx.query(`
+      INSERT INTO tire_events
+        (vehicle_id,tire_asset_id,event_type,position,old_tire_id,new_tire_id,manufacturer_serial,notes,created_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      RETURNING *
+    `, [
+      vehicleId, newAsset?.id || oldAsset?.id || null, type, position,
+      oldTireId, newAsset?.tire_id || clean(body.newTireId) || null,
+      serial, clean(body.notes) || null, userId || null
+    ]);
+
+    return { ...result.rows[0], old_tire: oldAsset, new_tire: newAsset };
+  });
+}
+
+export async function mountTireRoutes(app) {
+  await ensureTireSchema();
+
+  app.get("/api/tire/control", async (req,res) => {
+    try { res.json({success:true, vehicles: await getTireControl()}); }
+    catch(e){ res.status(500).json({success:false,error:e.message}); }
+  });
+
+  app.get("/api/tire/vehicle/:vehicleId", async (req,res) => {
+    try { res.json({success:true,...await getVehicleTires(req.params.vehicleId)}); }
+    catch(e){ res.status(500).json({success:false,error:e.message}); }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/initial-survey", async (req,res) => {
+    try { res.json({success:true,...await submitInitialSurvey(req.params.vehicleId,req.body,req.user?.id)}); }
+    catch(e){ res.status(e.statusCode || 500).json({success:false,error:e.message}); }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/reopen", async (req,res) => {
+    if (req.user?.role !== "Owner") return res.status(403).json({success:false,error:"Owner only"});
+    try { res.json({success:true,survey:await reopenInitialSurvey(req.params.vehicleId,req.user?.id)}); }
+    catch(e){ res.status(400).json({success:false,error:e.message}); }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/service-request", async (req,res) => {
+    try {
+      res.json({success:true,request:await createTireServiceRequest(req.params.vehicleId,req.body,req.user?.id)});
+    } catch(e) {
+      res.status(e.statusCode || 400).json({success:false,error:e.message});
+    }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/event", async (req,res) => {
+    try { res.json({success:true,event:await createTireEvent(req.params.vehicleId,req.body,req.user?.id)}); }
+    catch(e){ res.status(400).json({success:false,error:e.message}); }
+  });
+}
++params.length);
+  }
+  const sql=`SELECT r.*, COALESCE(v.plate, CONCAT_WS(' ',v.plate_number,v.plate_code)) AS plate,
+      v.driver,
+      u.name AS created_by_name
+    FROM tire_service_requests r
+    LEFT JOIN vehicles v ON v.id=r.vehicle_id
+    LEFT JOIN users u ON u.id=r.created_by
+    ${where.length?'WHERE '+where.join(' AND '):''}
+    ORDER BY r.created_at DESC, r.id DESC
+    LIMIT 500`;
+  const result=await query(sql,params);
+  return result.rows;
+}
+
+export async function updateTireServiceRequestStatus(id,status) {
+  const allowed=['PENDING','APPROVED','IN_PROGRESS','COMPLETED','REJECTED','CANCELLED'];
+  const next=clean(status).toUpperCase();
+  if(!allowed.includes(next)) throw new Error('Invalid tire service request status.');
+  const result=await query(`UPDATE tire_service_requests SET status=$1,updated_at=CURRENT_TIMESTAMP WHERE id=$2 RETURNING *`,[next,id]);
+  if(!result.rows[0]) {
+    const e=new Error('Tire service request not found.');
+    e.statusCode=404;
+    throw e;
+  }
+  return result.rows[0];
+}
+
 export async function createTireEvent(vehicleId, body, userId) {
   const type = clean(body.eventType);
   if (!["PUNCTURE","REPLACEMENT","SPARE","ROTATION","INSPECTION","OTHER"].includes(type)) {

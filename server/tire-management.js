@@ -99,7 +99,8 @@ export async function getTireControl() {
         vehicle_id, status, completed_date, notes, scheduled_date
       FROM periodic_maintenance
       WHERE type = '6_months_general'
-        AND (status = 'Completed' OR COALESCE(TRIM(notes), '') <> '')
+        AND status = 'Completed'
+        AND completed_date IS NOT NULL
       ORDER BY vehicle_id, COALESCE(completed_date, scheduled_date) DESC NULLS LAST, id DESC
     ),
     latest_inspection AS (
@@ -110,8 +111,8 @@ export async function getTireControl() {
       ORDER BY vehicle_id, completed_date DESC, id DESC
     )
     SELECT v.id, v.plate, v.driver, v.location,
-      v.current_km, v.last_oil_km, COALESCE(v.oil_change_interval,5000) AS oil_change_interval,
-      v.last_oil_change_date, v.inspection_last_date, v.inspection_due_date,
+      v.current_km, oc.oil_change_km AS last_oil_km, COALESCE(v.oil_change_interval,5000) AS oil_change_interval,
+      oc.oil_change_date AS last_oil_change_date, v.inspection_last_date, v.inspection_due_date,
       s.status AS survey_status, s.submitted_at,
       i.completed_date AS inspection_record_date,
       m.status AS maintenance_status, m.completed_date AS maintenance_completed_date,
@@ -126,6 +127,14 @@ export async function getTireControl() {
         ) ORDER BY t.position
       ) FILTER (WHERE t.id IS NOT NULL), '[]'::json) AS tires
     FROM vehicles v
+    LEFT JOIN LATERAL (
+      SELECT oil_change_km, oil_change_date
+      FROM oil_changes
+      WHERE vehicle_id=v.id
+        AND COALESCE(notes,'') NOT ILIKE '%Google Sheet%'
+      ORDER BY oil_change_date DESC NULLS LAST, id DESC
+      LIMIT 1
+    ) oc ON true
     LEFT JOIN tire_surveys s ON s.vehicle_id=v.id
     LEFT JOIN tire_assets t ON t.vehicle_id=v.id AND t.active=true
     LEFT JOIN latest_6m m ON m.vehicle_id=v.id
@@ -133,6 +142,7 @@ export async function getTireControl() {
     GROUP BY v.id, v.plate, v.driver, v.location, v.current_km, v.last_oil_km,
       v.oil_change_interval, v.last_oil_change_date, v.inspection_last_date, v.inspection_due_date,
       s.status, s.submitted_at, i.completed_date, m.status, m.completed_date, m.notes, m.scheduled_date
+    WHERE LOWER(TRIM(COALESCE(v.plate,''))) <> 'test 123'
     ORDER BY v.plate
   `);
   const today = new Date();
@@ -171,16 +181,7 @@ export async function getTireControl() {
       } else {
         maintenanceStatus = "green"; maintenanceReason = `Last completed ${days} days ago`;
       }
-    } else if (String(v.maintenance_notes || "").trim()) {
-      const d = v.maintenance_scheduled_date ? new Date(v.maintenance_scheduled_date) : null;
-      if (d) {
-        const days = daysBetween(d, today);
-        maintenanceStatus = days > 180 ? "red" : days >= 150 ? "yellow" : "green";
-        maintenanceReason = days > 180 ? `6-month maintenance overdue by ${days-180} days` : "Maintenance record contains inspection notes";
-      } else {
-        maintenanceStatus = "green"; maintenanceReason = "Maintenance inspection notes recorded";
-      }
-    }
+
 
     const inspectionRecordDate = v.inspection_record_date ? new Date(v.inspection_record_date) : null;
     const vehicleInspectionDate = v.inspection_last_date ? new Date(v.inspection_last_date) : null;
@@ -217,6 +218,23 @@ export async function getTireControl() {
   });
 }
 
+
+export async function getVehicleTrackingHistory(vehicleId) {
+  const [workOrders, periodic, oilChanges, tickets, tireEvents] = await Promise.all([
+    query(`SELECT * FROM work_orders WHERE vehicle_id=$1 ORDER BY reported_date DESC NULLS LAST, id DESC LIMIT 500`, [vehicleId]),
+    query(`SELECT * FROM periodic_maintenance WHERE vehicle_id=$1 ORDER BY COALESCE(completed_date, scheduled_date) DESC NULLS LAST, id DESC LIMIT 500`, [vehicleId]),
+    query(`SELECT * FROM oil_changes WHERE vehicle_id=$1 ORDER BY oil_change_date DESC NULLS LAST, id DESC LIMIT 500`, [vehicleId]),
+    query(`SELECT * FROM tickets WHERE vehicle_id=$1 ORDER BY opened_at DESC NULLS LAST, id DESC LIMIT 500`, [vehicleId]),
+    query(`SELECT e.*, t.tire_id FROM tire_events e LEFT JOIN tire_assets t ON t.id=e.tire_asset_id WHERE e.vehicle_id=$1 ORDER BY e.event_date DESC, e.id DESC LIMIT 500`, [vehicleId])
+  ]);
+  return {
+    workOrders: workOrders.rows,
+    periodicMaintenance: periodic.rows,
+    oilChanges: oilChanges.rows,
+    tickets: tickets.rows,
+    tireEvents: tireEvents.rows
+  };
+}
 
 export async function getVehicleTires(vehicleId) {
   const survey = await query(`SELECT * FROM tire_surveys WHERE vehicle_id=$1 LIMIT 1`, [vehicleId]);
@@ -429,6 +447,11 @@ export async function mountTireRoutes(app) {
 
   app.get("/api/tire/control", async (req,res) => {
     try { res.json({success:true, vehicles: await getTireControl()}); }
+    catch(e){ res.status(500).json({success:false,error:e.message}); }
+  });
+
+  app.get("/api/tire/vehicle/:vehicleId/history", async (req,res) => {
+    try { res.json({success:true,...await getVehicleTrackingHistory(req.params.vehicleId)}); }
     catch(e){ res.status(500).json({success:false,error:e.message}); }
   });
 

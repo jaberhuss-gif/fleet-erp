@@ -77,7 +77,7 @@ export default function VehicleTicket({ user, canWork=false }) {
         }catch(_){}
         message=['Closed','COMPLETED'].includes(String(row.status||''))?msgClosed({driver,plate},row.description):msgOpen({driver,plate},row.description);
       }else if(row.kind==='tire'){
-        message=msgOpen({driver,plate},row.description);
+        message=['Closed','COMPLETED'].includes(String(row.status||''))?msgClosed({driver,plate},row.description):msgOpen({driver,plate},row.description);
       }else{
         message='Hello '+driver+',\n\nVehicle '+plate+' annual inspection is due. Please arrange the annual inspection.\n\nFleet Management';
       }
@@ -85,14 +85,7 @@ export default function VehicleTicket({ user, canWork=false }) {
       window.open('https://wa.me/'+String(phone).replace(/\D/g,'')+'?text='+encodeURIComponent(message),'_blank');
     }catch(e){alert(e.response?.data?.error||e.message)}
   };
-  const whatsappClosed=async(row)=>{
-    let phone=row.vehicle?.phone,driver=row.vehicle?.driver||'Driver',plate=row.vehicle?.plate||'';
-    if(row.kind==='maintenance'){try{const info=(await api.get('/tickets/'+row.id+'/whatsapp-info')).data||{};phone=info.driverPhone||phone;driver=info.driverName||driver;plate=info.vehiclePlate||plate}catch(_){}}
-    const description=row.description;
-    const message=msgClosed({driver,plate},description);
-    if(!phone){alert('No driver phone number found for this vehicle.');return}
-    window.open('https://wa.me/'+String(phone).replace(/\D/g,'')+'?text='+encodeURIComponent(message),'_blank');
-  };
+
 
   return <div className="hub-page">
     <div className="panel" style={{marginBottom:16}}>

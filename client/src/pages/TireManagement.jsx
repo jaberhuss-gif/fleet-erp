@@ -57,6 +57,7 @@ export default function TireManagement({ user, driverMode=false }) {
   const [photos,setPhotos] = useState({});
   const [notes,setNotes] = useState('');
   const [event,setEvent] = useState({eventType:'PUNCTURE',tireAssetId:'',position:'',oldTireId:'',newTireId:'',manufacturerSerial:'',notes:''});
+  const [serviceRequest,setServiceRequest] = useState({requestType:'TIRE_SHOP_VISIT',position:'',notes:'',photo:''});
   const [loading,setLoading] = useState(false);
   const [message,setMessage] = useState('');
   const [error,setError] = useState('');
@@ -109,6 +110,19 @@ export default function TireManagement({ user, driverMode=false }) {
       await load();
       setMessage('Survey reopened for controlled correction.');
     } catch(e){setError(e.response?.data?.error||e.message);}
+  };
+
+  const submitServiceRequest = async () => {
+    try {
+      if (!vehicleId) return setError('Select a vehicle first.');
+      if (!serviceRequest.notes.trim()) return setError('Please describe the tire issue or required service.');
+      await api.post('/tire/vehicle/'+vehicleId+'/service-request', serviceRequest);
+      setServiceRequest({requestType:'TIRE_SHOP_VISIT',position:'',notes:'',photo:''});
+      await load();
+      setMessage('Tire service request submitted. Management will review it before any tire replacement.');
+    } catch(e) {
+      setError(e.response?.data?.error||e.message);
+    }
   };
 
   const saveEvent = async () => {
@@ -193,6 +207,66 @@ export default function TireManagement({ user, driverMode=false }) {
           <div style={{fontSize:13}}>Pressure: {t.pressure_psi ?? '-'} PSI</div>
         </div>)}
       </div>
+    </div>}
+
+    {vehicleId && locked && driverMode && <div className="panel" style={{marginTop:16}}>
+      <h2>🛠️ Tire Service Request</h2>
+      <p style={{color:'#64748b',marginTop:4}}>
+        Use this request if the vehicle is going to the tire shop, a tire has a puncture, or a tire must be replaced because of damage.
+        This does not change the tire record automatically; management reviews the request first.
+      </p>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:8}}>
+        <select value={serviceRequest.requestType} onChange={e=>setServiceRequest({...serviceRequest,requestType:e.target.value})}>
+          <option value="TIRE_SHOP_VISIT">Tire Shop Visit</option>
+          <option value="TIRE_REPLACEMENT_DAMAGE">Tire Replacement — Damage</option>
+          <option value="PUNCTURE_REPAIR">Puncture / Repair</option>
+          <option value="OTHER">Other Tire Service</option>
+        </select>
+        <select value={serviceRequest.position} onChange={e=>setServiceRequest({...serviceRequest,position:e.target.value})}>
+          <option value="">Tire Position</option>
+          {POSITIONS.map(p=><option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
+      <textarea
+        placeholder="Describe the tire problem / required service"
+        value={serviceRequest.notes}
+        onChange={e=>setServiceRequest({...serviceRequest,notes:e.target.value})}
+        style={{marginTop:8,minHeight:90}}
+      />
+      <label style={{display:'block',marginTop:8,fontWeight:600}}>📷 Damage / Tire Photo (optional)</label>
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={async e=>{
+          const file=e.target.files?.[0];
+          if(!file) return;
+          try {
+            const photo=await readPhoto(file);
+            setServiceRequest({...serviceRequest,photo});
+          } catch(err) {
+            setError('Could not read the tire photo.');
+          }
+        }}
+      />
+      {serviceRequest.photo && <img src={serviceRequest.photo} alt="Tire service request" style={{width:'100%',maxWidth:420,height:180,objectFit:'cover',borderRadius:8,marginTop:8}} />}
+      <button className="btn btn-primary" onClick={submitServiceRequest} style={{marginTop:10}}>Submit Tire Service Request</button>
+    </div>}
+
+    {vehicleId && !driverMode && (data?.serviceRequests||[]).length > 0 && <div className="panel" style={{marginTop:16}}>
+      <h2>🛠️ Tire Service Requests</h2>
+      <table>
+        <thead><tr><th>Date</th><th>Request</th><th>Position</th><th>Status</th><th>Notes</th></tr></thead>
+        <tbody>
+          {(data?.serviceRequests||[]).map(r=><tr key={r.id}>
+            <td>{new Date(r.created_at).toLocaleString()}</td>
+            <td>{r.request_type}</td>
+            <td>{r.position||'-'}</td>
+            <td>{r.status}</td>
+            <td>{r.notes||'-'}</td>
+          </tr>)}
+        </tbody>
+      </table>
     </div>}
 
     {vehicleId && locked && !driverMode && <div className="panel" style={{marginTop:16}}>

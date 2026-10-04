@@ -3,6 +3,7 @@ import DriverPortal from './DriverPortal';
 import Drivers from './Drivers';
 import Vehicles from './Vehicles';
 import VehicleMaintenance from './VehicleMaintenance';
+import PeriodicVehicleInspection from './PeriodicVehicleInspection';
 import ReportIssue from './ReportIssue';
 import SmartReportIssue from './SmartReportIssue';
 import TireManagement, { TireControlCenter } from './TireManagement';
@@ -190,6 +191,7 @@ export default function FleetHub({ user, access, initialOwnerGroup = 'add' }) {
         {ownerSection === 'add-driver' && <Drivers key="owner-add-driver" initialAction="add" />}
         {ownerSection === 'readings' && <Vehicles key="owner-readings" canWork={fleetWork} initialAction="readings" />}
         {ownerSection === 'maintenance' && <VehicleMaintenance canWork={fleetWork} />}
+        {ownerSection === 'periodic-inspection' && <PeriodicVehicleInspection canWork={fleetWork} />}
         {ownerSection === 'vehicle-history' && <VehicleTracking />}
         {ownerSection === 'issue' && <ReportIssue canWork={fleetWork} />}
         {ownerSection === 'smart-issue' && <SmartReportIssue canWork={fleetWork} />}

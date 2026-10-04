@@ -25,7 +25,7 @@ export default function VehicleTicket({ user, canWork=false }) {
     setLoading(true);setError('');
     try{
       const [t,tr,v,p]=await Promise.all([
-        api.get('/tickets?fleetType=general'),
+        api.get('/tickets?fleetType=maintenance'),
         api.get('/tire/service-requests'),
         api.get('/vehicles'),
         api.get('/periodic-maintenance')
@@ -43,8 +43,8 @@ export default function VehicleTicket({ user, canWork=false }) {
 
   const rows=useMemo(()=>{
     const general=tickets.map(t=>({kind:'maintenance',id:t.id,vehicle:vehicleMap[String(t.vehicle_id)]||{plate:t.plate,driver:t.driver},description:t.description||t.title||t.category||'Maintenance request',status:t.status,date:t.opened_at,raw:t}));
-    const tires=tireRequests.filter(r=>['PENDING','APPROVED','IN_PROGRESS'].includes(String(r.status||'PENDING').toUpperCase())).map(r=>({kind:'tire',id:r.id,vehicle:vehicleMap[String(r.vehicle_id)]||{plate:r.plate,driver:r.driver},description:(r.notes||'Tire service request')+(r.position?' — '+r.position:''),status:r.status,date:r.created_at,raw:r}));
-    return [...general,...annualMissing].filter(r=>!search||String(r.vehicle?.plate||'').toLowerCase().includes(search.toLowerCase())||String(r.description).toLowerCase().includes(search.toLowerCase())).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+    const tires=tireRequests.map(r=>({kind:'tire',id:r.id,vehicle:vehicleMap[String(r.vehicle_id)]||{plate:r.plate,driver:r.driver},description:(r.notes||'Tire service request')+(r.position?' — '+r.position:''),status:r.status,date:r.created_at,raw:r}));
+    return [...general,...tires,...annualMissing].filter(r=>!search||String(r.vehicle?.plate||'').toLowerCase().includes(search.toLowerCase())||String(r.description).toLowerCase().includes(search.toLowerCase())).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
   },[tickets,tireRequests,vehicleMap,annualMissing,search]);
 
   const close=async(row)=>{
@@ -75,7 +75,7 @@ export default function VehicleTicket({ user, canWork=false }) {
           const info=(await api.get('/tickets/'+row.id+'/whatsapp-info')).data||{};
           phone=info.driverPhone||phone;driver=info.driverName||driver;plate=info.vehiclePlate||plate;
         }catch(_){}
-        message=msgOpen({driver,plate},row.description);
+        message=['Closed','COMPLETED'].includes(String(row.status||''))?msgClosed({driver,plate},row.description):msgOpen({driver,plate},row.description);
       }else if(row.kind==='tire'){
         message=msgOpen({driver,plate},row.description);
       }else{
@@ -97,7 +97,7 @@ export default function VehicleTicket({ user, canWork=false }) {
   return <div className="hub-page">
     <div className="panel" style={{marginBottom:16}}>
       <h1 style={{margin:0}}>🎫 Vehicle Ticket</h1>
-      <p style={{margin:'6px 0 0',color:'#64748b'}}>Open driver maintenance requests, missing annual inspections and tire replacement/service tickets.</p>
+      <p style={{margin:'6px 0 0',color:'#64748b'}}>All driver maintenance requests, annual inspection tickets and tire replacement/service tickets — open and completed.</p>
       <div style={{display:'grid',gridTemplateColumns:'1fr 180px auto',gap:8,marginTop:12}}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search vehicle or request"/>
         <select value={status} onChange={e=>setStatus(e.target.value)}><option value="Open">Open</option><option value="All">All</option></select>
@@ -107,7 +107,7 @@ export default function VehicleTicket({ user, canWork=false }) {
     {error&&<div className="alert alert-error">{error}</div>}
     {loading?<div className="loading">Loading vehicle tickets...</div>:<div className="panel" style={{overflowX:'auto'}}>
       <table><thead><tr><th>Type</th><th>Vehicle</th><th>Driver</th><th>Request</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
-      <tbody>{rows.filter(r=>status==='All'||r.status==='Open'||r.status==='PENDING'||r.status==='APPROVED'||r.status==='IN_PROGRESS').length?rows.filter(r=>status==='All'||r.status==='Open'||r.status==='PENDING'||r.status==='APPROVED'||r.status==='IN_PROGRESS').map(r=><tr key={r.kind+'-'+r.id}>
+      <tbody>{rows.filter(r=>status==='All'||['Open','PENDING','APPROVED','IN_PROGRESS'].includes(String(r.status||''))).length?rows.filter(r=>status==='All'||['Open','PENDING','APPROVED','IN_PROGRESS'].includes(String(r.status||''))).map(r=><tr key={r.kind+'-'+r.id}>
         <td>{r.kind==='maintenance'?'Maintenance Request':r.kind==='annual'?'Annual Inspection':'Tire Service'}</td>
         <td><strong>{r.vehicle?.plate||'-'}</strong></td><td>{r.vehicle?.driver||'-'}</td><td style={{minWidth:280}}>{r.description}</td><td>{String(r.date||'').slice(0,10)||'-'}</td><td>{r.status}</td>
         <td><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>

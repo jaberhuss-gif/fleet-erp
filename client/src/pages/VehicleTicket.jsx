@@ -17,8 +17,8 @@ const msgOpen=(vehicle,description)=>'Hello '+(vehicle?.driver||'Driver')+',\n\n
 const msgClosed=(vehicle,description)=>'Hello '+(vehicle?.driver||'Driver')+',\n\nVehicle '+(vehicle?.plate||'')+' has been serviced based on the request: '+description+'\n\nThe request has been completed and closed.\n\nFleet Management';
 
 export default function VehicleTicket({ user, canWork=false }) {
-  const [tickets,setTickets]=useState([]),[tireRequests,setTireRequests]=useState([]),[vehicles,setVehicles]=useState([]),[periodic,setPeriodic]=useState([]);
-  const [search,setSearch]=useState(''),[status,setStatus]=useState('Open'),[loading,setLoading]=useState(true),[error,setError]=useState('');
+  const [tickets,setTickets]=useState([]),[tireRequests,setTireRequests]=useState([]),[vehicles,setVehicles]=useState([]),[periodic,setPeriodic]=useState([]),[dailyReport,setDailyReport]=useState(null);
+  const [search,setSearch]=useState(''),[status,setStatus]=useState('Open'),[activeTab,setActiveTab]=useState('maintenance'),[loading,setLoading]=useState(true),[error,setError]=useState('');
   const canClose=user?.role==='Owner'||canWork;
 
   const load=async()=>{
@@ -103,6 +103,10 @@ export default function VehicleTicket({ user, canWork=false }) {
         message=['Closed','COMPLETED'].includes(String(row.status||''))?msgClosed({driver,plate},row.description):msgOpen({driver,plate},row.description);
       }else if(row.kind==='inspection'){
         message=msgOpen({driver,plate},row.description);
+      }else if(row.kind==='km'){
+        message='Hello '+driver+',\n\nNo KM reading has been recorded today for vehicle '+plate+'. Please enter today\'s current KM.\n\nFleet Management';
+      }else if(row.kind==='oil'){
+        message='Hello '+driver+',\n\nVehicle '+plate+' — '+row.description+'. Current KM: '+Number(row.current||0).toLocaleString()+' km. Last Oil KM: '+Number(row.last||0).toLocaleString()+' km.\n\nFleet Management';
       }
       if(!phone){alert('No driver phone number found for this vehicle.');return}
       window.open('https://wa.me/'+String(phone).replace(/\D/g,'')+'?text='+encodeURIComponent(message),'_blank');

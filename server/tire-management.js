@@ -25,7 +25,16 @@ function statusFor(tire) {
 }
 
 export async function ensureTireSchema() {
+  // The legacy vehicles table predates the compliance center. Add only the
+  // missing compliance fields so the control center works without requiring
+  // a separate/manual migration.
   await query(`
+    ALTER TABLE vehicles
+      ADD COLUMN IF NOT EXISTS last_oil_change_date DATE,
+      ADD COLUMN IF NOT EXISTS inspection_last_date DATE,
+      ADD COLUMN IF NOT EXISTS inspection_due_date DATE,
+      ADD COLUMN IF NOT EXISTS oil_change_interval INTEGER DEFAULT 5000;
+
     CREATE TABLE IF NOT EXISTS tire_assets (
       id BIGSERIAL PRIMARY KEY,
       vehicle_id BIGINT NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,

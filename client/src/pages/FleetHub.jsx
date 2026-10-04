@@ -7,6 +7,8 @@ import ReportIssue from './ReportIssue';
 import SmartReportIssue from './SmartReportIssue';
 import TireManagement, { TireControlCenter } from './TireManagement';
 import TireServiceRequests from './TireServiceRequests';
+import DailyKmSubmitted from './DailyKmSubmitted';
+import DailyKmMissing from './DailyKmMissing';
 
 const FLEET_ACTIONS = [
   {
@@ -64,12 +66,6 @@ const FLEET_ACTIONS = [
     description: 'Submit a tire shop, puncture repair or tire replacement request.'
   },
   {
-    id: 'tire-service',
-    label: '🛞 Tire Service Request',
-    title: 'Tire Service Request',
-    description: 'Submit a tire shop, puncture repair or tire replacement request.'
-  },
-  {
     id: 'tire-control',
     label: '🛞 Tire Control',
     title: 'Tire Control Center',
@@ -118,7 +114,8 @@ export default function FleetHub({ user, access }) {
   if (user?.role === 'Owner') {
     const ownerGroups = {
       add: ['add-vehicle', 'add-driver'],
-      maintenance: ['readings', 'maintenance', 'issue', 'smart-issue', 'tire', 'tire-service', 'tire-control']
+      maintenance: ['readings', 'maintenance', 'issue', 'smart-issue', 'tire', 'tire-service', 'tire-control'],
+      km: ['daily-km-submitted', 'daily-km-missing']
     };
     const ownerItems = {
       'add-vehicle': { label: '🚙 Add Vehicle', title: 'Add Vehicle', description: 'Add and maintain vehicle master data.' },
@@ -129,6 +126,8 @@ export default function FleetHub({ user, access }) {
       'smart-issue': { label: '🧠 Smart Report Issue', title: 'Smart Report Issue', description: 'Use the smart maintenance issue reporting workflow.' },
       tire: { label: '🛞 Tire Survey', title: 'Tire Survey', description: 'Initial 6-tire survey, serial numbers, photos and lock control.' },
       'tire-control': { label: '🎫 Ticket Control', title: 'Ticket Control', description: 'Vehicle compliance control for tires, oil, 6-month maintenance and annual inspection.' },
+      'daily-km-submitted': { label: '📋 Daily KM — Submitted', title: 'Daily KM — Submitted', description: 'View vehicles that submitted a daily KM reading today.' },
+      'daily-km-missing': { label: '⚠️ Daily KM — Missing', title: 'Daily KM — Missing', description: 'View vehicles that have not submitted a daily KM reading today.' },
     };
     const ownerVisible = ownerGroups[ownerGroup].filter(id => ownerItems[id]);
     const ownerSection = ownerVisible.includes(section) ? section : ownerVisible[0];
@@ -161,6 +160,12 @@ export default function FleetHub({ user, access }) {
           >
             🔧 Vehicle Maintenance
           </button>
+          <button
+            className={ownerGroup === 'km' ? 'sub-btn active' : 'sub-btn'}
+            onClick={() => changeOwnerGroup('km')}
+          >
+            📊 KM Tracking
+          </button>
         </div>
 
         {ownerGroup === 'add' && (
@@ -174,6 +179,16 @@ export default function FleetHub({ user, access }) {
         )}
 
         {ownerGroup === 'maintenance' && (
+          <div className="sub-nav" style={{ marginBottom: 18 }}>
+            {ownerVisible.map(id => (
+              <button key={id} className={ownerSection === id ? 'sub-btn active' : 'sub-btn'} onClick={() => setSection(id)}>
+                {ownerItems[id].label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {ownerGroup === 'km' && (
           <div className="sub-nav" style={{ marginBottom: 18 }}>
             {ownerVisible.map(id => (
               <button key={id} className={ownerSection === id ? 'sub-btn active' : 'sub-btn'} onClick={() => setSection(id)}>
@@ -197,6 +212,8 @@ export default function FleetHub({ user, access }) {
         {ownerSection === 'tire' && <TireManagement user={user} driverMode={false} />}
         {ownerSection === 'tire-service' && <TireServiceRequests driverMode={false} />}
         {ownerSection === 'tire-control' && <TireControlCenter />}
+        {ownerSection === 'daily-km-submitted' && <DailyKmSubmitted />}
+        {ownerSection === 'daily-km-missing' && <DailyKmMissing user={user} />}
       </div>
     );
   }

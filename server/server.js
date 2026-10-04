@@ -750,11 +750,9 @@ function requireRole(...allowedRoles) {
 app.post("/api/operations/morning-sync", requireRole("Owner"), async (req, res) => {
   const startedAt = new Date().toISOString();
   try {
-    const { runGoogleSheetSyncOnce } = await import("./googleSheetSync.js");
     const { reconcileAndNotify, checkMaintenanceDue } = await import("./kmDailyNotifications.js");
     const { closeStaleDailyKmTickets } = await import("./dailyKm.js");
 
-    const sheet = await runGoogleSheetSyncOnce();
     const dailyKm = await reconcileAndNotify();
     const staleDailyKm = await closeStaleDailyKmTickets(
       dailyKm.today,
@@ -766,7 +764,7 @@ app.post("/api/operations/morning-sync", requireRole("Owner"), async (req, res) 
       success: true,
       startedAt,
       completedAt: new Date().toISOString(),
-      results: { sheet, dailyKm, staleDailyKm, maintenance }
+      results: { dailyKm, staleDailyKm, maintenance }
     });
   } catch (error) {
     console.error("[ManualMorningSync]", error);

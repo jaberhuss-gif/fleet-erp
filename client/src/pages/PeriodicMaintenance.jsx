@@ -254,7 +254,15 @@ export default function PeriodicMaintenance({ canWork = false }) {
     }, 250);
   };
 
+  // For 6-month maintenance, a note is the evidence that the vehicle was inspected.
+  // Notes may describe findings; they still mean the inspection was performed.
+  const isSixMonthInspected = (r) => r.type === '6_months_general' && (
+    r.status === 'Completed' || Boolean(String(r.notes || '').trim())
+  );
+
   const getStatusBadge = (r) => {
+    if (isSixMonthInspected(r)) return <span className="status-badge status-safe">GREEN — Inspected</span>;
+    if (r.type === '6_months_general') return <span className="status-badge status-urgent">RED — Not Inspected</span>;
     if (r.status === 'Completed') return <span className="status-badge status-safe">Completed</span>;
     if (r.scheduled_date < today) return <span className="status-badge status-urgent">Overdue</span>;
     return <span className="status-badge status-warning">Pending</span>;
@@ -305,6 +313,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
           </div>
         </div>
         <h2 className="print-hide">Periodic Maintenance & Inspection</h2>
+        <div className="print-hide" style={{marginBottom:'12px',padding:'10px 14px',borderRadius:'8px',background:'#f8fafc',border:'1px solid #e2e8f0'}}><strong>6-Month Control:</strong> <span style={{color:'#15803d'}}>GREEN = inspected (notes or completed)</span> · <span style={{color:'#b91c1c'}}>RED = not inspected (no notes)</span></div>
 
         <div className="btn-row no-print">
           {canWork && <button className="btn btn-warning" onClick={handleGenerate}>Auto-Generate All</button>}

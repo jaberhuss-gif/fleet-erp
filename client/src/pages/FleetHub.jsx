@@ -106,7 +106,7 @@ export default function FleetHub({ user, access }) {
   if (user?.role === 'Owner') {
     const ownerGroups = {
       add: ['add-vehicle', 'add-driver'],
-      maintenance: ['readings', 'maintenance', 'issue', 'smart-issue', 'tire', 'tire-control']
+      maintenance: ['readings', 'maintenance', 'issue', 'smart-issue', 'tire', 'tire-service', 'tire-control']
     };
     const ownerItems = {
       'add-vehicle': { label: '🚙 Add Vehicle', title: 'Add Vehicle', description: 'Add and maintain vehicle master data.' },

@@ -3287,6 +3287,19 @@ export async function completePeriodicMaintenance(id, data = {}) {
     throw new Error("Periodic maintenance not found");
   }
 
+  // Keep vehicle compliance fields synchronized when an annual inspection is
+  // actually completed. Scheduled/pending inspection rows must never mark a
+  // vehicle as inspected.
+  if (String(result.rows[0].type || '').toLowerCase().trim() === 'inspection') {
+    const completedDate = result.rows[0].completed_date || result.rows[0].last_service_date || new Date().toISOString().slice(0, 10);
+    await query(`
+      UPDATE vehicles
+      SET inspection_last_date = $1::date,
+          inspection_due_date = ($1::date + INTERVAL '365 days')::date
+      WHERE id = $2
+    `, [completedDate, result.rows[0].vehicle_id]);
+  }
+
   return result.rows[0];
 }
 

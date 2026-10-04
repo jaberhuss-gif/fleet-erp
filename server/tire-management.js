@@ -89,6 +89,23 @@ export async function ensureTireSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_tire_events_vehicle ON tire_events(vehicle_id, event_date DESC);
+
+    CREATE TABLE IF NOT EXISTS tire_service_requests (
+      id BIGSERIAL PRIMARY KEY,
+      vehicle_id BIGINT NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+      request_type TEXT NOT NULL,
+      position TEXT,
+      notes TEXT NOT NULL,
+      photo TEXT,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      created_by BIGINT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_tire_service_requests_vehicle
+      ON tire_service_requests(vehicle_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_tire_service_requests_status
+      ON tire_service_requests(status, created_at DESC);
   `);
 }
 
@@ -239,10 +256,18 @@ export async function getVehicleTires(vehicleId) {
     FROM tire_events e LEFT JOIN tire_assets t ON t.id=e.tire_asset_id
     WHERE e.vehicle_id=$1 ORDER BY e.event_date DESC, e.id DESC LIMIT 100
   `, [vehicleId]);
+  const serviceRequests = await query(`
+    SELECT id, vehicle_id, request_type, position, notes, photo, status, created_by, created_at, updated_at
+    FROM tire_service_requests
+    WHERE vehicle_id=$1
+    ORDER BY created_at DESC, id DESC
+    LIMIT 50
+  `, [vehicleId]);
   return {
     survey: survey.rows[0] || null,
     tires: tires.rows.map(t => ({...t, condition_status: statusFor(t)})),
-    events: events.rows
+    events: events.rows,
+    serviceRequests: serviceRequests.rows
   };
 }
 
@@ -318,6 +343,38 @@ export async function reopenInitialSurvey(vehicleId, userId) {
     WHERE vehicle_id=$1 RETURNING *
   `, [vehicleId, userId || null]);
   if (!result.rows[0]) throw new Error("Initial Tire Survey not found.");
+  return result.rows[0];
+}
+
+export async function createTireServiceRequest(vehicleId, body, userId) {
+  const allowed = ["TIRE_SHOP_VISIT", "TIRE_REPLACEMENT_DAMAGE", "PUNCTURE_REPAIR", "OTHER"];
+  const requestType = clean(body.requestType);
+  if (!allowed.includes(requestType)) {
+    const e = new Error("Invalid tire service request type.");
+    e.statusCode = 400;
+    throw e;
+  }
+
+  const notes = clean(body.notes);
+  if (!notes) {
+    const e = new Error("Please describe the tire issue or required service.");
+    e.statusCode = 400;
+    throw e;
+  }
+
+  const result = await query(`
+    INSERT INTO tire_service_requests
+      (vehicle_id, request_type, position, notes, photo, created_by)
+    VALUES ($1,$2,$3,$4,$5,$6)
+    RETURNING *
+  `, [
+    vehicleId,
+    requestType,
+    clean(body.position) || null,
+    notes,
+    clean(body.photo) || null,
+    userId || null
+  ]);
   return result.rows[0];
 }
 
@@ -423,6 +480,14 @@ export async function mountTireRoutes(app) {
     if (req.user?.role !== "Owner") return res.status(403).json({success:false,error:"Owner only"});
     try { res.json({success:true,survey:await reopenInitialSurvey(req.params.vehicleId,req.user?.id)}); }
     catch(e){ res.status(400).json({success:false,error:e.message}); }
+  });
+
+  app.post("/api/tire/vehicle/:vehicleId/service-request", async (req,res) => {
+    try {
+      res.json({success:true,request:await createTireServiceRequest(req.params.vehicleId,req.body,req.user?.id)});
+    } catch(e) {
+      res.status(e.statusCode || 400).json({success:false,error:e.message});
+    }
   });
 
   app.post("/api/tire/vehicle/:vehicleId/event", async (req,res) => {

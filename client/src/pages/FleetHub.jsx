@@ -6,6 +6,8 @@ import VehicleMaintenance from './VehicleMaintenance';
 import ReportIssue from './ReportIssue';
 import SmartReportIssue from './SmartReportIssue';
 import TireManagement, { TireControlCenter } from './TireManagement';
+import DailyKmSubmitted from './DailyKmSubmitted';
+import DailyKmMissing from './DailyKmMissing';
 
 const FLEET_ACTIONS = [
   {
@@ -69,6 +71,7 @@ export default function FleetHub({ user, access }) {
   const fleetWork = user?.role === 'Owner' || !!access?.fleet?.can_work;
 
   const [section, setSection] = useState('add-vehicle');
+  const [ownerGroup, setOwnerGroup] = useState('add');
 
   if (!fleetView) {
     return (
@@ -82,7 +85,7 @@ export default function FleetHub({ user, access }) {
 
   const visibleActions = FLEET_ACTIONS.filter(item => {
     // Drivers only need the three driver-facing Fleet functions.
-    if (isDriver) return ['daily-km', 'issue', 'smart-issue'].includes(item.id);
+    if (isDriver) return ['daily-km', 'issue', 'smart-issue', 'tire'].includes(item.id);
 
     // Driver records remain Owner-only.
     if (item.id === 'add-driver') return user?.role === 'Owner';
@@ -100,6 +103,75 @@ export default function FleetHub({ user, access }) {
     if (!visibleActions.some(s => s.id === next)) return;
     setSection(next);
   };
+
+  if (user?.role === 'Owner') {
+    const ownerGroups = {
+      add: ['add-vehicle', 'add-driver'],
+      maintenance: ['readings', 'maintenance', 'issue', 'smart-issue', 'tire', 'tire-control'],
+      km: ['daily-submitted', 'daily-missing']
+    };
+    const ownerItems = {
+      'add-vehicle': { label: '🚙 Add Vehicle', title: 'Add Vehicle', description: 'Add and maintain vehicle master data.' },
+      'add-driver': { label: '👨‍🔧 Add Driver', title: 'Add Driver', description: 'Add and maintain driver records and vehicle assignments.' },
+      readings: { label: '📏 Edit KM & Previous Readings', title: 'Edit KM & Previous Readings', description: 'Review and edit current odometer and previous vehicle readings.' },
+      maintenance: { label: '🔧 Periodic Maintenance (82)', title: 'Periodic Maintenance (82)', description: '6-month general maintenance and annual periodic inspection control.' },
+      issue: { label: '🛠️ Maintenance Issue Report', title: 'Maintenance Issue Report', description: 'Report a vehicle problem and create a maintenance ticket.' },
+      'smart-issue': { label: '🧠 Smart Report Issue', title: 'Smart Report Issue', description: 'Use the smart maintenance issue reporting workflow.' },
+      tire: { label: '🛞 Tire Survey', title: 'Tire Survey', description: 'Initial 6-tire survey, serial numbers, photos and lock control.' },
+      'tire-control': { label: '🎫 Ticket Control', title: 'Ticket Control', description: 'Vehicle compliance control for tires, oil, 6-month maintenance and annual inspection.' },
+      'daily-submitted': { label: '📋 Daily KM — Submitted', title: 'Daily KM — Submitted', description: 'Review daily vehicle KM submissions received from drivers.' },
+      'daily-missing': { label: '⚠️ Daily KM — Missing', title: 'Daily KM — Missing', description: 'Review vehicles with missing daily KM submissions.' }
+    };
+    const ownerVisible = ownerGroups[ownerGroup].filter(id => ownerItems[id]);
+    const ownerSection = ownerVisible.includes(section) ? section : ownerVisible[0];
+    const ownerCurrent = ownerItems[ownerSection];
+    const changeOwnerGroup = (group) => {
+      setOwnerGroup(group);
+      const first = ownerGroups[group]?.[0];
+      if (first) setSection(first);
+    };
+
+    return (
+      <div className="hub-page">
+        <div className="panel" style={{ marginBottom: 16 }}>
+          <div>
+            <h1 style={{ margin: 0 }}>🚗 Fleet</h1>
+            <p style={{ margin: '6px 0 0', color: '#64748b' }}>Fleet master data, vehicle maintenance, tire control and KM tracking.</p>
+          </div>
+        </div>
+
+        <div className="sub-nav" style={{ marginBottom: 12 }}>
+          <button className={ownerGroup === 'add' ? 'sub-btn active' : 'sub-btn'} onClick={() => changeOwnerGroup('add')}>➕ Add</button>
+          <button className={ownerGroup === 'maintenance' ? 'sub-btn active' : 'sub-btn'} onClick={() => changeOwnerGroup('maintenance')}>🔧 Vehicle Maintenance</button>
+          <button className={ownerGroup === 'km' ? 'sub-btn active' : 'sub-btn'} onClick={() => changeOwnerGroup('km')}>📏 KM Tracking</button>
+        </div>
+
+        <div className="sub-nav" style={{ marginBottom: 18 }}>
+          {ownerVisible.map(id => (
+            <button key={id} className={ownerSection === id ? 'sub-btn active' : 'sub-btn'} onClick={() => setSection(id)}>
+              {ownerItems[id].label}
+            </button>
+          ))}
+        </div>
+
+        <div className="panel" style={{ marginBottom: 16 }}>
+          <h2 style={{ margin: 0 }}>{ownerCurrent.title}</h2>
+          <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: '13px' }}>{ownerCurrent.description}</p>
+        </div>
+
+        {ownerSection === 'add-vehicle' && <Vehicles key="owner-add-vehicle" canWork={fleetWork} initialAction="add" />}
+        {ownerSection === 'add-driver' && <Drivers key="owner-add-driver" initialAction="add" />}
+        {ownerSection === 'readings' && <Vehicles key="owner-readings" canWork={fleetWork} initialAction="readings" />}
+        {ownerSection === 'maintenance' && <VehicleMaintenance canWork={fleetWork} />}
+        {ownerSection === 'issue' && <ReportIssue canWork={fleetWork} />}
+        {ownerSection === 'smart-issue' && <SmartReportIssue canWork={fleetWork} />}
+        {ownerSection === 'tire' && <TireManagement user={user} driverMode={false} />}
+        {ownerSection === 'tire-control' && <TireControlCenter />}
+        {ownerSection === 'daily-submitted' && <DailyKmSubmitted />}
+        {ownerSection === 'daily-missing' && <DailyKmMissing user={user} />}
+      </div>
+    );
+  }
 
   return (
     <div className="hub-page">

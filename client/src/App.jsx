@@ -217,14 +217,17 @@ export default function App() {
             <div className="erp-nav-heading">Fleet</div>
             {allowedTabs.includes('fleet') && (
               <>
-                {[
-                  ['add', '➕ Add'],
-                  ['maintenance', '🔧 Periodic Maintenance'],
-                  ['maintenance-report', '🛠️ Maintenance Report'],
-                  ['history', '📚 History'],
-                  ['vehicle-ticket', '🎫 Vehicle Ticket'],
-                  ['km', '📊 KM Tracking']
-                ].map(([group, label]) => (
+                {(user?.role === 'Driver'
+                  ? [['add', '➕ Add']]
+                  : [
+                      ['add', '➕ Add'],
+                      ['maintenance', '🔧 Periodic Maintenance'],
+                      ['maintenance-report', '🛠️ Maintenance Report'],
+                      ['history', '📚 History'],
+                      ['vehicle-ticket', '🎫 Vehicle Ticket'],
+                      ['km', '📊 KM Tracking']
+                    ]
+                ).map(([group, label]) => (
                   <button key={group} className="erp-nav-btn" onClick={() => { setFleetGroup(group); handleTabChange('fleet'); }}>
                     {label}
                   </button>

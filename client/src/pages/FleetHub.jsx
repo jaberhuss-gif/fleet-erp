@@ -84,7 +84,7 @@ export default function FleetHub({ user, access }) {
 
   const visibleActions = FLEET_ACTIONS.filter(item => {
     // Drivers only need the three driver-facing Fleet functions.
-    if (isDriver) return ['daily-km', 'issue', 'smart-issue', 'tire'].includes(item.id);
+    if (isDriver) return ['daily-km', 'issue', 'smart-issue', 'tire', 'tire-service'].includes(item.id);
 
     // Driver records remain Owner-only.
     if (item.id === 'add-driver') return user?.role === 'Owner';

@@ -237,7 +237,7 @@ export default function App() {
               <>
                 {[
                   ['add', '➕ Add'],
-                  ['maintenance', '🔧 Vehicle Maintenance'],
+                  ['maintenance', '🔧 Periodic Maintenance'],
                   ['periodic-inspection', '🔍 الفحص الدوري للمركبة'],
                   ['km', '📊 KM Tracking']
                 ].map(([group, label]) => (

@@ -107,7 +107,8 @@ export async function getTireControl() {
       COALESCE(NULLIF(v.plate, ''), CONCAT_WS(' ', v.plate_number, v.plate_code)) AS plate,
       v.plate_number, v.plate_code, v.driver, v.location,
       v.current_km, v.last_oil_km, v.last_oil_change_date, COALESCE(v.oil_change_interval, 5000) AS oil_change_interval,
-      v.inspection_last_date, v.inspection_due_date,
+      v.inspection_last_date,
+      COALESCE(v.inspection_due_date, (v.inspection_last_date + INTERVAL '365 days')::date) AS effective_inspection_due_date,
       s.status AS survey_status, s.submitted_at,
       COALESCE(json_agg(
         json_build_object(
@@ -121,7 +122,10 @@ export async function getTireControl() {
       pm.maintenance_due_date,
       pm.maintenance_last_date,
       pm.maintenance_notes,
-      pm.maintenance_record_status
+      pm.maintenance_record_status,
+      ai.annual_inspection_last_date,
+      ai.annual_inspection_notes,
+      ai.annual_inspection_status
     FROM vehicles v
     LEFT JOIN tire_surveys s ON s.vehicle_id=v.id
     LEFT JOIN tire_assets t ON t.vehicle_id=v.id AND t.active=true
@@ -137,10 +141,22 @@ export async function getTireControl() {
       ORDER BY COALESCE(pm.scheduled_date, pm.last_service_date) DESC NULLS LAST, pm.id DESC
       LIMIT 1
     ) pm ON TRUE
+    LEFT JOIN LATERAL (
+      SELECT
+        COALESCE(pm2.last_service_date, pm2.scheduled_date) AS annual_inspection_last_date,
+        pm2.notes AS annual_inspection_notes,
+        pm2.status AS annual_inspection_status
+      FROM periodic_maintenance pm2
+      WHERE pm2.vehicle_id=v.id
+        AND LOWER(TRIM(COALESCE(pm2.type,''))) IN ('inspection','annual inspection','annual_inspection')
+      ORDER BY COALESCE(pm2.last_service_date, pm2.scheduled_date) DESC NULLS LAST, pm2.id DESC
+      LIMIT 1
+    ) ai ON TRUE
     GROUP BY v.id, v.plate, v.plate_number, v.plate_code, v.driver, v.location,
       v.current_km, v.last_oil_km, v.last_oil_change_date, v.oil_change_interval,
       v.inspection_last_date, v.inspection_due_date, s.status, s.submitted_at,
-      pm.maintenance_due_date, pm.maintenance_last_date, pm.maintenance_notes, pm.maintenance_record_status
+      pm.maintenance_due_date, pm.maintenance_last_date, pm.maintenance_notes, pm.maintenance_record_status,
+      ai.annual_inspection_last_date, ai.annual_inspection_notes, ai.annual_inspection_status
     ORDER BY plate
   `);
   const today = new Date();
@@ -164,9 +180,11 @@ export async function getTireControl() {
     const oilStatus = (!lastOilKm || !currentKm) ? "red" : kmSinceOil >= oilInterval ? "red" : kmSinceOil >= oilInterval - 500 ? "yellow" : "green";
     const maintenanceInspected = Boolean(String(v.maintenance_notes || '').trim()) || String(v.maintenance_record_status || '').toLowerCase() === 'completed';
     const maintenanceStatus = !v.maintenance_due_date ? "red" : maintenanceInspected ? "green" : "red";
-    const inspectionStatus = dateStatus(v.inspection_due_date, 30);
+    const inspectionDue = v.effective_inspection_due_date ||
+      (v.annual_inspection_last_date ? (new Date(v.annual_inspection_last_date).setDate(new Date(v.annual_inspection_last_date).getDate()+365), new Date(v.annual_inspection_last_date).toISOString().slice(0,10)) : null);
+    const inspectionStatus = dateStatus(inspectionDue, 30);
     const maintenanceDays = v.maintenance_due_date ? Math.ceil((new Date(v.maintenance_due_date).getTime() - today.getTime()) / 86400000) : null;
-    const inspectionDays = v.inspection_due_date ? Math.ceil((new Date(v.inspection_due_date).getTime() - today.getTime()) / 86400000) : null;
+    const inspectionDays = inspectionDue ? Math.ceil((new Date(inspectionDue).getTime() - today.getTime()) / 86400000) : null;
     const tireReason = tires.length < 6 ? `Only ${tires.length}/6 active tires recorded` :
       tires.some(t => t.status === "red") ? "One or more tires are RED" :
       tires.some(t => t.status === "yellow") ? "One or more tires need attention" : "All 6 tires OK";
@@ -176,7 +194,8 @@ export async function getTireControl() {
     const maintenanceReason = !v.maintenance_due_date ? "No 6-month maintenance record" :
       !maintenanceInspected ? "6-month maintenance not inspected — no notes/completion recorded" :
       "6-month maintenance inspected";
-    const inspectionReason = !v.inspection_due_date ? "No annual inspection due date recorded" :
+    const inspectionEvidence = Boolean(String(v.annual_inspection_notes || '').trim()) || String(v.annual_inspection_status || '').toLowerCase() === 'completed';
+    const inspectionReason = !inspectionDue ? "No annual inspection date recorded" :
       inspectionDays < 0 ? `Inspection overdue by ${Math.abs(inspectionDays)} days` :
       inspectionDays <= 30 ? `Inspection due in ${inspectionDays} days` : `Inspection due in ${inspectionDays} days`;
     const overall = [tireStatus, oilStatus, maintenanceStatus, inspectionStatus].includes("red") ? "red" : [tireStatus, oilStatus, maintenanceStatus, inspectionStatus].includes("yellow") ? "yellow" : "green";
@@ -185,7 +204,9 @@ export async function getTireControl() {
       tireReason, oilReason, maintenanceReason, inspectionReason,
       maintenanceDueDate: v.maintenance_due_date, maintenanceLastDate: v.maintenance_last_date,
       maintenanceNotes: v.maintenance_notes, maintenanceRecordStatus: v.maintenance_record_status,
-      inspectionDueDate: v.inspection_due_date,
+      inspectionDueDate: inspectionDue,
+      inspectionLastDate: v.inspection_last_date || v.annual_inspection_last_date,
+      inspectionEvidence,
       maintenanceStatus, inspectionStatus, overallStatus: overall,
       red: tires.filter(t => t.status === "red").length,
       yellow: tires.filter(t => t.status === "yellow").length,

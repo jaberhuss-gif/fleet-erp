@@ -111,8 +111,11 @@ export async function getTireControl() {
       ORDER BY vehicle_id, completed_date DESC, id DESC
     )
     SELECT v.id, v.plate, v.driver, v.location,
-      COALESCE(today_km.reading_km, 0) AS current_km, v.last_oil_km, COALESCE(v.oil_change_interval,5000) AS oil_change_interval,
-      v.last_oil_change_date, today_km.reading_date AS daily_km_date, v.inspection_last_date, v.inspection_due_date,
+      COALESCE(today_km.reading_km, 0) AS current_km,
+      COALESCE(oil_history.oil_change_km, v.last_oil_km) AS last_oil_km,
+      COALESCE(v.oil_change_interval,5000) AS oil_change_interval,
+      COALESCE(oil_history.oil_change_date, v.last_oil_change_date) AS last_oil_change_date,
+      today_km.reading_date AS daily_km_date, v.inspection_last_date, v.inspection_due_date,
       s.status AS survey_status, s.submitted_at,
       i.completed_date AS inspection_record_date,
       m.status AS maintenance_status, m.completed_date AS maintenance_completed_date,
@@ -135,13 +138,23 @@ export async function getTireControl() {
       ORDER BY created_at DESC, id DESC
       LIMIT 1
     ) today_km ON true
+    LEFT JOIN LATERAL (
+      SELECT oil_change_km, oil_change_date
+      FROM oil_changes
+      WHERE vehicle_id=v.id
+        AND COALESCE(notes,'') NOT ILIKE '%Google Sheet%'
+      ORDER BY oil_change_date DESC NULLS LAST, id DESC
+      LIMIT 1
+    ) oil_history ON true
     LEFT JOIN tire_surveys s ON s.vehicle_id=v.id
     LEFT JOIN tire_assets t ON t.vehicle_id=v.id AND t.active=true
     LEFT JOIN latest_6m m ON m.vehicle_id=v.id
     LEFT JOIN latest_inspection i ON i.vehicle_id=v.id
     WHERE LOWER(TRIM(COALESCE(v.plate,''))) <> 'test 123'
     GROUP BY v.id, v.plate, v.driver, v.location, v.last_oil_km,
-      v.oil_change_interval, v.last_oil_change_date, today_km.reading_km, today_km.reading_date, v.inspection_last_date, v.inspection_due_date,
+      v.oil_change_interval, v.last_oil_change_date,
+      oil_history.oil_change_km, oil_history.oil_change_date,
+      today_km.reading_km, today_km.reading_date, v.inspection_last_date, v.inspection_due_date,
       s.status, s.submitted_at, i.completed_date, m.status, m.completed_date, m.notes, m.scheduled_date
     ORDER BY v.plate
   `);

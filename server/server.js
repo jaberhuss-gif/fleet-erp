@@ -73,6 +73,7 @@ app.get("/api/migration/vehicles", async (req, res) => {
       SELECT
         id, plate_number, plate_code, make, model, year, location, driver, phone,
         current_km, last_oil_km, oil_change_interval, last_oil_change_date,
+        inspection_last_date, inspection_due_date,
         status, meter_updated_at, updated_at
       FROM vehicles
       ORDER BY id

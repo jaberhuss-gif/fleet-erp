@@ -328,7 +328,15 @@ export function TireControlCenter() {
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:9,marginTop:14}}>
         <Compliance label="🛞 Tires" status={r.tireStatus} reason={r.tireReason}/>
-        <Compliance label="🛢️ Oil" status={r.oilStatus} reason={r.oilReason}/>
+        <Compliance
+          label="🛢️ Oil"
+          status={r.oilStatus}
+          reason={
+            r.oilReason === 'No Data'
+              ? 'No Daily KM submitted today'
+              : `${r.oilReason} • Current KM: ${Number(r.current_km || 0).toLocaleString()} • Last Oil KM: ${Number(r.last_oil_km || 0).toLocaleString()} • Driven: ${r.drivenSinceOil == null ? '-' : Number(r.drivenSinceOil).toLocaleString()} km • Remaining: ${r.oilRemaining == null ? '-' : Number(r.oilRemaining).toLocaleString()} km • Progress: ${Number(r.oilProgress || 0).toFixed(0)}%`
+          }
+        />
         <Compliance label="🔧 6-Month Maintenance" status={r.maintenanceStatus} reason={r.maintenanceReason}/>
         <Compliance label="📋 Annual Inspection" status={r.inspectionStatus} reason={r.inspectionReason}/>
       </div>

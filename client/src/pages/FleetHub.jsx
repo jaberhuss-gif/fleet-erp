@@ -9,6 +9,7 @@ import TireManagement, { TireControlCenter } from './TireManagement';
 import TireServiceRequests from './TireServiceRequests';
 import DailyKmSubmitted from './DailyKmSubmitted';
 import DailyKmMissing from './DailyKmMissing';
+import VehicleTracking from './VehicleTracking';
 
 const FLEET_ACTIONS = [
   {
@@ -115,7 +116,7 @@ export default function FleetHub({ user, access, initialOwnerGroup = 'add' }) {
   if (user?.role === 'Owner') {
     const ownerGroups = {
       add: ['add-vehicle', 'add-driver'],
-      maintenance: ['readings', 'maintenance', 'issue', 'smart-issue', 'tire', 'tire-service', 'tire-control'],
+      maintenance: ['readings', 'maintenance', 'vehicle-history', 'issue', 'smart-issue', 'tire', 'tire-service', 'tire-control'],
       km: ['daily-km-submitted', 'daily-km-missing']
     };
     const ownerItems = {
@@ -123,6 +124,7 @@ export default function FleetHub({ user, access, initialOwnerGroup = 'add' }) {
       'add-driver': { label: '👨‍🔧 Add Driver', title: 'Add Driver', description: 'Add and maintain driver records and vehicle assignments.' },
       readings: { label: '📏 Edit KM & Previous Readings', title: 'Edit KM & Previous Readings', description: 'Review and edit current odometer and previous vehicle readings.' },
       maintenance: { label: '🔧 Periodic Maintenance (82)', title: 'Periodic Maintenance (82)', description: '6-month general maintenance and annual periodic inspection control.' },
+      'vehicle-history': { label: '📚 Vehicle Maintenance History', title: 'Vehicle Maintenance History', description: 'Complete vehicle tracking history: repairs, work orders, oil, tires, tickets and inspections.' },
       issue: { label: '🛠️ Maintenance Issue Report', title: 'Maintenance Issue Report', description: 'Report a vehicle problem and create a maintenance ticket.' },
       'smart-issue': { label: '🧠 Smart Report Issue', title: 'Smart Report Issue', description: 'Use the smart maintenance issue reporting workflow.' },
       tire: { label: '🛞 Tire Survey', title: 'Tire Survey', description: 'Initial 6-tire survey, serial numbers, photos and lock control.' },
@@ -188,6 +190,7 @@ export default function FleetHub({ user, access, initialOwnerGroup = 'add' }) {
         {ownerSection === 'add-driver' && <Drivers key="owner-add-driver" initialAction="add" />}
         {ownerSection === 'readings' && <Vehicles key="owner-readings" canWork={fleetWork} initialAction="readings" />}
         {ownerSection === 'maintenance' && <VehicleMaintenance canWork={fleetWork} />}
+        {ownerSection === 'vehicle-history' && <VehicleTracking />}
         {ownerSection === 'issue' && <ReportIssue canWork={fleetWork} />}
         {ownerSection === 'smart-issue' && <SmartReportIssue canWork={fleetWork} />}
         {ownerSection === 'tire' && <TireManagement user={user} driverMode={false} />}

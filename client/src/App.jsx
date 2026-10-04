@@ -237,7 +237,7 @@ export default function App() {
               <>
                 {[
                   ['add', '➕ Add'],
-                  ['maintenance', '🔧 Vehicle Maintenance'],
+                  ['maintenance', '🔧 Periodic Maintenance'],
                   ['km', '📊 KM Tracking']
                 ].map(([group, label]) => (
                   <button key={group} className="erp-nav-btn" onClick={() => { setFleetGroup(group); handleTabChange('fleet'); }}>

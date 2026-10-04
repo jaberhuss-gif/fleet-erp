@@ -141,6 +141,12 @@ export default function PeriodicMaintenance({ canWork = false }) {
 
   const currentList = subTabData[subTab] || filtered;
 
+  const inspectionList =
+    subTab === 'all' ? null :
+    subTab === 'pending' ? null :
+    subTab === 'completed' ? null :
+    null;
+
   // A record is considered filled/processed when any actual work data exists.
   // The generated vehicle/type/scheduled-date fields alone do not count.
   const hasActionData = (r) =>
@@ -152,6 +158,68 @@ export default function PeriodicMaintenance({ canWork = false }) {
 
   const filledRecords = filtered.filter(hasActionData);
   const untouchedRecords = filtered.filter((r) => !hasActionData(r));
+
+  // Inspection control matrix: use ALL fleet vehicles so a missing PM record is
+  // explicitly RED, while preserving the old ERP rule that 6-month notes prove
+  // the maintenance was actually performed.
+  const isInspected = (r) => {
+    if (!r) return false;
+    if (r.type === '6_months_general') {
+      return r.status === 'Completed' ||
+        Boolean(String(r.completed_date || '').trim()) ||
+        Boolean(String(r.notes || '').trim());
+    }
+    if (r.type === 'inspection') {
+      return r.status === 'Completed' ||
+        Boolean(String(r.completed_date || '').trim());
+    }
+    return false;
+  };
+
+  const pickLatestControl = (list, type) => {
+    const typed = list.filter(r => r.type === type);
+    if (!typed.length) return null;
+    const evidenced = typed.filter(isInspected);
+    const pool = evidenced.length ? evidenced : typed;
+    return pool.reduce((best, r) => {
+      if (!best) return r;
+      const bt = new Date(best.completed_date || best.scheduled_date || 0).getTime();
+      const rt = new Date(r.completed_date || r.scheduled_date || 0).getTime();
+      if (rt > bt) return r;
+      if (rt === bt && Number(r.id || 0) > Number(best.id || 0)) return r;
+      return best;
+    }, null);
+  };
+
+  const recordsByVehicle = records.reduce((map, r) => {
+    const key = String(r.vehicle_id);
+    if (!map[key]) map[key] = [];
+    map[key].push(r);
+    return map;
+  }, {});
+
+  const vehicleSummary = vehicles.map(v => {
+    const vehicleRecords = recordsByVehicle[String(v.id)] || [];
+    const six = pickLatestControl(vehicleRecords, '6_months_general');
+    const annual = pickLatestControl(vehicleRecords, 'inspection');
+    const sixDone = Boolean(six && isInspected(six));
+    const annualDone = Boolean(annual && isInspected(annual));
+    const missing = [];
+    if (!sixDone) missing.push('6-Month Maintenance');
+    if (!annualDone) missing.push('Annual Inspection');
+    return {
+      vehicle_id: v.id,
+      plate: v.plate || v.plate_number || '-',
+      driver: v.driver || v.driver_name || '-',
+      six, annual, sixDone, annualDone,
+      fullyInspected: sixDone && annualDone,
+      missing
+    };
+  });
+
+  const partiallyInspectedVehicles = vehicleSummary.filter(v => v.sixDone !== v.annualDone);
+  const notInspectedVehicles = vehicleSummary.filter(v => !v.sixDone && !v.annualDone);
+  const fullyInspectedVehicles = vehicleSummary.filter(v => v.fullyInspected);
 
   const exportColumns = [
     { key: 'vehicle_plate', label: 'Vehicle' },
@@ -171,87 +239,54 @@ export default function PeriodicMaintenance({ canWork = false }) {
   };
 
   const printPdfReport = () => {
-    // Use a dedicated print window so global app/table CSS cannot force
-    // one maintenance record onto a separate PDF page.
     const esc = (value) => String(value ?? '-')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-    const rows = currentList.map((r) => {
-      const status = r.status === 'Completed'
-        ? 'Completed'
-        : (r.scheduled_date < today ? 'Overdue' : 'Pending');
-      return `<tr>
-        <td>${esc(r.vehicle_plate)}</td>
-        <td>${esc(r.vehicle_location)}</td>
-        <td>${esc(r.driver_name)}</td>
-        <td>${esc(TYPE_LABELS[r.type] || r.type)}</td>
-        <td>${esc(r.scheduled_date)}</td>
-        <td>${esc(r.completed_date)}</td>
-        <td>${esc(status)}</td>
-        <td>${esc(r.technician)}</td>
-        <td>${esc(r.notes)}</td>
-      </tr>`;
-    }).join('');
+    const inspectionMode = ['partial', 'none', 'fully'].includes(subTab);
+    let title = 'Vehicle Maintenance';
+    let headers = [];
+    let rows = '';
 
-    const printWindow = window.open('', '_blank', 'width=1200,height=800');
-    if (!printWindow) {
-      setError('Please allow pop-ups for the PDF print report.');
-      return;
+    if (inspectionMode) {
+      const list = subTab === 'partial' ? partiallyInspectedVehicles
+        : subTab === 'none' ? notInspectedVehicles : fullyInspectedVehicles;
+      title = subTab === 'partial' ? 'Partially Inspected Vehicles'
+        : subTab === 'none' ? 'Not Inspected Vehicles' : 'Fully Inspected Vehicles';
+      headers = ['Vehicle','Driver','6-Month','Annual Inspection','Overall','Missing'];
+      rows = list.map(v => {
+        const overall = subTab === 'fully' ? 'GREEN — Fully Inspected'
+          : subTab === 'none' ? 'RED — Not Inspected' : 'YELLOW — Partially Inspected';
+        return '<tr><td>'+esc(v.plate)+'</td><td>'+esc(v.driver)+'</td><td>'+
+          esc(v.sixDone ? 'Inspected' : 'Not Inspected')+'</td><td>'+
+          esc(v.annualDone ? 'Inspected' : 'Not Inspected')+'</td><td>'+
+          esc(overall)+'</td><td>'+esc(v.missing.length ? v.missing.join(' + ') : '—')+'</td></tr>';
+      }).join('');
+    } else {
+      title = 'Vehicle Maintenance';
+      headers = ['Vehicle','Location','Driver','Type','Scheduled','Completed','Status','Technician','Notes'];
+      rows = currentList.map((r) => {
+        const status = r.status === 'Completed' ? 'Completed' : (r.scheduled_date < today ? 'Overdue' : 'Pending');
+        return '<tr><td>'+esc(r.vehicle_plate)+'</td><td>'+esc(r.vehicle_location)+
+          '</td><td>'+esc(r.driver_name)+'</td><td>'+esc(TYPE_LABELS[r.type] || r.type)+
+          '</td><td>'+esc(r.scheduled_date)+'</td><td>'+esc(r.completed_date)+
+          '</td><td>'+esc(status)+'</td><td>'+esc(r.technician)+'</td><td>'+esc(r.notes)+'</td></tr>';
+      }).join('');
     }
 
+    const printWindow = window.open('', '_blank', 'width=1200,height=800');
+    if (!printWindow) { setError('Please allow pop-ups for the PDF print report.'); return; }
     printWindow.document.open();
-    printWindow.document.write(`<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Vehicle Maintenance</title>
-<style>
-  @page { size: A4 landscape; margin: 10mm; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: #fff; color: #111; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; }
-  .title { font-size: 18pt; font-weight: 700; color: #1e3a8a; margin: 0 0 3mm; }
-  .meta { font-size: 8pt; color: #555; margin-bottom: 4mm; padding-bottom: 3mm; border-bottom: 2px solid #1e3a8a; }
-  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  thead { display: table-header-group; }
-  tr { break-inside: avoid; page-break-inside: avoid; }
-  th, td { border: 1px solid #9aa4b2; padding: 4px 5px; text-align: left; vertical-align: top; line-height: 1.2; overflow-wrap: anywhere; }
-  th { background: #e9eef5; font-weight: 700; }
-  th:nth-child(1), td:nth-child(1) { width: 10%; }
-  th:nth-child(2), td:nth-child(2) { width: 13%; }
-  th:nth-child(3), td:nth-child(3) { width: 17%; }
-  th:nth-child(4), td:nth-child(4) { width: 11%; }
-  th:nth-child(5), td:nth-child(5) { width: 10%; }
-  th:nth-child(6), td:nth-child(6) { width: 10%; }
-  th:nth-child(7), td:nth-child(7) { width: 9%; }
-  th:nth-child(8), td:nth-child(8) { width: 10%; }
-  th:nth-child(9), td:nth-child(9) { width: 10%; }
-  @media print {
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  }
-</style>
-</head>
-<body>
-  <div class="title">Vehicle Maintenance</div>
-  <div class="meta">Generated: ${esc(new Date().toLocaleString())} · Records: ${currentList.length}</div>
-  <table>
-    <thead><tr>
-      <th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th>
-      <th>Completed</th><th>Status</th><th>Technician</th><th>Notes</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
-</body>
-</html>`);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-    }, 250);
+    printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
+<style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:8.5pt;color:#111}
+.title{font-size:18pt;font-weight:700;margin:0 0 3mm}.meta{font-size:8pt;color:#555;margin-bottom:4mm;padding-bottom:3mm;border-bottom:2px solid #1e3a8a}
+table{width:100%;border-collapse:collapse;table-layout:fixed}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}
+th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:top;line-height:1.2;overflow-wrap:anywhere}th{background:#e9eef5;font-weight:700}</style>
+</head><body><div class="title">${esc(title)}</div><div class="meta">Generated: ${esc(new Date().toLocaleString())} · Records: ${inspectionMode ? (subTab === 'partial' ? partiallyInspectedVehicles.length : subTab === 'none' ? notInspectedVehicles.length : fullyInspectedVehicles.length) : currentList.length}</div>
+<table><thead><tr>${headers.map(h => '<th>'+esc(h)+'</th>').join('')}</tr></thead><tbody>${rows}</tbody></table>
+</body></html>`);
+    printWindow.document.close(); printWindow.focus();
+    setTimeout(() => printWindow.print(), 250);
   };
 
   // For 6-month maintenance, a note is the evidence that the vehicle was inspected.
@@ -275,6 +310,12 @@ export default function PeriodicMaintenance({ canWork = false }) {
         <button className={subTab === 'pending' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('pending')}>Pending ({subTabData.pending.length})</button>
         <button className={subTab === 'overdue' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('overdue')}>Overdue ({subTabData.overdue.length})</button>
         <button className={subTab === 'completed' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('completed')}>Completed ({subTabData.completed.length})</button>
+      </div>
+
+      <div className="sub-nav print-hide" style={{ marginTop: '10px' }}>
+        <button className={subTab === 'partial' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('partial')}>🟡 Partially Inspected ({partiallyInspectedVehicles.length})</button>
+        <button className={subTab === 'none' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('none')}>🔴 Not Inspected ({notInspectedVehicles.length})</button>
+        <button className={subTab === 'fully' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('fully')}>🟢 Fully Inspected ({fullyInspectedVehicles.length})</button>
       </div>
 
       {/* ===== Stats Cards ===== */}
@@ -399,7 +440,24 @@ export default function PeriodicMaintenance({ canWork = false }) {
           <button className="btn btn-warning" onClick={() => { setSearch(''); setFilterVehicle('all'); setFilterType('all'); setFilterStatus('all'); }}>Clear</button>
         </div>
 
-        {loading ? <div className="loading">Loading...</div> : (
+        {loading ? <div className="loading">Loading...</div> : ['partial','none','fully'].includes(subTab) ? (
+          <table className="periodic-maintenance-screen-table">
+            <thead><tr><th>Vehicle</th><th>Driver</th><th>6-Month</th><th>Annual Inspection</th><th>Overall</th><th>Missing</th></tr></thead>
+            <tbody>
+              {(subTab === 'partial' ? partiallyInspectedVehicles : subTab === 'none' ? notInspectedVehicles : fullyInspectedVehicles).map((v) => {
+                const overall = subTab === 'fully' ? 'GREEN — Fully Inspected' : subTab === 'none' ? 'RED — Not Inspected' : 'YELLOW — Partially Inspected';
+                return <tr key={v.vehicle_id}>
+                  <td><strong>{v.plate}</strong></td><td>{v.driver}</td>
+                  <td><span className={v.sixDone ? 'status-badge status-safe' : 'status-badge status-urgent'}>{v.sixDone ? 'Inspected' : 'Not Inspected'}</span></td>
+                  <td><span className={v.annualDone ? 'status-badge status-safe' : 'status-badge status-urgent'}>{v.annualDone ? 'Inspected' : 'Not Inspected'}</span></td>
+                  <td><span className={subTab === 'fully' ? 'status-badge status-safe' : subTab === 'none' ? 'status-badge status-urgent' : 'status-badge status-warning'}>{overall}</span></td>
+                  <td>{v.missing.length ? v.missing.join(' + ') : '—'}</td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+        ) : (
+                  {loading ? <div className="loading">Loading...</div> : (
           <table className="periodic-maintenance-screen-table">
             <thead>
               <tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Completed</th><th>Status</th><th>Technician</th><th>Cost</th><th>Notes</th><th>Actions</th></tr>
@@ -426,7 +484,8 @@ export default function PeriodicMaintenance({ canWork = false }) {
               ))}
             </tbody>
           </table>
-        )}
+
+        )}        )}
 
         <div className="periodic-maintenance-print-table-wrap">
           <table className="periodic-maintenance-print-table">

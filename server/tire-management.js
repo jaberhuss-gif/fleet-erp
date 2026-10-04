@@ -344,7 +344,7 @@ export async function listTireServiceRequests(filters={}) {
   const params=[]; const where=[]; const vehicle=clean(filters.vehicle); const status=clean(filters.status).toUpperCase();
   if(vehicle){ params.push("%"+vehicle+"%"); where.push("(COALESCE(v.plate,'') ILIKE $1 OR COALESCE(v.plate_number,'') ILIKE $1 OR COALESCE(v.plate_code,'') ILIKE $1)"); }
   if(status){ params.push(status); where.push("UPPER(r.status) = $"+params.length); }
-  const sql=`SELECT r.*, COALESCE(v.plate, CONCAT_WS(' ',v.plate_number,v.plate_code)) AS plate, v.driver, u.name AS created_by_name
+  const sql=`SELECT r.*, COALESCE(v.plate, CONCAT_WS(' ',v.plate_number,v.plate_code)) AS plate, v.driver, u.full_name AS created_by_name
     FROM tire_service_requests r
     LEFT JOIN vehicles v ON v.id=r.vehicle_id
     LEFT JOIN users u ON u.id=r.created_by

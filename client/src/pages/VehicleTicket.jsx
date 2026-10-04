@@ -64,7 +64,7 @@ export default function VehicleTicket({ user, canWork=false }) {
     const daily=(dailyReport?.records||[]).find(r=>String(r.vehicleId)===String(v.id));
     const changed=Boolean(daily?.erpIsOilChange) || String(v.last_oil_change_date||'').slice(0,10)===String(dailyReport?.reportDate||'');
     const current=Number(daily?.km ?? v.currentKm ?? 0);
-    const last=Number(v.lastOilKm||0);
+    const last=v.last_oil_km != null ? Number(v.last_oil_km) : null;
     return {kind:'oil',id:'oil-'+v.id,vehicle:v,description:changed?'Oil change recorded today':'Oil change not recorded today',status:changed?'Changed':'Not Changed',date:dailyReport?.reportDate||'',current,last,raw:daily};
   }),[vehicles,dailyReport]);
 

@@ -221,7 +221,11 @@ export function TireControlCenter() {
   const [error,setError]=useState('');
   const load=async()=>{try{const r=await api.get('/tire/control');setRows(r.data.vehicles||[]);}catch(e){setError(e.response?.data?.error||e.message);}};
   useEffect(()=>{load();},[]);
-  const sortedRows=useMemo(()=>[...rows].sort((a,b)=>({red:0,yellow:1,green:2}[a.overallStatus||'green']-({red:0,yellow:1,green:2}[b.overallStatus||'green']) || String(a.plate).localeCompare(String(b.plate))),[rows]);
+  const sortedRows=useMemo(() => [...rows].sort((a,b) => {
+    const rank = {red:0, yellow:1, green:2};
+    return (rank[a.overallStatus || 'green'] ?? 2) - (rank[b.overallStatus || 'green'] ?? 2)
+      || String(a.plate || '').localeCompare(String(b.plate || ''));
+  }), [rows]);
   const totals=useMemo(()=>rows.reduce((a,r)=>({
     red:a.red+(r.overallStatus==='red'?1:0),
     yellow:a.yellow+(r.overallStatus==='yellow'?1:0),

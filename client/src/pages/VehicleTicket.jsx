@@ -28,9 +28,10 @@ export default function VehicleTicket({ user, canWork=false }) {
         api.get('/tickets?fleetType=maintenance'),
         api.get('/tire/service-requests'),
         api.get('/vehicles'),
-        api.get('/periodic-maintenance')
+        api.get('/periodic-maintenance'),
+        api.get('/google-sheet-submission-report')
       ]);
-      setTickets(t.data?.tickets||[]);setTireRequests(tr.data?.requests||[]);setVehicles(v.data?.vehicles||[]);setPeriodic(p.data?.records||[]);
+      setTickets(t.data?.tickets||[]);setTireRequests(tr.data?.requests||[]);setVehicles(v.data?.vehicles||[]);setPeriodic(p.data?.records||[]);setDailyReport(d.data||null);
     }catch(e){setError(e.response?.data?.error||e.message)}finally{setLoading(false)}
   };
   useEffect(()=>{load()},[]);

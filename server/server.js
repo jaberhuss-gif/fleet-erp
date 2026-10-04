@@ -33,7 +33,8 @@ app.use("/api", async (req, res, next) => {
   const publicApiPaths = new Set([
     "/api/health",
     "/api/v2/health",
-    "/api/auth/login"
+    "/api/auth/login",
+    "/api/migration/vehicles"
   ]);
   if (publicApiPaths.has(req.originalUrl.split("?")[0])) return next();
   return requireAuth(req, res, (err) => {
@@ -46,6 +47,58 @@ app.use("/api", async (req, res, next) => {
 });
 
 app.get("/api/health", async (req, res) => res.json({ status: "ok", time: new Date().toISOString() }));
+
+// ===== TEMPORARY VEHICLE MIGRATION FEED (OLD ERP -> VELA) =====
+// Protected by a Render environment secret. This is intentionally limited to
+// vehicle master data plus yesterday/today KM readings during the migration.
+app.get("/api/migration/vehicles", async (req, res) => {
+  try {
+    const expected = String(process.env.MIGRATION_SYNC_TOKEN || "").trim();
+    const provided = String(req.get("x-migration-token") || "").trim();
+
+    if (!expected || !provided || provided !== expected) {
+      return res.status(401).json({ success: false, error: "Unauthorized migration feed" });
+    }
+
+    const dates = await pgQuery(`
+      SELECT
+        ((CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date - INTERVAL '1 day')::date::text AS yesterday,
+        (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date::text AS today
+    `);
+
+    const yesterday = dates.rows[0].yesterday;
+    const today = dates.rows[0].today;
+
+    const vehicles = await pgQuery(`
+      SELECT
+        id, plate_number, plate_code, make, model, year, location, driver, phone,
+        current_km, last_oil_km, oil_change_interval, last_oil_change_date,
+        status, meter_updated_at, updated_at
+      FROM vehicles
+      ORDER BY id
+    `);
+
+    const readings = await pgQuery(`
+      SELECT id, vehicle_id, plate, reading_km, reading_date, is_oil_change, notes, created_at
+      FROM km_records
+      WHERE reading_date BETWEEN $1::date AND $2::date
+      ORDER BY reading_date, id
+    `, [yesterday, today]);
+
+    res.json({
+      success: true,
+      source: "fleet-erp",
+      from_date: yesterday,
+      to_date: today,
+      vehicles: vehicles.rows,
+      readings: readings.rows
+    });
+  } catch (e) {
+    console.error("[MigrationFeed]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 
 // ===== TIRE MANAGEMENT =====
 await mountTireRoutes(app);

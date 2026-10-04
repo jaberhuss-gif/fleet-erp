@@ -74,23 +74,53 @@ async function activeTireAt(tx, vehicleId, position, excludeId = null) {
 
 async function swapPositions(tx, vehicleId, posA, posB) {
   if (posA === posB) throw httpError(400, "Source and target positions are the same.");
-  const a = await activeTireAt(tx, vehicleId, posA);
-  const b = await activeTireAt(tx, vehicleId, posB);
+
+  // Lock both occupied positions in a deterministic order so concurrent swaps
+  // cannot read stale positions or deadlock each other.
+  const locked = await tx.query(
+    `SELECT * FROM tire_assets
+     WHERE vehicle_id=$1 AND active=true AND position IN ($2,$3)
+     ORDER BY id
+     FOR UPDATE`,
+    [vehicleId, posA, posB]
+  );
+
+  const a = locked.rows.find(r => r.position === posA) || null;
+  const b = locked.rows.find(r => r.position === posB) || null;
+
   if (!a && !b) throw httpError(400, `No active tires at ${posA} or ${posB}.`);
+
   if (a && !b) {
-    await tx.query(`UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`, [posB, a.id]);
+    await tx.query(
+      `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
+      [posB, a.id]
+    );
     return { a, b: null };
   }
+
   if (b && !a) {
-    await tx.query(`UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`, [posA, b.id]);
+    await tx.query(
+      `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
+      [posA, b.id]
+    );
     return { a: null, b };
   }
+
   await tx.query("SAVEPOINT swap_positions");
   try {
-    const temp=`__ROTATE__${a.id}_${b.id}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
-    await tx.query(`UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`, [temp,a.id]);
-    await tx.query(`UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`, [posA,b.id]);
-    await tx.query(`UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`, [posB,a.id]);
+    const temp = `__ROTATE__${a.id}_${b.id}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+    await tx.query(
+      `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
+      [temp, a.id]
+    );
+    await tx.query(
+      `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
+      [posA, b.id]
+    );
+    await tx.query(
+      `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
+      [posB, a.id]
+    );
     await tx.query("RELEASE SAVEPOINT swap_positions");
     return { a, b };
   } catch (err) {
@@ -196,6 +226,28 @@ export async function ensureTireSchema() {
     ALTER TABLE tire_surveys ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
     ALTER TABLE tire_surveys ADD COLUMN IF NOT EXISTS locked BOOLEAN DEFAULT FALSE;
     ALTER TABLE tire_assets ADD COLUMN IF NOT EXISTS installed_km BIGINT;
+    DO $
+    DECLARE c RECORD;
+    BEGIN
+      FOR c IN
+        SELECT conname
+        FROM pg_constraint
+        WHERE conrelid = 'tire_assets'::regclass
+          AND contype = 'u'
+          AND pg_get_constraintdef(oid) ILIKE '%manufacturer_serial%'
+      LOOP
+        EXECUTE format('ALTER TABLE tire_assets DROP CONSTRAINT IF EXISTS %I', c.conname);
+      END LOOP;
+      FOR c IN
+        SELECT indexname
+        FROM pg_indexes
+        WHERE tablename = 'tire_assets'
+          AND indexname ILIKE '%manufacturer%serial%'
+          AND indexdef ILIKE '%UNIQUE%'
+      LOOP
+        EXECUTE format('DROP INDEX IF EXISTS %I', c.indexname);
+      END LOOP;
+    END $;
     ALTER TABLE tire_assets ADD COLUMN IF NOT EXISTS dot TEXT;
     ALTER TABLE tire_events ADD COLUMN IF NOT EXISTS outcome TEXT;
   `);
@@ -479,8 +531,8 @@ export async function getVehicleTires(vehicleId) {
 
 export async function submitInitialSurvey(vehicleId, body, user) {
   const existing = await query(`SELECT status FROM tire_surveys WHERE vehicle_id=$1 LIMIT 1`, [vehicleId]);
-  if (existing.rows[0]?.status === "LOCKED") {
-    throw httpError(409, "Initial Tire Survey is already completed and locked. Only management can reopen it.");
+  if (["SUBMITTED", "APPROVED", "LOCKED"].includes(existing.rows[0]?.status)) {
+    throw httpError(409, "Initial Tire Survey is already submitted/approved and locked. Management must reopen it before a new survey.");
   }
 
   const tires = Array.isArray(body.tires) ? body.tires : [];
@@ -516,6 +568,14 @@ export async function submitInitialSurvey(vehicleId, body, user) {
       if (!tireId) {
         const seq = await tx.query(`SELECT nextval('tire_id_seq') AS n`);
         tireId = "T-" + String(seq.rows[0].n).padStart(6, "0");
+      } else {
+        const duplicate = await tx.query(
+          `SELECT id FROM tire_assets WHERE tire_id=$1 LIMIT 1 FOR UPDATE`,
+          [tireId]
+        );
+        if (duplicate.rows[0]) {
+          throw httpError(409, `Tire ID ${tireId} is already registered. Use a new Tire ID.`);
+        }
       }
 
       const inserted = await tx.query(
@@ -614,6 +674,11 @@ export async function approveInitialSurvey(vehicleId, user) {
 }
 
 export async function updateTireAsset(vehicleId, tireId, body, user) {
+  const survey = await query(`SELECT status, locked FROM tire_surveys WHERE vehicle_id=$1 LIMIT 1`, [vehicleId]);
+  if (!survey.rows[0] || survey.rows[0].status !== "APPROVED" || survey.rows[0].locked !== true) {
+    throw httpError(409, "Tire Survey must be APPROVED and locked before tire data can be edited.");
+  }
+
   const current = await query(
     `SELECT * FROM tire_assets WHERE id=$1 AND vehicle_id=$2 LIMIT 1`,
     [tireId, vehicleId]
@@ -667,6 +732,10 @@ export async function updateTireAsset(vehicleId, tireId, body, user) {
 }
 
 export async function updateVehicleTiresAfterApproval(vehicleId, tires, user) {
+  const survey = await query(`SELECT status, locked FROM tire_surveys WHERE vehicle_id=$1 LIMIT 1`, [vehicleId]);
+  if (!survey.rows[0] || survey.rows[0].status !== "APPROVED" || survey.rows[0].locked !== true) {
+    throw httpError(409, "Tire Survey must be APPROVED and locked before tire data can be updated.");
+  }
   const list = Array.isArray(tires) ? tires : [];
 
   const result = await transaction(async tx => {
@@ -725,6 +794,10 @@ export async function updateVehicleTiresAfterApproval(vehicleId, tires, user) {
 }
 
 export async function changeTirePosition(vehicleId, tireId, newPosition, user, notes = "") {
+  const survey = await query(`SELECT status, locked FROM tire_surveys WHERE vehicle_id=$1 LIMIT 1`, [vehicleId]);
+  if (!survey.rows[0] || survey.rows[0].status !== "APPROVED" || survey.rows[0].locked !== true) {
+    throw httpError(409, "Tire Survey must be APPROVED and locked before changing tire position.");
+  }
   if (!POSITIONS.includes(newPosition)) throw httpError(400, "Invalid position.");
   const result = await transaction(async tx => {
     const current = await tx.query(`SELECT * FROM tire_assets WHERE id=$1 AND vehicle_id=$2 AND active=true FOR UPDATE`, [tireId, vehicleId]);

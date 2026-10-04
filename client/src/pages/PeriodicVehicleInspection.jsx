@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import api from '../api/client';
 
-const API = '/fleet/periodic-maintenance';
-const VEHICLES_API = '/fleet/vehicles';
+const API = '/periodic-maintenance';
+const VEHICLES_API = '/vehicles';
 
 function PeriodicMaintenance({ canWork = false }) {
   const [records, setRecords] = useState([]);

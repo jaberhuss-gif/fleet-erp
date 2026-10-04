@@ -238,7 +238,6 @@ export default function App() {
                 {[
                   ['add', '➕ Add'],
                   ['maintenance', '🔧 Periodic Maintenance'],
-                  ['periodic-inspection', '🔍 الفحص الدوري للمركبة'],
                   ['maintenance-report', '🛠️ Maintenance Report'],
                   ['history', '📚 History'],
                   ['vehicle-ticket', '🎫 Vehicle Ticket'],

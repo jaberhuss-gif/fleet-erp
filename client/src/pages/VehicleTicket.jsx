@@ -62,10 +62,11 @@ export default function VehicleTicket({ user, canWork=false }) {
 
   const oilRows=useMemo(()=>vehicles.map(v=>{
     const daily=(dailyReport?.records||[]).find(r=>String(r.vehicleId)===String(v.id));
-    const changed=Boolean(daily?.erpIsOilChange) || String(v.last_oil_change_date||'').slice(0,10)===String(dailyReport?.reportDate||'');
-    const current=Number(daily?.km ?? v.currentKm ?? 0);
+    const changed=Boolean(daily?.erpIsOilChange);
+    const hasKm=daily?.km != null;
+    const current=hasKm ? Number(daily.km) : null;
     const last=v.last_oil_km != null ? Number(v.last_oil_km) : null;
-    return {kind:'oil',id:'oil-'+v.id,vehicle:v,description:changed?'Oil change recorded today':'Oil change not recorded today',status:changed?'Changed':'Not Changed',date:dailyReport?.reportDate||'',current,last,raw:daily};
+    return {kind:'oil',id:'oil-'+v.id,vehicle:v,description:!hasKm?'KM missing today':changed?'Oil change recorded today':'Oil change not recorded today',status:!hasKm?'KM Missing':changed?'Changed':'Not Changed',date:dailyReport?.reportDate||'',current,last,raw:daily};
   }),[vehicles,dailyReport]);
 
   const rows=activeTab==='inspection'?inspectionTickets:activeTab==='km'?kmMissingRows:activeTab==='oil'?oilRows:ticketRows;
@@ -106,7 +107,7 @@ export default function VehicleTicket({ user, canWork=false }) {
       }else if(row.kind==='km'){
         message='Hello '+driver+',\n\nNo KM reading has been recorded today for vehicle '+plate+'. Please enter today\'s current KM.\n\nFleet Management';
       }else if(row.kind==='oil'){
-        message='Hello '+driver+',\n\nVehicle '+plate+' — '+row.description+'. Current KM: '+Number(row.current||0).toLocaleString()+' km. Last Oil KM: '+Number(row.last||0).toLocaleString()+' km.\n\nFleet Management';
+        message='Hello '+driver+',\n\nVehicle '+plate+' — '+row.description+'. Current KM: '+(row.current!=null?Number(row.current).toLocaleString()+' km.':'')+(row.last!=null?' Last Oil KM: '+Number(row.last).toLocaleString()+' km.':'')\n\nFleet Management';
       }
       if(!phone){alert('No driver phone number found for this vehicle.');return}
       window.open('https://wa.me/'+String(phone).replace(/\D/g,'')+'?text='+encodeURIComponent(message),'_blank');
@@ -134,7 +135,7 @@ export default function VehicleTicket({ user, canWork=false }) {
     {loading?<div className="loading">Loading vehicle tickets...</div>:<div className="panel" style={{overflowX:'auto'}}>
       <table><thead><tr><th>Type</th><th>Vehicle</th><th>Driver</th><th>Request / Oil Status</th><th>Current KM</th><th>Last Oil KM</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>{rows.filter(r=>activeTab==='oil'||status==='All'||['Open','PENDING','APPROVED','IN_PROGRESS'].includes(String(r.status||''))).length?rows.filter(r=>activeTab==='oil'||status==='All'||['Open','PENDING','APPROVED','IN_PROGRESS'].includes(String(r.status||''))).map(r=><tr key={r.kind+'-'+r.id}>
-        <td>{r.kind==='maintenance'?'Maintenance Request':r.kind==='annual'?'Annual Inspection':'Tire Service'}</td>
+        <td>{r.kind==='maintenance'?'Maintenance Request':r.kind==='inspection'?'Inspection':r.kind==='tire'?'Tire Service':r.kind==='km'?'Daily KM':'Oil Change'}</td>
         <td><strong>{r.vehicle?.plate||'-'}</strong></td><td>{r.vehicle?.driver||'-'}</td><td style={{minWidth:280}}>{r.description}</td><td>{r.current!=null?Number(r.current).toLocaleString():'-'}</td><td>{r.last!=null?Number(r.last).toLocaleString():'-'}</td><td>{String(r.date||'').slice(0,10)||'-'}</td><td>{r.status}</td>
         <td><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
           {canClose&&['maintenance','tire','inspection'].includes(r.kind)&&<button className="btn btn-success" style={{padding:'6px 10px'}} onClick={()=>close(r)}>Close</button>}

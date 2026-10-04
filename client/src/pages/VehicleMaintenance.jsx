@@ -1,11 +1,6 @@
-﻿import { useState } from 'react';
 import PeriodicMaintenance from './PeriodicMaintenance';
-import SmartReportIssue from './SmartReportIssue';
-import VehicleRepairOrders from './VehicleRepairOrders';
 
 export default function VehicleMaintenance({ canWork = false }) {
-  const [sub, setSub] = useState('maintenance');
-
   return (
     <div>
       <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #0891b2 100%)', padding: '28px 24px', borderRadius: '12px', marginBottom: '20px', color: 'white' }}>
@@ -15,29 +10,7 @@ export default function VehicleMaintenance({ canWork = false }) {
         </p>
       </div>
 
-      <div className="sub-nav">
-        <button
-          className={sub === 'maintenance' ? 'sub-btn active' : 'sub-btn'}
-          onClick={() => setSub('maintenance')}
-        >
-          🔧 Periodic Maintenance (82)
-        </button>
-        <button
-          className={sub === 'report' ? 'sub-btn active' : 'sub-btn'}
-          onClick={() => setSub('report')}
-        >
-          🧠 Smart Report Issue
-        </button>
-        <button
-          className={sub === 'repairs' ? 'sub-btn active' : 'sub-btn'}
-          onClick={() => setSub('repairs')}
-        >
-          🛠️ Repair Verification
-        </button>
-      </div>
-
-      {sub === 'maintenance' && <PeriodicMaintenance canWork={canWork} />}
-      {sub === 'report' && <SmartReportIssue canWork={canWork} />}\n      {sub === 'repairs' && <VehicleRepairOrders canWork={canWork} />}
+      <PeriodicMaintenance canWork={canWork} />
     </div>
   );
 }

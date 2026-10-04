@@ -68,6 +68,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [access, setAccess] = useState(null);
   const [tab, setTab] = useState('gm');
+  const [fleetGroup, setFleetGroup] = useState('add');
   const [viewingVehicleId, setViewingVehicleId] = useState(null);
   const [ready, setReady] = useState(false);
   const [accessLoading, setAccessLoading] = useState(false);
@@ -232,7 +233,20 @@ export default function App() {
 
           <div className="erp-nav-group">
             <div className="erp-nav-heading">Fleet</div>
-            {['fleet','fleet-tickets'].filter(t => allowedTabs.includes(t)).map(t => (
+            {allowedTabs.includes('fleet') && (
+              <>
+                {[
+                  ['add', '➕ Add'],
+                  ['maintenance', '🔧 Vehicle Maintenance'],
+                  ['km', '📊 KM Tracking']
+                ].map(([group, label]) => (
+                  <button key={group} className="erp-nav-btn" onClick={() => { setFleetGroup(group); handleTabChange('fleet'); }}>
+                    {label}
+                  </button>
+                ))}
+              </>
+            )}
+            {['fleet-tickets'].filter(t => allowedTabs.includes(t)).map(t => (
               <button key={t} className={(tab === t || (t === 'fleet' && tab === 'vehicle-details')) ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
                 {TAB_LABELS[t]}
               </button>
@@ -299,7 +313,7 @@ export default function App() {
           {tab === 'warehouse' && <WarehouseHub user={user} access={access || {}} />}
           {tab === 'building-maintenance' && canViewModule('building') && <BuildingMaintenancePage user={user} access={access || {}} />}
           {tab === 'fleet' && canViewModule('fleet') && (
-            <FleetHub user={user} access={access || {}} onViewVehicle={handleViewVehicle} />
+            <FleetHub user={user} access={access || {}} onViewVehicle={handleViewVehicle} initialOwnerGroup={fleetGroup} />
           )}
           {tab === 'vehicle-details' && viewingVehicleId && <VehicleDetails vehicleId={viewingVehicleId} onBack={handleBackToVehicles} />}
           {tab === 'troubleshooter' && <Troubleshooter />}

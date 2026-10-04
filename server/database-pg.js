@@ -142,14 +142,27 @@ function formatVehicle(row) {
 
 export async function getVehicleById(id) {
   const result = await query(`
-    SELECT v.*, d.name AS relational_driver_name, d.phone AS relational_driver_phone,
-           d.id AS relational_driver_id
+    SELECT v.*,
+           d.name AS relational_driver_name, d.phone AS relational_driver_phone,
+           d.id AS relational_driver_id,
+           oh.oil_change_km AS canonical_last_oil_km,
+           oh.oil_change_date AS canonical_last_oil_change_date
     FROM vehicles v
     LEFT JOIN drivers d ON d.id = v.driver_id
+    LEFT JOIN LATERAL (
+      SELECT oil_change_km, oil_change_date
+      FROM oil_changes
+      WHERE vehicle_id = v.id
+        AND COALESCE(notes,'') NOT ILIKE '%Google Sheet%'
+      ORDER BY oil_change_date DESC NULLS LAST, id DESC
+      LIMIT 1
+    ) oh ON true
     WHERE v.id = $1 LIMIT 1
   `, [id]);
   return formatVehicle({
     ...result.rows[0],
+    last_oil_km: result.rows[0]?.canonical_last_oil_km ?? result.rows[0]?.last_oil_km,
+    last_oil_change_date: result.rows[0]?.canonical_last_oil_change_date ?? result.rows[0]?.last_oil_change_date,
     driver: result.rows[0]?.relational_driver_name ?? result.rows[0]?.driver ?? "",
     phone: result.rows[0]?.relational_driver_phone ?? result.rows[0]?.phone ?? ""
   });
@@ -217,14 +230,26 @@ export async function listVehicles() {
       FROM vehicles v
     )
     SELECT r.*, d.name AS relational_driver_name, d.phone AS relational_driver_phone,
-           d.id AS relational_driver_id
+           d.id AS relational_driver_id,
+           oh.oil_change_km AS canonical_last_oil_km,
+           oh.oil_change_date AS canonical_last_oil_change_date
     FROM ranked r
     LEFT JOIN drivers d ON d.id = r.driver_id
+    LEFT JOIN LATERAL (
+      SELECT oil_change_km, oil_change_date
+      FROM oil_changes
+      WHERE vehicle_id = r.id
+        AND COALESCE(notes,'') NOT ILIKE '%Google Sheet%'
+      ORDER BY oil_change_date DESC NULLS LAST, id DESC
+      LIMIT 1
+    ) oh ON true
     WHERE r.rn = 1
     ORDER BY r.plate_number, r.plate_code
   `);
   return result.rows.map(row => formatVehicle({
     ...row,
+    last_oil_km: row.canonical_last_oil_km ?? row.last_oil_km,
+    last_oil_change_date: row.canonical_last_oil_change_date ?? row.last_oil_change_date,
     driver: row.relational_driver_name ?? row.driver ?? "",
     phone: row.relational_driver_phone ?? row.phone ?? ""
   }));

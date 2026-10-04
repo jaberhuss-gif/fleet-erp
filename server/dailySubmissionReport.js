@@ -85,7 +85,7 @@ export async function getDailySubmissionReport(targetDate = null) {
 
   const readingsResult = await query(`
     SELECT DISTINCT ON (vehicle_id)
-      vehicle_id, reading_km, reading_date, created_at, notes, id
+      vehicle_id, reading_km, reading_date, created_at, notes, is_oil_change, id
     FROM km_records
     WHERE reading_date::date = $1::date
     ORDER BY vehicle_id, reading_km DESC, id DESC
@@ -199,6 +199,7 @@ export async function getDailySubmissionReport(targetDate = null) {
       status: submitted ? "Submitted" : "Not Submitted",
       erpTimestamp: erp?.created_at ? new Date(erp.created_at).toISOString() : null,
       googleSheetTimestamp: sheet?.date ? sheet.date.toISOString() : null,
+      erpIsOilChange: Boolean(erp?.is_oil_change),
       timestamp: sheet?.date
         ? sheet.date.toISOString()
         : (erp?.created_at ? new Date(erp.created_at).toISOString() : null)

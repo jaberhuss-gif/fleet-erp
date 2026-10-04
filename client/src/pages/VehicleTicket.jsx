@@ -42,7 +42,7 @@ export default function VehicleTicket({ user, canWork=false }) {
   }).filter(x=>x.status==='Open'),[vehicles,periodic]);
 
   const rows=useMemo(()=>{
-    const general=tickets.filter(t=>t.status==='Open').map(t=>({kind:'maintenance',id:t.id,vehicle:vehicleMap[String(t.vehicle_id)]||{plate:t.plate,driver:t.driver},description:t.description||t.title||t.category||'Maintenance request',status:t.status,date:t.opened_at,raw:t}));
+    const general=tickets.map(t=>({kind:'maintenance',id:t.id,vehicle:vehicleMap[String(t.vehicle_id)]||{plate:t.plate,driver:t.driver},description:t.description||t.title||t.category||'Maintenance request',status:t.status,date:t.opened_at,raw:t}));
     const tires=tireRequests.filter(r=>['PENDING','APPROVED','IN_PROGRESS'].includes(String(r.status||'PENDING').toUpperCase())).map(r=>({kind:'tire',id:r.id,vehicle:vehicleMap[String(r.vehicle_id)]||{plate:r.plate,driver:r.driver},description:(r.notes||'Tire service request')+(r.position?' — '+r.position:''),status:r.status,date:r.created_at,raw:r}));
     return [...general,...annualMissing].filter(r=>!search||String(r.vehicle?.plate||'').toLowerCase().includes(search.toLowerCase())||String(r.description).toLowerCase().includes(search.toLowerCase())).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
   },[tickets,tireRequests,vehicleMap,annualMissing,search]);
@@ -114,7 +114,7 @@ export default function VehicleTicket({ user, canWork=false }) {
           {canClose&&<button className="btn btn-success" style={{padding:'6px 10px'}} onClick={()=>close(r)}>Close</button>}
           <button className="btn" style={{padding:'6px 10px',background:'#25D366',color:'#fff'}} onClick={()=>whatsapp(r)}>📱 WhatsApp</button>
         </div></td>
-      </tr>):<tr><td colSpan="7" style={{textAlign:'center',padding:24}}>No open vehicle tickets found.</td></tr>}</tbody></table>
+      </tr>):<tr><td colSpan="7" style={{textAlign:'center',padding:24}}>No vehicle tickets found.</td></tr>}</tbody></table>
     </div>}
   </div>;
 }

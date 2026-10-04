@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import axios from 'axios';
+import api from '../api/client';
 
 const API = '/periodic-maintenance';
 const VEHICLES_API = '/vehicles/list';
@@ -30,13 +30,13 @@ function PeriodicMaintenance({ canWork = false }) {
   const loadData = () => {
     setLoading(true);
     const url = filterStatus ? `${API}?status=${filterStatus}` : API;
-    axios.get(url)
+    api.get(url)
       .then((res) => { setRecords(res.data.records || []); setLoading(false); })
       .catch((err) => { setError(err.message); setLoading(false); });
   };
 
   const loadVehicles = () => {
-    axios.get(VEHICLES_API)
+    api.get(VEHICLES_API)
       .then((res) => setVehicles(res.data.vehicles || []))
       .catch((err) => console.error(err));
   };
@@ -54,8 +54,8 @@ function PeriodicMaintenance({ canWork = false }) {
     };
 
     const req = editingId
-      ? axios.put(`${API}/${editingId}`, payload)
-      : axios.post(API, payload);
+      ? api.put(`${API}/${editingId}`, payload)
+      : api.post(API, payload);
 
     req
       .then(() => {
@@ -87,7 +87,7 @@ function PeriodicMaintenance({ canWork = false }) {
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this maintenance record?')) return;
     try {
-      await axios.delete(`${API}/${id}`);
+      await api.delete(`${API}/${id}`);
       loadData();
     } catch (err) {
       alert('Error: ' + (err.response?.data?.error || err.message));

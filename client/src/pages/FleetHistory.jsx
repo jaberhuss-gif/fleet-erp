@@ -17,8 +17,8 @@ export default function FleetHistory() {
 
   const vehicle=data?.vehicle;
   const maintenance=useMemo(()=>[
-    ...(data?.workOrders||[]).map(x=>({date:x.reported_date||x.created_at,type:'Work Order',ref:x.wo_no||x.id,description:x.description||x.category||'-',status:x.status,cost:x.final_cost??x.contractor_cost??x.labor_cost??0})),
-    ...(data?.periodicMaintenance||[]).map(x=>({date:x.completed_date||x.scheduled_date||x.created_at,type:x.type==='inspection'?'Annual Inspection':'6-Month Maintenance',ref:x.id,description:x.notes||x.description||'-',status:x.status,cost:x.final_cost??x.cost??0}))
+    ...(data?.history?.workOrders||[]).map(x=>({date:x.reported_date||x.created_at,type:'Work Order',ref:x.wo_no||x.id,description:x.description||x.category||'-',status:x.status,cost:x.final_cost??x.contractor_cost??x.labor_cost??0})),
+    ...(data?.history?.periodicMaintenance||[]).map(x=>({date:x.completed_date||x.scheduled_date||x.created_at,type:x.type==='inspection'?'Annual Inspection':'6-Month Maintenance',ref:x.id,description:x.notes||x.description||'-',status:x.status,cost:x.final_cost??x.cost??0}))
   ].sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))),[data]);
   const oil=useMemo(()=>(data?.oilChanges||[]).map(x=>({date:x.oil_change_date||x.created_at,km:x.oil_change_km,notes:x.notes||'-',changedBy:x.changed_by||x.user_name||'ERP'})),[data]);
   const km=useMemo(()=>(data?.readings||[]).map(x=>({date:x.reading_date||x.date||x.created_at,reading:x.current_km??x.km??x.odometer??x.reading,previous:x.previous_km??x.previous_reading,driver:x.driver||x.driver_name||'-',source:x.source||'-'})).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))),[data]);

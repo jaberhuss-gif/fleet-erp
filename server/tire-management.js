@@ -140,7 +140,7 @@ export async function getTireControl() {
     LEFT JOIN latest_6m m ON m.vehicle_id=v.id
     LEFT JOIN latest_inspection i ON i.vehicle_id=v.id
     GROUP BY v.id, v.plate, v.driver, v.location, v.current_km, v.last_oil_km,
-      v.oil_change_interval, v.last_oil_change_date, v.inspection_last_date, v.inspection_due_date,
+      v.oil_change_interval, oc.oil_change_km, oc.oil_change_date, v.inspection_last_date, v.inspection_due_date,
       s.status, s.submitted_at, i.completed_date, m.status, m.completed_date, m.notes, m.scheduled_date
     WHERE LOWER(TRIM(COALESCE(v.plate,''))) <> 'test 123'
     ORDER BY v.plate

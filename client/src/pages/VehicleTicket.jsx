@@ -41,11 +41,21 @@ export default function VehicleTicket({ user, canWork=false }) {
     return {kind:'annual',id:'annual-'+v.id,vehicle:v,description:'Annual vehicle inspection',record:r,status:r&&inspected(r)?'Closed':'Open',date:r?.completed_date||r?.scheduled_date||''};
   }).filter(x=>x.status==='Open'),[vehicles,periodic]);
 
+  const inspectionTickets=useMemo(()=>vehicles.flatMap(v=>{
+    const vr=periodic.filter(x=>String(x.vehicle_id)===String(v.id));
+    const six=latest(vr,'6_months_general');
+    const annual=latest(vr,'inspection');
+    const missing=[];
+    if(!(six&&inspected(six))) missing.push({component:'6-Month Maintenance',record:six});
+    if(!(annual&&inspected(annual))) missing.push({component:'Annual Inspection',record:annual});
+    return missing.map((m,i)=>({kind:'inspection',id:'inspection-'+v.id+'-'+i,vehicle:v,description:m.component+' required',status:'Open',date:m.record?.scheduled_date||'',record:m.record,component:m.component}));
+  }),[vehicles,periodic]);
+
   const rows=useMemo(()=>{
     const general=tickets.map(t=>({kind:'maintenance',id:t.id,vehicle:vehicleMap[String(t.vehicle_id)]||{plate:t.plate,driver:t.driver},description:t.description||t.title||t.category||'Maintenance request',status:t.status,date:t.opened_at,raw:t}));
     const tires=tireRequests.map(r=>({kind:'tire',id:r.id,vehicle:vehicleMap[String(r.vehicle_id)]||{plate:r.plate,driver:r.driver},description:(r.notes||'Tire service request')+(r.position?' — '+r.position:''),status:r.status,date:r.created_at,raw:r}));
-    return [...general,...tires,...annualMissing].filter(r=>!search||String(r.vehicle?.plate||'').toLowerCase().includes(search.toLowerCase())||String(r.description).toLowerCase().includes(search.toLowerCase())).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
-  },[tickets,tireRequests,vehicleMap,annualMissing,search]);
+    return [...general,...tires,...inspectionTickets,...annualMissing].filter(r=>!search||String(r.vehicle?.plate||'').toLowerCase().includes(search.toLowerCase())||String(r.description).toLowerCase().includes(search.toLowerCase())).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  },[tickets,tireRequests,vehicleMap,inspectionTickets,annualMissing,search]);
 
   const close=async(row)=>{
     if(!canClose)return;
@@ -53,13 +63,13 @@ export default function VehicleTicket({ user, canWork=false }) {
     try{
       if(row.kind==='maintenance') await api.put('/tickets/'+row.id+'/close',{});
       if(row.kind==='tire') await api.put('/tire/service-requests/'+row.id,{status:'COMPLETED'});
-      if(row.kind==='annual'){
+      if(row.kind==='inspection'){
         let rec=row.record;
+        const type=row.component==='6-Month Maintenance'?'6_months_general':'inspection';
         if(!rec){
-          const created=await api.post('/periodic-maintenance',{vehicleId:Number(row.vehicle.id),type:'inspection',scheduledDate:new Date().toISOString().slice(0,10),status:'Completed',completedDate:new Date().toISOString().slice(0,10),technician:user?.fullName||user?.username||'Fleet Management',notes:'Annual inspection completed and ticket closed.'});
-          rec=created.data?.record;
+          await api.post('/periodic-maintenance',{vehicleId:Number(row.vehicle.id),type,scheduledDate:new Date().toISOString().slice(0,10),status:'Completed',completedDate:new Date().toISOString().slice(0,10),technician:user?.fullName||user?.username||'Fleet Management',notes:row.component+' completed and ticket closed.'});
         }else{
-          await api.put('/periodic-maintenance/'+rec.id,{...rec,status:'Completed',completedDate:new Date().toISOString().slice(0,10),notes:rec.notes||'Annual inspection completed and ticket closed.'});
+          await api.put('/periodic-maintenance/'+rec.id,{...rec,type,status:'Completed',completedDate:new Date().toISOString().slice(0,10),notes:rec.notes||row.component+' completed and ticket closed.'});
         }
       }
       await load();
@@ -78,8 +88,8 @@ export default function VehicleTicket({ user, canWork=false }) {
         message=['Closed','COMPLETED'].includes(String(row.status||''))?msgClosed({driver,plate},row.description):msgOpen({driver,plate},row.description);
       }else if(row.kind==='tire'){
         message=['Closed','COMPLETED'].includes(String(row.status||''))?msgClosed({driver,plate},row.description):msgOpen({driver,plate},row.description);
-      }else{
-        message='Hello '+driver+',\n\nVehicle '+plate+' annual inspection is due. Please arrange the annual inspection.\n\nFleet Management';
+      }else if(row.kind==='inspection'){
+        message=msgOpen({driver,plate},row.description);
       }
       if(!phone){alert('No driver phone number found for this vehicle.');return}
       window.open('https://wa.me/'+String(phone).replace(/\D/g,'')+'?text='+encodeURIComponent(message),'_blank');
@@ -91,6 +101,12 @@ export default function VehicleTicket({ user, canWork=false }) {
     <div className="panel" style={{marginBottom:16}}>
       <h1 style={{margin:0}}>🎫 Vehicle Ticket</h1>
       <p style={{margin:'6px 0 0',color:'#64748b'}}>All driver maintenance requests, annual inspection tickets and tire replacement/service tickets — open and completed.</p>
+      <div className="sub-nav" style={{marginTop:12,marginBottom:8}}>
+        <button className="sub-btn active">1- Maintenance Issues</button>
+        <button className="sub-btn">2- Inspection Tickets</button>
+        <button className="sub-btn">3- Daily KM Missing</button>
+        <button className="sub-btn">4- Oil Change</button>
+      </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 180px auto',gap:8,marginTop:12}}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search vehicle or request"/>
         <select value={status} onChange={e=>setStatus(e.target.value)}><option value="Open">Open</option><option value="All">All</option></select>

@@ -183,6 +183,7 @@ export default function FleetHub({ user, access }) {
         {ownerSection === 'issue' && <ReportIssue canWork={fleetWork} />}
         {ownerSection === 'smart-issue' && <SmartReportIssue canWork={fleetWork} />}
         {ownerSection === 'tire' && <TireManagement user={user} driverMode={false} />}
+        {ownerSection === 'tire-service' && <TireServiceRequests driverMode={false} />}
         {ownerSection === 'tire-control' && <TireControlCenter />}
       </div>
     );
@@ -252,6 +253,10 @@ export default function FleetHub({ user, access }) {
 
       {safeSection === 'tire' && (
         <TireManagement user={user} driverMode={isDriver} />
+      )}
+
+      {safeSection === 'tire-service' && (
+        <TireServiceRequests driverMode={isDriver} />
       )}
 
       {safeSection === 'tire-control' && user?.role === 'Owner' && (

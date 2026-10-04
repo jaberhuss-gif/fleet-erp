@@ -119,25 +119,28 @@ export async function getTireControl() {
         ) ORDER BY t.position
       ) FILTER (WHERE t.id IS NOT NULL), '[]'::json) AS tires,
       pm.maintenance_due_date,
-      pm.maintenance_last_date
+      pm.maintenance_last_date,
+      pm.maintenance_notes,
+      pm.maintenance_record_status
     FROM vehicles v
     LEFT JOIN tire_surveys s ON s.vehicle_id=v.id
     LEFT JOIN tire_assets t ON t.vehicle_id=v.id AND t.active=true
     LEFT JOIN LATERAL (
       SELECT
         COALESCE(pm.scheduled_date::text, (pm.last_service_date + INTERVAL '180 days')::date::text) AS maintenance_due_date,
-        COALESCE(pm.last_service_date::text, pm.completed_date::text, pm.scheduled_date::text) AS maintenance_last_date
+        COALESCE(pm.last_service_date::text, pm.scheduled_date::text) AS maintenance_last_date,
+        pm.notes AS maintenance_notes,
+        pm.status AS maintenance_record_status
       FROM periodic_maintenance pm
       WHERE pm.vehicle_id=v.id
-        AND LOWER(COALESCE(pm.type,'')) NOT IN ('oil_change','oil change','oil')
-      ORDER BY CASE WHEN pm.status='Pending' THEN 0 ELSE 1 END,
-        COALESCE(pm.scheduled_date, pm.last_service_date) DESC NULLS LAST, pm.id DESC
+        AND LOWER(COALESCE(pm.type,'')) IN ('6_months_general','6 months general','6-months general','6-month general maintenance')
+      ORDER BY COALESCE(pm.scheduled_date, pm.last_service_date) DESC NULLS LAST, pm.id DESC
       LIMIT 1
     ) pm ON TRUE
     GROUP BY v.id, v.plate, v.plate_number, v.plate_code, v.driver, v.location,
       v.current_km, v.last_oil_km, v.last_oil_change_date, v.oil_change_interval,
       v.inspection_last_date, v.inspection_due_date, s.status, s.submitted_at,
-      pm.maintenance_due_date, pm.maintenance_last_date
+      pm.maintenance_due_date, pm.maintenance_last_date, pm.maintenance_notes, pm.maintenance_record_status
     ORDER BY plate
   `);
   const today = new Date();
@@ -159,7 +162,8 @@ export async function getTireControl() {
     const oilInterval = Number(v.oil_change_interval || 5000);
     const kmSinceOil = currentKm - lastOilKm;
     const oilStatus = (!lastOilKm || !currentKm) ? "red" : kmSinceOil >= oilInterval ? "red" : kmSinceOil >= oilInterval - 500 ? "yellow" : "green";
-    const maintenanceStatus = dateStatus(v.maintenance_due_date, 30);
+    const maintenanceInspected = Boolean(String(v.maintenance_notes || '').trim()) || String(v.maintenance_record_status || '').toLowerCase() === 'completed';
+    const maintenanceStatus = !v.maintenance_due_date ? "red" : maintenanceInspected ? "green" : "red";
     const inspectionStatus = dateStatus(v.inspection_due_date, 30);
     const maintenanceDays = v.maintenance_due_date ? Math.ceil((new Date(v.maintenance_due_date).getTime() - today.getTime()) / 86400000) : null;
     const inspectionDays = v.inspection_due_date ? Math.ceil((new Date(v.inspection_due_date).getTime() - today.getTime()) / 86400000) : null;
@@ -169,9 +173,9 @@ export async function getTireControl() {
     const oilReason = (!lastOilKm || !currentKm) ? "Current KM or last oil KM is missing" :
       kmSinceOil >= oilInterval ? `Oil overdue by ${kmSinceOil - oilInterval} km` :
       kmSinceOil >= oilInterval - 500 ? `Oil due within ${oilInterval - kmSinceOil} km` : `${oilInterval - kmSinceOil} km remaining`;
-    const maintenanceReason = !v.maintenance_due_date ? "No 6-month maintenance date recorded" :
-      maintenanceDays < 0 ? `Maintenance overdue by ${Math.abs(maintenanceDays)} days` :
-      maintenanceDays <= 30 ? `Maintenance due in ${maintenanceDays} days` : `Maintenance due in ${maintenanceDays} days`;
+    const maintenanceReason = !v.maintenance_due_date ? "No 6-month maintenance record" :
+      !maintenanceInspected ? "6-month maintenance not inspected — no notes/completion recorded" :
+      "6-month maintenance inspected";
     const inspectionReason = !v.inspection_due_date ? "No annual inspection due date recorded" :
       inspectionDays < 0 ? `Inspection overdue by ${Math.abs(inspectionDays)} days` :
       inspectionDays <= 30 ? `Inspection due in ${inspectionDays} days` : `Inspection due in ${inspectionDays} days`;
@@ -179,7 +183,9 @@ export async function getTireControl() {
     return {
       ...v, tires, tireStatus, oilStatus, oilKmRemaining: Math.max(0, oilInterval - kmSinceOil),
       tireReason, oilReason, maintenanceReason, inspectionReason,
-      maintenanceDueDate: v.maintenance_due_date, inspectionDueDate: v.inspection_due_date,
+      maintenanceDueDate: v.maintenance_due_date, maintenanceLastDate: v.maintenance_last_date,
+      maintenanceNotes: v.maintenance_notes, maintenanceRecordStatus: v.maintenance_record_status,
+      inspectionDueDate: v.inspection_due_date,
       maintenanceStatus, inspectionStatus, overallStatus: overall,
       red: tires.filter(t => t.status === "red").length,
       yellow: tires.filter(t => t.status === "yellow").length,

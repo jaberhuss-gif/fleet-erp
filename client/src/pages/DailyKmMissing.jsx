@@ -48,9 +48,9 @@ export default function DailyKmMissing({ user }) {
       <div className="panel" style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div>
-            <h1 style={{ margin: 0 }}>⚠️ سجل غير المدخلين اليوم</h1>
+            <h1 style={{ margin: 0 }}>⚠️ Daily KM — Missing</h1>
             <p style={{ margin: "6px 0 0", color: "#64748b" }}>
-              السيارة تظهر هنا فقط إذا لم تسجل اليوم لا في Google Sheet ولا في ERP.
+              Vehicles appear here only if they have not submitted today in either Google Sheet or ERP.
             </p>
           </div>
           <div style={{ display: "flex", gap: 8 }}>

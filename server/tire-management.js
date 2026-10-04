@@ -181,7 +181,7 @@ export async function getTireControl() {
     const maintenanceInspected = Boolean(String(v.maintenance_notes || '').trim()) || String(v.maintenance_record_status || '').toLowerCase() === 'completed';
     const maintenanceStatus = !v.maintenance_due_date ? "red" : maintenanceInspected ? "green" : "red";
     const inspectionDue = v.effective_inspection_due_date ||
-      (v.annual_inspection_last_date ? (new Date(v.annual_inspection_last_date).setDate(new Date(v.annual_inspection_last_date).getDate()+365), new Date(v.annual_inspection_last_date).toISOString().slice(0,10)) : null);
+      (v.annual_inspection_last_date ? new Date(new Date(v.annual_inspection_last_date).getTime() + 365 * 86400000).toISOString().slice(0,10) : null);
     const inspectionStatus = dateStatus(inspectionDue, 30);
     const maintenanceDays = v.maintenance_due_date ? Math.ceil((new Date(v.maintenance_due_date).getTime() - today.getTime()) / 86400000) : null;
     const inspectionDays = inspectionDue ? Math.ceil((new Date(inspectionDue).getTime() - today.getTime()) / 86400000) : null;

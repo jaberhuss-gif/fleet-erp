@@ -99,6 +99,7 @@ export async function getTireControl() {
         vehicle_id, status, completed_date, notes, scheduled_date
       FROM periodic_maintenance
       WHERE type = '6_months_general'
+        AND (status = 'Completed' OR COALESCE(TRIM(notes), '') <> '')
       ORDER BY vehicle_id, COALESCE(completed_date, scheduled_date) DESC NULLS LAST, id DESC
     ),
     latest_inspection AS (

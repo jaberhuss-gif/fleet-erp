@@ -239,6 +239,9 @@ export default function App() {
                   ['add', '➕ Add'],
                   ['maintenance', '🔧 Periodic Maintenance'],
                   ['periodic-inspection', '🔍 الفحص الدوري للمركبة'],
+                  ['maintenance-report', '🛠️ Maintenance Report'],
+                  ['history', '📚 History'],
+                  ['vehicle-ticket', '🎫 Vehicle Ticket'],
                   ['km', '📊 KM Tracking']
                 ].map(([group, label]) => (
                   <button key={group} className="erp-nav-btn" onClick={() => { setFleetGroup(group); handleTabChange('fleet'); }}>
@@ -247,11 +250,7 @@ export default function App() {
                 ))}
               </>
             )}
-            {['fleet-tickets'].filter(t => allowedTabs.includes(t)).map(t => (
-              <button key={t} className={(tab === t || (t === 'fleet' && tab === 'vehicle-details')) ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
-                {TAB_LABELS[t]}
-              </button>
-            ))}
+
           </div>
 
           {['operations','building-maintenance'].some(t => allowedTabs.includes(t)) && (

@@ -58,6 +58,12 @@ const FLEET_ACTIONS = [
     description: 'Initial 6-tire survey, serial numbers, photos and lock control.'
   },
   {
+    id: 'tire-service',
+    label: '🛞 Tire Service Request',
+    title: 'Tire Service Request',
+    description: 'Submit a tire shop, puncture repair or tire replacement request.'
+  },
+  {
     id: 'tire-control',
     label: '🛞 Tire Control',
     title: 'Tire Control Center',

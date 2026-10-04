@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import api from '../api/client';
 
-const API = '/periodic-maintenance';
-const VEHICLES_API = '/vehicles/list';
+const API = '/fleet/periodic-maintenance';
+const VEHICLES_API = '/fleet/vehicles';
 
 function PeriodicMaintenance({ canWork = false }) {
   const [records, setRecords] = useState([]);
@@ -31,13 +31,13 @@ function PeriodicMaintenance({ canWork = false }) {
     setLoading(true);
     const url = filterStatus ? `${API}?status=${filterStatus}` : API;
     api.get(url)
-      .then((res) => { setRecords(res.data.records || []); setLoading(false); })
+      .then((res) => { setRecords(Array.isArray(res.data) ? res.data : (res.data.records || [])); setLoading(false); })
       .catch((err) => { setError(err.message); setLoading(false); });
   };
 
   const loadVehicles = () => {
     api.get(VEHICLES_API)
-      .then((res) => setVehicles(res.data.vehicles || []))
+      .then((res) => setVehicles(Array.isArray(res.data) ? res.data : (res.data.vehicles || [])))
       .catch((err) => console.error(err));
   };
 

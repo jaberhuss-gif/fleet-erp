@@ -30,9 +30,9 @@ export default function DailyKmSubmitted() {
       <div className="panel" style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div>
-            <h1 style={{ margin: 0 }}>📋 سجل المدخلين اليوم</h1>
+            <h1 style={{ margin: 0 }}>📋 Daily KM — Submitted</h1>
             <p style={{ margin: "6px 0 0", color: "#64748b" }}>
-              أي سيارة سجلت اليوم من Google Sheet أو من ERP تظهر هنا.
+              Vehicles that submitted today from Google Sheet or ERP appear here.
             </p>
           </div>
           <button className="btn btn-primary" onClick={load}>🔄 Refresh</button>

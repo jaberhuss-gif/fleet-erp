@@ -1,0 +1,21 @@
+import { useEffect, useMemo, useState } from 'react';
+import api from '../api/client';
+import VehicleDetails from './VehicleDetails';
+
+export default function VehicleTracking() {
+  const [vehicles,setVehicles]=useState([]), [vehicleId,setVehicleId]=useState(''), [show360,setShow360]=useState(false), [history,setHistory]=useState(null), [loading,setLoading]=useState(false), [error,setError]=useState('');
+  useEffect(()=>{(async()=>{try{const r=await api.get('/vehicles/list'); const rows=r.data?.vehicles||r.data||[]; setVehicles(rows.filter(v=>String(v.plate||((v.plate_number||'')+' '+(v.plate_code||''))).trim().toLowerCase()!=='test 123'));}catch(e){setError(e.response?.data?.error||e.message)}})()},[]);
+  useEffect(()=>{if(!vehicleId){setHistory(null);return;}(async()=>{setLoading(true);setError('');try{const r=await api.get('/tire/vehicle/'+encodeURIComponent(vehicleId)+'/history');setHistory(r.data||{});}catch(e){setError(e.response?.data?.error||e.message)}finally{setLoading(false)}})()},[vehicleId]);
+  const selected=useMemo(()=>vehicles.find(v=>String(v.id)===String(vehicleId)),[vehicles,vehicleId]);
+  const plate=v=>v?.plate||((v?.plate_number||'')+' '+(v?.plate_code||'')).trim();
+  const fmt=v=>v==null||v===''?'-':Number(v).toLocaleString();
+  if(show360&&vehicleId)return <VehicleDetails vehicleId={vehicleId} onBack={()=>setShow360(false)} />;
+  const work=(history?.workOrders||[]).map(x=>({date:x.reported_date||x.created_at,type:'Work Order',ref:x.wo_no||x.id,description:x.description||x.category||'-',status:x.status,cost:x.final_cost??x.contractor_cost??x.labor_cost??0}));
+  const periodic=(history?.periodicMaintenance||[]).map(x=>({date:x.completed_date||x.scheduled_date||x.created_at,type:x.type==='inspection'?'Annual Inspection':'6-Month Maintenance',ref:x.id,description:x.notes||x.description||'-',status:x.status,cost:x.final_cost??x.cost??0}));
+  const oil=(history?.oilChanges||[]).map(x=>({date:x.oil_change_date||x.created_at,type:'Oil Change',ref:x.id,description:'Oil change at '+fmt(x.oil_change_km)+' km',status:x.changed_by||'ERP',cost:0}));
+  const tickets=(history?.tickets||[]).map(x=>({date:x.opened_at||x.created_at,type:'Vehicle Ticket',ref:x.id,description:x.title||x.description||'-',status:x.status,cost:0}));
+  const tires=(history?.tireEvents||[]).map(x=>({date:x.event_date||x.created_at,type:'Tire Event',ref:x.id,description:(x.event_type||'-')+(x.position?' — '+x.position:'')+(x.manufacturer_serial?' — '+x.manufacturer_serial:''),status:'Recorded',cost:0}));
+  const rows=[...work,...periodic,...oil,...tickets,...tires].sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  return <div><div className='panel' style={{marginBottom:16}}><h2 style={{marginTop:0}}>🚗 Vehicle Tracking & Maintenance History</h2><p style={{color:'#64748b',marginBottom:14}}>Complete vehicle history: work orders, periodic maintenance, oil, tickets and tire events.</p><div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}><select value={vehicleId} onChange={e=>setVehicleId(e.target.value)} style={{minWidth:280,padding:10}}><option value=''>Select Vehicle</option>{vehicles.map(v=><option key={v.id} value={v.id}>{plate(v)}</option>)}</select>{selected&&<button className='btn' onClick={()=>setShow360(true)}>Open Vehicle 360</button>}</div></div>
+  {error&&<div className='alert alert-error'>{error}</div>}{!vehicleId?<div className='alert alert-info'>Select a vehicle to view its complete tracking history.</div>:loading?<div className='loading'>Loading vehicle history...</div>:<div className='panel' style={{overflowX:'auto'}}><h3>{plate(selected)} — Tracking History</h3>{!rows.length?<div className='alert alert-info'>No tracking records found for this vehicle.</div>:<table><thead><tr><th>Date</th><th>Type</th><th>Reference</th><th>Description</th><th>Status</th><th>Cost</th></tr></thead><tbody>{rows.map((r,i)=><tr key={r.type+'-'+r.ref+'-'+i}><td>{String(r.date||'').slice(0,10)||'-'}</td><td>{r.type}</td><td>{r.ref||'-'}</td><td>{r.description}</td><td>{r.status||'-'}</td><td>{fmt(r.cost)}</td></tr>)}</tbody></table>}</div>}</div>;
+}

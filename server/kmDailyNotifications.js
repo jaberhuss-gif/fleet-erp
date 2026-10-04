@@ -606,7 +606,7 @@ export async function getDriverDailyKmStatus(userId) {
   }
 
   const todayResult = await query(`
-    SELECT (CURRENT_TIMESTAMP AT TIME ZONE $1::text)::date::text AS today
+    SELECT (CURRENT_TIMESTAMP AT TIME ZONE CAST($1 AS text))::date::text AS today
   `, [DAILY_KM_TZ]);
   const today = todayResult.rows[0].today;
 

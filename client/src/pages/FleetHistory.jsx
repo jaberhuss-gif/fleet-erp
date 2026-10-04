@@ -13,7 +13,7 @@ export default function FleetHistory() {
   const [error,setError]=useState('');
 
   useEffect(()=>{(async()=>{try{const r=await api.get('/vehicles');setVehicles((r.data?.vehicles||[]).filter(v=>String(v.plate||'').trim().toLowerCase()!=='test 123'));}catch(e){setError(e.response?.data?.error||e.message)}})()},[]);
-  useEffect(()=>{if(!vehicleId){setData(null);return;} (async()=>{setLoading(true);setError('');try{const r=await api.get('/vehicles/'+vehicleId+'/details');setData(r.data||{});}catch(e){setError(e.response?.data?.error||e.message)}finally{setLoading(false)}})()},[vehicleId]);
+  useEffect(()=>{if(!vehicleId){setData(null);return;} (async()=>{setLoading(true);setError('');try{const [detail,history]=await Promise.all([api.get('/vehicles/'+vehicleId+'/details'),api.get('/tire/vehicle/'+vehicleId+'/history')]);setData({...detail.data,history:history.data||{}});}catch(e){setError(e.response?.data?.error||e.message)}finally{setLoading(false)}})()},[vehicleId]);
 
   const vehicle=data?.vehicle;
   const maintenance=useMemo(()=>[

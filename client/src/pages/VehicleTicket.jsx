@@ -107,7 +107,7 @@ export default function VehicleTicket({ user, canWork=false }) {
       }else if(row.kind==='km'){
         message='Hello '+driver+',\n\nNo KM reading has been recorded today for vehicle '+plate+'. Please enter today\'s current KM.\n\nFleet Management';
       }else if(row.kind==='oil'){
-        message='Hello '+driver+',\n\nVehicle '+plate+' — '+row.description+'. Current KM: '+(row.current!=null?Number(row.current).toLocaleString()+' km.':'')+(row.last!=null?' Last Oil KM: '+Number(row.last).toLocaleString()+' km.':'')\n\nFleet Management';
+        message='Hello '+driver+',\n\nVehicle '+plate+' — '+row.description+'. Current KM: '+(row.current!=null?Number(row.current).toLocaleString()+' km.':'')+(row.last!=null?' Last Oil KM: '+Number(row.last).toLocaleString()+' km.':'')+'\n\nFleet Management';
       }
       if(!phone){alert('No driver phone number found for this vehicle.');return}
       window.open('https://wa.me/'+String(phone).replace(/\D/g,'')+'?text='+encodeURIComponent(message),'_blank');

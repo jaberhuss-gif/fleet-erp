@@ -161,9 +161,25 @@ export async function getTireControl() {
     const oilStatus = (!lastOilKm || !currentKm) ? "red" : kmSinceOil >= oilInterval ? "red" : kmSinceOil >= oilInterval - 500 ? "yellow" : "green";
     const maintenanceStatus = dateStatus(v.maintenance_due_date, 30);
     const inspectionStatus = dateStatus(v.inspection_due_date, 30);
+    const maintenanceDays = v.maintenance_due_date ? Math.ceil((new Date(v.maintenance_due_date).getTime() - today.getTime()) / 86400000) : null;
+    const inspectionDays = v.inspection_due_date ? Math.ceil((new Date(v.inspection_due_date).getTime() - today.getTime()) / 86400000) : null;
+    const tireReason = tires.length < 6 ? `Only ${tires.length}/6 active tires recorded` :
+      tires.some(t => t.status === "red") ? "One or more tires are RED" :
+      tires.some(t => t.status === "yellow") ? "One or more tires need attention" : "All 6 tires OK";
+    const oilReason = (!lastOilKm || !currentKm) ? "Current KM or last oil KM is missing" :
+      kmSinceOil >= oilInterval ? `Oil overdue by ${kmSinceOil - oilInterval} km` :
+      kmSinceOil >= oilInterval - 500 ? `Oil due within ${oilInterval - kmSinceOil} km` : `${oilInterval - kmSinceOil} km remaining`;
+    const maintenanceReason = !v.maintenance_due_date ? "No 6-month maintenance date recorded" :
+      maintenanceDays < 0 ? `Maintenance overdue by ${Math.abs(maintenanceDays)} days` :
+      maintenanceDays <= 30 ? `Maintenance due in ${maintenanceDays} days` : `Maintenance due in ${maintenanceDays} days`;
+    const inspectionReason = !v.inspection_due_date ? "No annual inspection due date recorded" :
+      inspectionDays < 0 ? `Inspection overdue by ${Math.abs(inspectionDays)} days` :
+      inspectionDays <= 30 ? `Inspection due in ${inspectionDays} days` : `Inspection due in ${inspectionDays} days`;
     const overall = [tireStatus, oilStatus, maintenanceStatus, inspectionStatus].includes("red") ? "red" : [tireStatus, oilStatus, maintenanceStatus, inspectionStatus].includes("yellow") ? "yellow" : "green";
     return {
       ...v, tires, tireStatus, oilStatus, oilKmRemaining: Math.max(0, oilInterval - kmSinceOil),
+      tireReason, oilReason, maintenanceReason, inspectionReason,
+      maintenanceDueDate: v.maintenance_due_date, inspectionDueDate: v.inspection_due_date,
       maintenanceStatus, inspectionStatus, overallStatus: overall,
       red: tires.filter(t => t.status === "red").length,
       yellow: tires.filter(t => t.status === "yellow").length,

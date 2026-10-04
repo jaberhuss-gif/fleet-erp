@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import DriverPortal from './DriverPortal';
 import Drivers from './Drivers';
 import Vehicles from './Vehicles';
@@ -73,12 +73,13 @@ const FLEET_ACTIONS = [
   }
 ];
 
-export default function FleetHub({ user, access }) {
+export default function FleetHub({ user, access, initialOwnerGroup = 'add' }) {
   const fleetView = user?.role === 'Owner' || !!access?.fleet?.can_view;
   const fleetWork = user?.role === 'Owner' || !!access?.fleet?.can_work;
 
   const [section, setSection] = useState('add-vehicle');
-  const [ownerGroup, setOwnerGroup] = useState('add');
+  const [ownerGroup, setOwnerGroup] = useState(initialOwnerGroup);
+  useEffect(() => { if (user?.role === 'Owner') setOwnerGroup(initialOwnerGroup); }, [initialOwnerGroup, user?.role]);
 
   if (!fleetView) {
     return (
@@ -146,27 +147,6 @@ export default function FleetHub({ user, access }) {
             <h1 style={{ margin: 0 }}>🚗 Fleet</h1>
             <p style={{ margin: '6px 0 0', color: '#64748b' }}>Fleet master data, vehicle maintenance, tire control and KM tracking.</p>
           </div>
-        </div>
-
-        <div className="sub-nav" style={{ marginBottom: 12 }}>
-          <button
-            className={ownerGroup === 'add' ? 'sub-btn active' : 'sub-btn'}
-            onClick={() => changeOwnerGroup('add')}
-          >
-            ➕ Add
-          </button>
-          <button
-            className={ownerGroup === 'maintenance' ? 'sub-btn active' : 'sub-btn'}
-            onClick={() => changeOwnerGroup('maintenance')}
-          >
-            🔧 Vehicle Maintenance
-          </button>
-          <button
-            className={ownerGroup === 'km' ? 'sub-btn active' : 'sub-btn'}
-            onClick={() => changeOwnerGroup('km')}
-          >
-            📊 KM Tracking
-          </button>
         </div>
 
         {ownerGroup === 'add' && (

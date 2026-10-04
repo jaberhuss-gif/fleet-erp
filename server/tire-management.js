@@ -111,8 +111,8 @@ export async function getTireControl() {
       ORDER BY vehicle_id, completed_date DESC, id DESC
     )
     SELECT v.id, v.plate, v.driver, v.location,
-      v.current_km, oc.oil_change_km AS last_oil_km, COALESCE(v.oil_change_interval,5000) AS oil_change_interval,
-      oc.oil_change_date AS last_oil_change_date, v.inspection_last_date, v.inspection_due_date,
+      COALESCE(today_km.reading_km, 0) AS current_km, v.last_oil_km, COALESCE(v.oil_change_interval,5000) AS oil_change_interval,
+      v.last_oil_change_date, today_km.reading_date AS daily_km_date, v.inspection_last_date, v.inspection_due_date,
       s.status AS survey_status, s.submitted_at,
       i.completed_date AS inspection_record_date,
       m.status AS maintenance_status, m.completed_date AS maintenance_completed_date,
@@ -128,20 +128,20 @@ export async function getTireControl() {
       ) FILTER (WHERE t.id IS NOT NULL), '[]'::json) AS tires
     FROM vehicles v
     LEFT JOIN LATERAL (
-      SELECT oil_change_km, oil_change_date
-      FROM oil_changes
+      SELECT reading_km, reading_date
+      FROM km_records
       WHERE vehicle_id=v.id
-        AND COALESCE(notes,'') NOT ILIKE '%Google Sheet%'
-      ORDER BY oil_change_date DESC NULLS LAST, id DESC
+        AND reading_date::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date
+      ORDER BY created_at DESC, id DESC
       LIMIT 1
-    ) oc ON true
+    ) today_km ON true
     LEFT JOIN tire_surveys s ON s.vehicle_id=v.id
     LEFT JOIN tire_assets t ON t.vehicle_id=v.id AND t.active=true
     LEFT JOIN latest_6m m ON m.vehicle_id=v.id
     LEFT JOIN latest_inspection i ON i.vehicle_id=v.id
     WHERE LOWER(TRIM(COALESCE(v.plate,''))) <> 'test 123'
-    GROUP BY v.id, v.plate, v.driver, v.location, v.current_km,
-      v.oil_change_interval, oc.oil_change_km, oc.oil_change_date, v.inspection_last_date, v.inspection_due_date,
+    GROUP BY v.id, v.plate, v.driver, v.location, v.last_oil_km,
+      v.oil_change_interval, v.last_oil_change_date, today_km.reading_km, today_km.reading_date, v.inspection_last_date, v.inspection_due_date,
       s.status, s.submitted_at, i.completed_date, m.status, m.completed_date, m.notes, m.scheduled_date
     ORDER BY v.plate
   `);
@@ -157,17 +157,30 @@ export async function getTireControl() {
       (tires.some(t => t.status === "red") ? "One or more tires require immediate attention" :
        tires.some(t => t.status === "yellow") ? "One or more tires are approaching limit" : "All recorded tires are within limits");
 
-    const currentKm = Number(v.current_km || 0);
+    const hasDailyKm = v.daily_km_date != null && Number(v.current_km || 0) > 0;
+    const currentKm = hasDailyKm ? Number(v.current_km) : 0;
     const lastOilKm = Number(v.last_oil_km || 0);
     const oilInterval = Number(v.oil_change_interval || 5000);
+    const drivenSinceOil = hasDailyKm && lastOilKm > 0 ? currentKm - lastOilKm : null;
+    const oilRemaining = drivenSinceOil != null ? oilInterval - drivenSinceOil : null;
+    const oilProgress = drivenSinceOil != null ? (drivenSinceOil / oilInterval) * 100 : 0;
     const oilDueKm = lastOilKm > 0 ? lastOilKm + oilInterval : null;
-    let oilStatus = "red", oilReason = "Last oil change KM is not recorded";
-    if (oilDueKm !== null && currentKm >= oilDueKm) {
-      oilStatus = "red"; oilReason = `Oil overdue by ${(currentKm-oilDueKm).toLocaleString()} km`;
-    } else if (oilDueKm !== null && currentKm >= oilDueKm - 500) {
-      oilStatus = "yellow"; oilReason = `Oil due in ${(oilDueKm-currentKm).toLocaleString()} km`;
-    } else if (oilDueKm !== null) {
-      oilStatus = "green"; oilReason = `Oil due at ${oilDueKm.toLocaleString()} km`;
+    let oilStatus = "red", oilReason = "No Daily KM submitted today";
+    if (!hasDailyKm) {
+      oilStatus = "red";
+      oilReason = "No Data";
+    } else if (lastOilKm <= 0) {
+      oilStatus = "red";
+      oilReason = "Last oil change KM is not recorded";
+    } else if (drivenSinceOil > oilInterval) {
+      oilStatus = "red";
+      oilReason = `Overdue by ${(drivenSinceOil-oilInterval).toLocaleString()} km`;
+    } else if (drivenSinceOil >= oilInterval * 0.8) {
+      oilStatus = "yellow";
+      oilReason = `Due Soon — ${Math.max(0,oilRemaining).toLocaleString()} km remaining`;
+    } else {
+      oilStatus = "green";
+      oilReason = `OK — ${Math.max(0,oilRemaining).toLocaleString()} km remaining`;
     }
 
     const maintenanceDate = v.maintenance_completed_date ? new Date(v.maintenance_completed_date) : null;
@@ -207,7 +220,7 @@ export async function getTireControl() {
       ...v,
       tires,
       tireStatus:tireWorst, tireReason,
-      oilStatus, oilReason, oilDueKm,
+      oilStatus, oilReason, oilDueKm, drivenSinceOil, oilRemaining, oilProgress, hasDailyKm,
       maintenanceStatus, maintenanceReason,
       inspectionStatus, inspectionReason,
       overallStatus,

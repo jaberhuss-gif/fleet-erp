@@ -78,32 +78,42 @@ async function swapPositions(tx, vehicleId, posA, posB) {
   const b = await activeTireAt(tx, vehicleId, posB);
   if (!a && !b) throw httpError(400, `No active tires at ${posA} or ${posB}.`);
 
-  if (a && b) {
-    const temp = `__ROTATE__${Date.now()}_${a.id}`;
+  if (a && !b) {
     await tx.query(
-      `UPDATE tire_assets SET position = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
+      [posB, a.id]
+    );
+    return { a, b: null };
+  }
+  if (b && !a) {
+    await tx.query(
+      `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
+      [posA, b.id]
+    );
+    return { a: null, b };
+  }
+
+  await tx.query("SAVEPOINT swap_positions");
+  try {
+    const temp = `__ROTATE__${a.id}_${b.id}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+    await tx.query(
+      `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
       [temp, a.id]
     );
     await tx.query(
-      `UPDATE tire_assets SET position = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
       [posA, b.id]
     );
     await tx.query(
-      `UPDATE tire_assets SET position = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
       [posB, a.id]
     );
-  } else if (a) {
-    await tx.query(
-      `UPDATE tire_assets SET position = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
-      [posB, a.id]
-    );
-  } else if (b) {
-    await tx.query(
-      `UPDATE tire_assets SET position = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
-      [posA, b.id]
-    );
+    await tx.query("RELEASE SAVEPOINT swap_positions");
+    return { a, b };
+  } catch (e) {
+    await tx.query("ROLLBACK TO SAVEPOINT swap_positions");
+    throw e;
   }
-  return { a, b };
 }
 
 async function deactivateTire(tx, tire, note = "") {
@@ -143,7 +153,9 @@ export async function ensureTireSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_tire_assets_vehicle ON tire_assets(vehicle_id);
     CREATE INDEX IF NOT EXISTS idx_tire_assets_active ON tire_assets(vehicle_id, active);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_tire_assets_serial_unique
+    CREATE SEQUENCE IF NOT EXISTS tire_id_seq START 1;
+    DROP INDEX IF EXISTS idx_tire_assets_serial_unique;
+    CREATE INDEX IF NOT EXISTS idx_tire_assets_serial
       ON tire_assets(manufacturer_serial)
       WHERE manufacturer_serial IS NOT NULL AND manufacturer_serial <> '';
 
@@ -197,6 +209,9 @@ export async function ensureTireSchema() {
       ON tire_service_requests(status, created_at DESC);
 
     ALTER TABLE tire_surveys ADD COLUMN IF NOT EXISTS reopen_reason TEXT;
+    ALTER TABLE tire_surveys ADD COLUMN IF NOT EXISTS approved_by BIGINT;
+    ALTER TABLE tire_surveys ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+    ALTER TABLE tire_surveys ADD COLUMN IF NOT EXISTS locked BOOLEAN DEFAULT FALSE;
     ALTER TABLE tire_assets ADD COLUMN IF NOT EXISTS installed_km BIGINT;
     ALTER TABLE tire_assets ADD COLUMN IF NOT EXISTS dot TEXT;
     ALTER TABLE tire_events ADD COLUMN IF NOT EXISTS outcome TEXT;
@@ -301,6 +316,12 @@ export async function getTireControl() {
     } else if (v.survey_status === "OPEN") {
       tireWorst = "yellow";
       tireReason = "Survey reopened — awaiting resubmission";
+    } else if (v.survey_status === "SUBMITTED") {
+      tireWorst = "yellow";
+      tireReason = "Survey submitted — awaiting management approval";
+    } else if (v.survey_status !== "APPROVED" && v.survey_status !== "LOCKED") {
+      tireWorst = "red";
+      tireReason = "Invalid tire survey status";
     } else if (activeCount < EXPECTED_TIRE_COUNT) {
       tireWorst = "red";
       tireReason = `Only ${activeCount}/${EXPECTED_TIRE_COUNT} tires on vehicle`;
@@ -508,9 +529,11 @@ export async function submitInitialSurvey(vehicleId, body, user) {
         throw httpError(400, "Invalid tire position: " + position);
       }
 
-      const tireId =
-        clean(tire.tireId) ||
-        ("T-" + vehicleId + "-" + Date.now() + "-" + position.replace(/\s+/g, "-"));
+      let tireId = clean(tire.tireId);
+      if (!tireId) {
+        const seq = await tx.query(`SELECT nextval('tire_id_seq') AS n`);
+        tireId = "T-" + String(seq.rows[0].n).padStart(6, "0");
+      }
 
       const inserted = await tx.query(
         `INSERT INTO tire_assets
@@ -533,12 +556,7 @@ export async function submitInitialSurvey(vehicleId, body, user) {
           clean(tire.notes) || null,
           Number.isFinite(Number(tire.installedKm)) ? Number(tire.installedKm) : null
         ]
-      ).catch(e => {
-        if (e.code === "23505") {
-          throw httpError(409, "Duplicate manufacturer serial number: " + clean(tire.manufacturerSerial));
-        }
-        throw e;
-      });
+      );
 
       await tx.query(
         `INSERT INTO tire_events
@@ -558,12 +576,12 @@ export async function submitInitialSurvey(vehicleId, body, user) {
 
     const saved = await tx.query(
       `INSERT INTO tire_surveys
-       (vehicle_id,status,photos,notes,submitted_by,submitted_at,updated_at)
-       VALUES ($1,'LOCKED',$2,$3,$4,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+       (vehicle_id,status,photos,notes,submitted_by,submitted_at,locked,updated_at)
+       VALUES ($1,'SUBMITTED',$2,$3,$4,CURRENT_TIMESTAMP,TRUE,CURRENT_TIMESTAMP)
        ON CONFLICT(vehicle_id) DO UPDATE SET
-         status='LOCKED', photos=EXCLUDED.photos, notes=EXCLUDED.notes,
+         status='SUBMITTED', photos=EXCLUDED.photos, notes=EXCLUDED.notes,
          submitted_by=EXCLUDED.submitted_by, submitted_at=CURRENT_TIMESTAMP,
-         updated_at=CURRENT_TIMESTAMP
+         locked=TRUE, updated_at=CURRENT_TIMESTAMP
        RETURNING *`,
       [vehicleId, photosJson, clean(body.notes) || null, user?.id || null]
     );
@@ -571,7 +589,7 @@ export async function submitInitialSurvey(vehicleId, body, user) {
     return saved.rows[0];
   });
 
-  await audit(user, "TIRE_INITIAL_SURVEY_LOCKED", "vehicle", vehicleId, { surveyId: result.id });
+  await audit(user, "TIRE_INITIAL_SURVEY_SUBMITTED", "vehicle", vehicleId, { surveyId: result.id });
   return await getVehicleTires(vehicleId);
 }
 
@@ -581,7 +599,7 @@ export async function reopenInitialSurvey(vehicleId, user, reason) {
   const result = await query(
     `UPDATE tire_surveys
      SET status='OPEN', reopened_by=$2, reopened_at=CURRENT_TIMESTAMP,
-         reopen_reason=$3, updated_at=CURRENT_TIMESTAMP
+         reopen_reason=$3, locked=FALSE, updated_at=CURRENT_TIMESTAMP
      WHERE vehicle_id=$1 RETURNING *`,
     [vehicleId, user?.id || null, clean(reason)]
   );
@@ -590,6 +608,20 @@ export async function reopenInitialSurvey(vehicleId, user, reason) {
   await audit(user, "TIRE_INITIAL_SURVEY_REOPENED", "vehicle", vehicleId, {
     reason: clean(reason)
   });
+  return result.rows[0];
+}
+
+export async function approveInitialSurvey(vehicleId, user) {
+  const result = await query(
+    `UPDATE tire_surveys
+     SET status='APPROVED', approved_by=$2, approved_at=CURRENT_TIMESTAMP,
+         locked=TRUE, updated_at=CURRENT_TIMESTAMP
+     WHERE vehicle_id=$1 AND status='SUBMITTED'
+     RETURNING *`,
+    [vehicleId, user?.id || null]
+  );
+  if (!result.rows[0]) throw httpError(404, "No submitted tire survey to approve.");
+  await audit(user, "TIRE_SURVEY_APPROVED", "vehicle", vehicleId, { surveyId: result.rows[0].id });
   return result.rows[0];
 }
 
@@ -632,12 +664,7 @@ export async function updateTireAsset(vehicleId, tireId, body, user) {
        updated_at = CURRENT_TIMESTAMP
      WHERE id = $10 RETURNING *`,
     values
-  ).catch(e => {
-    if (e.code === "23505") {
-      throw httpError(409, "This manufacturer serial is already registered on another tire.");
-    }
-    throw e;
-  });
+  );
 
   await audit(user, "TIRE_ASSET_UPDATED", "tire_asset", tireId, {
     vehicleId,
@@ -702,6 +729,44 @@ export async function updateVehicleTiresAfterApproval(vehicleId, tires, user) {
   });
 
   return result;
+}
+
+export async function changeTirePosition(vehicleId, tireId, newPosition, user, notes = "") {
+  if (!POSITIONS.includes(newPosition)) throw httpError(400, "Invalid position.");
+
+  const result = await transaction(async tx => {
+    const current = await tx.query(
+      `SELECT * FROM tire_assets
+       WHERE id=$1 AND vehicle_id=$2 AND active=true
+       FOR UPDATE`,
+      [tireId, vehicleId]
+    );
+    if (!current.rows[0]) throw httpError(404, "Active tire not found.");
+    const tire = current.rows[0];
+    if (tire.position === newPosition) return { tire: tire, oldPosition: tire.position };
+
+    const occupied = await activeTireAt(tx, vehicleId, newPosition, tireId);
+    if (occupied) throw httpError(409, `Position ${newPosition} is already occupied by tire ${occupied.tire_id}.`);
+
+    const updated = await tx.query(
+      `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP
+       WHERE id=$2 RETURNING *`,
+      [newPosition, tireId]
+    );
+
+    await tx.query(
+      `INSERT INTO tire_events
+       (vehicle_id,tire_asset_id,event_type,position,old_tire_id,new_tire_id,notes,created_by)
+       VALUES ($1,$2,'POSITION_CHANGE',$3,$4,$5,$6,$7)`,
+      [vehicleId, tireId, `${tire.position} → ${newPosition}`, tire.tire_id, tire.tire_id, clean(notes) || null, user?.id || null]
+    );
+    return { tire: updated.rows[0], oldPosition: tire.position };
+  });
+
+  await audit(user, "TIRE_POSITION_CHANGED", "tire_asset", tireId, {
+    vehicleId, oldPosition: result.oldPosition, newPosition: result.tire.position
+  });
+  return result.tire;
 }
 
 export async function createTireServiceRequest(vehicleId, body, userId) {
@@ -895,7 +960,11 @@ export async function createTireEvent(vehicleId, body, user) {
         throw httpError(400, "Provide the new tire manufacturer serial or tire ID.");
       }
 
-      const newTireId = clean(body.newTireId) || ("T-" + vehicleId + "-" + Date.now());
+      let newTireId = clean(body.newTireId);
+      if (!newTireId) {
+        const seq = await tx.query(`SELECT nextval('tire_id_seq') AS n`);
+        newTireId = "T-" + String(seq.rows[0].n).padStart(6, "0");
+      }
 
       const insert = await tx.query(
         `INSERT INTO tire_assets
@@ -917,12 +986,7 @@ export async function createTireEvent(vehicleId, body, user) {
           clean(body.notes) || null,
           Number.isFinite(Number(body.installedKm)) ? Number(body.installedKm) : null
         ]
-      ).catch(e => {
-        if (e.code === "23505") {
-          throw httpError(409, "This manufacturer serial is already registered.");
-        }
-        throw e;
-      });
+      );
 
       newAsset = insert.rows[0];
     }
@@ -1028,6 +1092,31 @@ export async function mountTireRoutes(app) {
     }
   });
 
+  app.post("/api/tire/vehicle/:vehicleId/approve-survey", async (req, res) => {
+    if (!["Owner", "FleetSupervisor"].includes(req.user?.role)) {
+      return res.status(403).json({ success: false, error: "Owner or Fleet Supervisor only" });
+    }
+    try {
+      res.json({ success: true, survey: await approveInitialSurvey(req.params.vehicleId, req.user) });
+    } catch (e) {
+      res.status(e.statusCode || 400).json({ success: false, error: e.message });
+    }
+  });
+
+  app.put("/api/tire/vehicle/:vehicleId/tire/:tireId/position", async (req, res) => {
+    if (!["Owner", "FleetSupervisor"].includes(req.user?.role)) {
+      return res.status(403).json({ success: false, error: "Owner or Fleet Supervisor only" });
+    }
+    try {
+      const tire = await changeTirePosition(
+        req.params.vehicleId, req.params.tireId, clean(req.body?.position), req.user, req.body?.notes
+      );
+      res.json({ success: true, tire });
+    } catch (e) {
+      res.status(e.statusCode || 400).json({ success: false, error: e.message });
+    }
+  });
+
   app.put("/api/tire/vehicle/:vehicleId/tires/:tireId", async (req, res) => {
     if (!["Owner", "FleetSupervisor"].includes(req.user?.role)) {
       return res.status(403).json({
@@ -1098,39 +1187,3 @@ export async function mountTireRoutes(app) {
         )
       });
     } catch (e) {
-      res.status(e.statusCode || 400).json({ success: false, error: e.message });
-    }
-  });
-
-  app.post("/api/tire/vehicle/:vehicleId/service-request", async (req, res) => {
-    try {
-      await assertDriverCanAccessVehicle(req, req.params.vehicleId);
-      res.json({
-        success: true,
-        request: await createTireServiceRequest(
-          req.params.vehicleId,
-          req.body,
-          req.user?.id
-        )
-      });
-    } catch (e) {
-      res.status(e.statusCode || 400).json({ success: false, error: e.message });
-    }
-  });
-
-  app.post("/api/tire/vehicle/:vehicleId/event", async (req, res) => {
-    try {
-      await assertDriverCanAccessVehicle(req, req.params.vehicleId);
-      res.json({
-        success: true,
-        event: await createTireEvent(
-          req.params.vehicleId,
-          req.body,
-          req.user
-        )
-      });
-    } catch (e) {
-      res.status(e.statusCode || 400).json({ success: false, error: e.message });
-    }
-  });
-}

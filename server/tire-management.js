@@ -220,19 +220,21 @@ export async function getTireControl() {
 
 
 export async function getVehicleTrackingHistory(vehicleId) {
-  const [workOrders, periodic, oilChanges, tickets, tireEvents] = await Promise.all([
+  const [workOrders, periodic, oilChanges, tickets, tireEvents, tireServiceRequests] = await Promise.all([
     query(`SELECT * FROM work_orders WHERE vehicle_id=$1 ORDER BY reported_date DESC NULLS LAST, id DESC LIMIT 500`, [vehicleId]),
     query(`SELECT * FROM periodic_maintenance WHERE vehicle_id=$1 ORDER BY COALESCE(completed_date, scheduled_date) DESC NULLS LAST, id DESC LIMIT 500`, [vehicleId]),
     query(`SELECT * FROM oil_changes WHERE vehicle_id=$1 ORDER BY oil_change_date DESC NULLS LAST, id DESC LIMIT 500`, [vehicleId]),
     query(`SELECT * FROM tickets WHERE vehicle_id=$1 ORDER BY opened_at DESC NULLS LAST, id DESC LIMIT 500`, [vehicleId]),
-    query(`SELECT e.*, t.tire_id FROM tire_events e LEFT JOIN tire_assets t ON t.id=e.tire_asset_id WHERE e.vehicle_id=$1 ORDER BY e.event_date DESC, e.id DESC LIMIT 500`, [vehicleId])
+    query(`SELECT e.*, t.tire_id FROM tire_events e LEFT JOIN tire_assets t ON t.id=e.tire_asset_id WHERE e.vehicle_id=$1 ORDER BY e.event_date DESC, e.id DESC LIMIT 500`, [vehicleId]),
+    query(`SELECT * FROM tire_service_requests WHERE vehicle_id=$1 ORDER BY created_at DESC, id DESC LIMIT 500`, [vehicleId])
   ]);
   return {
     workOrders: workOrders.rows,
     periodicMaintenance: periodic.rows,
     oilChanges: oilChanges.rows,
     tickets: tickets.rows,
-    tireEvents: tireEvents.rows
+    tireEvents: tireEvents.rows,
+    tireServiceRequests: tireServiceRequests.rows
   };
 }
 

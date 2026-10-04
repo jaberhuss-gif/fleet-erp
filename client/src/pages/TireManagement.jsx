@@ -219,7 +219,7 @@ export default function TireManagement({ user, driverMode=false }) {
 export function TireControlCenter() {
   const [rows,setRows]=useState([]);
   const [error,setError]=useState('');
-  const load=async()=>{try{const r=await api.get('/tire/control');setRows(r.data.vehicles||[]);}catch(e){setError(e.response?.data?.error||e.message);}};
+  const load=async()=>{try{const r=await api.get('/tire/control');setRows((r.data.vehicles||[]).filter(v => !/^test\b/i.test(String(v.plate || v.plate_number || '').trim())));}catch(e){setError(e.response?.data?.error||e.message);}};
   useEffect(()=>{load();},[]);
   const sortedRows=useMemo(() => [...rows].sort((a,b) => {
     const rank = {red:0, yellow:1, green:2};
@@ -227,9 +227,9 @@ export function TireControlCenter() {
       || String(a.plate || '').localeCompare(String(b.plate || ''));
   }), [rows]);
   const totals=useMemo(()=>rows.reduce((a,r)=>({
-    red:a.red+(r.overallStatus==='red'?1:0),
-    yellow:a.yellow+(r.overallStatus==='yellow'?1:0),
-    green:a.green+(r.overallStatus==='green'?1:0)
+    red:a.red+(String(r.overallStatus||'').toLowerCase()==='red'?1:0),
+    yellow:a.yellow+(String(r.overallStatus||'').toLowerCase()==='yellow'?1:0),
+    green:a.green+(String(r.overallStatus||'').toLowerCase()==='green'?1:0)
   }),{red:0,yellow:0,green:0}),[rows]);
   const worst=(r)=>r.overallStatus||'green';
   const Compliance=({label,status,reason})=><div style={{padding:'10px',borderRadius:9,background:status==='red'?'#fee2e2':status==='yellow'?'#fef3c7':'#dcfce7'}}>

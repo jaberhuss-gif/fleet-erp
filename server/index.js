@@ -16,7 +16,21 @@ app.use(express.json());
 // ??? ???????? ????????? ????? ????? ??? 5000 ??
 app.get("/api/gm/dashboard", async (req, res) => {
   try {
-    const { rows: vehicles } = await pool.query("SELECT * FROM vehicles ORDER BY id ASC");
+    const { rows: vehicles } = await pool.query(`
+      SELECT v.*,
+             COALESCE(oh.oil_change_km, v.last_oil_km) AS last_oil_km,
+             COALESCE(oh.oil_change_date, v.last_oil_change_date) AS last_oil_change_date
+      FROM vehicles v
+      LEFT JOIN LATERAL (
+        SELECT oil_change_km, oil_change_date
+        FROM oil_changes
+        WHERE vehicle_id = v.id
+          AND COALESCE(notes,'') NOT ILIKE '%Google Sheet%'
+        ORDER BY oil_change_date DESC NULLS LAST, id DESC
+        LIMIT 1
+      ) oh ON true
+      ORDER BY v.id ASC
+    `);
 
     let urgentCount = 0;
     let warningCount = 0;

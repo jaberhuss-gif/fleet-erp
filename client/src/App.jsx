@@ -19,8 +19,6 @@ import BuildingMaintenancePage from './pages/BuildingMaintenance';
 import WarehouseHub from './pages/WarehouseHub';
 import api from './api/client';
 import DailyKmGate from './components/DailyKmGate';
-import DailyKmSubmitted from './pages/DailyKmSubmitted';
-import DailyKmMissing from './pages/DailyKmMissing';
 
 const OWNER_ONLY_TABS = new Set(['drivers', 'users', 'audit', 'backup']);
 
@@ -36,8 +34,6 @@ const TAB_MODULES = {
   tickets: ['tickets'],
   reports: ['reports'],
   'advanced-reports': ['advanced_reports'],
-  'daily-submitted': ['fleet'],
-  'daily-missing': ['fleet']
 };
 
 const TAB_LABELS = {
@@ -47,8 +43,6 @@ const TAB_LABELS = {
   reports: 'Reports',
   'fleet-tickets': '🚗 Vehicle Tickets',
   'advanced-reports': '📊 Advanced Reports',
-  'daily-submitted': '📋 Daily KM — Submitted',
-  'daily-missing': '⚠️ Daily KM — Missing',
   'support-service': '🛠️ Support & Service',
   operations: '🏢 Operations',
   warehouse: '📦 Warehouse',
@@ -137,12 +131,8 @@ export default function App() {
   };
 
   const allowedTabs = useMemo(() => {
-    const allTabs = ['gm', 'support-service', 'operations', 'warehouse', 'building-maintenance', 'fleet', 'daily-submitted', 'daily-missing', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
-    const isDriver = user?.role === 'Driver';
-    const tabs = isDriver
-      ? allTabs.filter(t => !['daily-submitted', 'daily-missing'].includes(t))
-      : allTabs;
-    const visible = tabs.filter(canViewTab);
+    const allTabs = ['gm', 'support-service', 'operations', 'warehouse', 'building-maintenance', 'fleet', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
+    const visible = allTabs.filter(canViewTab);
     if (user?.role === 'Owner') {
       return [...visible, 'drivers', 'users', 'audit', 'backup'];
     }
@@ -242,7 +232,7 @@ export default function App() {
 
           <div className="erp-nav-group">
             <div className="erp-nav-heading">Fleet</div>
-            {['fleet','daily-submitted','daily-missing','fleet-tickets'].filter(t => allowedTabs.includes(t)).map(t => (
+            {['fleet','fleet-tickets'].filter(t => allowedTabs.includes(t)).map(t => (
               <button key={t} className={(tab === t || (t === 'fleet' && tab === 'vehicle-details')) ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
                 {TAB_LABELS[t]}
               </button>
@@ -316,8 +306,6 @@ export default function App() {
           {tab === 'fleet-tickets' && <FleetTicketViewer user={user} />}
           {tab === 'tickets' && canViewModule('tickets') && <Tickets user={user} access={access || {}} />}
           {tab === 'advanced-reports' && <AdvancedReports />}
-          {tab === 'daily-submitted' && <DailyKmSubmitted />}
-          {tab === 'daily-missing' && <DailyKmMissing user={user} />}
           {tab === 'reports' && <Reports />}
           {tab === 'drivers' && user.role === 'Owner' && <Drivers />}
           {tab === 'users' && user.role === 'Owner' && <Users />}

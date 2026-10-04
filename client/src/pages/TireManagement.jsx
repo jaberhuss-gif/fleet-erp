@@ -315,7 +315,7 @@ export function TireControlCenter() {
   return <div className="hub-page">
     <div className="panel">
       <h1 style={{margin:0}}>🛞 Vehicle Compliance Control Center</h1>
-      <p style={{color:'#64748b',marginBottom:12}}>كل مركبة بكرت واحد: الإطارات + الزيت + الصيانة كل 6 أشهر + الفحص الدوري السنوي.</p>
+      <p style={{color:'#64748b',marginBottom:12}}>One card per vehicle: Tires + Oil + 6-Month Maintenance + Annual Inspection.</p>
       {error&&<div className="alert alert-error">{error}</div>}
       <div style={{display:'flex',gap:12,flexWrap:'wrap',fontWeight:700}}>
         <span><Badge status="red"/> {totals.red}</span><span><Badge status="yellow"/> {totals.yellow}</span><span><Badge status="green"/> {totals.green}</span><span style={{padding:'4px 9px',borderRadius:999,background:'#f1f5f9'}}>TOTAL {rows.length}</span>

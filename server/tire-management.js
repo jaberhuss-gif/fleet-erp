@@ -78,7 +78,6 @@ async function swapPositions(tx, vehicleId, posA, posB) {
   const b = await activeTireAt(tx, vehicleId, posB);
   if (!a && !b) throw httpError(400, `No active tires at ${posA} or ${posB}.`);
 
-  // Use a temporary position to avoid the unique-position collision during rotation.
   if (a && b) {
     const temp = `__ROTATE__${Date.now()}_${a.id}`;
     await tx.query(
@@ -130,6 +129,7 @@ export async function ensureTireSchema() {
       brand TEXT,
       model TEXT,
       size TEXT,
+      dot TEXT,
       tread_depth_mm NUMERIC(6,2),
       pressure_psi NUMERIC(6,2),
       condition_status TEXT NOT NULL DEFAULT 'green',
@@ -198,6 +198,7 @@ export async function ensureTireSchema() {
 
     ALTER TABLE tire_surveys ADD COLUMN IF NOT EXISTS reopen_reason TEXT;
     ALTER TABLE tire_assets ADD COLUMN IF NOT EXISTS installed_km BIGINT;
+    ALTER TABLE tire_assets ADD COLUMN IF NOT EXISTS dot TEXT;
     ALTER TABLE tire_events ADD COLUMN IF NOT EXISTS outcome TEXT;
   `);
 }
@@ -241,7 +242,7 @@ export async function getTireControl() {
         json_build_object(
           'id', t.id, 'tireId', t.tire_id, 'position', t.position,
           'serial', t.manufacturer_serial, 'brand', t.brand, 'model', t.model,
-          'size', t.size, 'treadDepthMm', t.tread_depth_mm,
+          'size', t.size, 'dot', t.dot, 'treadDepthMm', t.tread_depth_mm,
           'pressurePsi', t.pressure_psi, 'status', t.condition_status,
           'notes', t.condition_notes, 'active', t.active
         ) ORDER BY t.position
@@ -514,8 +515,8 @@ export async function submitInitialSurvey(vehicleId, body, user) {
       const inserted = await tx.query(
         `INSERT INTO tire_assets
          (vehicle_id, position, tire_id, manufacturer_serial, brand, model, size,
-          tread_depth_mm, pressure_psi, condition_status, condition_notes, installed_km)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+          dot, tread_depth_mm, pressure_psi, condition_status, condition_notes, installed_km)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          RETURNING id`,
         [
           vehicleId,
@@ -525,6 +526,7 @@ export async function submitInitialSurvey(vehicleId, body, user) {
           clean(tire.brand) || null,
           clean(tire.model) || null,
           clean(tire.size) || null,
+          clean(tire.dot) || null,
           Number.isFinite(Number(tire.treadDepthMm)) ? Number(tire.treadDepthMm) : null,
           Number.isFinite(Number(tire.pressurePsi)) ? Number(tire.pressurePsi) : null,
           statusFor(tire),
@@ -642,6 +644,64 @@ export async function updateTireAsset(vehicleId, tireId, body, user) {
     changes: body
   });
   return result.rows[0];
+}
+
+export async function updateVehicleTiresAfterApproval(vehicleId, tires, user) {
+  const list = Array.isArray(tires) ? tires : [];
+
+  const result = await transaction(async tx => {
+    const vehicle = await tx.query(
+      `SELECT id FROM vehicles WHERE id=$1 LIMIT 1 FOR UPDATE`,
+      [vehicleId]
+    );
+    if (!vehicle.rows[0]) throw httpError(404, "Vehicle not found.");
+
+    const saved = [];
+    for (const tire of list) {
+      if (!tire?.id) throw httpError(400, "Each tire must include its tire asset ID.");
+
+      const values = [
+        tire.manufacturer_serial || null,
+        tire.brand || null,
+        tire.size || null,
+        tire.dot || null,
+        tire.condition || tire.condition_status || null,
+        Number.isFinite(Number(tire.installed_km)) ? Number(tire.installed_km) : null,
+        tire.installed_date || null,
+        tire.id,
+        vehicleId
+      ];
+
+      const updated = await tx.query(
+        `UPDATE tire_assets
+         SET manufacturer_serial=$1,
+             brand=$2,
+             size=$3,
+             dot=$4,
+             condition_status=COALESCE(NULLIF($5,''), condition_status),
+             installed_km=$6,
+             installed_at=COALESCE($7::timestamptz, installed_at),
+             updated_at=CURRENT_TIMESTAMP
+         WHERE id=$8 AND vehicle_id=$9
+         RETURNING *`,
+        values
+      );
+
+      if (!updated.rows[0]) {
+        throw httpError(404, `Tire ${tire.id} not found for vehicle ${vehicleId}.`);
+      }
+      saved.push(updated.rows[0]);
+    }
+
+    return saved;
+  });
+
+  await audit(user, "TIRES_UPDATED", "vehicle", vehicleId, {
+    tireCount: result.length,
+    tireIds: result.map(t => t.id)
+  });
+
+  return result;
 }
 
 export async function createTireServiceRequest(vehicleId, body, userId) {
@@ -778,8 +838,6 @@ export async function createTireEvent(vehicleId, body, user) {
 
         if (!spare) throw httpError(400, "No spare tire available on this vehicle.");
 
-        // Put spare in the failed tire's position, then retire the failed tire.
-        // The spare position is intentionally left available.
         await tx.query(
           `UPDATE tire_assets SET position=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
           [oldAsset.position, spare.id]
@@ -788,8 +846,6 @@ export async function createTireEvent(vehicleId, body, user) {
         newAsset = spare;
         eventPosition = `${sparePosName} → ${oldAsset.position}`;
       }
-      // same_position / repaired: event only.
-      // replaced_with_new: continue through replacement below.
     }
 
     if (type === "SPARE") {
@@ -989,6 +1045,26 @@ export async function mountTireRoutes(app) {
           req.user
         )
       });
+    } catch (e) {
+      res.status(e.statusCode || 400).json({ success: false, error: e.message });
+    }
+  });
+
+  app.put("/api/tire/admin/tires/vehicle/:vehicleId/tires", async (req, res) => {
+    if (!["Owner", "FleetSupervisor"].includes(req.user?.role)) {
+      return res.status(403).json({
+        success: false,
+        error: "Owner or Fleet Supervisor only"
+      });
+    }
+
+    try {
+      const tires = await updateVehicleTiresAfterApproval(
+        req.params.vehicleId,
+        req.body?.tires,
+        req.user
+      );
+      res.json({ ok: true, success: true, tires });
     } catch (e) {
       res.status(e.statusCode || 400).json({ success: false, error: e.message });
     }

@@ -24,7 +24,7 @@ export default function VehicleTicket({ user, canWork=false }) {
   const load=async()=>{
     setLoading(true);setError('');
     try{
-      const [t,tr,v,p]=await Promise.all([
+      const [t,tr,v,p,d]=await Promise.all([
         api.get('/tickets?fleetType=maintenance'),
         api.get('/tire/service-requests'),
         api.get('/vehicles'),
@@ -51,11 +51,23 @@ export default function VehicleTicket({ user, canWork=false }) {
     return missing.map((m,i)=>({kind:'inspection',id:'inspection-'+v.id+'-'+i,vehicle:v,description:m.component+' required',status:'Open',date:m.record?.scheduled_date||'',record:m.record,component:m.component}));
   }),[vehicles,periodic]);
 
-  const rows=useMemo(()=>{
+  const ticketRows=useMemo(()=>{
     const general=tickets.map(t=>({kind:'maintenance',id:t.id,vehicle:vehicleMap[String(t.vehicle_id)]||{plate:t.plate,driver:t.driver},description:t.description||t.title||t.category||'Maintenance request',status:t.status,date:t.opened_at,raw:t}));
     const tires=tireRequests.map(r=>({kind:'tire',id:r.id,vehicle:vehicleMap[String(r.vehicle_id)]||{plate:r.plate,driver:r.driver},description:(r.notes||'Tire service request')+(r.position?' — '+r.position:''),status:r.status,date:r.created_at,raw:r}));
-    return [...general,...tires,...inspectionTickets,...annualMissing].filter(r=>!search||String(r.vehicle?.plate||'').toLowerCase().includes(search.toLowerCase())||String(r.description).toLowerCase().includes(search.toLowerCase())).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
-  },[tickets,tireRequests,vehicleMap,inspectionTickets,annualMissing,search]);
+    return [...general,...tires,...inspectionTickets].filter(r=>!search||String(r.vehicle?.plate||'').toLowerCase().includes(search.toLowerCase())||String(r.description).toLowerCase().includes(search.toLowerCase())).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  },[tickets,tireRequests,vehicleMap,inspectionTickets,search]);
+
+  const kmMissingRows=useMemo(()=>((dailyReport?.missing)||[]).map(r=>({kind:'km',id:'km-'+r.vehicleId,vehicle:{plate:r.vehicle,driver:r.driver,phone:r.phone},description:'Daily KM missing — no reading submitted today',status:'Open',date:dailyReport?.reportDate||'',raw:r})),[dailyReport]);
+
+  const oilRows=useMemo(()=>vehicles.map(v=>{
+    const daily=(dailyReport?.records||[]).find(r=>String(r.vehicleId)===String(v.id));
+    const changed=Boolean(daily?.erpIsOilChange) || String(v.last_oil_change_date||'').slice(0,10)===String(dailyReport?.reportDate||'');
+    const current=Number(daily?.km ?? v.currentKm ?? 0);
+    const last=Number(v.lastOilKm||0);
+    return {kind:'oil',id:'oil-'+v.id,vehicle:v,description:changed?'Oil change recorded today':'Oil change not recorded today',status:changed?'Changed':'Not Changed',date:dailyReport?.reportDate||'',current,last,raw:daily};
+  }),[vehicles,dailyReport]);
+
+  const rows=activeTab==='inspection'?inspectionTickets:activeTab==='km'?kmMissingRows:activeTab==='oil'?oilRows:ticketRows;
 
   const close=async(row)=>{
     if(!canClose)return;
@@ -102,10 +114,10 @@ export default function VehicleTicket({ user, canWork=false }) {
       <h1 style={{margin:0}}>🎫 Vehicle Ticket</h1>
       <p style={{margin:'6px 0 0',color:'#64748b'}}>All driver maintenance requests, annual inspection tickets and tire replacement/service tickets — open and completed.</p>
       <div className="sub-nav" style={{marginTop:12,marginBottom:8}}>
-        <button className="sub-btn active">1- Maintenance Issues</button>
-        <button className="sub-btn">2- Inspection Tickets</button>
-        <button className="sub-btn">3- Daily KM Missing</button>
-        <button className="sub-btn">4- Oil Change</button>
+        <button className={activeTab==='maintenance'?'sub-btn active':'sub-btn'} onClick={()=>setActiveTab('maintenance')}>1- Maintenance Issues ({ticketRows.length})</button>
+        <button className={activeTab==='inspection'?'sub-btn active':'sub-btn'} onClick={()=>setActiveTab('inspection')}>2- Inspection Tickets ({inspectionTickets.length})</button>
+        <button className={activeTab==='km'?'sub-btn active':'sub-btn'} onClick={()=>setActiveTab('km')}>3- Daily KM Missing ({kmMissingRows.length})</button>
+        <button className={activeTab==='oil'?'sub-btn active':'sub-btn'} onClick={()=>setActiveTab('oil')}>4- Oil Change ({oilRows.length})</button>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 180px auto',gap:8,marginTop:12}}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search vehicle or request"/>
@@ -115,15 +127,15 @@ export default function VehicleTicket({ user, canWork=false }) {
     </div>
     {error&&<div className="alert alert-error">{error}</div>}
     {loading?<div className="loading">Loading vehicle tickets...</div>:<div className="panel" style={{overflowX:'auto'}}>
-      <table><thead><tr><th>Type</th><th>Vehicle</th><th>Driver</th><th>Request</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
-      <tbody>{rows.filter(r=>status==='All'||['Open','PENDING','APPROVED','IN_PROGRESS'].includes(String(r.status||''))).length?rows.filter(r=>status==='All'||['Open','PENDING','APPROVED','IN_PROGRESS'].includes(String(r.status||''))).map(r=><tr key={r.kind+'-'+r.id}>
+      <table><thead><tr><th>Type</th><th>Vehicle</th><th>Driver</th><th>Request / Oil Status</th><th>Current KM</th><th>Last Oil KM</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>{rows.filter(r=>activeTab==='oil'||status==='All'||['Open','PENDING','APPROVED','IN_PROGRESS'].includes(String(r.status||''))).length?rows.filter(r=>activeTab==='oil'||status==='All'||['Open','PENDING','APPROVED','IN_PROGRESS'].includes(String(r.status||''))).map(r=><tr key={r.kind+'-'+r.id}>
         <td>{r.kind==='maintenance'?'Maintenance Request':r.kind==='annual'?'Annual Inspection':'Tire Service'}</td>
-        <td><strong>{r.vehicle?.plate||'-'}</strong></td><td>{r.vehicle?.driver||'-'}</td><td style={{minWidth:280}}>{r.description}</td><td>{String(r.date||'').slice(0,10)||'-'}</td><td>{r.status}</td>
+        <td><strong>{r.vehicle?.plate||'-'}</strong></td><td>{r.vehicle?.driver||'-'}</td><td style={{minWidth:280}}>{r.description}</td><td>{r.current!=null?Number(r.current).toLocaleString():'-'}</td><td>{r.last!=null?Number(r.last).toLocaleString():'-'}</td><td>{String(r.date||'').slice(0,10)||'-'}</td><td>{r.status}</td>
         <td><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-          {canClose&&<button className="btn btn-success" style={{padding:'6px 10px'}} onClick={()=>close(r)}>Close</button>}
+          {canClose&&['maintenance','tire','inspection'].includes(r.kind)&&<button className="btn btn-success" style={{padding:'6px 10px'}} onClick={()=>close(r)}>Close</button>}
           <button className="btn" style={{padding:'6px 10px',background:'#25D366',color:'#fff'}} onClick={()=>whatsapp(r)}>📱 WhatsApp</button>
         </div></td>
-      </tr>):<tr><td colSpan="7" style={{textAlign:'center',padding:24}}>No vehicle tickets found.</td></tr>}</tbody></table>
+      </tr>):<tr><td colSpan="9" style={{textAlign:'center',padding:24}}>No vehicle tickets found.</td></tr>}</tbody></table>
     </div>}
   </div>;
 }

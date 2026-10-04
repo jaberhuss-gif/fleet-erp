@@ -79,9 +79,15 @@ export default function FleetHub({ user, access, initialOwnerGroup = 'add' }) {
   const fleetView = user?.role === 'Owner' || !!access?.fleet?.can_view;
   const fleetWork = user?.role === 'Owner' || !!access?.fleet?.can_work;
 
-  const [section, setSection] = useState('add-vehicle');
-  const [ownerGroup, setOwnerGroup] = useState(initialOwnerGroup);
-  useEffect(() => { if (user?.role === 'Owner') setOwnerGroup(initialOwnerGroup); }, [initialOwnerGroup, user?.role]);
+  const isPeriodicInspectionEntry = initialOwnerGroup === 'periodic-inspection';
+  const [section, setSection] = useState(isPeriodicInspectionEntry ? 'periodic-inspection' : 'add-vehicle');
+  const [ownerGroup, setOwnerGroup] = useState(isPeriodicInspectionEntry ? 'maintenance' : initialOwnerGroup);
+  useEffect(() => {
+    if (user?.role === 'Owner') {
+      setOwnerGroup(initialOwnerGroup === 'periodic-inspection' ? 'maintenance' : initialOwnerGroup);
+      if (initialOwnerGroup === 'periodic-inspection') setSection('periodic-inspection');
+    }
+  }, [initialOwnerGroup, user?.role]);
 
   if (!fleetView) {
     return (
@@ -117,14 +123,15 @@ export default function FleetHub({ user, access, initialOwnerGroup = 'add' }) {
   if (user?.role === 'Owner') {
     const ownerGroups = {
       add: ['add-vehicle', 'add-driver'],
-      maintenance: ['readings', 'maintenance', 'vehicle-history', 'issue', 'smart-issue', 'tire', 'tire-service', 'tire-control'],
+      maintenance: ['readings', 'maintenance', 'periodic-inspection', 'vehicle-history', 'issue', 'smart-issue', 'tire', 'tire-service', 'tire-control'],
       km: ['daily-km-submitted', 'daily-km-missing']
     };
     const ownerItems = {
       'add-vehicle': { label: '🚙 Add Vehicle', title: 'Add Vehicle', description: 'Add and maintain vehicle master data.' },
       'add-driver': { label: '👨‍🔧 Add Driver', title: 'Add Driver', description: 'Add and maintain driver records and vehicle assignments.' },
       readings: { label: '📏 Edit KM & Previous Readings', title: 'Edit KM & Previous Readings', description: 'Review and edit current odometer and previous vehicle readings.' },
-      maintenance: { label: '🔧 Periodic Maintenance (82)', title: 'Periodic Maintenance (82)', description: '6-month general maintenance and annual periodic inspection control.' },
+      maintenance: { label: '🔧 Vehicle Maintenance', title: 'Vehicle Maintenance', description: 'Vehicle maintenance, inspections and repair verification.' },
+      'periodic-inspection': { label: '🔍 الفحص الدوري للمركبة', title: 'الفحص الدوري للمركبة', description: '6-month maintenance and annual inspection control.' },
       'vehicle-history': { label: '📚 Vehicle Maintenance History', title: 'Vehicle Maintenance History', description: 'Complete vehicle tracking history: repairs, work orders, oil, tires, tickets and inspections.' },
       issue: { label: '🛠️ Maintenance Issue Report', title: 'Maintenance Issue Report', description: 'Report a vehicle problem and create a maintenance ticket.' },
       'smart-issue': { label: '🧠 Smart Report Issue', title: 'Smart Report Issue', description: 'Use the smart maintenance issue reporting workflow.' },

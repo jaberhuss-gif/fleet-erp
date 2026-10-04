@@ -31,7 +31,7 @@ const state = {
   kmCutoffTimer: null,
   maintenanceTimer: null,
   sheetTimer: null,
-  sheetEnabled: process.env.GOOGLE_SHEET_SYNC_DISABLED !== "true"
+  sheetEnabled: false
 };
 
 function millisUntilNextRiyadhHour(hour) {
@@ -159,7 +159,6 @@ export function startSchedulers() {
 
   startDailyKmScheduler();
   startMaintenanceScheduler();
-  startSheetSyncScheduler();
 
   return state;
 }

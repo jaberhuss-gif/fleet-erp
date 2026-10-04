@@ -3,7 +3,6 @@ import DriverPortal from './DriverPortal';
 import Drivers from './Drivers';
 import Vehicles from './Vehicles';
 import VehicleMaintenance from './VehicleMaintenance';
-import PeriodicVehicleInspection from './PeriodicVehicleInspection';
 import ReportIssue from './ReportIssue';
 import TireManagement, { TireControlCenter } from './TireManagement';
 import TireServiceRequests from './TireServiceRequests';
@@ -30,7 +29,7 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
   const fleetWork=user?.role==='Owner'||!!access?.fleet?.can_work;
   const isDriver=user?.role==='Driver';
 
-  const [section,setSection]=useState(initialOwnerGroup==='periodic-inspection'?'periodic-inspection':'add-vehicle');
+  const [section,setSection]=useState('add-vehicle');
   const [ownerGroup,setOwnerGroup]=useState(initialOwnerGroup);
 
   useEffect(()=>{
@@ -39,7 +38,6 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
       const first={
         add:'add-vehicle',
         maintenance:'maintenance',
-        'periodic-inspection':'periodic-inspection',
         'maintenance-report':'maintenance-issue',
         history:'history',
         'vehicle-ticket':'vehicle-ticket',
@@ -71,7 +69,7 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
 
   const ownerGroups={
     add:['add-vehicle','add-driver','readings'],
-    maintenance:['maintenance','periodic-inspection'],
+    maintenance:['maintenance'],
     'maintenance-report':['maintenance-report'],
     history:['history'],
     'vehicle-ticket':['vehicle-ticket'],
@@ -82,7 +80,6 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
     'add-driver':{label:'👨‍🔧 Add Driver',title:'Add Driver',description:'Add and maintain driver records and vehicle assignments.'},
     readings:{label:'📏 Edit KM & Previous Readings',title:'Edit KM & Previous Readings',description:'Review and edit current odometer and previous vehicle readings.'},
     maintenance:{label:'🔧 Periodic Maintenance',title:'Periodic Maintenance',description:'Existing periodic maintenance records, schedules, edit and delete.'},
-    'periodic-inspection':{label:'🔍 الفحص الدوري للمركبة',title:'الفحص الدوري للمركبة',description:'Fleet-wide 6-month maintenance and annual inspection control.'},
     'maintenance-report':{label:'🛠️ Maintenance Report',title:'Maintenance Report',description:'Maintenance issue reports and tire service requests.'},
     history:{label:'📚 History',title:'History',description:'Maintenance history, oil change history and KM tracking history.'},
     'vehicle-ticket':{label:'🎫 Vehicle Ticket',title:'Vehicle Ticket',description:'Driver maintenance requests, annual inspection tickets and tire service tickets.'},
@@ -109,7 +106,7 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
     {currentSection==='add-driver'&&<Drivers initialAction="add"/>}
     {currentSection==='readings'&&<Vehicles canWork={fleetWork} initialAction="readings"/>}
     {currentSection==='maintenance'&&<VehicleMaintenance canWork={fleetWork}/>}
-    {currentSection==='periodic-inspection'&&<PeriodicVehicleInspection canWork={fleetWork}/>}
+
     {currentSection==='maintenance-report'&&<MaintenanceReport canWork={fleetWork}/>}
     {currentSection==='history'&&<FleetHistory/>}
     {currentSection==='vehicle-ticket'&&<VehicleTicket user={user} canWork={fleetWork}/>}

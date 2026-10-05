@@ -1,6 +1,6 @@
 import PeriodicMaintenance from './PeriodicMaintenance';
 
-export default function VehicleMaintenance({ canWork = false }) {
+export default function VehicleMaintenance({ canWork = false, onOpenInspectionEmail = null }) {
   return (
     <div>
       <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #0891b2 100%)', padding: '28px 24px', borderRadius: '12px', marginBottom: '20px', color: 'white' }}>
@@ -10,7 +10,7 @@ export default function VehicleMaintenance({ canWork = false }) {
         </p>
       </div>
 
-      <PeriodicMaintenance canWork={canWork} />
+      <PeriodicMaintenance canWork={canWork} onOpenInspectionEmail={onOpenInspectionEmail} />
     </div>
   );
 }

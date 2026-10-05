@@ -193,7 +193,7 @@ function PeriodicMaintenance({ canWork = false }) {
   const sendInspectionWhatsApp = async (row) => {
     try {
       const info = (await api.get('/vehicles/' + row.vehicle_id + '/whatsapp-info')).data || {};
-      const phoneRaw = String(info.driverPhone || '').replace(/\\D/g, '');
+      const phoneRaw = String(info.driverPhone || '').replace(/\D/g, '');
       let phone = phoneRaw;
       if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
       else if (phone.length === 10 && phone.startsWith('05')) phone = '966' + phone.slice(1);
@@ -204,7 +204,7 @@ function PeriodicMaintenance({ canWork = false }) {
       const driver = info.driverName || row.driver_name || 'Driver';
       const plate = info.vehiclePlate || ((row.plate_number || '') + (row.plate_code ? ' ' + row.plate_code : ''));
       const confirmationUrl = info.confirmationUrl || '';
-      const message = 'Hello ' + driver + ',\\n\\nVehicle ' + plate + ' — Annual Periodic Inspection.\\n\\nHave you completed the annual inspection?\\n\\nYES — ' + confirmationUrl + '?decision=yes\\nNO — ' + confirmationUrl + '?decision=no\\n\\nFleet Management';
+      const message = 'Hello ' + driver + ',\n\nVehicle ' + plate + ' — Annual Periodic Inspection.\n\nHave you completed the annual inspection?\n\nYES — ' + confirmationUrl + '?decision=yes\nNO — ' + confirmationUrl + '?decision=no\n\nFleet Management';
       window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(message), '_blank');
     } catch (err) {
       alert(err.response?.data?.error || err.message || 'Unable to prepare WhatsApp message.');

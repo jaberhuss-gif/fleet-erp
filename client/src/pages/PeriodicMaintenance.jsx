@@ -677,217 +677,190 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
     return <span className="status-badge status-warning">Pending</span>;
   };
 
-  return (
-    <div className="periodic-maintenance-print-root">
-      <div className="sub-nav print-hide">
-        <button className={subTab === 'all' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('all')}>All ({records.length})</button>
-        <button className={subTab === 'pending' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('pending')}>Pending ({subTabData.pending.length})</button>
-        <button className={subTab === 'overdue' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('overdue')}>Overdue ({subTabData.overdue.length})</button>
-        <button className={subTab === 'completed' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('completed')}>Completed ({subTabData.completed.length})</button>
-      </div>
-
-      <div className="sub-nav print-hide" style={{ marginTop: '10px' }}>
-        <button className={reportTab === 'original' ? 'sub-btn active' : 'sub-btn'} onClick={() => setReportTab('original')}>📋 Original Periodic Maintenance</button>
-        <button className={reportTab === 'sixInspected' ? 'sub-btn active' : 'sub-btn'} onClick={() => setReportTab('sixInspected')}>🟢 6-Month Inspected ({complianceReports.sixInspected.rows.length})</button>
-        <button className={reportTab === 'annualInspected' ? 'sub-btn active' : 'sub-btn'} onClick={() => setReportTab('annualInspected')}>🟢 Annual Inspected ({complianceReports.annualInspected.rows.length})</button>
-        <button className={reportTab === 'sixNotInspected' ? 'sub-btn active' : 'sub-btn'} onClick={() => setReportTab('sixNotInspected')}>🔴 6-Month Not Inspected ({complianceReports.sixNotInspected.rows.length})</button>
-        <button className={reportTab === 'annualNotInspected' ? 'sub-btn active' : 'sub-btn'} onClick={() => setReportTab('annualNotInspected')}>🔴 Annual Not Inspected ({complianceReports.annualNotInspected.rows.length})</button>
-      </div>
-      {reportTab !== 'original' && renderComplianceReport(reportTab)}
-
-      {/* ===== Stats Cards ===== */}
-      <div className="print-hide" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-        <div style={{ background: 'linear-gradient(135deg, #dc2626, #ef4444)', color: '#fff', padding: '16px 20px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(220,38,38,0.3)' }}>
-          <div style={{ fontSize: '13px', opacity: 0.9, marginBottom: '6px' }}>Overdue</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', lineHeight: 1 }}>{alerts.counts?.overdue?.total ?? alerts.overdue.length}</div>
-          <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '8px' }}>
-            Oil: {alerts.counts?.overdue?.oil_change ?? 0} | Inspection: {alerts.counts?.overdue?.inspection ?? 0} | General: {alerts.counts?.overdue?.['6_months_general'] ?? 0}
+  const renderControlTable = (kind) => {
+    const isSix = kind === 'six';
+    const rows = isSix
+      ? vehicleSummary
+      : vehicleSummary.filter(v => v.annualDone || !v.annualDone);
+    const title = isSix ? '6-Month Mechanical Inspection' : 'Annual Periodic Inspection';
+    const description = isSix
+      ? 'Mechanical 6-month inspection control. GREEN means inspection evidence is recorded; RED means no inspection evidence is recorded.'
+      : 'Annual periodic inspection control. Expiry date is always read from Vehicle Master and is shown for continuous follow-up.';
+    return (
+      <div className="panel" style={{ marginBottom: 18, overflowX: 'auto' }}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:12}}>
+          <div>
+            <h2 style={{margin:0}}>{title}</h2>
+            <div style={{marginTop:5,color:'#64748b'}}>{description}</div>
           </div>
+          <button className="btn btn-primary" onClick={() => printComplianceReport(isSix ? 'sixInspected' : 'annualInspected')}>🖨️ Print / Save PDF</button>
         </div>
-
-        <div style={{ background: 'linear-gradient(135deg, #f59e0b, #fbbf24)', color: '#fff', padding: '16px 20px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(245,158,11,0.3)' }}>
-          <div style={{ fontSize: '13px', opacity: 0.9, marginBottom: '6px' }}>Due Soon</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', lineHeight: 1 }}>{alerts.counts?.dueSoon?.total ?? alerts.dueSoon.length}</div>
-          <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '8px' }}>
-            Oil: {alerts.counts?.dueSoon?.oil_change ?? 0} | Inspection: {alerts.counts?.dueSoon?.inspection ?? 0} | General: {alerts.counts?.dueSoon?.['6_months_general'] ?? 0}
-          </div>
-        </div>
-
-        <div style={{ background: 'linear-gradient(135deg, #16a34a, #22c55e)', color: '#fff', padding: '16px 20px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(22,163,74,0.3)' }}>
-          <div style={{ fontSize: '13px', opacity: 0.9, marginBottom: '6px' }}>Safe</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', lineHeight: 1 }}>{Math.max(0, records.length - alerts.overdue.length - alerts.dueSoon.length)}</div>
-          <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '8px' }}>Out of {records.length} total records</div>
-        </div>
-      </div>
-
-      {message && <div className="alert alert-success">{message}</div>}
-      {error && <div className="alert alert-error">{error}</div>}
-
-      <div className="panel">
-        <div className="print-header">
-          <h1>Vehicle Maintenance</h1>
-          <div className="print-meta">
-            Generated: {new Date().toLocaleString()} · Records: {currentList.length}
-          </div>
-        </div>
-        <h2 className="print-hide">Periodic Maintenance & Inspection</h2>
-        <div className="print-hide" style={{marginBottom:'12px',padding:'10px 14px',borderRadius:'8px',background:'#f8fafc',border:'1px solid #e2e8f0'}}><strong>Annual Inspection Expiry:</strong> managed only in Vehicle Master. This table shows the current master expiry date.</div>
-        <div className="print-hide" style={{marginBottom:'12px',padding:'10px 14px',borderRadius:'8px',background:'#f8fafc',border:'1px solid #e2e8f0'}}><strong>6-Month Control:</strong> <span style={{color:'#15803d'}}>GREEN = inspected (notes or completed)</span> · <span style={{color:'#b91c1c'}}>RED = not inspected (no notes)</span></div>
-
-        <div className="btn-row no-print">
-          {canWork && <button className="btn btn-warning" onClick={handleGenerate}>Auto-Generate All</button>}
-          <button className="btn btn-success" onClick={() => exportReport(filledRecords, 'Periodic_Maintenance_Filled', 'Filled Records')}>
-            📊 Export Filled Records ({filledRecords.length})
-          </button>
-          <button className="btn btn-warning" onClick={() => exportReport(untouchedRecords, 'Periodic_Maintenance_Untouched', 'No Action Records')}>
-            📋 Export No Action Records ({untouchedRecords.length})
-          </button>
-          <button type="button" className="btn btn-primary pdf-export-btn" onClick={printPdfReport} title="Open the A4 PDF print dialog">
-            🖨️ Export PDF
-          </button>
-          {canWork && <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
-            {showForm ? 'Cancel' : '+ Schedule New'}
-          </button>}
-        </div>
-
-        {showForm && (
-          <form className="no-print" onSubmit={handleSubmit}>
-            <h3>{editing ? 'Edit Schedule' : 'New Schedule'}</h3>
-            <div className="cards-grid">
-              <div className="form-group">
-                <label>Vehicle *</label>
-                <select value={form.vehicleId} onChange={(e) => setForm({ ...form, vehicleId: e.target.value })} required>
-                  <option value="">-- Select Vehicle --</option>
-                  {vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate} - {v.driver}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Type *</label>
-                <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                  <option value="6_months_general">6-Month General Maintenance</option>
-                  <option value="inspection">Periodic Inspection</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Scheduled Date *</label>
-                <input type="date" value={form.scheduledDate} onChange={(e) => setForm({ ...form, scheduledDate: e.target.value })} required />
-              </div>
-              <div className="form-group">
-                <label>Status</label>
-                <input value="Pending" readOnly disabled title="New schedules must start as Pending and can only become Completed through the Complete action." />
-              </div>
-              <div className="form-group">
-                <label>Technician</label>
-                <input value={form.technician} onChange={(e) => setForm({ ...form, technician: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label>Cost (SAR)</label>
-                <input type="number" value={form.cost} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })} />
-              </div>
-            </div>
-            <div className="form-group">
-              <label>Notes</label>
-              <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />
-            </div>
-            <div className="btn-row">
-              <button type="submit" className="btn btn-success">{editing ? 'Update' : 'Save'}</button>
-              <button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button>
-            </div>
-          </form>
-        )}
-
-        <div className="filters no-print">
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Vehicle / Driver" />
-          <select value={filterVehicle} onChange={(e) => setFilterVehicle(e.target.value)}>
-            <option value="all">All Vehicles</option>
-            {vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate}</option>)}
-          </select>
-          <select value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-            <option value="all">All Types</option>
-            <option value="6_months_general">6-Month General</option>
-            <option value="inspection">Inspection</option>
-          </select>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-            <option value="all">All Statuses</option>
-            <option value="Pending">Pending</option>
-            <option value="Completed">Completed</option>
-          </select>
-          <button className="btn btn-warning" onClick={() => { setSearch(''); setFilterVehicle('all'); setFilterType('all'); setFilterStatus('all'); }}>Clear</button>
-        </div>
-
-        {loading ? <div className="loading">Loading...</div> : ['partial','none','fully'].includes(subTab) ? (
-          <table className="periodic-maintenance-screen-table">
-            <thead><tr><th>Vehicle</th><th>Driver</th><th>6-Month</th><th>Annual Inspection</th><th>Overall</th><th>Missing</th></tr></thead>
-            <tbody>
-              {(subTab === 'partial' ? partiallyInspectedVehicles : subTab === 'none' ? notInspectedVehicles : fullyInspectedVehicles).map((v) => {
-                const overall = subTab === 'fully' ? 'GREEN — Fully Inspected' : subTab === 'none' ? 'RED — Not Inspected' : 'YELLOW — Partially Inspected';
-                return <tr key={v.vehicle_id}>
-                  <td><strong>{v.plate}</strong></td><td>{v.driver}</td>
-                  <td><span className={v.sixDone ? 'status-badge status-safe' : 'status-badge status-urgent'}>{v.sixDone ? 'Inspected' : 'Not Inspected'}</span></td>
-                  <td><span className={v.annualDone ? 'status-badge status-safe' : 'status-badge status-urgent'}>{v.annualDone ? 'Inspected' : 'Not Inspected'}</span></td>
-                  <td><span className={subTab === 'fully' ? 'status-badge status-safe' : subTab === 'none' ? 'status-badge status-urgent' : 'status-badge status-warning'}>{overall}</span></td>
-                  <td>{v.missing.length ? v.missing.join(' + ') : '—'}</td>
-                </tr>;
-              })}
-            </tbody>
-          </table>
-        ) : (
-          <table className="periodic-maintenance-screen-table">
-            <thead>
-              <tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Inspection Expiry</th><th>Completed</th><th>Status</th><th>Technician</th><th>Cost</th><th>Notes</th><th>Actions</th></tr>
-            </thead>
-            <tbody>
-              {currentList.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.vehicle_plate || '-'}</td>
-                  <td>{r.vehicle_location || '-'}</td>
-                  <td>{r.driver_name || '-'}</td>
-                  <td>{TYPE_LABELS[r.type] || r.type}</td>
-                  <td>{r.scheduled_date}</td>
-                  <td>{getInspectionExpiry(r.vehicle_id)}</td>
-                  <td>{r.completed_date || '-'}</td>
-                  <td>{getStatusBadge(r)}</td>
-                  <td>{r.technician || '-'}</td>
-                  <td>{Number(r.cost || 0).toLocaleString()}</td>
-                  <td style={{ whiteSpace: 'pre-wrap', minWidth: '220px' }}>{r.notes || '-'}</td>
+        <table className="periodic-maintenance-screen-table">
+          <thead>
+            <tr>
+              <th>Vehicle</th><th>Location</th><th>Driver</th>
+              {isSix ? <><th>Inspection Date</th><th>Status</th><th>Technician</th><th>Notes</th></> :
+                <><th>Inspection Expiry</th><th>Status</th><th>Last Completed</th><th>Notes</th></>}
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => {
+              const rec = isSix ? row.six : row.annual;
+              const done = isSix ? row.sixDone : row.annualDone;
+              return (
+                <tr key={(isSix ? 'six-' : 'annual-') + row.vehicle_id}>
+                  <td><strong>{row.plate}</strong></td>
+                  <td>{vehicleById[String(row.vehicle_id)]?.location || '-'}</td>
+                  <td>{row.driver || '-'}</td>
+                  {isSix ? (
+                    <>
+                      <td>{rec?.completed_date || (done ? rec?.scheduled_date : '-') || '-'}</td>
+                      <td><span className={done ? 'status-badge status-safe' : 'status-badge status-urgent'}>{done ? 'GREEN — Inspected' : 'RED — Not Inspected'}</span></td>
+                      <td>{rec?.technician || '-'}</td>
+                      <td style={{whiteSpace:'pre-wrap',minWidth:240}}>{rec?.notes || '-'}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td><strong>{getInspectionExpiry(row.vehicle_id)}</strong></td>
+                      <td><span className={done ? 'status-badge status-safe' : 'status-badge status-urgent'}>{done ? 'GREEN — Inspected' : 'RED — Not Inspected'}</span></td>
+                      <td>{rec?.completed_date || '-'}</td>
+                      <td style={{whiteSpace:'pre-wrap',minWidth:240}}>{rec?.notes || '-'}</td>
+                    </>
+                  )}
                   <td>
-                    {canWork && r.status === 'Pending' && <button className="btn btn-success" onClick={() => handleComplete(r)}>Complete</button>}
-                    {canWork && <button className="btn btn-primary" onClick={() => handleEdit(r)}>Edit</button>}
-                    {canWork && <button className="btn btn-danger" onClick={() => handleDelete(r.id)}>Del</button>}
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      <button className="btn" style={{padding:'6px 10px',background:'#25D366',color:'#fff'}} onClick={() => reportWhatsApp(row, title, done)}>📱 WhatsApp</button>
+                      {canWork && (done
+                        ? <button className="btn btn-success" style={{padding:'6px 10px'}} onClick={() => handleEdit(rec)} disabled={!rec}>✓ Inspected</button>
+                        : <button className="btn btn-danger" style={{padding:'6px 10px'}} onClick={() => closeComplianceReport(row, title, isSix ? '6_months_general' : 'inspection')}>Close Inspection</button>
+                      )}
+                    </div>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
 
-        <div className="periodic-maintenance-print-table-wrap">
-          <table className="periodic-maintenance-print-table">
-            <thead>
-              <tr>
-                <th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Inspection Expiry</th>
-                <th>Completed</th><th>Status</th><th>Technician</th><th>Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentList.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.vehicle_plate || '-'}</td>
-                  <td>{r.vehicle_location || '-'}</td>
-                  <td>{r.driver_name || '-'}</td>
-                  <td>{TYPE_LABELS[r.type] || r.type}</td>
-                  <td>{r.scheduled_date || '-'}</td>
-                  <td>{getInspectionExpiry(r.vehicle_id)}</td>
-                  <td>{r.completed_date || '-'}</td>
-                  <td>{r.status === 'Completed' ? 'Completed' : (r.scheduled_date < today ? 'Overdue' : 'Pending')}</td>
-                  <td>{r.technician || '-'}</td>
-                  <td>{r.notes || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+  return (
+    <div className="periodic-maintenance-print-root">
+      <div className="panel print-hide" style={{marginBottom:16}}>
+        <h1 style={{margin:'0 0 6px'}}>🔧 Periodic Maintenance & Vehicle Inspection Control</h1>
+        <div style={{color:'#64748b'}}>
+          Rebuilt control page: 6-Month Mechanical and Annual Inspection are independent controls.
+          Existing periodic maintenance records are preserved.
         </div>
       </div>
+
+      {message && <div className="alert alert-success print-hide">{message}</div>}
+      {error && <div className="alert alert-error print-hide">{error}</div>}
+
+      <div className="sub-nav print-hide" style={{marginBottom:16}}>
+        <button className={reportTab==='six' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('six')}>
+          🔧 6-Month Mechanical ({vehicleSummary.length})
+        </button>
+        <button className={reportTab==='annual' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('annual')}>
+          📋 Annual Inspection ({vehicleSummary.length})
+        </button>
+        <button className={reportTab==='original' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('original')}>
+          📚 Original Maintenance Records ({records.length})
+        </button>
+      </div>
+
+      {reportTab === 'six' && renderControlTable('six')}
+      {reportTab === 'annual' && renderControlTable('annual')}
+
+      {reportTab === 'original' && (
+        <>
+          <div className="print-hide" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:10,marginBottom:16}}>
+            <div className="panel"><strong>All Records</strong><div style={{fontSize:28,fontWeight:700}}>{records.length}</div></div>
+            <div className="panel"><strong>Pending</strong><div style={{fontSize:28,fontWeight:700,color:'#d97706'}}>{subTabData.pending.length}</div></div>
+            <div className="panel"><strong>Overdue</strong><div style={{fontSize:28,fontWeight:700,color:'#dc2626'}}>{subTabData.overdue.length}</div></div>
+            <div className="panel"><strong>Completed</strong><div style={{fontSize:28,fontWeight:700,color:'#16a34a'}}>{subTabData.completed.length}</div></div>
+          </div>
+
+          <div className="sub-nav print-hide" style={{marginBottom:12}}>
+            {[
+              ['all','All'],['pending','Pending'],['overdue','Overdue'],['completed','Completed']
+            ].map(([key,label]) => (
+              <button key={key} className={subTab===key?'sub-btn active':'sub-btn'} onClick={()=>setSubTab(key)}>
+                {label} ({key==='all'?records.length:subTabData[key].length})
+              </button>
+            ))}
+          </div>
+
+          <div className="panel" style={{overflowX:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+              <div>
+                <h2 style={{margin:0}}>Original Periodic Maintenance Records</h2>
+                <div style={{marginTop:5,color:'#64748b'}}>This section keeps the existing database records. No compliance calculation changes the source data.</div>
+              </div>
+              <div className="btn-row print-hide">
+                {canWork && <button className="btn btn-warning" onClick={handleGenerate}>Auto-Generate All</button>}
+                <button className="btn btn-success" onClick={() => exportReport(filledRecords,'Periodic_Maintenance_Filled','Filled Records')}>📊 Export Filled</button>
+                <button className="btn btn-primary" onClick={printPdfReport}>🖨️ PDF</button>
+                {canWork && <button className="btn btn-primary" onClick={()=>setShowForm(!showForm)}>{showForm?'Cancel':'+ Schedule New'}</button>}
+              </div>
+            </div>
+
+            <div className="filters no-print" style={{marginTop:14}}>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Vehicle / Driver" />
+              <select value={filterVehicle} onChange={e=>setFilterVehicle(e.target.value)}>
+                <option value="all">All Vehicles</option>
+                {vehicles.map(v=><option key={v.id} value={v.id}>{v.plate}</option>)}
+              </select>
+              <select value={filterType} onChange={e=>setFilterType(e.target.value)}>
+                <option value="all">All Types</option>
+                <option value="6_months_general">6-Month General</option>
+                <option value="inspection">Inspection</option>
+              </select>
+              <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
+                <option value="all">All Statuses</option>
+                <option value="Pending">Pending</option>
+                <option value="Completed">Completed</option>
+              </select>
+              <button className="btn btn-warning" onClick={()=>{setSearch('');setFilterVehicle('all');setFilterType('all');setFilterStatus('all')}}>Clear</button>
+            </div>
+
+            {showForm && (
+              <form className="no-print" onSubmit={handleSubmit} style={{marginTop:14}}>
+                <h3>{editing?'Edit Schedule':'New Schedule'}</h3>
+                <div className="cards-grid">
+                  <div className="form-group"><label>Vehicle *</label><select value={form.vehicleId} onChange={e=>setForm({...form,vehicleId:e.target.value})} required><option value="">-- Select Vehicle --</option>{vehicles.map(v=><option key={v.id} value={v.id}>{v.plate} - {v.driver}</option>)}</select></div>
+                  <div className="form-group"><label>Type *</label><select value={form.type} onChange={e=>setForm({...form,type:e.target.value})}><option value="6_months_general">6-Month General Maintenance</option><option value="inspection">Periodic Inspection</option></select></div>
+                  <div className="form-group"><label>Scheduled Date *</label><input type="date" value={form.scheduledDate} onChange={e=>setForm({...form,scheduledDate:e.target.value})} required /></div>
+                  <div className="form-group"><label>Status</label><input value="Pending" readOnly disabled /></div>
+                  <div className="form-group"><label>Technician</label><input value={form.technician} onChange={e=>setForm({...form,technician:e.target.value})}/></div>
+                  <div className="form-group"><label>Cost (SAR)</label><input type="number" value={form.cost} onChange={e=>setForm({...form,cost:Number(e.target.value)})}/></div>
+                </div>
+                <div className="form-group"><label>Notes</label><textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} rows={2}/></div>
+                <div className="btn-row"><button type="submit" className="btn btn-success">{editing?'Update':'Save'}</button><button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button></div>
+              </form>
+            )}
+
+            {loading ? <div className="loading">Loading...</div> : (
+              <table className="periodic-maintenance-screen-table" style={{marginTop:14}}>
+                <thead><tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Inspection Expiry</th><th>Completed</th><th>Status</th><th>Technician</th><th>Cost</th><th>Notes</th><th>Actions</th></tr></thead>
+                <tbody>
+                  {currentList.map(r=>(
+                    <tr key={r.id}>
+                      <td><strong>{r.vehicle_plate||'-'}</strong></td><td>{r.vehicle_location||'-'}</td><td>{r.driver_name||'-'}</td>
+                      <td>{TYPE_LABELS[r.type]||r.type}</td><td>{r.scheduled_date||'-'}</td><td><strong>{getInspectionExpiry(r.vehicle_id)}</strong></td>
+                      <td>{r.completed_date||'-'}</td><td>{getStatusBadge(r)}</td><td>{r.technician||'-'}</td><td>{Number(r.cost||0).toLocaleString()}</td>
+                      <td style={{whiteSpace:'pre-wrap',minWidth:220}}>{r.notes||'-'}</td>
+                      <td>{canWork&&r.status==='Pending'&&<button className="btn btn-success" onClick={()=>handleComplete(r)}>Complete</button>} {canWork&&<button className="btn btn-primary" onClick={()=>handleEdit(r)}>Edit</button>} {canWork&&<button className="btn btn-danger" onClick={()=>handleDelete(r.id)}>Del</button>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
 
       {completing && (
         <div className="modal-overlay">
@@ -895,17 +868,11 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
             <h3>Complete Maintenance</h3>
             <p>{completing.vehicle_plate} — {TYPE_LABELS[completing.type] || completing.type}</p>
             <label>Completion Date</label>
-            <input type="date" value={completeForm.completedDate} onChange={(e) => setCompleteForm({ ...completeForm, completedDate: e.target.value })} />
-            <label>Technician</label>
-            <input value={completeForm.technician} onChange={(e) => setCompleteForm({ ...completeForm, technician: e.target.value })} />
-            <label>Total Cost (SAR)</label>
-            <input type="number" value={completeForm.cost} onChange={(e) => setCompleteForm({ ...completeForm, cost: Number(e.target.value) })} />
-            <label>Notes</label>
-            <textarea value={completeForm.notes} onChange={(e) => setCompleteForm({ ...completeForm, notes: e.target.value })} rows={3} />
-            <div className="btn-row">
-              {canWork && <button className="btn btn-success" onClick={handleCompleteSubmit}>Mark Completed</button>}
-              <button className="btn btn-warning" onClick={() => setCompleting(null)}>Cancel</button>
-            </div>
+            <input type="date" value={completeForm.completedDate} onChange={e=>setCompleteForm({...completeForm,completedDate:e.target.value})}/>
+            <label>Technician</label><input value={completeForm.technician} onChange={e=>setCompleteForm({...completeForm,technician:e.target.value})}/>
+            <label>Total Cost (SAR)</label><input type="number" value={completeForm.cost} onChange={e=>setCompleteForm({...completeForm,cost:Number(e.target.value)})}/>
+            <label>Notes</label><textarea value={completeForm.notes} onChange={e=>setCompleteForm({...completeForm,notes:e.target.value})} rows={3}/>
+            <div className="btn-row">{canWork&&<button className="btn btn-success" onClick={handleCompleteSubmit}>Mark Completed</button>}<button className="btn btn-warning" onClick={()=>setCompleting(null)}>Cancel</button></div>
           </div>
         </div>
       )}

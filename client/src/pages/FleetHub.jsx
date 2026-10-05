@@ -85,7 +85,8 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
     'vehicle-ticket':{label:'🎫 Vehicle Ticket',title:'Vehicle Ticket',description:'Driver maintenance requests, annual inspection tickets and tire service tickets.'},
     'daily-km-submitted':{label:'📋 Daily KM — Submitted',title:'Daily KM — Submitted',description:'View vehicles that submitted a daily KM reading today.'},
     'daily-km-missing':{label:'⚠️ Daily KM — Missing',title:'Daily KM — Missing',description:'View vehicles that have not submitted a daily KM reading today.'},
-    'inspection-email':{label:'📧 Annual Inspection Email',title:'Annual Inspection Email Control',description:'Select all sites or specific sites and send annual inspection reminders for vehicles due within 30 days.'}
+    'inspection-email':{label:'📧 Annual Inspection Email',title:'Annual Inspection Email Control',description:'Select all sites or specific sites and send annual inspection reminders for vehicles due within 31 days.'},
+    'inspection-upcoming':{label:'📅 Future Annual Inspections',title:'Future Annual Inspection Schedule',description:'Vehicles more than 31 days from expiry. Monitoring only; they move automatically to the email page when due.'}
   };
   const ids=ownerGroups[ownerGroup]||ownerGroups.add;
   const currentSection=ids.includes(section)?section:ids[0];
@@ -111,6 +112,7 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
     {currentSection==='history'&&<FleetHistory/>}
     {currentSection==='vehicle-ticket'&&<VehicleTicket user={user} canWork={fleetWork}/>}
     {currentSection==='daily-km-submitted'&&<DailyKmSubmitted/>}
-    {currentSection==='daily-km-missing'&&<DailyKmMissing user={user}/>}\n    {currentSection==='inspection-email'&&<PeriodicMaintenance canWork={fleetWork} inspectionEmailOnly/>}
+    {currentSection==='daily-km-missing'&&<DailyKmMissing user={user}/>}\n    {currentSection==='inspection-email'&&<PeriodicMaintenance canWork={fleetWork} inspectionEmailOnly onOpenInspectionUpcoming={()=>{setOwnerGroup('inspection-upcoming');setSection('inspection-upcoming');}}/>}
+    {currentSection==='inspection-upcoming'&&<PeriodicMaintenance canWork={fleetWork} inspectionUpcomingOnly onOpenInspectionEmail={()=>{setOwnerGroup('inspection-email');setSection('inspection-email');}}/>}
   </div>;
 }

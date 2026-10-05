@@ -280,7 +280,7 @@ export default function VehicleTicket({ user, canWork=false }) {
             <td>{String(r.date||'').slice(0,10)||'-'}</td>
             <td><strong>{r.status}</strong></td>
             <td><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-              {r.kind==='inspection' && canManage && normalStatus(r.status)==='COMPLETED' && <button className="btn" style={{padding:'6px 10px'}} onClick={()=>reopenInspection(r)}>🔄 Reopen Inspection</button>}
+              {r.kind==='inspection' && canManage && normalStatus(r.status)==='COMPLETED' && <button className="btn btn-warning" style={{padding:'6px 10px'}} onClick={()=>reopenInspection(r)}>✏️ Edit / Reopen</button>}
               {actionButtons(r)}
               <button className="btn" style={{padding:'6px 10px',background:'#25D366',color:'#fff'}} onClick={()=>whatsapp(r)}>📱 WhatsApp</button>
             </div></td>

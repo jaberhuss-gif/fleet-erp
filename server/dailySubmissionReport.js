@@ -16,7 +16,7 @@ export async function getDailySubmissionReport(targetDate = null) {
   const fleetResult = await query(`
     SELECT v.id, v.plate_number, v.plate_code, v.driver, v.phone, v.location, v.current_km,
            COALESCE(oh.oil_change_km, v.last_oil_km) AS last_oil_km,
-           COALESCE(oh.oil_change_date, v.last_oil_change_date) AS last_oil_change_date
+           COALESCE(oh.oil_change_date::text, v.last_oil_change_date::text) AS last_oil_change_date
     FROM vehicles v
     LEFT JOIN LATERAL (
       SELECT oil_change_km, oil_change_date

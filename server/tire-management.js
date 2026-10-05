@@ -1221,8 +1221,13 @@ export async function mountTireRoutes(app) {
   });
 
   app.put("/api/tire/service-requests/:id", async (req, res) => {
-    if (req.user?.role !== "Owner") {
-      return res.status(403).json({ success: false, error: "Owner only" });
+    if (!["Owner","FleetSupervisor"].includes(req.user?.role)) {
+      return res.status(403).json({ success: false, error: "Owner or Fleet Supervisor only" });
+    }
+    const allowedStatuses = ["OPEN","APPROVED","IN_PROGRESS","COMPLETED","CANCELLED"];
+    const requestedStatus = String(req.body?.status || "").trim().toUpperCase();
+    if (!allowedStatuses.includes(requestedStatus)) {
+      return res.status(400).json({ success:false, error:"Invalid tire service request status." });
     }
     try {
       res.json({

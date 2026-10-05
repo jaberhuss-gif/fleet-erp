@@ -218,6 +218,7 @@ export async function listVehicles() {
           PARTITION BY UPPER(TRIM(COALESCE(v.plate_number, ''))),
                        UPPER(TRIM(COALESCE(v.plate_code, '')))
           ORDER BY
+            CASE WHEN v.inspection_expiry_date IS NOT NULL THEN 2 ELSE 0 END DESC,
             CASE
               WHEN COALESCE(v.current_km, 0) > 0
                 OR COALESCE(v.last_oil_km, 0) > 0

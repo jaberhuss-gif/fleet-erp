@@ -16,6 +16,26 @@ import { mountPdfWorkOrderImport } from "./pdfWorkOrderImport.js";
 import { mountTireRoutes } from "./tire-management.js";
 import { toWaMeNumber } from "./phone.js";
 
+const ANNUAL_INSPECTION_EMAIL_FROM = 'Hussein.Anwar@iemaadex.com';
+const ANNUAL_INSPECTION_CC_EMAILS = 'Mohamed.Hassan@iemaadex.com, Mohammed.Al-Marhabi@iemaadex.com';
+const ANNUAL_INSPECTION_SITE_CONTACTS = {
+  'Uqlat Al Soqour': 'Samer.Abdulmalik@iemaadex.com, Bader.Almasrahi@iemaadex.com',
+  'Wadi Beddah': 'Meshal.Alghamdi@iemaadex.com',
+  'Al Hadar': 'Amr.Mohamed@iemaadex.com, Mostafa.Magdy@iemaadex.com',
+  'Al Quwayiyah': 'Amr.Mohamed@iemaadex.com, Mostafa.Magdy@iemaadex.com',
+  'Al Sabiyah': 'shezad.khan@iemaadex.com',
+  'Al Hulayfa': 'nouman.khan@iemaadex.com'
+};
+
+function annualInspectionRecipients(location) {
+  const key = String(location || '').trim().toLowerCase();
+  const match = Object.entries(ANNUAL_INSPECTION_SITE_CONTACTS).find(([site]) => site.toLowerCase() === key);
+  return {
+    managerEmail: match ? match[1] : '',
+    ccEmails: ANNUAL_INSPECTION_CC_EMAILS
+  };
+}
+
 async function ensureAnnualInspectionReminderSchema() {
   await pgQuery(`
     ALTER TABLE vehicles
@@ -38,11 +58,12 @@ function splitEmails(value) {
 
 async function sendAnnualInspectionReminderEmail(row) {
   const apiKey = String(process.env.RESEND_API_KEY || '').trim();
-  const from = String(process.env.INSPECTION_EMAIL_FROM || process.env.EMAIL_FROM || '').trim();
+  const from = String(process.env.INSPECTION_EMAIL_FROM || process.env.EMAIL_FROM || ANNUAL_INSPECTION_EMAIL_FROM).trim();
   if (!apiKey || !from) return { sent: false, reason: 'Email provider is not configured (RESEND_API_KEY / INSPECTION_EMAIL_FROM).' };
 
-  const to = splitEmails(row.inspection_manager_email);
-  const cc = splitEmails(row.inspection_cc_emails).filter(e => !to.includes(e));
+  const defaults = annualInspectionRecipients(row.location);
+  const to = splitEmails(row.inspection_manager_email || defaults.managerEmail);
+  const cc = splitEmails(row.inspection_cc_emails || defaults.ccEmails).filter(e => !to.includes(e));
   if (!to.length) return { sent: false, reason: 'No site manager email configured.' };
 
   const expiry = String(row.inspection_expiry_date || '').slice(0, 10);
@@ -1116,7 +1137,13 @@ app.get("/api/vehicles/:id/inspection-reminder", async (req, res) => {
       FROM vehicles WHERE id=$1
     `, [req.params.id]);
     if (!r.rows[0]) return res.status(404).json({success:false,error:"Vehicle not found"});
-    res.json({success:true, reminder:r.rows[0]});
+    const row = r.rows[0];
+    const defaults = annualInspectionRecipients(row.location);
+    res.json({success:true, reminder:{
+      ...row,
+      inspection_manager_email: row.inspection_manager_email || defaults.managerEmail,
+      inspection_cc_emails: row.inspection_cc_emails || defaults.ccEmails
+    }});
   } catch(e) { res.status(500).json({success:false,error:e.message}); }
 });
 

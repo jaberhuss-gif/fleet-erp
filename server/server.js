@@ -1825,6 +1825,108 @@ if (process.env.ERP_V2_ENABLED === "true") {
   }
 }
 
+// ===== ONE-TIME TEST VEHICLE 123 RESET =====
+// Enabled only when RESET_TEST_123=true in Render. It resets the dedicated
+// test vehicle and all rows that reference it, while preserving the vehicle
+// master row itself so the same test plate can be recreated cleanly.
+async function resetTestVehicle123Once() {
+  if (String(process.env.RESET_TEST_123 || '').toLowerCase() !== 'true') return;
+  const clientResult = await pgQuery('SELECT * FROM vehicles WHERE LOWER(TRIM(plate_number)) = $1 AND LOWER(TRIM(COALESCE(plate_code, \'\'))) = $2 LIMIT 1', ['test', '123']);
+  const vehicle = clientResult.rows[0];
+  if (!vehicle) {
+    console.log('[Test123Reset] vehicle test 123 not found; nothing to reset.');
+    return;
+  }
+  const vehicleId = vehicle.id;
+  const tablesResult = await pgQuery(`
+    SELECT DISTINCT tc.table_name
+    FROM information_schema.table_constraints tc
+    JOIN information_schema.constraint_column_usage ccu
+      ON ccu.constraint_name = tc.constraint_name
+     AND ccu.constraint_schema = tc.constraint_schema
+    JOIN information_schema.key_column_usage kcu
+      ON kcu.constraint_name = tc.constraint_name
+     AND kcu.constraint_schema = tc.constraint_schema
+    WHERE tc.constraint_type = 'FOREIGN KEY'
+      AND ccu.table_name = 'vehicles'
+      AND ccu.column_name = 'id'
+      AND kcu.column_name = 'vehicle_id'
+      AND tc.table_schema = 'public'
+  `);
+  for (const t of tablesResult.rows) {
+    if (t.table_name === 'vehicles') continue;
+    await pgQuery(`DELETE FROM "${String(t.table_name).replace(/"/g, '""')}" WHERE vehicle_id = $1`, [vehicleId]);
+  }
+  const columns = Object.keys(vehicle).filter(k => k !== 'id');
+  const values = columns.map(k => vehicle[k]);
+  const quoted = columns.map(k => '"' + k.replace(/"/g, '""') + '"').join(', ');
+  const params = columns.map((_, i) => '
+// stored driver name/phone snapshot. This prevents editing one driver or vehicle
+// from changing the assignment of unrelated vehicles.
+try {
+  await db.repairVehicleDriverAssignmentsFromSnapshots();
+} catch (e) {
+  console.error("[DriverRepair] vehicle-specific assignment reconciliation failed:", e.message);
+}
+
+// Narrow startup safety reconciliation for the known 4481 JUA assignment.
+try {
+  await db.repairKnownVehicleAssignments();
+} catch (e) {
+  console.error("[DriverRepair] startup reconciliation failed:", e.message);
+}
+
+try { await ensureVehicleRepairSchema(); } catch (e) { console.error("[Schema] vehicle repair schema check failed:", e.message); }
+try { await db.ensurePeriodicMaintenanceSchema(); } catch (e) { console.error("[Schema] periodic maintenance schema check failed:", e.message); }
+try { await ensureAnnualInspectionReminderSchema(); } catch (e) { console.error("[Schema] inspection reminder schema check failed:", e.message); }
+setInterval(() => processAnnualInspectionReminders().catch(e => console.error("[InspectionEmail] scheduler failed:", e.message)), 60 * 60 * 1000);
+
+
+// Additive, idempotent ticket-schema guard. Only missing columns are added;
+// existing tickets and historical data are never modified or removed.
+try {
+  await db.ensureTicketSchema();
+} catch (e) {
+  console.error("[Schema] ticket schema check failed:", e.message);
+}
+
+// Same guard for the Building Maintenance tables. Without this, a partially
+// migrated work_orders/projects/purchases/sites table makes the building
+// dashboard, monthly and financial reports return HTTP 500.
+try {
+  await db.ensureBuildingSchema();
+} catch (e) {
+  console.error("[Schema] building schema check failed:", e.message);
+}
+
+app.use(express.static(path.join(__dirname, '../client/dist')));
+app.get('*', async (req, res) => { res.sendFile(path.join(__dirname, '../client/dist/index.html')); });
+
+app.listen(PORT, () => {
+  console.log("");
+  console.log("======================================");
+  console.log("FLEET ERP SERVER");
+  console.log("======================================");
+  console.log("http://localhost:" + PORT);
+  console.log("Vehicle APIs: /api/vehicles, /api/tickets, /api/dashboard");
+  console.log("Building APIs: /api/sites, /api/work-orders, /api/projects, /api/purchases");
+  console.log("======================================");
+});
+
+
+
+
+ + (i + 1)).join(', ');
+  await pgQuery('DELETE FROM vehicles WHERE id = $1', [vehicleId]);
+  await pgQuery(`INSERT INTO vehicles (${quoted}) VALUES (${params})`, values);
+  console.log('[Test123Reset] reset complete for test 123, vehicle id', vehicleId);
+}
+try {
+  await resetTestVehicle123Once();
+} catch (e) {
+  console.error('[Test123Reset] reset failed:', e.message);
+}
+
 // Restore vehicle-specific driver assignments from each vehicle's own
 // stored driver name/phone snapshot. This prevents editing one driver or vehicle
 // from changing the assignment of unrelated vehicles.

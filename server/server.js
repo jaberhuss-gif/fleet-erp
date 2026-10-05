@@ -16,6 +16,107 @@ import { mountPdfWorkOrderImport } from "./pdfWorkOrderImport.js";
 import { mountTireRoutes } from "./tire-management.js";
 import { toWaMeNumber } from "./phone.js";
 
+async function ensureAnnualInspectionReminderSchema() {
+  await pgQuery(`
+    ALTER TABLE vehicles
+      ADD COLUMN IF NOT EXISTS inspection_expiry_date DATE,
+      ADD COLUMN IF NOT EXISTS inspection_reminder_days INTEGER NOT NULL DEFAULT 30,
+      ADD COLUMN IF NOT EXISTS inspection_manager_email TEXT,
+      ADD COLUMN IF NOT EXISTS inspection_cc_emails TEXT,
+      ADD COLUMN IF NOT EXISTS inspection_last_email_sent_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS inspection_last_email_key TEXT
+  `);
+}
+
+function splitEmails(value) {
+  return String(value || '')
+    .split(/[;,\\s]+/)
+    .map(v => v.trim().toLowerCase())
+    .filter(Boolean)
+    .filter((v, i, a) => a.indexOf(v) === i);
+}
+
+async function sendAnnualInspectionReminderEmail(row) {
+  const apiKey = String(process.env.RESEND_API_KEY || '').trim();
+  const from = String(process.env.INSPECTION_EMAIL_FROM || process.env.EMAIL_FROM || '').trim();
+  if (!apiKey || !from) return { sent: false, reason: 'Email provider is not configured (RESEND_API_KEY / INSPECTION_EMAIL_FROM).' };
+
+  const to = splitEmails(row.inspection_manager_email);
+  const cc = splitEmails(row.inspection_cc_emails).filter(e => !to.includes(e));
+  if (!to.length) return { sent: false, reason: 'No site manager email configured.' };
+
+  const expiry = String(row.inspection_expiry_date || '').slice(0, 10);
+  const days = Math.ceil((new Date(expiry + 'T00:00:00Z') - new Date(new Date().toISOString().slice(0,10) + 'T00:00:00Z')) / 86400000);
+  const plate = [row.plate_number, row.plate_code].filter(Boolean).join(' ').trim();
+  const subject = days < 0
+    ? 'URGENT: Annual Vehicle Inspection Expired — ' + plate
+    : 'Annual Vehicle Inspection Due Soon — ' + plate;
+  const textBody = [
+    'Dear Site Manager,',
+    '',
+    'Please arrange the annual periodic inspection for the following vehicle:',
+    '',
+    'Vehicle: ' + plate,
+    'Driver: ' + (row.driver || 'Unassigned'),
+    'Site: ' + (row.location || 'Not specified'),
+    'Inspection expiry date: ' + expiry,
+    'Days remaining: ' + days,
+    '',
+    'Please arrange the inspection appointment before the current inspection expires.',
+    '',
+    'Fleet Management'
+  ].join('\\n');
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to, cc, subject, text: textBody })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.message || data?.error || 'Email provider returned HTTP ' + response.status);
+  return { sent: true, id: data?.id || null, days };
+}
+
+async function processAnnualInspectionReminders() {
+  const result = await pgQuery(`
+    SELECT id, plate_number, plate_code, driver, location,
+           inspection_expiry_date, inspection_reminder_days,
+           inspection_manager_email, inspection_cc_emails,
+           inspection_last_email_sent_at, inspection_last_email_key
+    FROM vehicles
+    WHERE inspection_expiry_date IS NOT NULL
+      AND COALESCE(LOWER(TRIM(status)), '') NOT IN ('inactive','sold','disposed','disabled')
+  `);
+  let sent = 0, skipped = 0, failed = 0;
+  for (const row of result.rows) {
+    const expiry = String(row.inspection_expiry_date).slice(0,10);
+    const today = new Date().toISOString().slice(0,10);
+    const days = Math.ceil((new Date(expiry + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000);
+    const reminderDays = Number(row.inspection_reminder_days || 30);
+    if (days > reminderDays) { skipped++; continue; }
+
+    // One reminder per expiry date. If the expiry date is changed, a new reminder is allowed.
+    const key = expiry + ':' + reminderDays;
+    if (String(row.inspection_last_email_key || '') === key) { skipped++; continue; }
+
+    try {
+      const delivery = await sendAnnualInspectionReminderEmail(row);
+      if (delivery.sent) {
+        await pgQuery(`UPDATE vehicles SET inspection_last_email_sent_at=CURRENT_TIMESTAMP, inspection_last_email_key=$1 WHERE id=$2`, [key, row.id]);
+        sent++;
+      } else {
+        skipped++;
+      }
+    } catch (e) {
+      failed++;
+      console.error('[InspectionEmail] vehicle', row.id, e.message);
+    }
+  }
+  return { sent, skipped, failed, checked: result.rows.length };
+}
+
+
+
 const { listVehicles:listVehiclesPG, getVehicleById:getVehicleByIdPG, getVehicleByPlate:getVehicleByPlatePG, createVehicle:createVehiclePG, updateVehicle:updateVehiclePG, deleteVehicle:deleteVehiclePG, deleteAllVehicles:deleteAllVehiclesPG, addReading:addReadingPG, listReadings:listReadingsPG, changeOil:changeOilPG, listOilChanges:listOilChangesPG, createTicket:createTicketPG, listTickets:listTicketsPG, closeTicket:closeTicketPG, deleteAllTickets:deleteAllTicketsPG, acknowledgeTicket:acknowledgeTicketPG, startTicketWork:startTicketWorkPG, closeTicketWithNotes:closeTicketWithNotesPG, listTicketsByReporter:listTicketsByReporterPG, getReporterStats:getReporterStatsPG, listSites:listSitesPG, getSite:getSitePG, createSite:createSitePG, updateSite:updateSitePG, deleteSite:deleteSitePG, getAlerts:getAlertsPG, importVehicles:importVehiclesPG, listWorkOrders:listWorkOrdersPG, getWorkOrder:getWorkOrderPG, createWorkOrder:createWorkOrderPG, updateWorkOrder:updateWorkOrderPG, closeWorkOrder:closeWorkOrderPG, deleteWorkOrder:deleteWorkOrderPG, listProjects:listProjectsPG, getProject:getProjectPG, createProject:createProjectPG, updateProject:updateProjectPG, deleteProject:deleteProjectPG, listProjectItems:listProjectItemsPG, createProjectItem:createProjectItemPG, updateProjectItem:updateProjectItemPG, closeProjectItem:closeProjectItemPG, reopenProjectItem:reopenProjectItemPG, listWorkOrderItems:listWorkOrderItemsPG, createWorkOrderItem:createWorkOrderItemPG, listPurchases:listPurchasesPG, createPurchase:createPurchasePG, deletePurchase:deletePurchasePG, listPurchaseRequests:listPurchaseRequestsPG, createPurchaseRequest:createPurchaseRequestPG, approvePurchaseRequest:approvePurchaseRequestPG, rejectPurchaseRequest:rejectPurchaseRequestPG, recordPurchaseFromRequest:recordPurchaseFromRequestPG, listDrivers:listDriversPG, getDriver:getDriverPG, createDriver:createDriverPG, updateDriver:updateDriverPG, deleteDriver:deleteDriverPG, listInventory:listInventoryPG, getInventoryItem:getInventoryItemPG, createInventoryItem:createInventoryItemPG, updateInventoryItem:updateInventoryItemPG, deleteInventoryItem:deleteInventoryItemPG, stockIn:stockInPG, stockOut:stockOutPG, transferStock:transferStockPG, listStockTransactions:listStockTransactionsPG, getLowStockItems:getLowStockItemsPG, listPeriodicMaintenance:listPeriodicMaintenancePG, getPeriodicMaintenance:getPeriodicMaintenancePG, createPeriodicMaintenance:createPeriodicMaintenancePG, updatePeriodicMaintenance:updatePeriodicMaintenancePG, completePeriodicMaintenance:completePeriodicMaintenancePG, deletePeriodicMaintenance:deletePeriodicMaintenancePG, getPeriodicAlerts:getPeriodicAlertsPG, generateScheduledMaintenance:generateScheduledMaintenancePG, ensureVehicleRepairSchema, createVehicleRepairOrder:createVehicleRepairOrderPG, listVehicleRepairOrders:listVehicleRepairOrdersPG, completeVehicleRepairOrder:completeVehicleRepairOrderPG, closeVehicleRepairOrder:closeVehicleRepairOrderPG, logAction:logActionPG, listAuditLog:listAuditLogPG, getAuditStats:getAuditStatsPG, clearAuditLog:clearAuditLogPG, getBuildingDashboard:getBuildingDashboardPG, getCurrentMonthDashboardFinancial:getCurrentMonthDashboardFinancialPG, getDashboard:getDashboardPG, getMonthlyReport:getMonthlyReportPG, getGeneralMaintenanceReport:getGeneralMaintenanceReportPG, getFinancialReport:getFinancialReportPG }=db;
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1004,6 +1105,65 @@ app.get("/api/stock-transactions", async (req, res) => {
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+
+app.get("/api/vehicles/:id/inspection-reminder", async (req, res) => {
+  try {
+    const r = await pgQuery(`
+      SELECT id, plate_number, plate_code, driver, location,
+             inspection_expiry_date, inspection_reminder_days,
+             inspection_manager_email, inspection_cc_emails,
+             inspection_last_email_sent_at, inspection_last_email_key
+      FROM vehicles WHERE id=$1
+    `, [req.params.id]);
+    if (!r.rows[0]) return res.status(404).json({success:false,error:"Vehicle not found"});
+    res.json({success:true, reminder:r.rows[0]});
+  } catch(e) { res.status(500).json({success:false,error:e.message}); }
+});
+
+app.put("/api/vehicles/:id/inspection-reminder", async (req, res) => {
+  try {
+    const expiry = String(req.body.inspectionExpiryDate || '').trim() || null;
+    const days = Math.max(1, Math.min(180, Number(req.body.reminderDays || 30)));
+    const manager = String(req.body.managerEmail || '').trim();
+    const cc = String(req.body.ccEmails || '').trim();
+    const r = await pgQuery(`
+      UPDATE vehicles
+      SET inspection_expiry_date=$1,
+          inspection_reminder_days=$2,
+          inspection_manager_email=$3,
+          inspection_cc_emails=$4,
+          inspection_last_email_key=NULL
+      WHERE id=$5
+      RETURNING id, plate_number, plate_code, driver, location,
+                inspection_expiry_date, inspection_reminder_days,
+                inspection_manager_email, inspection_cc_emails,
+                inspection_last_email_sent_at, inspection_last_email_key
+    `, [expiry, days, manager || null, cc || null, req.params.id]);
+    if (!r.rows[0]) return res.status(404).json({success:false,error:"Vehicle not found"});
+    res.json({success:true, reminder:r.rows[0]});
+  } catch(e) { res.status(400).json({success:false,error:e.message}); }
+});
+
+app.post("/api/vehicles/:id/inspection-reminder/test", async (req, res) => {
+  try {
+    const r=await pgQuery(`
+      SELECT id, plate_number, plate_code, driver, location,
+             inspection_expiry_date, inspection_reminder_days,
+             inspection_manager_email, inspection_cc_emails
+      FROM vehicles WHERE id=$1
+    `, [req.params.id]);
+    if(!r.rows[0]) return res.status(404).json({success:false,error:"Vehicle not found"});
+    const result=await sendAnnualInspectionReminderEmail(r.rows[0]);
+    if(!result.sent) return res.status(400).json({success:false,error:result.reason});
+    res.json({success:true,...result});
+  } catch(e) { res.status(500).json({success:false,error:e.message}); }
+});
+
+app.get("/api/inspection-reminders/status", async (req,res) => {
+  try { res.json({success:true, ...(await processAnnualInspectionReminders()), configured:!!process.env.RESEND_API_KEY && !!(process.env.INSPECTION_EMAIL_FROM || process.env.EMAIL_FROM)}); }
+  catch(e) { res.status(500).json({success:false,error:e.message}); }
+});
+
 // ===== PERIODIC MAINTENANCE =====
 app.get("/api/periodic-maintenance", async (req, res) => {
   try {
@@ -1346,6 +1506,9 @@ try {
 }
 
 try { await ensureVehicleRepairSchema(); } catch (e) { console.error("[Schema] vehicle repair schema check failed:", e.message); }
+try { await ensureAnnualInspectionReminderSchema(); } catch (e) { console.error("[Schema] inspection reminder schema check failed:", e.message); }
+setInterval(() => processAnnualInspectionReminders().catch(e => console.error("[InspectionEmail] scheduler failed:", e.message)), 60 * 60 * 1000);
+
 
 // Additive, idempotent ticket-schema guard. Only missing columns are added;
 // existing tickets and historical data are never modified or removed.

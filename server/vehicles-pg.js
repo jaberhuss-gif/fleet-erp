@@ -203,6 +203,46 @@ export async function updateLastOilChangePG(id, data = {}) {
     const targetId = canonicalResult.rows[0]?.id;
     if (!targetId) throw new Error("Vehicle not found");
 
+    // Keep the canonical oil_changes history in sync with the manual edit.
+    // Oil Compliance reads the latest trusted oil_changes row first, so changing
+    // only vehicles.last_oil_km would make the UI appear unchanged.
+    const latestOil = await client.query(
+      `SELECT id, oil_change_date
+       FROM oil_changes
+       WHERE vehicle_id = $1
+         AND COALESCE(notes, '') NOT ILIKE '%Google Sheet%'
+       ORDER BY oil_change_date DESC NULLS LAST, id DESC
+       LIMIT 1`,
+      [targetId]
+    );
+
+    if (latestOil.rows[0]) {
+      await client.query(
+        `UPDATE oil_changes
+         SET oil_change_km = $1,
+             oil_change_date = $2
+         WHERE id = $3`,
+        [
+          oilKm,
+          oilDate || latestOil.rows[0].oil_change_date || new Date().toISOString().slice(0, 10),
+          latestOil.rows[0].id
+        ]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO oil_changes
+          (vehicle_id, oil_change_km, oil_change_date, changed_by, notes)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          targetId,
+          oilKm,
+          oilDate || new Date().toISOString().slice(0, 10),
+          "Manual Edit",
+          "Manual Last Oil Change baseline"
+        ]
+      );
+    }
+
     const updated = await client.query(
       `UPDATE vehicles
        SET last_oil_km = $1,
@@ -210,7 +250,7 @@ export async function updateLastOilChangePG(id, data = {}) {
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $3
        RETURNING *`,
-      [oilKm, oilDate, targetId]
+      [oilKm, oilDate || latestOil.rows[0]?.oil_change_date || new Date().toISOString().slice(0, 10), targetId]
     );
 
     if (!updated.rows[0]) throw new Error("Vehicle not found");

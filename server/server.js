@@ -1097,7 +1097,7 @@ app.get("/api/vehicles/:id/inspection-reminder", async (req, res) => {
   try {
     const r = await pgQuery(`
       SELECT id, plate_number, plate_code, driver, location,
-             inspection_expiry_date, inspection_reminder_days,
+             inspection_expiry_date::text AS inspection_expiry_date, inspection_reminder_days,
              inspection_manager_email, inspection_cc_emails,
              inspection_last_email_sent_at, inspection_last_email_key
       FROM vehicles WHERE id=$1
@@ -1172,7 +1172,7 @@ app.get("/api/inspection-reminders/due", async (req, res) => {
   try {
     const todayKey = new Date().toISOString().slice(0, 10);
     const r = await pgQuery(`
-      SELECT id, plate_number, plate_code, driver, location, inspection_expiry_date
+      SELECT id, plate_number, plate_code, driver, location, inspection_expiry_date::text AS inspection_expiry_date
       FROM vehicles
       WHERE inspection_expiry_date IS NOT NULL
         AND COALESCE(LOWER(TRIM(status)), '') NOT IN ('inactive','sold','disposed','disabled')

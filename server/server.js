@@ -208,8 +208,13 @@ app.get("/api/vehicles/list", async (req, res) => {
       success: true,
       vehicles: vehicles.map(v => ({
         id: v.id,
-        plate: v.plate,
-        driver: v.driver
+        plate: v.plate || v.plate_number || '',
+        plate_number: v.plate_number || '',
+        plate_code: v.plate_code || '',
+        driver: v.driver || '',
+        location: v.location || '',
+        inspection_expiry_date: v.inspection_expiry_date || null,
+        inspectionExpiryDate: v.inspection_expiry_date || null
       }))
     });
   } catch (e) {

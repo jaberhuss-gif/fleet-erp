@@ -1709,7 +1709,18 @@ app.get("/api/vehicles/:id/whatsapp-info", async (req, res) => {
        LIMIT 1`,
       [v.id]
     );
-    if (annual.rows[0] && String(annual.rows[0].status).toLowerCase() !== "completed") {
+    let annualRecord = annual.rows[0];
+    if (!annualRecord) {
+      const created = await pgQuery(
+        `INSERT INTO periodic_maintenance
+          (vehicle_id, type, scheduled_date, status, technician, notes)
+         VALUES ($1, 'inspection', CURRENT_DATE, 'Pending', '', '')
+         RETURNING id, status`,
+        [v.id]
+      );
+      annualRecord = created.rows[0];
+    }
+    if (annualRecord && String(annualRecord.status).toLowerCase() !== "completed") {
       const token = randomUUID();
       await pgQuery(
         `UPDATE periodic_maintenance
@@ -1717,7 +1728,7 @@ app.get("/api/vehicles/:id/whatsapp-info", async (req, res) => {
              whatsapp_confirmed_at = NULL,
              whatsapp_confirmation_source = NULL
          WHERE id = $2`,
-        [token, annual.rows[0].id]
+        [token, annualRecord.id]
       );
       const baseUrl = String(process.env.PUBLIC_APP_URL || process.env.RENDER_EXTERNAL_URL || "https://fleet-erp-kn0c.onrender.com").replace(/\/$/, "");
       confirmationUrl = baseUrl + "/inspection-confirm/" + token;

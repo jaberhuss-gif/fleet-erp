@@ -14,6 +14,7 @@ import { getKmDailyNotifications, getDailyKmReport, getDriverDailyKmStatus } fro
 import { updateLastOilChangePG } from "./vehicles-pg.js";
 import { mountPdfWorkOrderImport } from "./pdfWorkOrderImport.js";
 import { mountTireRoutes } from "./tire-management.js";
+import { toWaMeNumber } from "./phone.js";
 
 const { listVehicles:listVehiclesPG, getVehicleById:getVehicleByIdPG, getVehicleByPlate:getVehicleByPlatePG, createVehicle:createVehiclePG, updateVehicle:updateVehiclePG, deleteVehicle:deleteVehiclePG, deleteAllVehicles:deleteAllVehiclesPG, addReading:addReadingPG, listReadings:listReadingsPG, changeOil:changeOilPG, listOilChanges:listOilChangesPG, createTicket:createTicketPG, listTickets:listTicketsPG, closeTicket:closeTicketPG, deleteAllTickets:deleteAllTicketsPG, acknowledgeTicket:acknowledgeTicketPG, startTicketWork:startTicketWorkPG, closeTicketWithNotes:closeTicketWithNotesPG, listTicketsByReporter:listTicketsByReporterPG, getReporterStats:getReporterStatsPG, listSites:listSitesPG, getSite:getSitePG, createSite:createSitePG, updateSite:updateSitePG, deleteSite:deleteSitePG, getAlerts:getAlertsPG, importVehicles:importVehiclesPG, listWorkOrders:listWorkOrdersPG, getWorkOrder:getWorkOrderPG, createWorkOrder:createWorkOrderPG, updateWorkOrder:updateWorkOrderPG, closeWorkOrder:closeWorkOrderPG, deleteWorkOrder:deleteWorkOrderPG, listProjects:listProjectsPG, getProject:getProjectPG, createProject:createProjectPG, updateProject:updateProjectPG, deleteProject:deleteProjectPG, listProjectItems:listProjectItemsPG, createProjectItem:createProjectItemPG, updateProjectItem:updateProjectItemPG, closeProjectItem:closeProjectItemPG, reopenProjectItem:reopenProjectItemPG, listWorkOrderItems:listWorkOrderItemsPG, createWorkOrderItem:createWorkOrderItemPG, listPurchases:listPurchasesPG, createPurchase:createPurchasePG, deletePurchase:deletePurchasePG, listPurchaseRequests:listPurchaseRequestsPG, createPurchaseRequest:createPurchaseRequestPG, approvePurchaseRequest:approvePurchaseRequestPG, rejectPurchaseRequest:rejectPurchaseRequestPG, recordPurchaseFromRequest:recordPurchaseFromRequestPG, listDrivers:listDriversPG, getDriver:getDriverPG, createDriver:createDriverPG, updateDriver:updateDriverPG, deleteDriver:deleteDriverPG, listInventory:listInventoryPG, getInventoryItem:getInventoryItemPG, createInventoryItem:createInventoryItemPG, updateInventoryItem:updateInventoryItemPG, deleteInventoryItem:deleteInventoryItemPG, stockIn:stockInPG, stockOut:stockOutPG, transferStock:transferStockPG, listStockTransactions:listStockTransactionsPG, getLowStockItems:getLowStockItemsPG, listPeriodicMaintenance:listPeriodicMaintenancePG, getPeriodicMaintenance:getPeriodicMaintenancePG, createPeriodicMaintenance:createPeriodicMaintenancePG, updatePeriodicMaintenance:updatePeriodicMaintenancePG, completePeriodicMaintenance:completePeriodicMaintenancePG, deletePeriodicMaintenance:deletePeriodicMaintenancePG, getPeriodicAlerts:getPeriodicAlertsPG, generateScheduledMaintenance:generateScheduledMaintenancePG, ensureVehicleRepairSchema, createVehicleRepairOrder:createVehicleRepairOrderPG, listVehicleRepairOrders:listVehicleRepairOrdersPG, completeVehicleRepairOrder:completeVehicleRepairOrderPG, closeVehicleRepairOrder:closeVehicleRepairOrderPG, logAction:logActionPG, listAuditLog:listAuditLogPG, getAuditStats:getAuditStatsPG, clearAuditLog:clearAuditLogPG, getBuildingDashboard:getBuildingDashboardPG, getCurrentMonthDashboardFinancial:getCurrentMonthDashboardFinancialPG, getDashboard:getDashboardPG, getMonthlyReport:getMonthlyReportPG, getGeneralMaintenanceReport:getGeneralMaintenanceReportPG, getFinancialReport:getFinancialReportPG }=db;
 
@@ -1264,7 +1265,7 @@ app.get("/api/tickets/:id/whatsapp-info", async (req, res) => {
 
     const v = vehicleResult.rows[0];
     const plate = [v.plate_number, v.plate_code].filter(Boolean).join(" ").trim();
-    const phone = String(v.phone || "").replace(/[^0-9]/g, "");
+    const phone = toWaMeNumber(v.phone);
 
     res.json({
       success: true,
@@ -1276,6 +1277,31 @@ app.get("/api/tickets/:id/whatsapp-info", async (req, res) => {
     });
   } catch (e) {
     console.error("Error fetching WhatsApp info:", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get("/api/vehicles/:id/whatsapp-info", async (req, res) => {
+  try {
+    const vehicleResult = await pgQuery(
+      "SELECT id, plate_number, plate_code, driver, phone, current_km FROM vehicles WHERE id = $1",
+      [req.params.id]
+    );
+    if (!vehicleResult.rows[0]) {
+      return res.status(404).json({ success: false, error: "Vehicle not found" });
+    }
+    const v = vehicleResult.rows[0];
+    const plate = [v.plate_number, v.plate_code].filter(Boolean).join(" ").trim();
+    res.json({
+      success: true,
+      vehicleId: v.id,
+      driverName: v.driver || "",
+      driverPhone: toWaMeNumber(v.phone),
+      vehiclePlate: plate,
+      currentKm: Number(v.current_km || 0)
+    });
+  } catch (e) {
+    console.error("Error fetching vehicle WhatsApp info:", e);
     res.status(500).json({ success: false, error: e.message });
   }
 });

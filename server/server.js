@@ -304,23 +304,19 @@ app.delete("/api/tickets", async (req, res) => {
   }
 });
 
-app.put("/api/tickets/:id/acknowledge", async (req, res) => {
-  try {
-    const ticket = await acknowledgeTicketPG(req.params.id, req.body);
-    res.json({ success: true, ticket });
-  } catch (e) {
-    console.error("Error acknowledging ticket:", e);
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
-
 app.put("/api/tickets/:id/close-with-notes", async (req, res) => {
   try {
-    const ticket = await closeTicketWithNotesPG(req.params.id, req.body);
+    if (!["Owner","FleetSupervisor"].includes(req.user?.role)) {
+      return res.status(403).json({ success:false, error:"Only Owner or Fleet Supervisor can close tickets." });
+    }
+    const ticket = await closeTicketWithNotesPG(req.params.id, {
+      ...req.body,
+      closedBy: req.user?.full_name || req.user?.username || "Fleet Management"
+    });
     res.json({ success: true, ticket });
   } catch (e) {
     console.error("Error closing ticket with notes:", e);
-    res.status(500).json({ success: false, error: e.message });
+    res.status(400).json({ success:false, error:e.message });
   }
 });
 
@@ -355,9 +351,17 @@ app.get("/api/issues/types", async (req, res) => {
 });
 app.post("/api/issues/report", async (req, res) => {
   try {
-    const { vehicleId, issueType, category, description, reportedBy, priority, openedAt } = req.body;
+    const { vehicleId, issueType, category, description, priority, openedAt } = req.body;
     const finalCategory = issueType || category || "Other";
-    const ticket = await createTicketPG({ vehicleId, category: finalCategory, description, reportedBy: reportedBy || "Driver", priority: priority || "Medium", openedAt });
+    const reporter = req.user?.username || req.user?.full_name || "Driver";
+    const ticket = await createTicketPG({
+      vehicleId,
+      category: finalCategory,
+      description,
+      reportedBy: reporter,
+      priority: priority || "Medium",
+      openedAt
+    });
     res.json({ success: true, message: "Ticket created", ticket });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });

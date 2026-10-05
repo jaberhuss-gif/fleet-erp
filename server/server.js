@@ -1420,8 +1420,8 @@ app.get("/inspection-confirm/:token", async (req, res) => {
       "<p>Hello " + safeDriver + ",</p>" +
       "<p>Have you completed the annual inspection?</p>" +
       "<div style='display:flex;gap:12px;justify-content:center;flex-wrap:wrap'>" +
-      "<form method='POST' action='/inspection-confirm/" + token + "'><input type='hidden' name='decision' value='yes'><button type='submit' style='padding:14px 28px;background:#16a34a;color:white;border:0;border-radius:8px;font-size:16px;cursor:pointer'>YES — Inspection Completed</button></form>" +
-      "<form method='POST' action='/inspection-confirm/" + token + "'><input type='hidden' name='decision' value='no'><button type='submit' style='padding:14px 28px;background:#dc2626;color:white;border:0;border-radius:8px;font-size:16px;cursor:pointer'>NO — Not Completed</button></form>" +
+      "<form method='POST' action='/inspection-confirm/" + token + "?decision=yes'><button type='submit' style='padding:14px 28px;background:#16a34a;color:white;border:0;border-radius:8px;font-size:16px;cursor:pointer'>YES — Inspection Completed</button></form>" +
+      "<form method='POST' action='/inspection-confirm/" + token + "?decision=no'><button type='submit' style='padding:14px 28px;background:#dc2626;color:white;border:0;border-radius:8px;font-size:16px;cursor:pointer'>NO — Not Completed</button></form>" +
       "</div></body></html>");
   } catch (e) {
     res.status(500).send("<h2>Unable to load inspection confirmation.</h2>");
@@ -1431,7 +1431,7 @@ app.get("/inspection-confirm/:token", async (req, res) => {
 app.post("/inspection-confirm/:token", async (req, res) => {
   try {
     const token = String(req.params.token || "").trim();
-    const decision = String(req.body?.decision || "yes").trim().toLowerCase();
+    const decision = String(req.query?.decision || "yes").trim().toLowerCase();
     const result = await pgQuery(
       `SELECT id, status, completed_date FROM periodic_maintenance
        WHERE whatsapp_confirmation_token = $1

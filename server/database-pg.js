@@ -276,10 +276,6 @@ export async function createVehicle(vehicleData = {}) {
   if (driverId) {
     const driverCheck = await query(`SELECT id FROM drivers WHERE id = $1 LIMIT 1`, [driverId]);
     if (!driverCheck.rows[0]) throw new Error("Driver not found");
-    const assigned = await query(`SELECT id FROM vehicles WHERE driver_id = $1 LIMIT 1`, [driverId]);
-    if (assigned.rows[0]) throw new Error("Driver is already assigned to another vehicle");
-    const driverRow = (await query(`SELECT vehicle_id FROM drivers WHERE id = $1 LIMIT 1`, [driverId])).rows[0];
-    if (driverRow?.vehicle_id) throw new Error("Driver is already assigned to another vehicle");
   }
 
   const result = await query(`

@@ -7,7 +7,7 @@ const TYPE_LABELS = {
   'inspection': 'Periodic Inspection'
 };
 
-export default function PeriodicMaintenance({ canWork = false }) {
+export default function PeriodicMaintenance({ canWork = false, inspectionEmailOnly = false }) {
   const [subTab, setSubTab] = useState('all');
   const [records, setRecords] = useState([]);
   const [alerts, setAlerts] = useState({ overdue: [], dueSoon: [] });
@@ -485,7 +485,70 @@ export default function PeriodicMaintenance({ canWork = false }) {
     const isInspectedReport = key === 'sixInspected' || key === 'annualInspected';
     const component = key.startsWith('six') ? '6-Month Maintenance' : 'Annual Inspection';
     const type = key.startsWith('six') ? '6_months_general' : 'inspection';
+    if (inspectionEmailOnly) {
     return (
+      <div>
+        <div className="panel" style={{marginBottom:16}}>
+          <h1 style={{margin:0}}>📧 Annual Vehicle Inspection — Email Control</h1>
+          <p style={{margin:'6px 0 0',color:'#64748b'}}>
+            Send annual inspection reminders by site. Only expired vehicles and vehicles expiring within the next 30 days are included.
+            Inspection dates are maintained only in Vehicle Master.
+          </p>
+        </div>
+        {error && <div className="alert alert-error" style={{marginBottom:12}}>{error}</div>}
+        {message && <div className="alert alert-success" style={{marginBottom:12}}>{message}</div>}
+        <div className="panel" style={{marginBottom:16}}>
+          <h2 style={{marginTop:0}}>1. Choose Recipients</h2>
+          <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:14}}>
+            <button className={reminderSendMode==='all'?'btn btn-success':'btn'} onClick={()=>setReminderSendMode('all')}>1️⃣ Send to All Sites</button>
+            <button className={reminderSendMode==='sites'?'btn btn-success':'btn'} onClick={()=>setReminderSendMode('sites')}>2️⃣ Select Sites & Send</button>
+          </div>
+          {reminderSendMode==='sites' && (
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:8}}>
+              {annualInspectionSites.map(site=>(
+                <label key={site} style={{display:'flex',alignItems:'center',gap:8,padding:10,border:'1px solid #e2e8f0',borderRadius:8,cursor:'pointer'}}>
+                  <input type="checkbox" checked={selectedReminderSites.includes(site)}
+                    onChange={e=>setSelectedReminderSites(prev=>e.target.checked?[...prev,site]:prev.filter(x=>x!==site))}/>
+                  {site}
+                </label>
+              ))}
+            </div>
+          )}
+          {reminderSendMode==='all' && <div style={{padding:12,border:'1px solid #e2e8f0',borderRadius:8,background:'#f8fafc'}}>
+            All configured sites will be checked. A site receives an email only when it has an eligible vehicle.
+          </div>}
+        </div>
+        <div className="panel" style={{marginBottom:16}}>
+          <h2 style={{marginTop:0}}>2. Vehicles Due for Email — Next 30 Days</h2>
+          <div style={{fontSize:13,color:'#64748b',marginBottom:10}}>
+            Eligible vehicles: <strong>{reminderDueVehicles.length}</strong>
+          </div>
+          {reminderDueVehicles.length===0 ? <div style={{color:'#64748b'}}>No vehicles are expired or due within 30 days.</div> : (
+            <table><thead><tr><th>Vehicle</th><th>Driver</th><th>Site</th><th>Expiry (Gregorian)</th><th>Status</th></tr></thead>
+              <tbody>{reminderDueVehicles.filter(v=>reminderSendMode==='all'||selectedReminderSites.includes(v.location)).map(v=>(
+                <tr key={v.id}><td><strong>{v.plate||'-'}</strong></td><td>{v.driver||'-'}</td><td>{v.location||'-'}</td><td>{v.expiry||'-'}</td>
+                  <td><span className="status-badge" style={{background:v.days<0?'#dc2626':'#f59e0b',color:'#fff'}}>{v.days<0?'Expired':v.days===0?'Today':v.days+' days left'}</span></td></tr>
+              ))}</tbody>
+            </table>
+          )}
+        </div>
+        {reminderSendResult && <div className="panel" style={{marginBottom:16}}>
+          <h2 style={{marginTop:0}}>3. Send Result</h2>
+          {(reminderSendResult.results||[]).map(r=><div key={r.site} style={{padding:'7px 0',borderBottom:'1px solid #f1f5f9'}}>
+            {r.sent?'✅':'⚠️'} <strong>{r.site}</strong> — {r.vehicles} vehicle(s){r.reason?' — '+r.reason:''}
+          </div>)}
+        </div>}
+        <div className="btn-row">
+          {canWork && <button className="btn btn-success" onClick={sendInspectionReminders} disabled={sendingReminders}>
+            {sendingReminders?'Sending...':'📧 Send Email'}
+          </button>}
+          <button className="btn btn-secondary" onClick={openReminderSend} disabled={sendingReminders}>↻ Refresh</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
       <div className="panel print-hide" style={{ marginBottom: 18, overflowX: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
           <div>
@@ -527,8 +590,8 @@ export default function PeriodicMaintenance({ canWork = false }) {
                   <td>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <button className="btn" style={{ padding: '6px 10px', background: '#25D366', color: '#fff' }} onClick={() => reportWhatsApp(row, component, done)}>📱 WhatsApp</button>
-                      {canWork && key === 'annualInspected' && <button className="btn btn-primary" style={{ padding: '6px 10px' }} onClick={() => openReminder(row)}>📅 Set Expiry</button>}
-                      {canWork && key === 'annualNotInspected' && <button className="btn btn-primary" style={{ padding: '6px 10px' }} onClick={() => openReminder(row)}>📅 Set Expiry</button>}
+                      
+                      
                       {canWork && (
                         done
                           ? <button className="btn btn-success" style={{ padding: '6px 10px' }} disabled>✓ Closed</button>
@@ -900,45 +963,6 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
                 {sendingReminders ? 'Sending...' : '📧 Send Email'}
               </button>
               <button className="btn btn-secondary" onClick={() => setShowReminderSend(false)} disabled={sendingReminders}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {reminderVehicle && (
-        <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: 650 }}>
-            <h3>Annual Inspection Expiry — {reminderVehicle.plate}</h3>
-            <p style={{ color: '#64748b' }}>Set the expiry date and email recipients. The system will remind them automatically before expiry.</p>
-            <label>Inspection Expiry Date — Hijri (Umm al-Qura)</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              placeholder="1448-04-15"
-              value={hijriExpiryDate}
-              onChange={e => {
-                const value = e.target.value;
-                setHijriExpiryDate(value);
-                const gregorian = hijriToGregorian(value);
-                if (gregorian) {
-                  setReminderForm(prev => ({ ...prev, inspectionExpiryDate: gregorian }));
-                }
-              }}
-              required
-            />
-            <div style={{ marginTop: 6, marginBottom: 12, color: '#166534', fontWeight: 600 }}>
-              Gregorian date used in the system/email: {reminderForm.inspectionExpiryDate || '—'}
-            </div>
-            <label>Reminder Before Expiry (days)</label>
-            <input type="number" min="1" max="180" value={reminderForm.reminderDays} onChange={e => setReminderForm({...reminderForm, reminderDays:e.target.value})} />
-            <label>Site Manager Email</label>
-            <input type="email" value={reminderForm.managerEmail} onChange={e => setReminderForm({...reminderForm, managerEmail:e.target.value})} placeholder="manager@company.com" />
-            <label>CC Emails</label>
-            <textarea rows="3" value={reminderForm.ccEmails} onChange={e => setReminderForm({...reminderForm, ccEmails:e.target.value})} placeholder="email1@company.com, email2@company.com" />
-            <div className="btn-row">
-              {canWork && <button className="btn btn-success" onClick={saveReminder}>Save</button>}
-              {canWork && reminderForm.managerEmail && <button className="btn btn-warning" onClick={testReminder}>Send Test Email</button>}
-              <button className="btn btn-secondary" onClick={() => setReminderVehicle(null)}>Cancel</button>
             </div>
           </div>
         </div>

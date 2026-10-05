@@ -218,7 +218,7 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
               <div className="form-group"><label>Current KM</label><input type="number" value={form.currentKm} onChange={e => setForm({ ...form, currentKm: Number(e.target.value) })} /></div>
               <div className="form-group"><label>Last Oil KM</label><input type="number" min="0" value={form.lastOilKm} onChange={e => setForm({ ...form, lastOilKm: Number(e.target.value) })} /></div>
               <div className="form-group"><label>Last Oil Change Date</label><input type="date" value={form.lastOilChangeDate} onChange={e => setForm({ ...form, lastOilChangeDate:e.target.value })} /></div>
-              <div className="form-group"><label>Annual Inspection Expiry — Hijri (Umm al-Qura)</label><input type="text" inputMode="numeric" placeholder="1448-05-23" value={inspectionHijri} onChange={e => { const hijri=e.target.value; setInspectionHijri(hijri); const gregorian=hijriToGregorian(hijri); if (gregorian) setForm({ ...form, inspectionExpiryDate: gregorian }); }} /><div style={{fontSize:12,color:'#64748b',marginTop:4}}>Gregorian stored: {form.inspectionExpiryDate || '—'}</div></div>
+              <div className="form-group"><label>Annual Inspection Expiry — Hijri (Umm al-Qura)</label><input type="text" inputMode="numeric" placeholder="1448-05-23" value={inspectionHijri} onChange={e => { const hijri=e.target.value; setInspectionHijri(hijri); const gregorian=hijriToGregorian(hijri); if (gregorian) setForm({ ...form, inspectionExpiryDate: gregorian }); }} /><div style={{fontSize:12,color:'#64748b',marginTop:4}}>Hijri: {inspectionHijri || '—'} | Gregorian stored: {form.inspectionExpiryDate || '—'}</div></div>
               <div className="form-group"><label>Oil Interval</label><input type="number" value={form.oilChangeInterval} onChange={e => setForm({ ...form, oilChangeInterval: Number(e.target.value) })} /></div>
             </div>
             <div className="btn-row"><button type="submit" className="btn btn-success">{editing ? 'Update' : 'Save'}</button><button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button></div>
@@ -226,11 +226,11 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
         )}
 
         {loading ? <div className="loading">Loading...</div> : filtered.length === 0 ? <div className="alert alert-info">No vehicles match your filters.</div> : (
-          <table><thead><tr><th>Plate</th><th>Driver</th><th>Location</th><th>Current KM</th><th>Last Oil</th><th>Since Oil</th><th>Status</th><th>Actions</th></tr></thead>
+          <table><thead><tr><th>Plate</th><th>Driver</th><th>Location</th><th>Current KM</th><th>Annual Inspection Expiry</th><th>Last Oil</th><th>Since Oil</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>{filtered.map(v => (
               <tr key={v.id}>
                 <td style={{ fontWeight: 'bold' }}><button onClick={() => onViewVehicle && onViewVehicle(v.id)} style={{ background: 'none', border: 'none', color: '#1e3a8a', cursor: 'pointer', textDecoration: 'underline', fontWeight: 'bold', padding: 0, fontFamily: 'inherit', fontSize: 'inherit' }}>{v.plate}</button></td>
-                <td>{v.driver}</td><td>{v.location || '-'}</td><td>{v.currentKm.toLocaleString()}</td><td>{v.lastOilKm.toLocaleString()}</td>
+                <td>{v.driver}</td><td>{v.location || '-'}</td><td>{v.currentKm.toLocaleString()}</td><td>{v.inspectionExpiryDate ? String(v.inspectionExpiryDate).slice(0,10) : '—'}</td><td>{v.lastOilKm.toLocaleString()}</td>
                 <td style={{ fontWeight: 'bold', color: v.sinceOil >= 5000 ? '#dc2626' : v.sinceOil >= 4500 ? '#f59e0b' : '#16a34a' }}>{v.sinceOil.toLocaleString()}</td>
                 <td><span className={'status-badge ' + (v.status === 'Urgent Overdue' ? 'status-urgent' : v.status === 'Warning' ? 'status-warning' : 'status-safe')}>{v.status === 'Urgent Overdue' ? 'Overdue' : v.status}</span></td>
                 <td><button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => onViewVehicle && onViewVehicle(v.id)}>View</button>{canWork && <button className="btn btn-success" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleEdit(v)}>Edit</button>}{canWork && <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(v.id)} >Delete</button>}</td>

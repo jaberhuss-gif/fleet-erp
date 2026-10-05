@@ -1188,11 +1188,14 @@ app.get("/api/inspection-reminders/due", async (req, res) => {
         location: canonicalInspectionSite(row.location) || '-',
         expiry,
         days,
-        emailEligible: days <= 31
+        emailEligible: days <= 31,
+        managerEmail: annualInspectionRecipients(row.location).managerEmail,
+        ccEmails: annualInspectionRecipients(row.location).ccEmails
+          .split(',').map(e => e.trim()).filter(Boolean)
       };
     });
     vehicles.sort((a, b) => a.days - b.days || a.plate.localeCompare(b.plate));
-    res.json({ success: true, today: todayKey, windowDays: 30, vehicles });
+    res.json({ success: true, today: todayKey, windowDays: 31, vehicles });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }

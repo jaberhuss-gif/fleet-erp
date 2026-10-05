@@ -262,6 +262,16 @@ export async function createVehicle(vehicleData = {}) {
   const plateCode = parts.slice(1).join(" ").toUpperCase();
   if (!plateNumber) throw new Error("Vehicle plate is required");
 
+  const duplicate = await query(
+    `SELECT id
+     FROM vehicles
+     WHERE UPPER(TRIM(COALESCE(plate_number, ''))) = UPPER(TRIM($1))
+       AND UPPER(TRIM(COALESCE(plate_code, ''))) = UPPER(TRIM($2))
+     LIMIT 1`,
+    [plateNumber, plateCode]
+  );
+  if (duplicate.rows[0]) throw new Error("A vehicle with this plate already exists");
+
   const driverId = vehicleData.driverId ?? vehicleData.driver_id ?? null;
   if (driverId) {
     const driverCheck = await query(`SELECT id FROM drivers WHERE id = $1 LIMIT 1`, [driverId]);

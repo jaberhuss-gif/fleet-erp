@@ -1188,7 +1188,7 @@ app.get("/api/inspection-reminders/due", async (req, res) => {
         location: canonicalInspectionSite(row.location) || '-',
         expiry,
         days,
-        emailEligible: days <= 30
+        emailEligible: days <= 31
       };
     });
     vehicles.sort((a, b) => a.days - b.days || a.plate.localeCompare(b.plate));
@@ -1223,8 +1223,8 @@ app.post("/api/inspection-reminders/send", async (req, res) => {
       const expiry = String(row.inspection_expiry_date).slice(0, 10);
       const days = Math.ceil((new Date(expiry + 'T00:00:00Z') - new Date(todayKey + 'T00:00:00Z')) / 86400000);
       const site = canonicalInspectionSite(row.location);
-      // Manual email queue is strictly the next 30 days (including expired).
-      return days <= 30 && selectedSites.some(s => s.toLowerCase() === site.toLowerCase());
+      // Manual email queue is strictly the next 31 days (including expired).
+      return days <= 31 && selectedSites.some(s => s.toLowerCase() === site.toLowerCase());
     });
 
     const bySite = {};

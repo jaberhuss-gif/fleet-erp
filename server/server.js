@@ -36,6 +36,25 @@ function annualInspectionRecipients(location) {
   };
 }
 
+
+async function seedAnnualInspectionExpiryFromMasterList() {
+  const expiryByPlate = {
+    '2287':'2026-11-03','4980':'2026-10-13','1715':'2026-10-30','1737':'2026-10-27','4430':'2026-09-08',
+    '1543':'2026-12-18','1722':'2026-10-20','4532':'2026-12-25','2344':'2026-09-04','6183':'2026-12-18',
+    '2158':'2026-10-08','8703':'2026-09-18','4463':'2026-10-06','1709':'2026-10-20','2110':'2026-10-27',
+    '4479':'2027-01-28','1713':'2026-10-27','4435':'2026-10-09','8704':'2026-09-18','4534':'2026-12-21',
+    '4538':'2027-02-04','4533':'2026-12-11','1706':'2027-06-24','4541':'2027-03-31','2349':'2026-10-26',
+    '5456':'2026-10-11','1716':'2026-10-21','4481':'2026-10-13','2290':'2026-12-22','2687':'2026-10-30',
+    '2295':'2026-12-14','1738':'2026-10-14','1712':'2026-10-23','4431':'2026-11-05'
+  };
+  let updated = 0;
+  for (const [plate, expiry] of Object.entries(expiryByPlate)) {
+    const result = await pgQuery("UPDATE vehicles SET inspection_expiry_date = $1, updated_at = CURRENT_TIMESTAMP WHERE regexp_replace(COALESCE(plate_number, ''), '[^0-9]', '', 'g') = $2", [expiry, plate]);
+    updated += result.rowCount || 0;
+  }
+  console.log('[InspectionMasterImport] seeded expiry dates for ' + updated + ' vehicle rows.');
+}
+
 async function ensureAnnualInspectionReminderSchema() {
   await pgQuery(`
     ALTER TABLE vehicles
@@ -1634,6 +1653,7 @@ try {
 
 try { await ensureVehicleRepairSchema(); } catch (e) { console.error("[Schema] vehicle repair schema check failed:", e.message); }
 try { await ensureAnnualInspectionReminderSchema(); } catch (e) { console.error("[Schema] inspection reminder schema check failed:", e.message); }
+try { await seedAnnualInspectionExpiryFromMasterList(); } catch (e) { console.error("[InspectionMasterImport] failed:", e.message); }
 setInterval(() => processAnnualInspectionReminders().catch(e => console.error("[InspectionEmail] scheduler failed:", e.message)), 60 * 60 * 1000);
 
 

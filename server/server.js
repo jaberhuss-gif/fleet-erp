@@ -4,6 +4,7 @@ import { login, listUsers, createUser, updateUser, deleteUser, requireAuth } fro
 import { requirePermission, ACCESS_MODULES, getUserAccess, saveUserAccess } from "./rbac.js";
 import fs from "fs";
 import path from "path";
+import { randomUUID } from "crypto";
 import { fileURLToPath } from "url";
 
 
@@ -1336,6 +1337,116 @@ app.put("/api/periodic-maintenance/:id", async (req, res) => {
 app.put("/api/periodic-maintenance/:id/complete", async (req, res) => {
   try { res.json({ success: true, record: await completePeriodicMaintenancePG(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
+});
+
+app.post("/api/periodic-maintenance/whatsapp-confirmation", async (req, res) => {
+  try {
+    const vehicleId = Number(req.body?.vehicleId);
+    const type = String(req.body?.type || "inspection").trim();
+    if (!vehicleId || type !== "inspection") {
+      return res.status(400).json({ success: false, error: "Invalid inspection confirmation request." });
+    }
+
+    let result = await pgQuery(
+      `SELECT id, vehicle_id, type, status, plate_number, plate_code, driver
+       FROM periodic_maintenance pm
+       LEFT JOIN vehicles v ON v.id = pm.vehicle_id
+       WHERE pm.vehicle_id = $1 AND pm.type = 'inspection'
+       ORDER BY CASE WHEN pm.status = 'Pending' THEN 0 ELSE 1 END, pm.id DESC
+       LIMIT 1`,
+      [vehicleId]
+    );
+    let record = result.rows[0];
+
+    if (!record) {
+      result = await pgQuery(
+        `INSERT INTO periodic_maintenance
+          (vehicle_id, type, scheduled_date, status, technician, notes)
+         VALUES ($1, 'inspection', CURRENT_DATE, 'Pending', '', '')
+         RETURNING id, vehicle_id, type, status`,
+        [vehicleId]
+      );
+      record = result.rows[0];
+    }
+
+    if (String(record.status).toLowerCase() === "completed") {
+      return res.json({ success: true, alreadyCompleted: true });
+    }
+
+    const token = randomUUID();
+    const updated = await pgQuery(
+      `UPDATE periodic_maintenance
+       SET whatsapp_confirmation_token = $1,
+           whatsapp_confirmed_at = NULL,
+           whatsapp_confirmation_source = NULL
+       WHERE id = $2
+       RETURNING id`,
+      [token, record.id]
+    );
+
+    const baseUrl = String(process.env.PUBLIC_APP_URL || process.env.RENDER_EXTERNAL_URL || "https://fleet-erp-kn0c.onrender.com").replace(/\/$/, "");
+    res.json({
+      success: true,
+      confirmationUrl: baseUrl + "/inspection-confirm/" + token,
+      recordId: updated.rows[0]?.id
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get("/inspection-confirm/:token", async (req, res) => {
+  try {
+    const token = String(req.params.token || "").trim();
+    const result = await pgQuery(
+      `SELECT pm.id, pm.status, pm.completed_date, v.plate_number, v.plate_code, v.driver, pm.type
+       FROM periodic_maintenance pm
+       LEFT JOIN vehicles v ON v.id = pm.vehicle_id
+       WHERE pm.whatsapp_confirmation_token = $1
+       LIMIT 1`,
+      [token]
+    );
+    const row = result.rows[0];
+    if (!row) return res.status(404).send("<h2>Inspection confirmation link is invalid or expired.</h2>");
+    const vehicle = [row.plate_number, row.plate_code].filter(Boolean).join(" ");
+    if (String(row.status).toLowerCase() === "completed") {
+      return res.send("<!doctype html><html><body style='font-family:Arial;padding:30px'><h2>Inspection Already Completed</h2><p>Vehicle <strong>" + vehicle + "</strong> is already recorded as completed.</p><p>Completed date: " + (row.completed_date || "-") + "</p></body></html>");
+    }
+    res.send("<!doctype html><html><body style='font-family:Arial;max-width:620px;margin:50px auto;padding:24px;text-align:center'><h2>Annual Vehicle Inspection</h2><p>Vehicle <strong>" + vehicle + "</strong></p><p>Hello " + String(row.driver || "Driver").replace(/[<>&]/g, "") + ",</p><p>Have you completed the annual inspection?</p><form method='POST' action='/inspection-confirm/" + token + "'><button type='submit' style='padding:14px 28px;background:#16a34a;color:white;border:0;border-radius:8px;font-size:16px;cursor:pointer'>YES — Inspection Completed</button></form></body></html>");
+  } catch (e) {
+    res.status(500).send("<h2>Unable to load inspection confirmation.</h2>");
+  }
+});
+
+app.post("/inspection-confirm/:token", async (req, res) => {
+  try {
+    const token = String(req.params.token || "").trim();
+    const result = await pgQuery(
+      `SELECT id, status FROM periodic_maintenance
+       WHERE whatsapp_confirmation_token = $1
+       LIMIT 1`,
+      [token]
+    );
+    const row = result.rows[0];
+    if (!row) return res.status(404).send("<h2>Inspection confirmation link is invalid or expired.</h2>");
+    if (String(row.status).toLowerCase() !== "completed") {
+      await completePeriodicMaintenancePG(row.id, {
+        technician: "WhatsApp Confirmation",
+        cost: 0,
+        notes: "Annual inspection confirmed by driver via WhatsApp confirmation link.",
+      });
+      await pgQuery(
+        `UPDATE periodic_maintenance
+         SET whatsapp_confirmed_at = NOW(),
+             whatsapp_confirmation_source = 'WhatsApp'
+         WHERE id = $1`,
+        [row.id]
+      );
+    }
+    res.send("<!doctype html><html><body style='font-family:Arial;max-width:620px;margin:50px auto;padding:24px;text-align:center'><h2 style='color:#16a34a'>✓ Inspection Completed</h2><p>The inspection has been recorded in Fleet ERP.</p><p>Date: " + new Date().toISOString().slice(0,10) + "</p></body></html>");
+  } catch (e) {
+    res.status(500).send("<h2>Unable to complete the inspection.</h2><p>" + String(e.message || "").replace(/[<>&]/g, "") + "</p>");
+  }
 });
 
 app.delete("/api/periodic-maintenance/:id", async (req, res) => {

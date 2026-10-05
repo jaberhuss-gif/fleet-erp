@@ -116,7 +116,7 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
   const handleQuickSave = async () => {
     setMessage(''); setError('');
     try {
-      await api.put('/vehicles/' + quickEdit.id, { currentKm: Number(quickKm) });
+      await api.put('/vehicles/' + quickEdit.id, { currentKm: Number(quickKm), lastOilKm: Number(quickOilKm) });
       setMessage('Reading updated for ' + quickEdit.plate);
       setQuickEdit(null);
       load();

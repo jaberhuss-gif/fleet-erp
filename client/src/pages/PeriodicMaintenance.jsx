@@ -320,7 +320,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       }
       const message = inspectedState
         ? 'Hello ' + driver + ',\n\nVehicle ' + plate + ' — ' + component + ' has been inspected and recorded.\n\nFleet Management'
-        : 'Hello ' + driver + ',\n\nVehicle ' + plate + ' — ' + component + ' inspection is still pending. Please arrange the inspection.\n\nPlease also inform your Supervisor and the Camp/Campus team accordingly.' + (info.confirmationUrl ? '\n\nIf the inspection has been completed, please confirm here:\n' + info.confirmationUrl : '') + '\n\nFleet Management';
+        : 'Hello ' + driver + ',\n\nVehicle ' + plate + ' — ' + component + ' inspection is still pending. Please arrange the inspection.\n\nPlease also inform your Supervisor and the Camp/Campus team accordingly.\n\nIMPORTANT: If you have completed the inspection, open the link below and press YES to confirm.\nIf the inspection has NOT been completed yet, DO NOT press YES. Complete the inspection first, then return to this message and press YES.\n\n' + (info.confirmationUrl ? 'Inspection confirmation link:\n' + info.confirmationUrl : 'The inspection confirmation link is not available yet.') + '\n\nFleet Management';
       window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(message), '_blank');
     } catch (e) {
       setError(e.response?.data?.error || e.message);

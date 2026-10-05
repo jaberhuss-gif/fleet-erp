@@ -557,32 +557,20 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
   const renderComplianceReport = (key) => {
     const report = complianceReports[key];
     if (!report) return null;
-    const isInspectedReport = key === 'sixInspected' || key === 'annualInspected';
     const component = key.startsWith('six') ? '6-Month Maintenance' : 'Annual Inspection';
     const type = key.startsWith('six') ? '6_months_general' : 'inspection';
 
-  return (
+    return (
       <div className="panel print-hide" style={{ marginBottom: 18, overflowX: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
           <div>
             <h2 style={{ margin: 0, color: report.color }}>{report.title} ({report.rows.length})</h2>
-            <div style={{ marginTop: 5, color: '#64748b' }}>
-              Separate control report — {component}
-            </div>
+            <div style={{ marginTop: 5, color: '#64748b' }}>Separate control report — {component}</div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button
-              className="btn btn-primary"
-              onClick={() => printComplianceReport(key)}
-            >🖨️ Print / Save PDF</button>
-          </div>
+          <button className="btn btn-primary" onClick={() => printComplianceReport(key)}>🖨️ Print / Save PDF</button>
         </div>
         <table>
-          <thead>
-            <tr>
-              <th>Vehicle</th><th>Driver</th><th>Status</th><th>Scheduled</th><th>Completed</th><th>Notes</th><th>Actions</th>
-            </tr>
-          </thead>
+          <thead><tr><th>Vehicle</th><th>Driver</th><th>Status</th><th>Scheduled</th><th>Completed</th><th>Notes</th><th>Actions</th></tr></thead>
           <tbody>
             {report.rows.length === 0 ? (
               <tr><td colSpan="7" style={{ textAlign: 'center', padding: 24 }}>No vehicles in this report.</td></tr>
@@ -600,12 +588,9 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
                   <td>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <button className="btn" style={{ padding: '6px 10px', background: '#25D366', color: '#fff' }} onClick={() => reportWhatsApp(row, component, done)}>📱 WhatsApp</button>
-                      
-                      
-                      {canWork && (
-                        done
-                          ? <button className="btn btn-success" style={{ padding: '6px 10px' }} disabled>✓ Closed</button>
-                          : <button className="btn btn-danger" style={{ padding: '6px 10px' }} onClick={() => closeComplianceReport(row, component, type)}>Close</button>
+                      {canWork && (done
+                        ? <button className="btn btn-success" style={{ padding: '6px 10px' }} disabled>✓ Closed</button>
+                        : <button className="btn btn-danger" style={{ padding: '6px 10px' }} onClick={() => closeComplianceReport(row, component, type)}>Close</button>
                       )}
                     </div>
                   </td>
@@ -617,7 +602,6 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       </div>
     );
   };
-
 
 
   const printPdfReport = () => {

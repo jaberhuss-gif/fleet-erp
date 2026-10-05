@@ -47,27 +47,6 @@ export default function VehicleTicket({ user, canWork=false }) {
 
   const vehicleMap=useMemo(()=>Object.fromEntries(vehicles.map(v=>[String(v.id),v])),[vehicles]);
 
-  const inspectionTickets=useMemo(()=>vehicles
-    .filter(v=>String(v.plate||'').trim().toLowerCase()!=='test 123')
-    .flatMap(v=>{
-      const vr=periodic.filter(x=>String(x.vehicle_id)===String(v.id));
-      const six=latest(vr,'6_months_general');
-      const annual=latest(vr,'inspection');
-      const missing=[];
-      if(!(six&&inspected(six))) missing.push({component:'6-Month Maintenance',record:six});
-      if(!(annual&&inspected(annual))) missing.push({component:'Annual Inspection',record:annual});
-      return missing.map((m,i)=>({
-        kind:'inspection',
-        id:'inspection-'+v.id+'-'+i,
-        vehicle:v,
-        description:m.component+' required',
-        status:'Open',
-        date:m.record?.scheduled_date||'',
-        record:m.record,
-        component:m.component
-      }));
-    }),[vehicles,periodic]);
-
   const ticketRows=useMemo(()=>{
     const general=tickets.map(t=>({
       kind:'maintenance',

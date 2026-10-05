@@ -73,6 +73,7 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [accessLoading, setAccessLoading] = useState(false);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
+  const [vehicleDataVersion, setVehicleDataVersion] = useState(0);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -118,6 +119,15 @@ export default function App() {
     window.addEventListener('navigate', handler);
     return () => window.removeEventListener('navigate', handler);
   }, [user, access]);
+
+  // Vehicle Master is the single edit point for vehicle identity, driver assignment,
+  // current KM and oil fields. Remount the active page immediately after a save so
+  // every module re-reads the same canonical vehicle data.
+  useEffect(() => {
+    const handler = () => setVehicleDataVersion(v => v + 1);
+    window.addEventListener('fleet-vehicles-updated', handler);
+    return () => window.removeEventListener('fleet-vehicles-updated', handler);
+  }, []);
 
   const canViewModule = (module) => {
     if (user?.role === 'Owner') return true;
@@ -290,7 +300,7 @@ export default function App() {
           )}
         </aside>
 
-        <main className="main">
+        <main className="main" key={vehicleDataVersion}>
           {tab === 'gm' && <GMDashboard />}
           {tab === 'support-service' && <SupportServiceHub user={user} access={access || {}} />}
           {tab === 'operations' && <OperationsHub user={user} access={access || {}} />}

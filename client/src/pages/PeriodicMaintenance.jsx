@@ -22,6 +22,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
   const [filterType, setFilterType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [search, setSearch] = useState('');
+  const [reportTab, setReportTab] = useState('original');
 
   const [form, setForm] = useState({
     vehicleId: '', type: '6_months_general', scheduledDate: '',
@@ -238,6 +239,149 @@ export default function PeriodicMaintenance({ canWork = false }) {
     await exportToExcel(data, filename, exportColumns, sheetName);
   };
 
+  const complianceReports = {
+    sixInspected: {
+      title: '6-Month Maintenance — Inspected',
+      color: '#16a34a',
+      rows: vehicleSummary.filter(v => v.sixDone)
+    },
+    annualInspected: {
+      title: 'Annual Inspection — Inspected',
+      color: '#16a34a',
+      rows: vehicleSummary.filter(v => v.annualDone)
+    },
+    sixNotInspected: {
+      title: '6-Month Maintenance — Not Inspected',
+      color: '#dc2626',
+      rows: vehicleSummary.filter(v => !v.sixDone)
+    },
+    annualNotInspected: {
+      title: 'Annual Inspection — Not Inspected',
+      color: '#dc2626',
+      rows: vehicleSummary.filter(v => !v.annualDone)
+    }
+  };
+
+  const normalizeWaPhone = (value) => {
+    const digits = String(value || '').replace(/\\D/g, '');
+    if (digits.length === 9 && digits.startsWith('5')) return '966' + digits;
+    if (digits.length === 10 && digits.startsWith('05')) return '966' + digits.slice(1);
+    if (digits.startsWith('966')) return digits;
+    return digits;
+  };
+
+  const reportWhatsApp = async (row, component, inspectedState) => {
+    try {
+      const info = (await api.get('/vehicles/' + row.vehicle_id + '/whatsapp-info')).data || {};
+      const phone = normalizeWaPhone(info.driverPhone);
+      const driver = info.driverName || row.driver || 'Driver';
+      const plate = info.vehiclePlate || row.plate || '';
+      if (!phone) {
+        setError('No driver WhatsApp number found for vehicle ' + plate);
+        return;
+      }
+      const message = inspectedState
+        ? 'Hello ' + driver + ',\\n\\nVehicle ' + plate + ' — ' + component + ' has been inspected and recorded.\\n\\nFleet Management'
+        : 'Hello ' + driver + ',\\n\\nVehicle ' + plate + ' — ' + component + ' inspection is still pending. Please arrange the inspection.\\n\\nFleet Management';
+      window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(message), '_blank');
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
+  };
+
+  const closeComplianceReport = async (row, component, type) => {
+    if (!canWork) return;
+    if (!confirm('Confirm ' + component + ' is completed and close this item?')) return;
+    setError(''); setMessage('');
+    try {
+      let rec = type === '6_months_general' ? row.six : row.annual;
+      if (!rec) {
+        const created = await api.post('/periodic-maintenance', {
+          vehicleId: Number(row.vehicle_id),
+          type,
+          scheduledDate: new Date().toISOString().slice(0, 10),
+          status: 'Pending'
+        });
+        rec = created.data?.record;
+      }
+      if (!rec?.id) throw new Error('Unable to create the maintenance record.');
+      await api.put('/periodic-maintenance/' + rec.id + '/complete', {
+        completedDate: new Date().toISOString().slice(0, 10),
+        technician: 'Fleet Management',
+        notes: component + ' completed and ticket closed.'
+      });
+      setMessage(component + ' closed for ' + row.plate);
+      await load();
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
+  };
+
+  const renderComplianceReport = (key) => {
+    const report = complianceReports[key];
+    if (!report) return null;
+    const isInspectedReport = key === 'sixInspected' || key === 'annualInspected';
+    const component = key.startsWith('six') ? '6-Month Maintenance' : 'Annual Inspection';
+    const type = key.startsWith('six') ? '6_months_general' : 'inspection';
+    return (
+      <div className="panel print-hide" style={{ marginBottom: 18, overflowX: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+          <div>
+            <h2 style={{ margin: 0, color: report.color }}>{report.title} ({report.rows.length})</h2>
+            <div style={{ marginTop: 5, color: '#64748b' }}>
+              Separate control report — {component}
+            </div>
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              setSubTab(key === 'sixInspected' ? 'completed' : key === 'annualInspected' ? 'completed' : key === 'sixNotInspected' ? 'none' : 'none');
+              setReportTab('original');
+              setTimeout(printPdfReport, 50);
+            }}
+          >🖨️ Print / Save PDF</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Vehicle</th><th>Driver</th><th>Status</th><th>Scheduled</th><th>Completed</th><th>Notes</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {report.rows.length === 0 ? (
+              <tr><td colSpan="7" style={{ textAlign: 'center', padding: 24 }}>No vehicles in this report.</td></tr>
+            ) : report.rows.map(row => {
+              const rec = type === '6_months_general' ? row.six : row.annual;
+              const done = type === '6_months_general' ? row.sixDone : row.annualDone;
+              return (
+                <tr key={key + '-' + row.vehicle_id}>
+                  <td><strong>{row.plate}</strong></td>
+                  <td>{row.driver || '-'}</td>
+                  <td><span className="status-badge" style={{ background: done ? '#16a34a' : '#dc2626', color: '#fff' }}>{done ? 'Inspected' : 'Not Inspected'}</span></td>
+                  <td>{rec?.scheduled_date || '-'}</td>
+                  <td>{rec?.completed_date || '-'}</td>
+                  <td>{rec?.notes || '-'}</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button className="btn" style={{ padding: '6px 10px', background: '#25D366', color: '#fff' }} onClick={() => reportWhatsApp(row, component, done)}>📱 WhatsApp</button>
+                      {canWork && (
+                        done
+                          ? <button className="btn btn-success" style={{ padding: '6px 10px' }} disabled>✓ Closed</button>
+                          : <button className="btn btn-danger" style={{ padding: '6px 10px' }} onClick={() => closeComplianceReport(row, component, type)}>Close</button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+
+
   const printPdfReport = () => {
     const esc = (value) => String(value ?? '-')
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -313,10 +457,13 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
       </div>
 
       <div className="sub-nav print-hide" style={{ marginTop: '10px' }}>
-        <button className={subTab === 'partial' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('partial')}>🟡 Partially Inspected ({partiallyInspectedVehicles.length})</button>
-        <button className={subTab === 'none' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('none')}>🔴 Not Inspected ({notInspectedVehicles.length})</button>
-        <button className={subTab === 'fully' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('fully')}>🟢 Fully Inspected ({fullyInspectedVehicles.length})</button>
+        <button className={reportTab === 'original' ? 'sub-btn active' : 'sub-btn'} onClick={() => setReportTab('original')}>📋 Original Periodic Maintenance</button>
+        <button className={reportTab === 'sixInspected' ? 'sub-btn active' : 'sub-btn'} onClick={() => setReportTab('sixInspected')}>🟢 6-Month Inspected ({complianceReports.sixInspected.rows.length})</button>
+        <button className={reportTab === 'annualInspected' ? 'sub-btn active' : 'sub-btn'} onClick={() => setReportTab('annualInspected')}>🟢 Annual Inspected ({complianceReports.annualInspected.rows.length})</button>
+        <button className={reportTab === 'sixNotInspected' ? 'sub-btn active' : 'sub-btn'} onClick={() => setReportTab('sixNotInspected')}>🔴 6-Month Not Inspected ({complianceReports.sixNotInspected.rows.length})</button>
+        <button className={reportTab === 'annualNotInspected' ? 'sub-btn active' : 'sub-btn'} onClick={() => setReportTab('annualNotInspected')}>🔴 Annual Not Inspected ({complianceReports.annualNotInspected.rows.length})</button>
       </div>
+      {reportTab !== 'original' && renderComplianceReport(reportTab)}
 
       {/* ===== Stats Cards ===== */}
       <div className="print-hide" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '20px' }}>

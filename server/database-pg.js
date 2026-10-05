@@ -825,7 +825,10 @@ export async function ensurePeriodicMaintenanceSchema() {
       ADD COLUMN IF NOT EXISTS next_due_km INTEGER,
       ADD COLUMN IF NOT EXISTS interval_km INTEGER DEFAULT 5000,
       ADD COLUMN IF NOT EXISTS interval_days INTEGER DEFAULT 180,
-      ADD COLUMN IF NOT EXISTS notification_sent_at TIMESTAMPTZ
+      ADD COLUMN IF NOT EXISTS notification_sent_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS whatsapp_confirmation_token TEXT,
+      ADD COLUMN IF NOT EXISTS whatsapp_confirmed_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS whatsapp_confirmation_source TEXT
   `);
 }
 

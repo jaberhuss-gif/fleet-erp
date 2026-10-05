@@ -105,7 +105,7 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
 
     {currentSection==='add-vehicle'&&<Vehicles canWork={fleetWork}/>} 
     {currentSection==='add-driver'&&<Drivers initialAction="add"/>}
-    {currentSection==='maintenance'&&<VehicleMaintenance canWork={fleetWork}/>}
+    {currentSection==='maintenance'&&<VehicleMaintenance canWork={fleetWork} onOpenInspectionEmail={()=>{setOwnerGroup('inspection-email');setSection('inspection-email');}}/>}
 
     {currentSection==='maintenance-report'&&<MaintenanceReport canWork={fleetWork}/>}
     {currentSection==='history'&&<FleetHistory/>}

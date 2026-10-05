@@ -1339,6 +1339,23 @@ app.put("/api/periodic-maintenance/:id/complete", async (req, res) => {
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
+app.put("/api/periodic-maintenance/:id/reopen", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: "Invalid maintenance record." });
+    const result = await pgQuery(
+      `SELECT id, vehicle_id, type, status, scheduled_date FROM periodic_maintenance WHERE id = $1 LIMIT 1`,
+      [id]
+    );
+    const row = result.rows[0];
+    if (!row) return res.status(404).json({ success: false, error: "Periodic maintenance not found." });
+    if (String(row.type || "").toLowerCase() !== "inspection") return res.status(400).json({ success: false, error: "Only annual inspection records can be reopened here." });
+    await pgQuery(`UPDATE periodic_maintenance SET status = 'Pending', whatsapp_confirmed_at = NULL, whatsapp_confirmation_source = 'Fleet Management - Reopened' WHERE id = $1`, [id]);
+    await pgQuery(`UPDATE vehicles SET inspection_last_date = NULL, inspection_due_date = COALESCE($1::date, inspection_due_date) WHERE id = $2`, [row.scheduled_date, row.vehicle_id]);
+    res.json({ success: true, message: "Annual inspection reopened.", vehicleId: row.vehicle_id, recordId: id });
+  } catch (e) { res.status(400).json({ success: false, error: e.message }); }
+});
+
 app.post("/api/periodic-maintenance/whatsapp-confirmation", async (req, res) => {
   try {
     const vehicleId = Number(req.body?.vehicleId);

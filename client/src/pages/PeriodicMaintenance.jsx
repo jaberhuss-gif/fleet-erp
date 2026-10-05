@@ -25,6 +25,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
   const [reportTab, setReportTab] = useState('original');
   const [reminderVehicle, setReminderVehicle] = useState(null);
   const [reminderForm, setReminderForm] = useState({ inspectionExpiryDate: '', reminderDays: 30, managerEmail: '', ccEmails: '' });
+  const [hijriExpiryDate, setHijriExpiryDate] = useState('');
   const [showReminderSend, setShowReminderSend] = useState(false);
   const [reminderSendMode, setReminderSendMode] = useState('all');
   const [selectedReminderSites, setSelectedReminderSites] = useState([]);
@@ -326,6 +327,51 @@ export default function PeriodicMaintenance({ canWork = false }) {
     }
   };
 
+  // Convert between Gregorian and Saudi Umm al-Qura Hijri dates using the
+  // browser's built-in Islamic Umm al-Qura calendar. This avoids manual
+  // Hijri-to-Gregorian conversion by the user.
+  const gregorianToHijri = (isoDate) => {
+    if (!isoDate) return '';
+    const [y, m, d] = String(isoDate).slice(0, 10).split('-').map(Number);
+    if (!y || !m || !d) return '';
+    const parts = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', {
+      year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC'
+    }).formatToParts(new Date(Date.UTC(y, m - 1, d)));
+    const get = (type) => parts.find(p => p.type === type)?.value;
+    return get('year') + '-' + get('month') + '-' + get('day');
+  };
+
+  const hijriToGregorian = (value) => {
+    const m = String(value || '').trim().match(/^(\d{4})[-\/]?(\d{2})[-\/]?(\d{2})$/);
+    if (!m) return '';
+    const hy = Number(m[1]), hm = Number(m[2]), hd = Number(m[3]);
+    if (hm < 1 || hm > 12 || hd < 1 || hd > 30) return '';
+
+    const fmt = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', {
+      year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC'
+    });
+    const target = hy + '-' + String(hm).padStart(2, '0') + '-' + String(hd).padStart(2, '0');
+    let lo = Date.UTC(hy - 622, 0, 1);
+    let hi = Date.UTC(hy - 621, 11, 31);
+    const key = (ms) => {
+      const p = fmt.formatToParts(new Date(ms));
+      const get = (type) => p.find(x => x.type === type)?.value;
+      return get('year') + '-' + get('month') + '-' + get('day');
+    };
+    // Binary-search the Gregorian range because Umm al-Qura dates are monotonic.
+    while (lo <= hi) {
+      const mid = lo + Math.floor((hi - lo) / (2 * 86400000)) * 86400000;
+      const k = key(mid);
+      if (k === target) {
+        const date = new Date(mid);
+        return date.toISOString().slice(0, 10);
+      }
+      if (k < target) lo = mid + 86400000;
+      else hi = mid - 86400000;
+    }
+    return '';
+  };
+
   const openReminder = async (vehicle) => {
     // Open the modal immediately so a backend/read failure cannot make the
     // Set Expiry button appear unresponsive. The GET below then fills the
@@ -347,6 +393,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
         managerEmail: r.inspection_manager_email || '',
         ccEmails: r.inspection_cc_emails || ''
       });
+      setHijriExpiryDate(gregorianToHijri(r.inspection_expiry_date ? String(r.inspection_expiry_date).slice(0,10) : ''));
     } catch (e) {
       setError(e.response?.data?.error || e.message);
     }
@@ -838,8 +885,25 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
           <div className="modal" style={{ maxWidth: 650 }}>
             <h3>Annual Inspection Expiry — {reminderVehicle.plate}</h3>
             <p style={{ color: '#64748b' }}>Set the expiry date and email recipients. The system will remind them automatically before expiry.</p>
-            <label>Inspection Expiry Date</label>
-            <input type="date" value={reminderForm.inspectionExpiryDate} onChange={e => setReminderForm({...reminderForm, inspectionExpiryDate:e.target.value})} required />
+            <label>Inspection Expiry Date — Hijri (Umm al-Qura)</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="1448-04-15"
+              value={hijriExpiryDate}
+              onChange={e => {
+                const value = e.target.value;
+                setHijriExpiryDate(value);
+                const gregorian = hijriToGregorian(value);
+                if (gregorian) {
+                  setReminderForm(prev => ({ ...prev, inspectionExpiryDate: gregorian }));
+                }
+              }}
+              required
+            />
+            <div style={{ marginTop: 6, marginBottom: 12, color: '#166534', fontWeight: 600 }}>
+              Gregorian date used in the system/email: {reminderForm.inspectionExpiryDate || '—'}
+            </div>
             <label>Reminder Before Expiry (days)</label>
             <input type="number" min="1" max="180" value={reminderForm.reminderDays} onChange={e => setReminderForm({...reminderForm, reminderDays:e.target.value})} />
             <label>Site Manager Email</label>

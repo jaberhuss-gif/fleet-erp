@@ -218,6 +218,14 @@ export default function VehicleTicket({ user, canWork=false }) {
       let phone=row.vehicle?.phone||row.vehicle?.driver_phone;
       let driver=row.vehicle?.driver||'Driver';
       let plate=row.vehicle?.plate||'';
+      if(row.vehicle?.id){
+        try{
+          const info=(await api.get('/vehicles/'+row.vehicle.id+'/whatsapp-info')).data||{};
+          phone=info.driverPhone||phone;
+          driver=info.driverName||driver;
+          plate=info.vehiclePlate||plate;
+        }catch(_){}
+      }
       let message;
       if(row.kind==='maintenance'){
         try{
@@ -235,7 +243,12 @@ export default function VehicleTicket({ user, canWork=false }) {
         message='Hello '+driver+',\n\nVehicle '+plate+' — '+row.description+'. Current KM: '+(row.current?Number(row.current).toLocaleString()+' km.':'')+(row.last?' Last Oil KM: '+Number(row.last).toLocaleString()+' km.':'')+'\n\nFleet Management';
       }
       if(!phone){alert('No driver phone number found for this vehicle.');return}
-      window.open('https://wa.me/'+String(phone).replace(/\D/g,'')+'?text='+encodeURIComponent(message),'_blank');
+      const waPhone=String(phone||'').replace(/\D/g,'');
+      if(waPhone.length===9 && waPhone.startsWith('5')) phone='966'+waPhone;
+      else if(waPhone.length===10 && waPhone.startsWith('05')) phone='966'+waPhone.slice(1);
+      else phone=waPhone;
+      if(!phone){alert('No valid Saudi driver WhatsApp number found for this vehicle.');return}
+      window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(message),'_blank');
     }catch(e){alert(e.response?.data?.error||e.message)}
   };
 

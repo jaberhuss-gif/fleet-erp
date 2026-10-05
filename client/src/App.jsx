@@ -242,7 +242,8 @@ export default function App() {
                       ['maintenance-report', '🛠️ Maintenance Report'],
                       ['history', '📚 History'],
                       ['vehicle-ticket', '🎫 Vehicle Ticket'],
-                      ['km', '📊 KM Tracking']
+                      ['km', '📊 KM Tracking'],
+                      ['inspection-email', '📧 Annual Inspection Email']
                     ]
                 ).map(([group, label]) => (
                   <button key={group} className="erp-nav-btn" onClick={() => { setFleetGroup(group); handleTabChange('fleet'); }}>

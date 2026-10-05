@@ -115,6 +115,7 @@ function formatVehicle(row) {
     driver_name: driver,
     driver_phone: phone,
     phone,
+    driverId: row.driver_id ?? null,
 
     currentKm: currentKM,
     currentKM,
@@ -294,7 +295,7 @@ export async function createVehicle(vehicleData = {}) {
       0
     ),
     numberValue(vehicleData.oilChangeInterval, 5000),
-    vehicleData.lastOilChangeDate || "",
+    (vehicleData.lastOilChangeDate === "" || vehicleData.lastOilChangeDate == null) ? null : vehicleData.lastOilChangeDate,
     new Date().toISOString()
   ]);
 

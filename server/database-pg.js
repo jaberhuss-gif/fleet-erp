@@ -422,14 +422,6 @@ export async function updateVehicle(id, data = {}) {
   if (driverId) {
     const driverCheck = await query(`SELECT id, name, phone, vehicle_id FROM drivers WHERE id = $1 LIMIT 1`, [driverId]);
     if (!driverCheck.rows[0]) throw new Error("Driver not found");
-    const assigned = await query(
-      `SELECT id FROM vehicles WHERE driver_id = $1 AND id <> $2 LIMIT 1`,
-      [driverId, id]
-    );
-    if (assigned.rows[0]) throw new Error("Driver is already assigned to another vehicle");
-    if (driverCheck.rows[0].vehicle_id && Number(driverCheck.rows[0].vehicle_id) !== Number(id)) {
-      throw new Error("Driver is already assigned to another vehicle");
-    }
   }
 
   const make = data.make !== undefined ? pgStr(data.make) : (vehicleRow.make || "");

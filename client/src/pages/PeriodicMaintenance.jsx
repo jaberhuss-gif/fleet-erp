@@ -396,10 +396,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
               </div>
               <div className="form-group">
                 <label>Status</label>
-                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                  <option value="Pending">Pending</option>
-                  <option value="Completed">Completed</option>
-                </select>
+                <input value="Pending" readOnly disabled title="New schedules must start as Pending and can only become Completed through the Complete action." />
               </div>
               <div className="form-group">
                 <label>Technician</label>

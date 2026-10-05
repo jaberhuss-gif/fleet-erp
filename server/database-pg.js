@@ -341,6 +341,12 @@ export async function updateVehicle(id, data = {}) {
     ? numberValue(data.oilChangeInterval, 5000)
     : numberValue(vehicleRow.oil_change_interval, 5000);
 
+  // Empty date inputs must be stored as NULL, never as an empty PostgreSQL date.
+  const requestedOilDate = data.lastOilChangeDate ?? data.last_oil_change_date;
+  const oilChangeDate = requestedOilDate === "" || requestedOilDate == null
+    ? (vehicleRow.last_oil_change_date || null)
+    : requestedOilDate;
+
   let driverId = data.driverId ?? data.driver_id;
   if (driverId === undefined && (data.driverName !== undefined || data.driver !== undefined)) {
     const requestedName = pgStr(data.driverName ?? data.driver);
@@ -387,7 +393,7 @@ export async function updateVehicle(id, data = {}) {
     data.location ?? vehicleRow.location ?? "",
     driverId,
     oilInterval,
-    data.lastOilChangeDate ?? data.last_oil_change_date ?? vehicleRow.last_oil_change_date ?? null,
+    oilChangeDate,
     id
   ]);
 
@@ -424,7 +430,7 @@ export async function updateVehicle(id, data = {}) {
       `, [
         id,
         lastOilKM,
-        data.lastOilChangeDate ?? data.last_oil_change_date ?? vehicleRow.last_oil_change_date ?? null
+        oilChangeDate
       ]);
     }
   }

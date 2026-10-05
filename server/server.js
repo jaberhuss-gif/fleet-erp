@@ -1831,8 +1831,11 @@ if (process.env.ERP_V2_ENABLED === "true") {
 // master row itself so the same test plate can be recreated cleanly.
 async function resetTestVehicle123Once() {
   if (String(process.env.RESET_TEST_123 || '').toLowerCase() !== 'true') return;
-  const clientResult = await pgQuery('SELECT * FROM vehicles WHERE LOWER(TRIM(plate_number)) = $1 AND LOWER(TRIM(COALESCE(plate_code, \'\'))) = $2 LIMIT 1', ['test', '123']);
-  const vehicle = clientResult.rows[0];
+  const result = await pgQuery(
+    "SELECT id FROM vehicles WHERE LOWER(TRIM(CONCAT(COALESCE(plate_number,''), ' ', COALESCE(plate_code,'')))) = $1 LIMIT 1",
+    ['test 123']
+  );
+  const vehicle = result.rows[0];
   if (!vehicle) {
     console.log('[Test123Reset] vehicle test 123 not found; nothing to reset.');
     return;
@@ -1842,25 +1845,29 @@ async function resetTestVehicle123Once() {
     SELECT DISTINCT tc.table_name
     FROM information_schema.table_constraints tc
     JOIN information_schema.constraint_column_usage ccu
-      ON ccu.constraint_name = tc.constraint_name
-     AND ccu.constraint_schema = tc.constraint_schema
+      ON ccu.constraint_name = tc.constraint_name AND ccu.constraint_schema = tc.constraint_schema
     JOIN information_schema.key_column_usage kcu
-      ON kcu.constraint_name = tc.constraint_name
-     AND kcu.constraint_schema = tc.constraint_schema
+      ON kcu.constraint_name = tc.constraint_name AND kcu.constraint_schema = tc.constraint_schema
     WHERE tc.constraint_type = 'FOREIGN KEY'
-      AND ccu.table_name = 'vehicles'
-      AND ccu.column_name = 'id'
-      AND kcu.column_name = 'vehicle_id'
-      AND tc.table_schema = 'public'
+      AND ccu.table_name = 'vehicles' AND ccu.column_name = 'id'
+      AND kcu.column_name = 'vehicle_id' AND tc.table_schema = 'public'
   `);
-  for (const t of tablesResult.rows) {
-    if (t.table_name === 'vehicles') continue;
-    await pgQuery(`DELETE FROM "${String(t.table_name).replace(/"/g, '""')}" WHERE vehicle_id = $1`, [vehicleId]);
+  for (const row of tablesResult.rows) {
+    if (row.table_name === 'vehicles') continue;
+    const table = String(row.table_name).replace(/"/g, '""');
+    await pgQuery(`DELETE FROM "${table}" WHERE vehicle_id = $1`, [vehicleId]);
   }
-  const columns = Object.keys(vehicle).filter(k => k !== 'id');
-  const values = columns.map(k => vehicle[k]);
-  const quoted = columns.map(k => '"' + k.replace(/"/g, '""') + '"').join(', ');
-  const params = columns.map((_, i) => '
+  await pgQuery(
+    "UPDATE vehicles SET inspection_last_date = NULL, inspection_due_date = NULL WHERE id = $1",
+    [vehicleId]
+  );
+  console.log('[Test123Reset] child records cleared and inspection fields reset for test 123.');
+}
+
+try { await resetTestVehicle123Once(); } catch (e) {
+  console.error('[Test123Reset] reset failed:', e.message);
+}
+
 // stored driver name/phone snapshot. This prevents editing one driver or vehicle
 // from changing the assignment of unrelated vehicles.
 try {

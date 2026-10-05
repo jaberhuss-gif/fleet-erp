@@ -1294,36 +1294,49 @@ export async function deleteAllTickets() {
 
 export async function acknowledgeTicket(id, data = {}) {
   const acknowledgedBy =
-    stringValue(
-      data.acknowledgedBy ||
-      data.username ||
-      data.user
-    ) || "System";
+    stringValue(data.acknowledgedBy || data.username || data.user) || "System";
 
   const result = await query(
     `UPDATE tickets
-     SET acknowledged_at = CURRENT_TIMESTAMP,
+     SET status = CASE WHEN status = 'Closed' THEN status ELSE 'Acknowledged' END,
+         acknowledged_at = COALESCE(acknowledged_at, CURRENT_TIMESTAMP),
          acknowledged_by = $1
-     WHERE id = $2`,
+     WHERE id = $2
+     RETURNING *`,
     [acknowledgedBy, id]
   );
 
-  return { changes: result.rowCount };
+  if (!result.rows[0]) throw new Error("Ticket not found");
+  return result.rows[0];
+}
+
+export async function startTicketWork(id, data = {}) {
+  const startedBy =
+    stringValue(data.startedBy || data.username || data.user) || "System";
+
+  const result = await query(
+    `UPDATE tickets
+     SET status = CASE
+                    WHEN status IN ('Closed','Completed') THEN status
+                    ELSE 'IN_PROGRESS'
+                  END,
+         assigned_to_name = COALESCE(NULLIF($1,''), assigned_to_name),
+         assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP)
+     WHERE id = $2
+     RETURNING *`,
+    [startedBy, id]
+  );
+
+  if (!result.rows[0]) throw new Error("Ticket not found");
+  return result.rows[0];
 }
 
 export async function closeTicketWithNotes(id, data = {}) {
   const closedBy =
-    stringValue(
-      data.closedBy ||
-      data.username ||
-      data.user
-    ) || "System";
+    stringValue(data.closedBy || data.username || data.user) || "System";
 
   const resolutionNotes =
-    stringValue(
-      data.resolutionNotes ||
-      data.notes
-    );
+    stringValue(data.resolutionNotes || data.notes);
 
   const result = await query(
     `UPDATE tickets
@@ -1331,11 +1344,13 @@ export async function closeTicketWithNotes(id, data = {}) {
          closed_at = CURRENT_TIMESTAMP,
          closed_by = $1,
          resolution_notes = $2
-     WHERE id = $3`,
+     WHERE id = $3
+     RETURNING *`,
     [closedBy, resolutionNotes, id]
   );
 
-  return { changes: result.rowCount };
+  if (!result.rows[0]) throw new Error("Ticket not found");
+  return result.rows[0];
 }
 
 export async function listTicketsByReporter(reporter) {
@@ -1389,6 +1404,7 @@ export default {
   closeTicket,
   deleteAllTickets,
   acknowledgeTicket,
+  startTicketWork,
   closeTicketWithNotes,
   listTicketsByReporter,
   getReporterStats

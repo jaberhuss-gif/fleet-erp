@@ -312,7 +312,7 @@ export async function createVehicle(vehicleData = {}) {
     await query(`UPDATE vehicles SET driver = $1, phone = $2 WHERE id = $3`, [d.name || "", d.phone || "", result.rows[0].id]);
     await query(
       `UPDATE drivers
-       SET vehicle_id = $1, updated_at = CURRENT_TIMESTAMP
+       SET vehicle_id = COALESCE(vehicle_id, $1), updated_at = CURRENT_TIMESTAMP
        WHERE id = $2`,
       [result.rows[0].id, driverId]
     );
@@ -494,8 +494,12 @@ export async function updateVehicle(id, data = {}) {
       await query(
         `UPDATE drivers
          SET vehicle_id = NULL, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1 AND vehicle_id = $2`,
-        [oldDriverId, id]
+         WHERE id = $1 AND vehicle_id = $2
+           AND NOT EXISTS (
+             SELECT 1 FROM vehicles
+             WHERE driver_id = $1 AND id <> $3
+           )`,
+        [oldDriverId, id, id]
       );
     }
 
@@ -513,7 +517,7 @@ export async function updateVehicle(id, data = {}) {
     if (newDriverId) {
       await query(
         `UPDATE drivers
-         SET vehicle_id = $1, updated_at = CURRENT_TIMESTAMP
+         SET vehicle_id = COALESCE(vehicle_id, $1), updated_at = CURRENT_TIMESTAMP
          WHERE id = $2`,
         [id, newDriverId]
       );

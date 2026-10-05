@@ -14,9 +14,8 @@ import VehicleTicket from './VehicleTicket';
 
 const FLEET_ACTIONS = [
   { id:'daily-km', label:'📏 Add Daily KM', title:'Daily KM / Odometer Reading', description:'Enter today’s vehicle odometer reading and review recent readings.' },
-  { id:'add-vehicle', label:'🚙 Add Vehicle', title:'Add Vehicle', description:'Add a new vehicle and maintain vehicle master data.' },
+  { id:'add-vehicle', label:'🚙 Vehicle Master', title:'Vehicle Master', description:'Single place to add and edit vehicle identity, driver assignment and vehicle master data.' },
   { id:'add-driver', label:'👨‍🔧 Add Driver', title:'Add Driver', description:'Add and maintain driver records and vehicle assignments.' },
-  { id:'readings', label:'📏 Edit KM & Previous Readings', title:'Edit KM & Previous Readings', description:'Review and edit current odometer and previous vehicle readings.' },
   { id:'maintenance', label:'🔧 Vehicle Maintenance', title:'Vehicle Maintenance', description:'Periodic maintenance, inspections and repair verification.' },
   { id:'issue', label:'🛠️ Maintenance Issue Report', title:'Report a Vehicle Problem', description:'Report a vehicle problem and create a maintenance ticket.' },
   { id:'tire-service', label:'🛞 Tire Service Request', title:'Tire Service Request', description:'Submit a tire shop, puncture repair or tire replacement request.' },
@@ -68,7 +67,7 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
   }
 
   const ownerGroups={
-    add:['add-vehicle','add-driver','readings'],
+    add:['add-vehicle','add-driver'],
     maintenance:['maintenance'],
     'maintenance-report':['maintenance-report'],
     history:['history'],
@@ -76,9 +75,8 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
     km:['daily-km-submitted','daily-km-missing']
   };
   const ownerItems={
-    'add-vehicle':{label:'🚙 Add Vehicle',title:'Add Vehicle',description:'Add and maintain vehicle master data.'},
+    'add-vehicle':{label:'🚙 Vehicle Master',title:'Vehicle Master',description:'Single place to add and edit vehicle identity, driver assignment and vehicle master data.'},
     'add-driver':{label:'👨‍🔧 Add Driver',title:'Add Driver',description:'Add and maintain driver records and vehicle assignments.'},
-    readings:{label:'📏 Edit KM & Previous Readings',title:'Edit KM & Previous Readings',description:'Review and edit current odometer and previous vehicle readings.'},
     maintenance:{label:'🔧 Periodic Maintenance',title:'Periodic Maintenance',description:'Existing periodic maintenance records, schedules, edit and delete.'},
     'maintenance-report':{label:'🛠️ Maintenance Report',title:'Maintenance Report',description:'Maintenance issue reports and tire service requests.'},
     history:{label:'📚 History',title:'History',description:'Maintenance history, oil change history and KM tracking history.'},
@@ -102,9 +100,8 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
       <p style={{margin:'6px 0 0',color:'#64748b',fontSize:13}}>{ownerItems[currentSection].description}</p>
     </div>
 
-    {currentSection==='add-vehicle'&&<Vehicles canWork={fleetWork} initialAction="add"/>}
+    {currentSection==='add-vehicle'&&<Vehicles canWork={fleetWork}/>} 
     {currentSection==='add-driver'&&<Drivers initialAction="add"/>}
-    {currentSection==='readings'&&<Vehicles canWork={fleetWork} initialAction="readings"/>}
     {currentSection==='maintenance'&&<VehicleMaintenance canWork={fleetWork}/>}
 
     {currentSection==='maintenance-report'&&<MaintenanceReport canWork={fleetWork}/>}

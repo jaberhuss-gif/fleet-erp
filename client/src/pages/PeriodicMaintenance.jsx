@@ -586,7 +586,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
             <div style={{marginTop:14,color:'#64748b'}}>No vehicles have an annual inspection expiry date configured in Vehicle Master.</div>
           ) : (
             <table style={{marginTop:14}}>
-              <thead><tr><th>Vehicle</th><th>Driver</th><th>Site</th><th>Expiry</th><th>Status</th><th>Email</th></tr></thead>
+              <thead><tr><th>Vehicle</th><th>Driver</th><th>Site</th><th>Expiry</th><th>Status</th><th>Email</th><th>To</th><th>CC</th></tr></thead>
               <tbody>
                 {reminderDueVehicles.filter(v=>(v.days<=31) && (reminderSendMode==='all'||selectedReminderSites.includes(v.location))).map(v=>(
                   <tr key={v.id}>

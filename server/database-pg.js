@@ -1527,15 +1527,79 @@ export default {
 // ============================================================
 
 export async function listSites() {
+  // Single canonical Site Master. Legacy duplicate spellings are mapped to one
+  // display name, while the seven approved sites are guaranteed to exist.
+  const canonicalSites = [
+    ["UQL", "Uqlat Al Soqour", "Qassim"],
+    ["HAD", "Al Hadar", "WD"],
+    ["HUL", "Al Hulayfa", "Madina"],
+    ["SAB", "Al Sabiyah", "Madina"],
+    ["WB", "Wadi Beddah", "Al Baha"],
+    ["QUW", "Al Quwayiyah", "Al Quwayiyah"],
+    ["MAH", "Mahd ad Dhahab", "Mahd"]
+  ];
+
+  for (const [code, name, region] of canonicalSites) {
+    await query(
+      `INSERT INTO sites (code, name, region, status)
+       SELECT $1, $2, $3, 'Active'
+       WHERE NOT EXISTS (
+         SELECT 1 FROM sites
+         WHERE lower(trim(name)) = lower(trim($2))
+            OR upper(trim(coalesce(code, ''))) = upper(trim($1))
+       )`,
+      [code, name, region]
+    );
+  }
+
   const result = await query(`
     SELECT *
     FROM sites
+    WHERE lower(trim(name)) IN (
+      'uqlat al soqour',
+      'uqlat saqour',
+      'al hadar',
+      'al hulifa',
+      'al hulyfa',
+      'al sabiyah',
+      'sabeyah',
+      'sabayia',
+      'wadi beddah',
+      'wadi bidah',
+      'wadi bida',
+      'al quwayiyah',
+      'mah',
+      'mahd',
+      'mahd ad dhahab'
+    )
     ORDER BY id ASC
   `);
 
-  return result.rows;
-}
+  // Collapse legacy spellings to the approved display names and remove
+  // duplicates without deleting historical database records.
+  const canonicalName = (value) => {
+    const key = String(value || '').trim().toLowerCase();
+    if (['uqlat al soqour', 'uqlat saqour'].includes(key)) return 'Uqlat Al Soqour';
+    if (['al hadar'].includes(key)) return 'Al Hadar';
+    if (['al hulifa', 'al hulyfa'].includes(key)) return 'Al Hulayfa';
+    if (['al sabiyah', 'sabeyah', 'sabayia'].includes(key)) return 'Al Sabiyah';
+    if (['wadi beddah', 'wadi bidah', 'wadi bida'].includes(key)) return 'Wadi Beddah';
+    if (['al quwayiyah'].includes(key)) return 'Al Quwayiyah';
+    if (['mah', 'mahd', 'mahd ad dhahab'].includes(key)) return 'Mahd ad Dhahab';
+    return String(value || '').trim();
+  };
 
+  const seen = new Set();
+  return result.rows
+    .map(row => ({ ...row, name: canonicalName(row.name) }))
+    .filter(row => {
+      const key = row.name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 export async function getSite(id) {
   const result = await query(
     `SELECT * FROM sites WHERE id = $1`,

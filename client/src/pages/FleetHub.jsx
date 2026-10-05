@@ -61,7 +61,7 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
       <div className="panel" style={{marginBottom:16}}><h1 style={{margin:0}}>🚗 Fleet</h1><p style={{margin:'6px 0 0',color:'#64748b'}}>Fleet vehicle and maintenance actions.</p></div>
       <div className="sub-nav" style={{marginBottom:18}}>{visibleActions.map(item=><button key={item.id} className={safeSection===item.id?'sub-btn active':'sub-btn'} onClick={()=>setSection(item.id)}>{item.label}</button>)}</div>
       {safeSection==='daily-km'&&<DriverPortal canWork={fleetWork}/>}
-      {safeSection==='issue'&&<ReportIssue canWork={fleetWork}/>}
+      {safeSection==='issue'&&<ReportIssue canWork={fleetWork} user={user}/>}
       {safeSection==='tire-service'&&<TireServiceRequests driverMode={isDriver}/>}
       {safeSection==='tire'&&<TireManagement user={user} driverMode={isDriver}/>}
     </div>;

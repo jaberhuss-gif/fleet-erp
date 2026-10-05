@@ -305,8 +305,18 @@ export async function updateVehicle(id, data = {}) {
   const vehicleRow = vehicleResult.rows[0];
   if (!vehicleRow) return { changes: 0 };
 
-  const currentKM = data.currentKM !== undefined || data.km !== undefined
-    ? numberValue(data.currentKM ?? data.km, numberValue(vehicleRow.current_km, 0))
+  // Accept all frontend/API spellings. The Vehicles page sends currentKm,
+  // while older callers used currentKM/current_km/km.
+  const hasCurrentKM =
+    data.currentKm !== undefined ||
+    data.currentKM !== undefined ||
+    data.current_km !== undefined ||
+    data.km !== undefined;
+  const currentKM = hasCurrentKM
+    ? numberValue(
+        data.currentKm ?? data.currentKM ?? data.current_km ?? data.km,
+        numberValue(vehicleRow.current_km, 0)
+      )
     : numberValue(vehicleRow.current_km, 0);
   // Vehicle Edit form sends lastOilKm (camelCase). Accept all existing
   // spellings so editing a vehicle cannot silently revert the saved oil reading.

@@ -684,11 +684,24 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
     const isSix = kind === 'six';
     const rows = isSix
       ? vehicleSummary.filter(v => !v.sixDone)
-      : vehicleSummary.filter(v => !v.annualDone);
-    const title = isSix ? '6-Month Mechanical Inspection' : 'Annual Periodic Inspection';
+      : vehicleSummary
+          .filter(v => !v.annualDone && v.inspectionExpiry)
+          .map(v => ({ ...v, inspectionExpiry: String(v.inspectionExpiry).slice(0, 10) }))
+          .filter(v => {
+            const days = Math.ceil(
+              (new Date(v.inspectionExpiry + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000
+            );
+            return days <= 30;
+          })
+          .sort((a, b) => {
+            const da = new Date(a.inspectionExpiry + 'T00:00:00Z').getTime();
+            const db = new Date(b.inspectionExpiry + 'T00:00:00Z').getTime();
+            return da - db || String(a.plate).localeCompare(String(b.plate));
+          });
+    const title = isSix ? '6-Month Mechanical Inspection' : 'Annual Periodic Inspection — Due Within 30 Days';
     const description = isSix
       ? 'Mechanical 6-month inspection control. GREEN means inspection evidence is recorded; RED means no inspection evidence is recorded.'
-      : 'Annual periodic inspection control. Expiry date is always read from Vehicle Master and is shown for continuous follow-up.';
+      : 'Only expired vehicles and vehicles expiring within the next 30 days are shown. Vehicles are sorted from nearest expiry to farthest expiry. Dates are maintained in Vehicle Master.';
     return (
       <div className="panel" style={{ marginBottom: 18, overflowX: 'auto' }}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:12}}>
@@ -728,7 +741,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
                     </>
                   ) : (
                     <>
-                      <td><strong>{getInspectionExpiry(row.vehicle_id)}</strong></td>
+                      <td><strong>{row.inspectionExpiry || '—'}</strong></td>
                       <td><span className={done ? 'status-badge status-safe' : 'status-badge status-urgent'}>{done ? 'GREEN — Inspected' : 'RED — Not Inspected'}</span></td>
                       <td>{rec?.completed_date || '-'}</td>
                       <td style={{whiteSpace:'pre-wrap',minWidth:240}}>{rec?.notes || '-'}</td>

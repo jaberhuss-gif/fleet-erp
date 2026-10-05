@@ -23,6 +23,8 @@ export default function PeriodicMaintenance({ canWork = false }) {
   const [filterStatus, setFilterStatus] = useState('all');
   const [search, setSearch] = useState('');
   const [reportTab, setReportTab] = useState('original');
+  const [reminderVehicle, setReminderVehicle] = useState(null);
+  const [reminderForm, setReminderForm] = useState({ inspectionExpiryDate: '', reminderDays: 30, managerEmail: '', ccEmails: '' });
 
   const [form, setForm] = useState({
     vehicleId: '', type: '6_months_general', scheduledDate: '',
@@ -317,6 +319,38 @@ export default function PeriodicMaintenance({ canWork = false }) {
     }
   };
 
+  const openReminder = async (vehicle) => {
+    try {
+      const res = await api.get('/vehicles/' + vehicle.vehicle_id + '/inspection-reminder');
+      const r = res.data?.reminder || {};
+      setReminderVehicle(vehicle);
+      setReminderForm({
+        inspectionExpiryDate: r.inspection_expiry_date ? String(r.inspection_expiry_date).slice(0,10) : '',
+        reminderDays: Number(r.inspection_reminder_days || 30),
+        managerEmail: r.inspection_manager_email || '',
+        ccEmails: r.inspection_cc_emails || ''
+      });
+    } catch (e) { setError(e.response?.data?.error || e.message); }
+  };
+
+  const saveReminder = async () => {
+    if (!reminderVehicle) return;
+    try {
+      const res = await api.put('/vehicles/' + reminderVehicle.vehicle_id + '/inspection-reminder', reminderForm);
+      setMessage('Annual inspection reminder saved for ' + reminderVehicle.plate);
+      setReminderVehicle(null);
+      await load();
+    } catch (e) { setError(e.response?.data?.error || e.message); }
+  };
+
+  const testReminder = async () => {
+    if (!reminderVehicle) return;
+    try {
+      const res = await api.post('/vehicles/' + reminderVehicle.vehicle_id + '/inspection-reminder/test');
+      setMessage('Test email sent successfully.');
+    } catch (e) { setError(e.response?.data?.error || e.message); }
+  };
+
   const printComplianceReport = (key) => {
     const report = complianceReports[key];
     if (!report) return;
@@ -379,6 +413,8 @@ export default function PeriodicMaintenance({ canWork = false }) {
                   <td>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <button className="btn" style={{ padding: '6px 10px', background: '#25D366', color: '#fff' }} onClick={() => reportWhatsApp(row, component, done)}>📱 WhatsApp</button>
+                      {canWork && key === 'annualInspected' && <button className="btn btn-primary" style={{ padding: '6px 10px' }} onClick={() => openReminder(row)}>📅 Set Expiry</button>}
+                      {canWork && key === 'annualNotInspected' && <button className="btn btn-primary" style={{ padding: '6px 10px' }} onClick={() => openReminder(row)}>📅 Set Expiry</button>}
                       {canWork && (
                         done
                           ? <button className="btn btn-success" style={{ padding: '6px 10px' }} disabled>✓ Closed</button>
@@ -670,6 +706,28 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
           </table>
         </div>
       </div>
+
+      {reminderVehicle && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 650 }}>
+            <h3>Annual Inspection Expiry — {reminderVehicle.plate}</h3>
+            <p style={{ color: '#64748b' }}>Set the expiry date and email recipients. The system will remind them automatically before expiry.</p>
+            <label>Inspection Expiry Date</label>
+            <input type="date" value={reminderForm.inspectionExpiryDate} onChange={e => setReminderForm({...reminderForm, inspectionExpiryDate:e.target.value})} required />
+            <label>Reminder Before Expiry (days)</label>
+            <input type="number" min="1" max="180" value={reminderForm.reminderDays} onChange={e => setReminderForm({...reminderForm, reminderDays:e.target.value})} />
+            <label>Site Manager Email</label>
+            <input type="email" value={reminderForm.managerEmail} onChange={e => setReminderForm({...reminderForm, managerEmail:e.target.value})} placeholder="manager@company.com" />
+            <label>CC Emails</label>
+            <textarea rows="3" value={reminderForm.ccEmails} onChange={e => setReminderForm({...reminderForm, ccEmails:e.target.value})} placeholder="email1@company.com, email2@company.com" />
+            <div className="btn-row">
+              {canWork && <button className="btn btn-success" onClick={saveReminder}>Save</button>}
+              {canWork && reminderForm.managerEmail && <button className="btn btn-warning" onClick={testReminder}>Send Test Email</button>}
+              <button className="btn btn-secondary" onClick={() => setReminderVehicle(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {completing && (
         <div className="modal-overlay">

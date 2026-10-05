@@ -1701,13 +1701,35 @@ app.get("/api/vehicles/:id/whatsapp-info", async (req, res) => {
     }
     const v = vehicleResult.rows[0];
     const plate = [v.plate_number, v.plate_code].filter(Boolean).join(" ").trim();
+    let confirmationUrl = "";
+    const annual = await pgQuery(
+      `SELECT id, status FROM periodic_maintenance
+       WHERE vehicle_id = $1 AND type = 'inspection'
+       ORDER BY CASE WHEN status = 'Pending' THEN 0 ELSE 1 END, id DESC
+       LIMIT 1`,
+      [v.id]
+    );
+    if (annual.rows[0] && String(annual.rows[0].status).toLowerCase() !== "completed") {
+      const token = randomUUID();
+      await pgQuery(
+        `UPDATE periodic_maintenance
+         SET whatsapp_confirmation_token = $1,
+             whatsapp_confirmed_at = NULL,
+             whatsapp_confirmation_source = NULL
+         WHERE id = $2`,
+        [token, annual.rows[0].id]
+      );
+      const baseUrl = String(process.env.PUBLIC_APP_URL || process.env.RENDER_EXTERNAL_URL || "https://fleet-erp-kn0c.onrender.com").replace(/\/$/, "");
+      confirmationUrl = baseUrl + "/inspection-confirm/" + token;
+    }
     res.json({
       success: true,
       vehicleId: v.id,
       driverName: v.driver || "",
       driverPhone: toWaMeNumber(v.phone),
       vehiclePlate: plate,
-      currentKm: Number(v.current_km || 0)
+      currentKm: Number(v.current_km || 0),
+      confirmationUrl
     });
   } catch (e) {
     console.error("Error fetching vehicle WhatsApp info:", e);

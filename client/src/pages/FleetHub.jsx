@@ -3,6 +3,7 @@ import DriverPortal from './DriverPortal';
 import Drivers from './Drivers';
 import Vehicles from './Vehicles';
 import VehicleMaintenance from './VehicleMaintenance';
+import PeriodicMaintenance from './PeriodicMaintenance';
 import ReportIssue from './ReportIssue';
 import TireManagement, { TireControlCenter } from './TireManagement';
 import TireServiceRequests from './TireServiceRequests';
@@ -110,6 +111,6 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
     {currentSection==='history'&&<FleetHistory/>}
     {currentSection==='vehicle-ticket'&&<VehicleTicket user={user} canWork={fleetWork}/>}
     {currentSection==='daily-km-submitted'&&<DailyKmSubmitted/>}
-    {currentSection==='daily-km-missing'&&<DailyKmMissing user={user}/>}\n    {currentSection==='inspection-email'&&<VehicleMaintenance canWork={fleetWork} inspectionEmailOnly/>}
+    {currentSection==='daily-km-missing'&&<DailyKmMissing user={user}/>}\n    {currentSection==='inspection-email'&&<PeriodicMaintenance canWork={fleetWork} inspectionEmailOnly/>}
   </div>;
 }

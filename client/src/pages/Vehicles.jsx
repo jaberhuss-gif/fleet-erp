@@ -11,6 +11,7 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [inspectionHijri, setInspectionHijri] = useState('');
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterLocation, setFilterLocation] = useState('all');
@@ -18,8 +19,33 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({
     plate: '', make: 'Toyota', model: 'Hilux', year: 2022,
-    location: '', driver: '', driverId: '', phone: '', currentKm: 0, lastOilKm: 0, lastOilChangeDate: '', oilChangeInterval: 5000
+    location: '', driver: '', driverId: '', phone: '', currentKm: 0, lastOilKm: 0, lastOilChangeDate: '', oilChangeInterval: 5000, inspectionExpiryDate: ''
   });
+
+  const gregorianToHijri = (isoDate) => {
+    if (!isoDate) return '';
+    const d = new Date(String(isoDate).slice(0, 10) + 'T12:00:00Z');
+    if (Number.isNaN(d.getTime())) return '';
+    const parts = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura-nu-latn', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+    const get = k => parts.find(p => p.type === k)?.value || '';
+    return `${get('year')}-${get('month')}-${get('day')}`;
+  };
+
+  const hijriToGregorian = (value) => {
+    const m = String(value || '').trim().match(/^(\d{4})[-\/]?(\d{2})[-\/]?(\d{2})$/);
+    if (!m) return '';
+    const target = `${m[1]}-${m[2]}-${m[3]}`;
+    const fmt = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura-nu-latn', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const key = d => { const p = fmt.formatToParts(d); const get = k => p.find(x => x.type === k)?.value || ''; return `${get('year')}-${get('month')}-${get('day')}`; };
+    let lo = Date.UTC(Number(m[1]) - 580, 0, 1), hi = Date.UTC(Number(m[1]) - 560, 11, 31);
+    while (lo <= hi) {
+      const mid = lo + Math.floor((hi - lo) / 86400000 / 2) * 86400000;
+      const current = key(new Date(mid));
+      if (current === target) return new Date(mid).toISOString().slice(0, 10);
+      if (current < target) lo = mid + 86400000; else hi = mid - 86400000;
+    }
+    return '';
+  };
 
   useEffect(() => { load(); }, []);
 
@@ -35,7 +61,8 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
   };
 
   const resetForm = () => {
-    setForm({ plate: '', make: 'Toyota', model: 'Hilux', year: 2022, location: '', driver: '', phone: '', currentKm: 0, lastOilKm: 0, oilChangeInterval: 5000 });
+    setForm({ plate: '', make: 'Toyota', model: 'Hilux', year: 2022, location: '', driver: '', phone: '', currentKm: 0, lastOilKm: 0, lastOilChangeDate: '', oilChangeInterval: 5000, inspectionExpiryDate: '' });
+    setInspectionHijri('');
     setEditing(null);
     setShowForm(false);
   };
@@ -45,12 +72,12 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
     setMessage(''); setError('');
     try {
       if (editing) {
-        await api.put('/vehicles/' + editing.id, { ...form, driverId: form.driverId ? Number(form.driverId) : null, driverName: form.driver || '', lastOilChangeDate: form.lastOilChangeDate || null });
+        await api.put('/vehicles/' + editing.id, { ...form, driverId: form.driverId ? Number(form.driverId) : null, driverName: form.driver || '', lastOilChangeDate: form.lastOilChangeDate || null, inspectionExpiryDate: form.inspectionExpiryDate || null });
         setMessage('Vehicle updated');
         window.dispatchEvent(new CustomEvent('fleet-vehicles-updated', { detail: { vehicleId: editing.id } }));
         localStorage.setItem('fleet-vehicles-updated-at', String(Date.now()));
       } else {
-        await api.post('/vehicles', { ...form, driverId: form.driverId ? Number(form.driverId) : null, driverName: form.driver || '', lastOilChangeDate: form.lastOilChangeDate || null });
+        await api.post('/vehicles', { ...form, driverId: form.driverId ? Number(form.driverId) : null, driverName: form.driver || '', lastOilChangeDate: form.lastOilChangeDate || null, inspectionExpiryDate: form.inspectionExpiryDate || null });
         setMessage('Vehicle added');
         window.dispatchEvent(new CustomEvent('fleet-vehicles-updated'));
       }
@@ -60,10 +87,11 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
   };
 
   const handleEdit = (v) => {
+    setInspectionHijri(gregorianToHijri(v.inspectionExpiryDate ? String(v.inspectionExpiryDate).slice(0,10) : ''));
     setForm({
       plate: v.plate || '', make: v.make || 'Toyota', model: v.model || 'Hilux', year: v.year || 2022,
       location: v.location || '', driver: v.driver || '', driverId: v.driverId ? String(v.driverId) : '', phone: v.phone || '',
-      currentKm: Number(v.currentKm || 0), lastOilKm: Number(v.lastOilKm || 0), lastOilChangeDate: v.lastOilChangeDate ? String(v.lastOilChangeDate).slice(0,10) : '', oilChangeInterval: Number(v.interval || 5000)
+      currentKm: Number(v.currentKm || 0), lastOilKm: Number(v.lastOilKm || 0), lastOilChangeDate: v.lastOilChangeDate ? String(v.lastOilChangeDate).slice(0,10) : '', oilChangeInterval: Number(v.interval || 5000), inspectionExpiryDate: v.inspectionExpiryDate ? String(v.inspectionExpiryDate).slice(0,10) : ''
     });
     setEditing(v);
     setShowForm(true);
@@ -178,6 +206,7 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
               <div className="form-group"><label>Current KM</label><input type="number" value={form.currentKm} onChange={e => setForm({ ...form, currentKm: Number(e.target.value) })} /></div>
               <div className="form-group"><label>Last Oil KM</label><input type="number" min="0" value={form.lastOilKm} onChange={e => setForm({ ...form, lastOilKm: Number(e.target.value) })} /></div>
               <div className="form-group"><label>Last Oil Change Date</label><input type="date" value={form.lastOilChangeDate} onChange={e => setForm({ ...form, lastOilChangeDate:e.target.value })} /></div>
+              <div className="form-group"><label>Annual Inspection Expiry — Hijri (Umm al-Qura)</label><input type="text" inputMode="numeric" placeholder="1448-05-23" value={inspectionHijri} onChange={e => { const hijri=e.target.value; setInspectionHijri(hijri); const gregorian=hijriToGregorian(hijri); if (gregorian) setForm({ ...form, inspectionExpiryDate: gregorian }); }} /><div style={{fontSize:12,color:'#64748b',marginTop:4}}>Gregorian stored: {form.inspectionExpiryDate || '—'}</div></div>
               <div className="form-group"><label>Oil Interval</label><input type="number" value={form.oilChangeInterval} onChange={e => setForm({ ...form, oilChangeInterval: Number(e.target.value) })} /></div>
             </div>
             <div className="btn-row"><button type="submit" className="btn btn-success">{editing ? 'Update' : 'Save'}</button><button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button></div>

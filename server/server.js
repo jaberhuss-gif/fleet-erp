@@ -1924,58 +1924,6 @@ app.listen(PORT, () => {
 
 
 
-// Restore vehicle-specific driver assignments from each vehicle's own
-// stored driver name/phone snapshot. This prevents editing one driver or vehicle
-// from changing the assignment of unrelated vehicles.
-try {
-  await db.repairVehicleDriverAssignmentsFromSnapshots();
-} catch (e) {
-  console.error("[DriverRepair] vehicle-specific assignment reconciliation failed:", e.message);
-}
-
-// Narrow startup safety reconciliation for the known 4481 JUA assignment.
-try {
-  await db.repairKnownVehicleAssignments();
-} catch (e) {
-  console.error("[DriverRepair] startup reconciliation failed:", e.message);
-}
-
-try { await ensureVehicleRepairSchema(); } catch (e) { console.error("[Schema] vehicle repair schema check failed:", e.message); }
-try { await db.ensurePeriodicMaintenanceSchema(); } catch (e) { console.error("[Schema] periodic maintenance schema check failed:", e.message); }
-try { await ensureAnnualInspectionReminderSchema(); } catch (e) { console.error("[Schema] inspection reminder schema check failed:", e.message); }
-setInterval(() => processAnnualInspectionReminders().catch(e => console.error("[InspectionEmail] scheduler failed:", e.message)), 60 * 60 * 1000);
-
-
-// Additive, idempotent ticket-schema guard. Only missing columns are added;
-// existing tickets and historical data are never modified or removed.
-try {
-  await db.ensureTicketSchema();
-} catch (e) {
-  console.error("[Schema] ticket schema check failed:", e.message);
-}
-
-// Same guard for the Building Maintenance tables. Without this, a partially
-// migrated work_orders/projects/purchases/sites table makes the building
-// dashboard, monthly and financial reports return HTTP 500.
-try {
-  await db.ensureBuildingSchema();
-} catch (e) {
-  console.error("[Schema] building schema check failed:", e.message);
-}
-
-app.use(express.static(path.join(__dirname, '../client/dist')));
-app.get('*', async (req, res) => { res.sendFile(path.join(__dirname, '../client/dist/index.html')); });
-
-app.listen(PORT, () => {
-  console.log("");
-  console.log("======================================");
-  console.log("FLEET ERP SERVER");
-  console.log("======================================");
-  console.log("http://localhost:" + PORT);
-  console.log("Vehicle APIs: /api/vehicles, /api/tickets, /api/dashboard");
-  console.log("Building APIs: /api/sites, /api/work-orders, /api/projects, /api/purchases");
-  console.log("======================================");
-});
 
 
 

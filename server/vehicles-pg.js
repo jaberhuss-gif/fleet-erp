@@ -16,6 +16,7 @@ export async function listVehiclesPG() {
       last_oil_km,
       oil_change_interval,
       last_oil_change_date,
+      inspection_expiry_date,
       status,
       meter_updated_at,
       created_at,
@@ -43,6 +44,7 @@ export async function getVehicleByIdPG(id) {
       last_oil_km,
       oil_change_interval,
       last_oil_change_date,
+      inspection_expiry_date,
       status,
       meter_updated_at,
       created_at,
@@ -69,12 +71,12 @@ export async function createVehiclePG(data) {
       last_oil_km,
       oil_change_interval,
       last_oil_change_date,
+      inspection_expiry_date,
       status,
       meter_updated_at
     )
     VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14
-    )
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15
     RETURNING *
   `, [
     data.plateNumber ?? data.plate_number ?? "",
@@ -89,6 +91,7 @@ export async function createVehiclePG(data) {
     data.lastOilKm ?? data.last_oil_km ?? 0,
     data.oilChangeInterval ?? data.oil_change_interval ?? 5000,
     data.lastOilChangeDate ?? data.last_oil_change_date ?? null,
+    data.inspectionExpiryDate ?? data.inspection_expiry_date ?? null,
     data.status ?? "Safe",
     data.meterUpdatedAt ?? data.meter_updated_at ?? null
   ]);
@@ -129,6 +132,7 @@ export async function updateVehiclePG(id, data) {
         WHEN $11::boolean THEN $16
         ELSE last_oil_change_date
       END,
+      inspection_expiry_date = COALESCE($17, inspection_expiry_date),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = $1
     RETURNING *
@@ -148,7 +152,8 @@ export async function updateVehiclePG(id, data) {
     data.oilChangeInterval ?? data.oil_change_interval ?? null,
     data.status ?? null,
     data.meterUpdatedAt ?? data.meter_updated_at ?? null,
-    data.lastOilChangeDate ?? data.last_oil_change_date ?? null
+    data.lastOilChangeDate ?? data.last_oil_change_date ?? null,
+    data.inspectionExpiryDate ?? data.inspection_expiry_date ?? null
   ]);
 
   return result.rows[0] || null;

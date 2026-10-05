@@ -87,11 +87,23 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
   };
 
   const handleEdit = (v) => {
-    setInspectionHijri(gregorianToHijri(v.inspectionExpiryDate ? String(v.inspectionExpiryDate).slice(0,10) : ''));
+    // Vehicle Master API may return snake_case fields from the PostgreSQL layer.
+    // Accept both names so inspection dates never disappear from the edit form.
+    const inspectionDate = v.inspectionExpiryDate || v.inspection_expiry_date || '';
+    const oilDate = v.lastOilChangeDate || v.last_oil_change_date || '';
+    const oilKm = v.lastOilKm ?? v.last_oil_km ?? 0;
+    const currentKm = v.currentKm ?? v.current_km ?? 0;
+    const oilInterval = v.oilChangeInterval ?? v.oil_change_interval ?? v.interval ?? 5000;
+
+    setInspectionHijri(gregorianToHijri(inspectionDate ? String(inspectionDate).slice(0,10) : ''));
     setForm({
-      plate: v.plate || '', make: v.make || 'Toyota', model: v.model || 'Hilux', year: v.year || 2022,
+      plate: v.plate || [v.plate_number, v.plate_code].filter(Boolean).join(' '),
+      make: v.make || 'Toyota', model: v.model || 'Hilux', year: v.year || 2022,
       location: v.location || '', driver: v.driver || '', driverId: v.driverId ? String(v.driverId) : '', phone: v.phone || '',
-      currentKm: Number(v.currentKm || 0), lastOilKm: Number(v.lastOilKm || 0), lastOilChangeDate: v.lastOilChangeDate ? String(v.lastOilChangeDate).slice(0,10) : '', oilChangeInterval: Number(v.interval || 5000), inspectionExpiryDate: v.inspectionExpiryDate ? String(v.inspectionExpiryDate).slice(0,10) : ''
+      currentKm: Number(currentKm || 0), lastOilKm: Number(oilKm || 0),
+      lastOilChangeDate: oilDate ? String(oilDate).slice(0,10) : '',
+      oilChangeInterval: Number(oilInterval || 5000),
+      inspectionExpiryDate: inspectionDate ? String(inspectionDate).slice(0,10) : ''
     });
     setEditing(v);
     setShowForm(true);

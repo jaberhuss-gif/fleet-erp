@@ -503,44 +503,58 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
   };
 
   const buildInspectionEmail = (group) => {
-    const subject = 'Annual Vehicle Inspection Reminder — ' + group.site;
-    const body = [
-      'Dear Team,',
-      '',
-      'Please arrange the annual government inspection for the following vehicle(s):',
-      '',
-      ...group.rows.map((v, i) => {
-        const days = Number(v.days);
-        const timing = days < 0 ? 'EXPIRED by ' + Math.abs(days) + ' day(s)' :
-          days === 0 ? 'EXPIRES TODAY' : days + ' day(s) remaining';
-        return (i + 1) + '. Vehicle: ' + (v.plate || '-') +
-          ' | Driver: ' + (v.driver || '-') +
-          ' | Location: ' + (v.location || group.site) +
-          ' | Inspection Expiry: ' + (v.expiry || '-') +
-          ' | ' + timing;
-      }),
-      '',
-      'Please coordinate the inspection and update the Fleet system once completed.',
-      '',
-      'Regards,',
-      'Hussein Anwar',
-      'Fleet Manager'
-    ].join('\\n');
-
-    const params = new URLSearchParams({
-      to: group.to,
-      cc: group.cc,
-      subject,
-      body
-    });
-    return {
-      subject,
-      body,
-      url: 'https://outlook.office.com/mail/deeplink/compose?' + params.toString()
-    };
+  const subject = 'Annual Vehicle Inspection Reminder — ' + group.site;
+  const formatDate = (value) => {
+    const raw = String(value || '').slice(0, 10);
+    if (!raw) return '-';
+    const parts = raw.split('-');
+    if (parts.length !== 3) return raw;
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return parts[2] + '-' + (months[Number(parts[1]) - 1] || parts[1]) + '-' + parts[0];
   };
+  const body = [
+    'ANNUAL VEHICLE INSPECTION REMINDER',
+    'Site: ' + group.site,
+    '',
+    'Dear Team,',
+    '',
+    'Please arrange the annual government inspection for the following vehicles:',
+    '',
+    ...group.rows.flatMap((v, i) => {
+      const days = Number(v.days);
+      const timing = days < 0 ? 'EXPIRED — ' + Math.abs(days) + ' day(s) overdue' :
+        days === 0 ? 'EXPIRES TODAY' : days + ' day(s) remaining';
+      return [
+        (i + 1) + ') ' + (v.plate || '-'),
+        '   Driver: ' + (v.driver || '-'),
+        '   Inspection Expiry: ' + formatDate(v.expiry),
+        '   Status: ' + timing,
+        ''
+      ];
+    }),
+    'Please coordinate the inspection and update the Fleet system once completed.',
+    '',
+    'Regards,',
+    'Hussein Anwar',
+    'Fleet Manager'
+  ].join('\\r\\n');
 
-  const openInspectionEmail = (group) => {
+  const to = String(group.to || '').split(',').map(x => x.trim()).filter(Boolean).join(';');
+  const cc = String(group.cc || '').split(',').map(x => x.trim()).filter(Boolean).join(';');
+  const params = [
+    cc ? 'cc=' + encodeURIComponent(cc) : '',
+    'subject=' + encodeURIComponent(subject),
+    'body=' + encodeURIComponent(body)
+  ].filter(Boolean).join('&');
+
+  return {
+    subject,
+    body,
+    url: 'mailto:' + encodeURIComponent(to) + '?' + params
+  };
+};
+
+const openInspectionEmail = (group) => {
     if (!group.to) {
       setError(group.site + ': no email recipient is configured.');
       return;

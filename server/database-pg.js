@@ -166,8 +166,8 @@ export async function getVehicleById(id) {
     ...result.rows[0],
     last_oil_km: result.rows[0]?.canonical_last_oil_km ?? result.rows[0]?.last_oil_km,
     last_oil_change_date: result.rows[0]?.canonical_last_oil_change_date ?? result.rows[0]?.last_oil_change_date,
-    driver: result.rows[0]?.relational_driver_name ?? result.rows[0]?.driver ?? "",
-    phone: result.rows[0]?.relational_driver_phone ?? result.rows[0]?.phone ?? ""
+    driver: result.rows[0]?.driver ?? "",
+    phone: result.rows[0]?.phone ?? ""
   });
 }
 
@@ -199,8 +199,8 @@ export async function getVehicleByPlate(plate) {
   if (!row) return null;
   return formatVehicle({
     ...row,
-    driver: row.relational_driver_name ?? row.driver ?? "",
-    phone: row.relational_driver_phone ?? row.phone ?? ""
+    driver: row.driver ?? "",
+    phone: row.phone ?? ""
   });
 }
 
@@ -254,8 +254,8 @@ export async function listVehicles() {
     ...row,
     last_oil_km: row.canonical_last_oil_km ?? row.last_oil_km,
     last_oil_change_date: row.canonical_last_oil_change_date ?? row.last_oil_change_date,
-    driver: row.relational_driver_name ?? row.driver ?? "",
-    phone: row.relational_driver_phone ?? row.phone ?? ""
+    driver: row.driver ?? "",
+    phone: row.phone ?? ""
   }));
 }
 
@@ -549,6 +549,46 @@ export async function updateVehicle(id, data = {}) {
  * one active/inactive driver whose normalized name is Abdul Wahid.
  * It never touches KM, oil-change fields, KM history, or driver master records.
  */
+export async function repairVehicleDriverAssignmentsFromSnapshots() {
+  // Vehicle Master is the authoritative assignment record. Re-link each vehicle
+  // to the driver matching the vehicle's own stored name + phone, so editing one
+  // driver/vehicle never changes another vehicle's assignment.
+  const vehicles = await query(`
+    SELECT id, driver, phone, driver_id
+    FROM vehicles
+    WHERE NULLIF(TRIM(COALESCE(driver, '')), '') IS NOT NULL
+  `);
+  let checked = 0, repaired = 0;
+  for (const v of vehicles.rows) {
+    checked += 1;
+    const name = String(v.driver || '').trim();
+    const phone = String(v.phone || '').replace(/\\D/g, '');
+    if (!name) continue;
+    const matches = await query(`
+      SELECT id
+      FROM drivers
+      WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))
+        AND (
+          $2 = ''
+          OR REGEXP_REPLACE(COALESCE(phone, ''), '[^0-9]', '', 'g') = $2
+        )
+      ORDER BY id
+      LIMIT 2
+    `, [name, phone]);
+    if (matches.rows.length !== 1) continue;
+    const driverId = Number(matches.rows[0].id);
+    if (Number(v.driver_id || 0) === driverId) continue;
+    await query(`
+      UPDATE vehicles
+      SET driver_id = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+    `, [driverId, v.id]);
+    repaired += 1;
+  }
+  if (repaired) console.log('[DriverRepair] restored vehicle-specific driver assignments:', { checked, repaired });
+  return { checked, repaired };
+}
+
 export async function repairKnownVehicleAssignments() {
   const vehicleResult = await query(`
     SELECT v.id, v.plate_number, v.plate_code, v.driver_id,

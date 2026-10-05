@@ -1,6 +1,5 @@
 import { query } from "./postgres.js";
 import {
-  FIXED_FLEET_VEHICLES,
   normalizePlateKey,
   resolveRiyadhDate,
   DAILY_KM_TZ
@@ -47,9 +46,14 @@ export async function getDailySubmissionReport(targetDate = null) {
     erpByVehicle.set(Number(row.vehicle_id), row);
   }
 
-  const records = FIXED_FLEET_VEHICLES.map((plate) => {
-    const label = plateLabel(plate);
-    const vehicle = byPlate.get(normalizePlateKey(label)) || null;
+  const records = fleetResult.rows
+    .filter((vehicle) =>
+      String(vehicle.status || "").toLowerCase() !== "inactive" &&
+      normalizePlateKey(`${vehicle.plate_number || ""} ${vehicle.plate_code || ""}`) !== normalizePlateKey("test 123")
+    )
+    .sort((a, b) => String(a.plate_number || "").localeCompare(String(b.plate_number || ""), undefined, { numeric: true }))
+    .map((vehicle) => {
+    const label = `${vehicle.plate_number || ""} ${vehicle.plate_code || ""}`.trim();
     const erp = vehicle ? erpByVehicle.get(Number(vehicle.id)) || null : null;
     const km = erp ? Number(erp.reading_km) : null;
     const submitted = Boolean(erp);

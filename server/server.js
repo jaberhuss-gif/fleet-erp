@@ -1788,6 +1788,7 @@ try {
 }
 
 try { await ensureVehicleRepairSchema(); } catch (e) { console.error("[Schema] vehicle repair schema check failed:", e.message); }
+try { await db.ensurePeriodicMaintenanceSchema(); } catch (e) { console.error("[Schema] periodic maintenance schema check failed:", e.message); }
 try { await ensureAnnualInspectionReminderSchema(); } catch (e) { console.error("[Schema] inspection reminder schema check failed:", e.message); }
 setInterval(() => processAnnualInspectionReminders().catch(e => console.error("[InspectionEmail] scheduler failed:", e.message)), 60 * 60 * 1000);
 

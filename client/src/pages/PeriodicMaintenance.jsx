@@ -317,6 +317,25 @@ export default function PeriodicMaintenance({ canWork = false }) {
     }
   };
 
+  const printComplianceReport = (key) => {
+    const report = complianceReports[key];
+    if (!report) return;
+    const component = key.startsWith('six') ? '6-Month Maintenance' : 'Annual Inspection';
+    const type = key.startsWith('six') ? '6_months_general' : 'inspection';
+    const esc = (value) => String(value ?? '-')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    const rows = report.rows.map(row => {
+      const rec = type === '6_months_general' ? row.six : row.annual;
+      const done = type === '6_months_general' ? row.sixDone : row.annualDone;
+      return '<tr><td>'+esc(row.plate)+'</td><td>'+esc(row.driver)+'</td><td>'+esc(done ? 'Inspected' : 'Not Inspected')+'</td><td>'+esc(rec?.scheduled_date)+'</td><td>'+esc(rec?.completed_date)+'</td><td>'+esc(rec?.notes)+'</td></tr>';
+    }).join('');
+    const w=window.open('', '_blank', 'width=1200,height=800');
+    if(!w){setError('Please allow pop-ups for the report.');return;}
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>'+esc(report.title)+'</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial;font-size:9pt}h1{margin-bottom:4mm}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:5px;text-align:left;vertical-align:top}th{background:#e9eef5}</style></head><body><h1>'+esc(report.title)+'</h1><div>Generated: '+esc(new Date().toLocaleString())+' · Records: '+report.rows.length+'</div><table><thead><tr><th>Vehicle</th><th>Driver</th><th>Status</th><th>Scheduled</th><th>Completed</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table></body></html>');
+    w.document.close();w.focus();setTimeout(()=>w.print(),250);
+  };
+
   const renderComplianceReport = (key) => {
     const report = complianceReports[key];
     if (!report) return null;
@@ -334,11 +353,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
           </div>
           <button
             className="btn btn-primary"
-            onClick={() => {
-              setSubTab(key === 'sixInspected' ? 'completed' : key === 'annualInspected' ? 'completed' : key === 'sixNotInspected' ? 'none' : 'none');
-              setReportTab('original');
-              setTimeout(printPdfReport, 50);
-            }}
+            onClick={() => printComplianceReport(key)}
           >🖨️ Print / Save PDF</button>
         </div>
         <table>

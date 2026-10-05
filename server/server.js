@@ -1190,6 +1190,106 @@ app.get("/api/inspection-reminders/status", async (req,res) => {
   try { res.json({success:true, ...(await processAnnualInspectionReminders()), configured:!!process.env.RESEND_API_KEY && !!(process.env.INSPECTION_EMAIL_FROM || process.env.EMAIL_FROM)}); }
   catch(e) { res.status(500).json({success:false,error:e.message}); }
 });
+app.post("/api/inspection-reminders/send", async (req, res) => {
+  try {
+    const mode = String(req.body?.mode || 'all').toLowerCase();
+    const requestedSites = Array.isArray(req.body?.sites) ? req.body.sites.map(v => String(v || '').trim()).filter(Boolean) : [];
+    const today = new Date();
+    const todayKey = today.toISOString().slice(0, 10);
+
+    const r = await pgQuery(`
+      SELECT id, plate_number, plate_code, driver, location,
+             inspection_expiry_date, inspection_reminder_days,
+             inspection_manager_email, inspection_cc_emails,
+             inspection_last_email_sent_at, inspection_last_email_key
+      FROM vehicles
+      WHERE inspection_expiry_date IS NOT NULL
+        AND COALESCE(LOWER(TRIM(status)), '') NOT IN ('inactive','sold','disposed','disabled')
+    `);
+    const canonicalSites = Object.keys(ANNUAL_INSPECTION_SITE_CONTACTS);
+    const selectedSites = mode === 'sites'
+      ? canonicalSites.filter(site => requestedSites.some(s => s.toLowerCase() === site.toLowerCase()))
+      : canonicalSites;
+
+    const due = r.rows.filter(row => {
+      const expiry = String(row.inspection_expiry_date).slice(0, 10);
+      const days = Math.ceil((new Date(expiry + 'T00:00:00Z') - new Date(todayKey + 'T00:00:00Z')) / 86400000);
+      const reminderDays = Number(row.inspection_reminder_days || 30);
+      const site = String(row.location || '').trim();
+      return days <= reminderDays && selectedSites.some(s => s.toLowerCase() === site.toLowerCase());
+    });
+
+    const bySite = {};
+    for (const row of due) {
+      const site = canonicalSites.find(s => s.toLowerCase() === String(row.location || '').trim().toLowerCase()) || String(row.location || '').trim() || 'Unknown Site';
+      if (!bySite[site]) bySite[site] = [];
+      bySite[site].push(row);
+    }
+
+    const results = [];
+    for (const [site, rows] of Object.entries(bySite)) {
+      const first = rows[0];
+      const defaults = annualInspectionRecipients(site);
+      const to = splitEmails(first.inspection_manager_email || defaults.managerEmail);
+      const cc = splitEmails(first.inspection_cc_emails || defaults.ccEmails).filter(e => !to.includes(e));
+      if (!to.length) {
+        results.push({ site, vehicles: rows.length, sent: false, reason: 'No site manager email configured.' });
+        continue;
+      }
+
+      const items = rows.map(row => {
+        const expiry = String(row.inspection_expiry_date).slice(0, 10);
+        const days = Math.ceil((new Date(expiry + 'T00:00:00Z') - new Date(todayKey + 'T00:00:00Z')) / 86400000);
+        const plate = [row.plate_number, row.plate_code].filter(Boolean).join(' ').trim();
+        return { row, expiry, days, plate };
+      });
+      const hasExpired = items.some(x => x.days < 0);
+      const subject = hasExpired
+        ? 'URGENT: Annual Vehicle Inspections Due — ' + site
+        : 'Annual Vehicle Inspections Due Soon — ' + site;
+      const textBody = [
+        'Dear Site Manager,',
+        '',
+        'Please arrange the annual periodic inspection for the following vehicles:',
+        '',
+        ...items.map((x, idx) => (idx + 1) + '. Vehicle: ' + x.plate + ' | Driver: ' + (x.row.driver || 'Unassigned') + ' | Expiry: ' + x.expiry + ' | Days remaining: ' + x.days),
+        '',
+        'Please arrange the inspection appointments before the current inspections expire.',
+        '',
+        'Site: ' + site,
+        'Fleet Management'
+      ].join('\\n');
+
+      const apiKey = String(process.env.RESEND_API_KEY || '').trim();
+      const from = String(process.env.INSPECTION_EMAIL_FROM || process.env.EMAIL_FROM || ANNUAL_INSPECTION_EMAIL_FROM).trim();
+      if (!apiKey || !from) {
+        results.push({ site, vehicles: rows.length, sent: false, reason: 'Email provider is not configured.' });
+        continue;
+      }
+      try {
+        const response = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from, to, cc, subject, text: textBody })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data?.message || data?.error || 'Email provider returned HTTP ' + response.status);
+        for (const x of items) {
+          const key = x.expiry + ':' + Number(x.row.inspection_reminder_days || 30);
+          await pgQuery(`UPDATE vehicles SET inspection_last_email_sent_at=CURRENT_TIMESTAMP, inspection_last_email_key=$1 WHERE id=$2`, [key, x.row.id]);
+        }
+        results.push({ site, vehicles: rows.length, sent: true, id: data?.id || null });
+      } catch (e) {
+        results.push({ site, vehicles: rows.length, sent: false, reason: e.message });
+      }
+    }
+
+    res.json({ success: true, mode, selectedSites, dueVehicles: due.length, results });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 
 // ===== PERIODIC MAINTENANCE =====
 app.get("/api/periodic-maintenance", async (req, res) => {

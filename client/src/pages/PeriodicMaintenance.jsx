@@ -31,6 +31,7 @@ export default function PeriodicMaintenance({ canWork = false }) {
   const [selectedReminderSites, setSelectedReminderSites] = useState([]);
   const [sendingReminders, setSendingReminders] = useState(false);
   const [reminderSendResult, setReminderSendResult] = useState(null);
+  const [reminderDueVehicles, setReminderDueVehicles] = useState([]);
 
   const annualInspectionSites = ['Uqlat Al Soqour','Al Hadar','Al Hulayfa','Al Sabiyah','Wadi Beddah','Al Quwayiyah','Mahd ad Dhahab'];
 
@@ -417,11 +418,18 @@ export default function PeriodicMaintenance({ canWork = false }) {
     } catch (e) { setError(e.response?.data?.error || e.message); }
   };
 
-  const openReminderSend = () => {
+  const openReminderSend = async () => {
     setReminderSendMode('all');
     setSelectedReminderSites([]);
     setReminderSendResult(null);
+    setReminderDueVehicles([]);
     setShowReminderSend(true);
+    try {
+      const res = await api.get('/inspection-reminders/due');
+      setReminderDueVehicles(res.data?.vehicles || []);
+    } catch (e) {
+      setMessage('Unable to load the inspection email queue.');
+    }
   };
 
   const sendInspectionReminders = async () => {
@@ -818,7 +826,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
           <div className="modal" style={{ maxWidth: 700 }}>
             <h3>📧 Send Annual Inspection Reminders</h3>
             <p style={{ color: '#64748b' }}>
-              The system sends one email per site containing the vehicle numbers whose annual inspection is within each vehicle's reminder window.
+              The system sends one email per site containing only vehicles already expired or expiring within the next 30 days.
             </p>
             <div style={{ display: 'flex', gap: 10, margin: '14px 0', flexWrap: 'wrap' }}>
               <button
@@ -856,6 +864,23 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
                 <div style={{ marginTop: 8, color: '#64748b' }}>Selected: {selectedReminderSites.length}</div>
               </div>
             )}
+
+            <div style={{ marginTop: 14, padding: 12, border: '1px solid #e2e8f0', borderRadius: 8 }}>
+              <strong>Vehicles Due for Email — Next 30 Days</strong>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                Only expired vehicles and vehicles expiring within 30 days are shown here. Vehicles beyond 30 days are not included.
+              </div>
+              {reminderDueVehicles.length ? (
+                <div style={{ marginTop: 8 }}>
+                  {reminderDueVehicles.map(v => (
+                    <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '7px 0', borderBottom: '1px solid #f1f5f9' }}>
+                      <span><strong>{v.plate || '-'}</strong> · {v.location || '-'}</span>
+                      <span>{v.days < 0 ? 'Expired' : v.days === 0 ? 'Today' : v.days + ' days'} · {v.expiry}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <div style={{ marginTop: 8, color: '#64748b' }}>No vehicles are due within 30 days.</div>}
+            </div>
 
             {reminderSendResult && (
               <div style={{ marginTop: 14, padding: 12, border: '1px solid #e2e8f0', borderRadius: 8 }}>

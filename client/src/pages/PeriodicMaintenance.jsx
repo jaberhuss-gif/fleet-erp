@@ -7,7 +7,7 @@ const TYPE_LABELS = {
   'inspection': 'Periodic Inspection'
 };
 
-export default function PeriodicMaintenance({ canWork = false, inspectionEmailOnly = false }) {
+export default function PeriodicMaintenance({ canWork = false, inspectionEmailOnly = false, onOpenInspectionEmail = null }) {
   const [subTab, setSubTab] = useState('all');
   const [records, setRecords] = useState([]);
   const [alerts, setAlerts] = useState({ overdue: [], dueSoon: [] });
@@ -680,8 +680,8 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
   const renderControlTable = (kind) => {
     const isSix = kind === 'six';
     const rows = isSix
-      ? vehicleSummary
-      : vehicleSummary.filter(v => v.annualDone || !v.annualDone);
+      ? vehicleSummary.filter(v => !v.sixDone)
+      : vehicleSummary.filter(v => !v.annualDone);
     const title = isSix ? '6-Month Mechanical Inspection' : 'Annual Periodic Inspection';
     const description = isSix
       ? 'Mechanical 6-month inspection control. GREEN means inspection evidence is recorded; RED means no inspection evidence is recorded.'
@@ -693,7 +693,10 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
             <h2 style={{margin:0}}>{title}</h2>
             <div style={{marginTop:5,color:'#64748b'}}>{description}</div>
           </div>
-          <button className="btn btn-primary" onClick={() => printComplianceReport(isSix ? 'sixInspected' : 'annualInspected')}>🖨️ Print / Save PDF</button>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {!isSix && onOpenInspectionEmail && <button className="btn btn-success" onClick={onOpenInspectionEmail}>📧 Annual Inspection Email</button>}
+            <button className="btn btn-primary" onClick={() => printComplianceReport(isSix ? 'sixNotInspected' : 'annualNotInspected')}>🖨️ Print / Save PDF</button>
+          </div>
         </div>
         <table className="periodic-maintenance-screen-table">
           <thead>
@@ -761,10 +764,10 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
 
       <div className="sub-nav print-hide" style={{marginBottom:16}}>
         <button className={reportTab==='six' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('six')}>
-          🔧 6-Month Mechanical ({vehicleSummary.length})
+          🔧 6-Month Mechanical ({vehicleSummary.filter(v=>!v.sixDone).length})
         </button>
         <button className={reportTab==='annual' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('annual')}>
-          📋 Annual Inspection ({vehicleSummary.length})
+          📋 Annual Inspection ({vehicleSummary.filter(v=>!v.annualDone).length})
         </button>
         <button className={reportTab==='original' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('original')}>
           📚 Original Maintenance Records ({records.length})

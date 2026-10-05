@@ -110,7 +110,7 @@ export default function VehicleTicket({ user, canWork=false }) {
     }),[vehicles]);
 
   const inspectionTicketRows=useMemo(()=>inspectionRows
-    .filter(x=>String(x.type||'').toLowerCase()==='inspection')
+    .filter(x=>String(x.type||'').toLowerCase()==='inspection' && normalStatus(x.status)==='COMPLETED')
     .map(x=>({
       kind:'inspection', id:x.id, vehicle:vehicleMap[String(x.vehicle_id)]||{plate:x.vehicle_plate||x.plate,driver:x.driver},
       description:'Annual Periodic Inspection'+(x.notes?' — '+x.notes:''), status:x.status||'Pending',

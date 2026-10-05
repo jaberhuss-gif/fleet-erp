@@ -40,7 +40,8 @@ export default function Drivers({ initialAction = null }) {
     e.preventDefault();
     setMessage(''); setError('');
     try {
-      const payload = { ...form, vehicleId: form.vehicleId ? Number(form.vehicleId) : null };
+      const { vehicleId: _vehicleId, ...driverData } = form;
+      const payload = driverData;
       if (editing) {
         await api.put('/drivers/' + editing.id, payload);
         setMessage('Driver updated');
@@ -164,13 +165,10 @@ export default function Drivers({ initialAction = null }) {
               <input value={form.nationality} onChange={e => setForm({ ...form, nationality: e.target.value })} placeholder="e.g. Pakistani" />
             </div>
             <div className="form-group">
-              <label>Vehicle</label>
-              <select value={form.vehicleId} onChange={e => setForm({ ...form, vehicleId: e.target.value })}>
-                <option value="">-- Not assigned --</option>
-                {vehicles.map(v => (
-                  <option key={v.id} value={v.id}>{v.plate} - {v.make} {v.model}</option>
-                ))}
-              </select>
+              <label>Vehicle Assignment</label>
+              <div style={{ padding: '9px 10px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: '6px', minHeight: '40px', display: 'flex', alignItems: 'center', color: '#3730a3', fontSize: '13px' }}>
+                Vehicle assignment is managed from <strong style={{ marginLeft: 4 }}>Vehicle Master</strong>.
+              </div>
             </div>
             <div className="form-group">
               <label>Status</label>

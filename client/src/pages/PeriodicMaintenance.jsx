@@ -230,7 +230,9 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     return {
       vehicle_id: v.id,
       plate: v.plate || v.plate_number || '-',
+      location: v.location || v.site || '-',
       driver: v.driver || v.driver_name || '-',
+      inspectionExpiry: v.inspectionExpiryDate || v.inspection_expiry_date || '',
       six, annual, sixDone, annualDone,
       fullyInspected: sixDone && annualDone,
       missing

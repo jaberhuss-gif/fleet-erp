@@ -1209,6 +1209,27 @@ app.get("/api/inspection-reminders/status", async (req,res) => {
   try { res.json({success:true, ...(await processAnnualInspectionReminders()), configured:!!process.env.RESEND_API_KEY && !!(process.env.INSPECTION_EMAIL_FROM || process.env.EMAIL_FROM)}); }
   catch(e) { res.status(500).json({success:false,error:e.message}); }
 });
+app.get("/api/inspection-reminders/due", async (req, res) => {
+  try {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const r = await pgQuery(`
+      SELECT id, plate_number, plate_code, driver, location, inspection_expiry_date
+      FROM vehicles
+      WHERE inspection_expiry_date IS NOT NULL
+        AND COALESCE(LOWER(TRIM(status)), '') NOT IN ('inactive','sold','disposed','disabled')
+      ORDER BY inspection_expiry_date ASC
+    `);
+    const due = r.rows.map(row => {
+      const expiry = String(row.inspection_expiry_date).slice(0, 10);
+      const days = Math.ceil((new Date(expiry + 'T00:00:00Z') - new Date(todayKey + 'T00:00:00Z')) / 86400000);
+      return { id: row.id, plate: [row.plate_number, row.plate_code].filter(Boolean).join(' ').trim(), driver: row.driver || 'Unassigned', location: row.location || 'Unknown Site', expiry, days };
+    }).filter(row => row.days <= 30);
+    res.json({ success: true, dueVehicles: due.length, vehicles: due });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.post("/api/inspection-reminders/send", async (req, res) => {
   try {
     const mode = String(req.body?.mode || 'all').toLowerCase();
@@ -1233,9 +1254,9 @@ app.post("/api/inspection-reminders/send", async (req, res) => {
     const due = r.rows.filter(row => {
       const expiry = String(row.inspection_expiry_date).slice(0, 10);
       const days = Math.ceil((new Date(expiry + 'T00:00:00Z') - new Date(todayKey + 'T00:00:00Z')) / 86400000);
-      const reminderDays = Number(row.inspection_reminder_days || 30);
       const site = String(row.location || '').trim();
-      return days <= reminderDays && selectedSites.some(s => s.toLowerCase() === site.toLowerCase());
+      // Manual email queue is strictly the next 30 days (including expired).
+      return days <= 30 && selectedSites.some(s => s.toLowerCase() === site.toLowerCase());
     });
 
     const bySite = {};

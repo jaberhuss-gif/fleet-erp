@@ -537,7 +537,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     'Regards,',
     'Hussein Anwar',
     'Fleet Manager'
-  ].join('\\r\\n');
+  ].join('\n');
 
   const to = String(group.to || '').split(',').map(x => x.trim()).filter(Boolean).join(';');
   const cc = String(group.cc || '').split(',').map(x => x.trim()).filter(Boolean).join(';');

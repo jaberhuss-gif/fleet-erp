@@ -226,7 +226,7 @@ export async function ensureTireSchema() {
     ALTER TABLE tire_surveys ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
     ALTER TABLE tire_surveys ADD COLUMN IF NOT EXISTS locked BOOLEAN DEFAULT FALSE;
     ALTER TABLE tire_assets ADD COLUMN IF NOT EXISTS installed_km BIGINT;
-    DO $
+    DO $$
     DECLARE c RECORD;
     BEGIN
       FOR c IN
@@ -247,7 +247,7 @@ export async function ensureTireSchema() {
       LOOP
         EXECUTE format('DROP INDEX IF EXISTS %I', c.indexname);
       END LOOP;
-    END $;
+    END $$;
     ALTER TABLE tire_assets ADD COLUMN IF NOT EXISTS dot TEXT;
     ALTER TABLE tire_events ADD COLUMN IF NOT EXISTS outcome TEXT;
   `);

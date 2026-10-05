@@ -322,6 +322,20 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     }
   };
 
+  const openConfirmationLink = async (row) => {
+    try {
+      setError('');
+      const info = (await api.get('/vehicles/' + row.vehicle_id + '/whatsapp-info')).data || {};
+      if (!info.confirmationUrl) {
+        setError('No confirmation link is available for vehicle ' + (row.plate || ''));
+        return;
+      }
+      window.open(info.confirmationUrl, '_blank');
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
+  };
+
   const closeComplianceReport = async (row, component, type) => {
     if (!canWork) return;
     if (!confirm('Confirm ' + component + ' is completed and close this item?')) return;
@@ -944,6 +958,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
                   <td>
                     <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                       <button className="btn" style={{padding:'6px 10px',background:'#25D366',color:'#fff'}} onClick={() => reportWhatsApp(row, title, done)}>📱 WhatsApp</button>
+                      {!done && !isSix && <button className="btn btn-primary" style={{padding:'6px 10px'}} onClick={() => openConfirmationLink(row)}>🔗 Confirmation Link</button>}
                       {canWork && (done
                         ? <button className="btn btn-success" style={{padding:'6px 10px'}} onClick={() => handleEdit(rec)} disabled={!rec}>✓ Inspected</button>
                         : <button className="btn btn-danger" style={{padding:'6px 10px'}} onClick={() => closeComplianceReport(row, title, isSix ? '6_months_general' : 'inspection')}>Close Inspection</button>

@@ -327,17 +327,29 @@ export default function PeriodicMaintenance({ canWork = false }) {
   };
 
   const openReminder = async (vehicle) => {
+    // Open the modal immediately so a backend/read failure cannot make the
+    // Set Expiry button appear unresponsive. The GET below then fills the
+    // saved expiry/recipient values from Vehicle Master.
+    setError('');
+    setReminderVehicle(vehicle);
+    setReminderForm({
+      inspectionExpiryDate: '',
+      reminderDays: 30,
+      managerEmail: '',
+      ccEmails: ''
+    });
     try {
       const res = await api.get('/vehicles/' + vehicle.vehicle_id + '/inspection-reminder');
       const r = res.data?.reminder || {};
-      setReminderVehicle(vehicle);
       setReminderForm({
         inspectionExpiryDate: r.inspection_expiry_date ? String(r.inspection_expiry_date).slice(0,10) : '',
         reminderDays: Number(r.inspection_reminder_days || 30),
         managerEmail: r.inspection_manager_email || '',
         ccEmails: r.inspection_cc_emails || ''
       });
-    } catch (e) { setError(e.response?.data?.error || e.message); }
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
   };
 
   const saveReminder = async () => {

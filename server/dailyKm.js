@@ -3,11 +3,10 @@
 // PostgreSQL `km_records` is the single source of truth for Daily KM
 // compliance. Google Sheet data is never consulted here.
 //
-// The operational fleet is a fixed list of 36 vehicles and the matching key
-// is the vehicle (plate), never the driver. All Daily KM calculations in the
-// ERP (reports, notifications, dashboards, scheduler) must go through this
-// module so that the population and the Submitted/Missing decision are
-// identical everywhere.
+// Daily KM uses the operational vehicles currently stored in Vehicle Master.
+// The vehicle (plate/id) is the matching key, never the driver. This keeps
+// Daily KM synchronized with the centralized Vehicle Master instead of a
+// hard-coded fleet list.
 
 import { query, transaction } from "./postgres.js";
 
@@ -27,6 +26,8 @@ export const FIXED_FLEET_VEHICLES = [
   ["4541", "LUA"], ["4980", "JUA"], ["5456", "TKA"], ["6183", "ZUA"]
 ];
 
+// Kept for legacy imports; authoritative Daily KM count is calculated from
+// Vehicle Master at request time.
 export const FLEET_VEHICLE_COUNT = FIXED_FLEET_VEHICLES.length;
 
 export function normalizePlateKey(value) {
@@ -77,27 +78,38 @@ export async function resolveRiyadhDate(requestedDate = null) {
   return result.rows[0].report_date;
 }
 
-// Map every fixed fleet plate to its PostgreSQL vehicle row (if it exists).
+// Load the operational vehicles directly from the centralized Vehicle Master.
+// Test/placeholder vehicle "test 123" and explicitly inactive vehicles are excluded.
 async function loadFleetVehicles() {
   const result = await query(`
     SELECT id, plate_number, plate_code, driver, phone, current_km, location,
            COALESCE(LOWER(TRIM(status)), '') AS status
     FROM vehicles
-  `);
+    WHERE COALESCE(LOWER(TRIM(status)), '') <> 'inactive'
+      AND normalize_plate IS NOT NULL
+  `).catch(async () => query(`
+    SELECT id, plate_number, plate_code, driver, phone, current_km, location,
+           COALESCE(LOWER(TRIM(status)), '') AS status
+    FROM vehicles
+    WHERE COALESCE(LOWER(TRIM(status)), '') <> 'inactive'
+  `));
 
-  const byPlate = new Map();
+  const vehicles = [];
   for (const row of result.rows) {
     const key = normalizePlateKey(`${row.plate_number || ""} ${row.plate_code || ""}`);
-    if (key && !byPlate.has(key)) byPlate.set(key, row);
+    if (!key || key === normalizePlateKey("test 123")) continue;
+    vehicles.push(row);
   }
-  return byPlate;
+  return vehicles.sort((a, b) =>
+    String(a.plate_number || "").localeCompare(String(b.plate_number || ""), undefined, { numeric: true })
+  );
 }
 
 // The one authoritative Daily KM calculation.
-// Returns one record per fixed fleet vehicle with a Submitted/Missing status.
+// Returns one record per operational Vehicle Master vehicle with a Submitted/Missing status.
 export async function getDailyKmStatus(requestedDate = null) {
   const reportDate = await resolveRiyadhDate(requestedDate);
-  const byPlate = await loadFleetVehicles();
+  const fleetVehicles = await loadFleetVehicles();
 
   const readingResult = await query(`
     SELECT DISTINCT ON (vehicle_id) vehicle_id, reading_km, reading_date, id
@@ -111,15 +123,14 @@ export async function getDailyKmStatus(requestedDate = null) {
     readingByVehicleId.set(Number(row.vehicle_id), row);
   }
 
-  const records = FIXED_FLEET_VEHICLES.map((plate) => {
-    const label = plateLabel(plate);
-    const v = byPlate.get(fleetPlateKey(plate)) || null;
-    const reading = v ? readingByVehicleId.get(Number(v.id)) || null : null;
+  const records = fleetVehicles.map((v) => {
+    const label = `${v.plate_number || ""} ${v.plate_code || ""}`.trim();
+    const reading = readingByVehicleId.get(Number(v.id)) || null;
     return {
       vehicleId: v ? Number(v.id) : null,
       vehicle: label,
       vehiclePlate: label,
-      vehicleFound: !!v,
+      vehicleFound: true,
       driverName: v?.driver || "",
       driverPhone: v?.phone || "",
       currentKm: Number(v?.current_km || 0),

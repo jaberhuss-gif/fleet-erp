@@ -1254,7 +1254,7 @@ app.post("/api/inspection-reminders/send", async (req, res) => {
         '',
         'Site: ' + site,
         'Fleet Management'
-      ].join('\\n');
+      ].join('\n');
 
       const apiKey = String(process.env.RESEND_API_KEY || '').trim();
       const from = String(process.env.INSPECTION_EMAIL_FROM || process.env.EMAIL_FROM || ANNUAL_INSPECTION_EMAIL_FROM).trim();

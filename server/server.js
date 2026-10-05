@@ -1409,10 +1409,20 @@ app.get("/inspection-confirm/:token", async (req, res) => {
     const row = result.rows[0];
     if (!row) return res.status(404).send("<h2>Inspection confirmation link is invalid or expired.</h2>");
     const vehicle = [row.plate_number, row.plate_code].filter(Boolean).join(" ");
+    const safeVehicle = String(vehicle || "").replace(/[<>&]/g, "");
+    const safeDriver = String(row.driver || "Driver").replace(/[<>&]/g, "");
     if (String(row.status).toLowerCase() === "completed") {
-      return res.send("<!doctype html><html><body style='font-family:Arial;padding:30px'><h2>Inspection Already Completed</h2><p>Vehicle <strong>" + vehicle + "</strong> is already recorded as completed.</p><p>Completed date: " + (row.completed_date || "-") + "</p></body></html>");
+      return res.send("<!doctype html><html><body style='font-family:Arial;padding:30px;text-align:center'><h2>Inspection Already Completed</h2><p>Vehicle <strong>" + safeVehicle + "</strong> is already recorded as completed.</p><p>Completed date: " + (row.completed_date || "-") + "</p></body></html>");
     }
-    res.send("<!doctype html><html><body style='font-family:Arial;max-width:620px;margin:50px auto;padding:24px;text-align:center'><h2>Annual Vehicle Inspection</h2><p>Vehicle <strong>" + vehicle + "</strong></p><p>Hello " + String(row.driver || "Driver").replace(/[<>&]/g, "") + ",</p><p>Have you completed the annual inspection?</p><form method='POST' action='/inspection-confirm/" + token + "'><button type='submit' style='padding:14px 28px;background:#16a34a;color:white;border:0;border-radius:8px;font-size:16px;cursor:pointer'>YES — Inspection Completed</button></form></body></html>");
+    res.send("<!doctype html><html><body style='font-family:Arial;max-width:620px;margin:50px auto;padding:24px;text-align:center'>" +
+      "<h2>Annual Vehicle Inspection</h2>" +
+      "<p>Vehicle <strong>" + safeVehicle + "</strong></p>" +
+      "<p>Hello " + safeDriver + ",</p>" +
+      "<p>Have you completed the annual inspection?</p>" +
+      "<div style='display:flex;gap:12px;justify-content:center;flex-wrap:wrap'>" +
+      "<form method='POST' action='/inspection-confirm/" + token + "'><input type='hidden' name='decision' value='yes'><button type='submit' style='padding:14px 28px;background:#16a34a;color:white;border:0;border-radius:8px;font-size:16px;cursor:pointer'>YES — Inspection Completed</button></form>" +
+      "<form method='POST' action='/inspection-confirm/" + token + "'><input type='hidden' name='decision' value='no'><button type='submit' style='padding:14px 28px;background:#dc2626;color:white;border:0;border-radius:8px;font-size:16px;cursor:pointer'>NO — Not Completed</button></form>" +
+      "</div></body></html>");
   } catch (e) {
     res.status(500).send("<h2>Unable to load inspection confirmation.</h2>");
   }
@@ -1421,31 +1431,51 @@ app.get("/inspection-confirm/:token", async (req, res) => {
 app.post("/inspection-confirm/:token", async (req, res) => {
   try {
     const token = String(req.params.token || "").trim();
+    const decision = String(req.body?.decision || "yes").trim().toLowerCase();
     const result = await pgQuery(
-      `SELECT id, status FROM periodic_maintenance
+      `SELECT id, status, completed_date FROM periodic_maintenance
        WHERE whatsapp_confirmation_token = $1
        LIMIT 1`,
       [token]
     );
     const row = result.rows[0];
     if (!row) return res.status(404).send("<h2>Inspection confirmation link is invalid or expired.</h2>");
-    if (String(row.status).toLowerCase() !== "completed") {
-      await completePeriodicMaintenancePG(row.id, {
-        technician: "WhatsApp Confirmation",
-        cost: 0,
-        notes: "Annual inspection confirmed by driver via WhatsApp confirmation link.",
-      });
+
+    if (String(row.status).toLowerCase() === "completed") {
+      return res.send("<!doctype html><html><body style='font-family:Arial;max-width:620px;margin:50px auto;padding:24px;text-align:center'><h2>Inspection Already Completed</h2><p>This inspection is already closed in Fleet ERP.</p></body></html>");
+    }
+
+    if (decision === "no") {
       await pgQuery(
         `UPDATE periodic_maintenance
-         SET whatsapp_confirmed_at = NOW(),
-             whatsapp_confirmation_source = 'WhatsApp'
+         SET whatsapp_confirmed_at = NULL,
+             whatsapp_confirmation_source = 'WhatsApp - NO'
          WHERE id = $1`,
         [row.id]
       );
+      return res.send("<!doctype html><html><body style='font-family:Arial;max-width:620px;margin:50px auto;padding:24px;text-align:center'>" +
+        "<h2 style='color:#dc2626'>NO — Inspection Not Completed</h2>" +
+        "<p>The inspection remains <strong>Pending</strong> and has not been closed.</p>" +
+        "<p>Fleet Management can send the WhatsApp reminder again when the vehicle is due.</p>" +
+        "</body></html>");
     }
+
+    await completePeriodicMaintenancePG(row.id, {
+      technician: "WhatsApp Confirmation",
+      cost: 0,
+      notes: "Annual inspection confirmed by driver via WhatsApp confirmation link.",
+    });
+    await pgQuery(
+      `UPDATE periodic_maintenance
+       SET whatsapp_confirmed_at = NOW(),
+           whatsapp_confirmation_source = 'WhatsApp - YES'
+       WHERE id = $1`,
+      [row.id]
+    );
+
     res.send("<!doctype html><html><body style='font-family:Arial;max-width:620px;margin:50px auto;padding:24px;text-align:center'><h2 style='color:#16a34a'>✓ Inspection Completed</h2><p>The inspection has been recorded in Fleet ERP.</p><p>Date: " + new Date().toISOString().slice(0,10) + "</p></body></html>");
   } catch (e) {
-    res.status(500).send("<h2>Unable to complete the inspection.</h2><p>" + String(e.message || "").replace(/[<>&]/g, "") + "</p>");
+    res.status(500).send("<h2>Unable to process the inspection confirmation.</h2><p>" + String(e.message || "").replace(/[<>&]/g, "") + "</p>");
   }
 });
 

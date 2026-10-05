@@ -141,7 +141,7 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
     <div>
       <div className="panel">
         <div style={{ background: 'linear-gradient(135deg, #0f766e, #06b6d4)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
-          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Vehicles</h2>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Vehicle Master</h2>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
           <div className="btn-row" style={{ margin: 0 }}>

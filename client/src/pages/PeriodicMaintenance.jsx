@@ -25,6 +25,13 @@ export default function PeriodicMaintenance({ canWork = false }) {
   const [reportTab, setReportTab] = useState('original');
   const [reminderVehicle, setReminderVehicle] = useState(null);
   const [reminderForm, setReminderForm] = useState({ inspectionExpiryDate: '', reminderDays: 30, managerEmail: '', ccEmails: '' });
+  const [showReminderSend, setShowReminderSend] = useState(false);
+  const [reminderSendMode, setReminderSendMode] = useState('all');
+  const [selectedReminderSites, setSelectedReminderSites] = useState([]);
+  const [sendingReminders, setSendingReminders] = useState(false);
+  const [reminderSendResult, setReminderSendResult] = useState(null);
+
+  const annualInspectionSites = ['Uqlat Al Soqour','Al Hadar','Al Hulayfa','Al Sabiyah','Wadi Beddah','Al Quwayiyah','Mahd ad Dhahab'];
 
   const [form, setForm] = useState({
     vehicleId: '', type: '6_months_general', scheduledDate: '',
@@ -351,6 +358,41 @@ export default function PeriodicMaintenance({ canWork = false }) {
     } catch (e) { setError(e.response?.data?.error || e.message); }
   };
 
+  const openReminderSend = () => {
+    setReminderSendMode('all');
+    setSelectedReminderSites([]);
+    setReminderSendResult(null);
+    setShowReminderSend(true);
+  };
+
+  const sendInspectionReminders = async () => {
+    if (reminderSendMode === 'sites' && selectedReminderSites.length === 0) {
+      setError('Please select at least one site.');
+      return;
+    }
+    if (!confirm(reminderSendMode === 'all'
+      ? 'Send annual inspection reminder emails to all sites with vehicles near expiry?'
+      : 'Send annual inspection reminder emails to the selected sites?')) return;
+    setSendingReminders(true);
+    setError('');
+    setMessage('');
+    try {
+      const res = await api.post('/inspection-reminders/send', {
+        mode: reminderSendMode,
+        sites: selectedReminderSites
+      });
+      setReminderSendResult(res.data);
+      const sent = (res.data.results || []).filter(x => x.sent);
+      const skipped = (res.data.results || []).filter(x => !x.sent);
+      setMessage('Inspection reminders processed: ' + sent.length + ' email(s) sent for ' + (res.data.dueVehicles || 0) + ' vehicle(s).');
+      if (skipped.length) setError(skipped.map(x => x.site + ': ' + x.reason).join(' | '));
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    } finally {
+      setSendingReminders(false);
+    }
+  };
+
   const printComplianceReport = (key) => {
     const report = complianceReports[key];
     if (!report) return;
@@ -385,10 +427,15 @@ export default function PeriodicMaintenance({ canWork = false }) {
               Separate control report — {component}
             </div>
           </div>
-          <button
-            className="btn btn-primary"
-            onClick={() => printComplianceReport(key)}
-          >🖨️ Print / Save PDF</button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {key === 'annualInspected' || key === 'annualNotInspected' ? (
+              <button className="btn btn-success" onClick={openReminderSend}>📧 Send Inspection Reminders</button>
+            ) : null}
+            <button
+              className="btn btn-primary"
+              onClick={() => printComplianceReport(key)}
+            >🖨️ Print / Save PDF</button>
+          </div>
         </div>
         <table>
           <thead>
@@ -706,6 +753,73 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
           </table>
         </div>
       </div>
+
+      {showReminderSend && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 700 }}>
+            <h3>📧 Send Annual Inspection Reminders</h3>
+            <p style={{ color: '#64748b' }}>
+              The system sends one email per site containing the vehicle numbers whose annual inspection is within each vehicle's reminder window.
+            </p>
+            <div style={{ display: 'flex', gap: 10, margin: '14px 0', flexWrap: 'wrap' }}>
+              <button
+                className={reminderSendMode === 'all' ? 'btn btn-success' : 'btn'}
+                onClick={() => setReminderSendMode('all')}
+              >1️⃣ Send to All Sites</button>
+              <button
+                className={reminderSendMode === 'sites' ? 'btn btn-success' : 'btn'}
+                onClick={() => setReminderSendMode('sites')}
+              >2️⃣ Select Sites & Send</button>
+            </div>
+
+            {reminderSendMode === 'all' ? (
+              <div style={{ padding: 14, borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                <strong>All Sites</strong>
+                <div style={{ marginTop: 6, color: '#64748b' }}>
+                  Only vehicles approaching their annual inspection expiry will be included. Each site receives its own email with the vehicle numbers.
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label>Select Sites</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 8, marginTop: 8 }}>
+                  {annualInspectionSites.map(site => (
+                    <label key={site} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 10, border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedReminderSites.includes(site)}
+                        onChange={(e) => setSelectedReminderSites(prev => e.target.checked ? [...prev, site] : prev.filter(x => x !== site))}
+                      />
+                      {site}
+                    </label>
+                  ))}
+                </div>
+                <div style={{ marginTop: 8, color: '#64748b' }}>Selected: {selectedReminderSites.length}</div>
+              </div>
+            )}
+
+            {reminderSendResult && (
+              <div style={{ marginTop: 14, padding: 12, border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                <strong>Result — {reminderSendResult.dueVehicles || 0} vehicle(s) due</strong>
+                <div style={{ marginTop: 8 }}>
+                  {(reminderSendResult.results || []).map(r => (
+                    <div key={r.site} style={{ padding: '5px 0' }}>
+                      {r.sent ? '✅' : '⚠️'} <strong>{r.site}</strong> — {r.vehicles} vehicle(s){r.reason ? ' — ' + r.reason : ''}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="btn-row" style={{ marginTop: 16 }}>
+              <button className="btn btn-success" onClick={sendInspectionReminders} disabled={sendingReminders}>
+                {sendingReminders ? 'Sending...' : '📧 Send Email'}
+              </button>
+              <button className="btn btn-secondary" onClick={() => setShowReminderSend(false)} disabled={sendingReminders}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {reminderVehicle && (
         <div className="modal-overlay">

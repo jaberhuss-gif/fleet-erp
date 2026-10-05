@@ -1868,6 +1868,36 @@ try { await resetTestVehicle123Once(); } catch (e) {
   console.error('[Test123Reset] reset failed:', e.message);
 }
 
+// ===== ONE-TIME TEST VEHICLE 123 INSPECTION SEED =====
+async function seedTestVehicle123InspectionOnce() {
+  if (String(process.env.CREATE_TEST_123_INSPECTION || '').toLowerCase() !== 'true') return;
+  const vehicleResult = await pgQuery(
+    "SELECT id FROM vehicles WHERE LOWER(TRIM(CONCAT(COALESCE(plate_number,''), ' ', COALESCE(plate_code,'')))) = $1 LIMIT 1",
+    ['test 123']
+  );
+  const vehicle = vehicleResult.rows[0];
+  if (!vehicle) return;
+  const existing = await pgQuery(
+    "SELECT id FROM periodic_maintenance WHERE vehicle_id = $1 AND type = 'inspection' LIMIT 1",
+    [vehicle.id]
+  );
+  if (existing.rows[0]) {
+    console.log('[Test123Seed] annual inspection already exists:', existing.rows[0].id);
+    return;
+  }
+  const created = await pgQuery(
+    `INSERT INTO periodic_maintenance
+      (vehicle_id, type, scheduled_date, status, technician, notes)
+     VALUES ($1, 'inspection', CURRENT_DATE, 'Pending', '', 'Test vehicle 123 - WhatsApp annual inspection workflow test')
+     RETURNING id`,
+    [vehicle.id]
+  );
+  console.log('[Test123Seed] annual inspection created:', created.rows[0]?.id);
+}
+try { await seedTestVehicle123InspectionOnce(); } catch (e) {
+  console.error('[Test123Seed] seed failed:', e.message);
+}
+
 // stored driver name/phone snapshot. This prevents editing one driver or vehicle
 // from changing the assignment of unrelated vehicles.
 try {

@@ -150,7 +150,10 @@ export default function VehicleTicket({ user, canWork=false }) {
     activeTab==='oil'?oilRows:ticketRows;
 
   const visibleRows=useMemo(()=>rows.filter(r=>{
-    if(activeTab==='oil') return status==='All'||status==='Open' ? ['OVERDUE','DUE SOON','No Data'].includes(normalStatus(r.status)) : true;
+    // Oil Compliance is a monitoring table, not an open-ticket queue.
+    // Always show every real vehicle so management can see the latest oil
+    // baseline, current KM, driven KM, date and current compliance status.
+    if(activeTab==='oil') return true;
     if(status==='All') return true;
     const s=normalStatus(r.status);
     return openStatuses.includes(s);

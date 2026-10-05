@@ -125,8 +125,15 @@ export default function App() {
   // every module re-reads the same canonical vehicle data.
   useEffect(() => {
     const handler = () => setVehicleDataVersion(v => v + 1);
+    const storageHandler = (e) => {
+      if (e.key === 'fleet-vehicles-updated-at') setVehicleDataVersion(v => v + 1);
+    };
     window.addEventListener('fleet-vehicles-updated', handler);
-    return () => window.removeEventListener('fleet-vehicles-updated', handler);
+    window.addEventListener('storage', storageHandler);
+    return () => {
+      window.removeEventListener('fleet-vehicles-updated', handler);
+      window.removeEventListener('storage', storageHandler);
+    };
   }, []);
 
   const canViewModule = (module) => {

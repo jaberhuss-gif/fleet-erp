@@ -243,7 +243,8 @@ export default function App() {
                       ['history', '📚 History'],
                       ['vehicle-ticket', '🎫 Vehicle Ticket'],
                       ['km', '📊 KM Tracking'],
-                      ['inspection-email', '📧 Annual Inspection Email']
+                      ['inspection-email', '📧 Annual Inspection Email'],
+                      ['inspection-upcoming', '📅 Future Annual Inspections']
                     ]
                 ).map(([group, label]) => (
                   <button key={group} className="erp-nav-btn" onClick={() => { setFleetGroup(group); handleTabChange('fleet'); }}>

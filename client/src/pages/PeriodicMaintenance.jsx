@@ -301,7 +301,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
   };
 
   const normalizeWaPhone = (value) => {
-    const digits = String(value || '').replace(/\\D/g, '');
+    const digits = String(value || '').replace(/\D/g, '');
     if (digits.length === 9 && digits.startsWith('5')) return '966' + digits;
     if (digits.length === 10 && digits.startsWith('05')) return '966' + digits.slice(1);
     if (digits.startsWith('966')) return digits;

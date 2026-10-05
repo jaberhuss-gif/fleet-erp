@@ -489,32 +489,23 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
             Inspection expiry dates are maintained only in Vehicle Master.
           </p>
         </div>
-
         {error && <div className="alert alert-error" style={{marginBottom:12}}>{error}</div>}
         {message && <div className="alert alert-success" style={{marginBottom:12}}>{message}</div>}
 
         <div className="panel" style={{marginBottom:16}}>
           <h2 style={{marginTop:0}}>1. Select Email Scope</h2>
           <div className="btn-row">
-            <button className={reminderSendMode==='all' ? 'btn btn-success' : 'btn'} onClick={() => setReminderSendMode('all')}>
-              1️⃣ Send to All Sites
-            </button>
-            <button className={reminderSendMode==='sites' ? 'btn btn-success' : 'btn'} onClick={() => setReminderSendMode('sites')}>
-              2️⃣ Select Sites & Send
-            </button>
+            <button className={reminderSendMode==='all'?'btn btn-success':'btn'} onClick={()=>setReminderSendMode('all')}>1️⃣ Send to All Sites</button>
+            <button className={reminderSendMode==='sites'?'btn btn-success':'btn'} onClick={()=>setReminderSendMode('sites')}>2️⃣ Select Sites & Send</button>
           </div>
-
-          {reminderSendMode === 'sites' && (
+          {reminderSendMode==='sites' && (
             <div style={{marginTop:14}}>
               <strong>Select Sites</strong>
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:8,marginTop:8}}>
-                {annualInspectionSites.map(site => (
+                {annualInspectionSites.map(site=>(
                   <label key={site} style={{display:'flex',alignItems:'center',gap:8,padding:10,border:'1px solid #e2e8f0',borderRadius:8,cursor:'pointer'}}>
-                    <input
-                      type="checkbox"
-                      checked={selectedReminderSites.includes(site)}
-                      onChange={e => setSelectedReminderSites(prev => e.target.checked ? [...prev, site] : prev.filter(x => x !== site))}
-                    />
+                    <input type="checkbox" checked={selectedReminderSites.includes(site)}
+                      onChange={e=>setSelectedReminderSites(prev=>e.target.checked?[...prev,site]:prev.filter(x=>x!==site))}/>
                     {site}
                   </label>
                 ))}
@@ -528,58 +519,36 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap'}}>
             <div>
               <h2 style={{marginTop:0,marginBottom:4}}>2. Vehicles Due for Email — Next 30 Days</h2>
-              <div style={{fontSize:13,color:'#64748b'}}>
-                Expired and due within 30 days only · Gregorian dates from Vehicle Master
-              </div>
+              <div style={{fontSize:13,color:'#64748b'}}>Expired and due within 30 days only · Gregorian dates from Vehicle Master</div>
             </div>
             <button className="btn" onClick={openReminderSend} disabled={sendingReminders}>↻ Refresh</button>
           </div>
-
-          {reminderDueVehicles.length === 0 ? (
+          {reminderDueVehicles.length===0 ? (
             <div style={{marginTop:14,color:'#64748b'}}>No vehicles are expired or due within 30 days.</div>
           ) : (
             <table style={{marginTop:14}}>
-              <thead>
-                <tr><th>Vehicle</th><th>Driver</th><th>Site</th><th>Expiry</th><th>Status</th></tr>
-              </thead>
+              <thead><tr><th>Vehicle</th><th>Driver</th><th>Site</th><th>Expiry</th><th>Status</th></tr></thead>
               <tbody>
-                {reminderDueVehicles
-                  .filter(v => reminderSendMode === 'all' || selectedReminderSites.includes(v.location))
-                  .map(v => (
-                    <tr key={v.id}>
-                      <td><strong>{v.plate || '-'}</strong></td>
-                      <td>{v.driver || '-'}</td>
-                      <td>{v.location || '-'}</td>
-                      <td>{v.expiry || '-'}</td>
-                      <td>
-                        <span className="status-badge" style={{background:v.days <= 0 ? '#dc2626' : '#f59e0b',color:'#fff'}}>
-                          {v.days < 0 ? 'Expired' : v.days === 0 ? 'Today' : v.days + ' days left'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                {reminderDueVehicles.filter(v=>reminderSendMode==='all'||selectedReminderSites.includes(v.location)).map(v=>(
+                  <tr key={v.id}>
+                    <td><strong>{v.plate||'-'}</strong></td><td>{v.driver||'-'}</td><td>{v.location||'-'}</td><td>{v.expiry||'-'}</td>
+                    <td><span className="status-badge" style={{background:v.days<=0?'#dc2626':'#f59e0b',color:'#fff'}}>{v.days<0?'Expired':v.days===0?'Today':v.days+' days left'}</span></td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}
         </div>
 
-        {reminderSendResult && (
-          <div className="panel" style={{marginBottom:16}}>
-            <h2 style={{marginTop:0}}>3. Send Result</h2>
-            {(reminderSendResult.results || []).map(r => (
-              <div key={r.site} style={{padding:'7px 0',borderBottom:'1px solid #f1f5f9'}}>
-                {r.sent ? '✅' : '⚠️'} <strong>{r.site}</strong> — {r.vehicles} vehicle(s){r.reason ? ' — ' + r.reason : ''}
-              </div>
-            ))}
-          </div>
-        )}
+        {reminderSendResult && <div className="panel" style={{marginBottom:16}}>
+          <h2 style={{marginTop:0}}>3. Send Result</h2>
+          {(reminderSendResult.results||[]).map(r=><div key={r.site} style={{padding:'7px 0',borderBottom:'1px solid #f1f5f9'}}>
+            {r.sent?'✅':'⚠️'} <strong>{r.site}</strong> — {r.vehicles} vehicle(s){r.reason?' — '+r.reason:''}
+          </div>)}
+        </div>}
 
         <div className="btn-row">
-          {canWork && (
-            <button className="btn btn-success" onClick={sendInspectionReminders} disabled={sendingReminders}>
-              {sendingReminders ? 'Sending...' : '📧 Send Email'}
-            </button>
-          )}
+          {canWork && <button className="btn btn-success" onClick={sendInspectionReminders} disabled={sendingReminders}>{sendingReminders?'Sending...':'📧 Send Email'}</button>}
         </div>
       </div>
     );
@@ -591,7 +560,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     const isInspectedReport = key === 'sixInspected' || key === 'annualInspected';
     const component = key.startsWith('six') ? '6-Month Maintenance' : 'Annual Inspection';
     const type = key.startsWith('six') ? '6_months_general' : 'inspection';
-    return (
+  return (
       <div>
         <div className="panel" style={{marginBottom:16}}>
           <h1 style={{margin:0}}>📧 Annual Vehicle Inspection — Email Control</h1>

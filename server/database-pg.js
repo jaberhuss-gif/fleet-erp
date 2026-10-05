@@ -312,37 +312,71 @@ export async function updateVehicle(id, data = {}) {
   const vehicleRow = vehicleResult.rows[0];
   if (!vehicleRow) return { changes: 0 };
 
-  // Accept all frontend/API spellings. The Vehicles page sends currentKm,
-  // while older callers used currentKM/current_km/km.
+  // Vehicle Master accepts the full vehicle identity plus operational fields.
+  // Missing fields are preserved; only explicitly supplied fields are changed.
+  const hasPlate =
+    data.plate !== undefined ||
+    data.plateNumber !== undefined ||
+    data.plate_number !== undefined ||
+    data.plateCode !== undefined ||
+    data.plate_code !== undefined;
+
+  let plateNumber = vehicleRow.plate_number || "";
+  let plateCode = vehicleRow.plate_code || "";
+  if (data.plate !== undefined) {
+    const parts = stringValue(data.plate).trim().split(/\s+/).filter(Boolean);
+    if (!parts[0]) throw new Error("Vehicle plate is required");
+    plateNumber = parts[0];
+    plateCode = parts.slice(1).join(" ").toUpperCase();
+  } else {
+    if (data.plateNumber !== undefined || data.plate_number !== undefined) {
+      plateNumber = stringValue(data.plateNumber ?? data.plate_number).trim();
+    }
+    if (data.plateCode !== undefined || data.plate_code !== undefined) {
+      plateCode = stringValue(data.plateCode ?? data.plate_code).trim().toUpperCase();
+    }
+    if (!plateNumber) throw new Error("Vehicle plate is required");
+  }
+
+  if (hasPlate) {
+    const duplicate = await query(
+      `SELECT id
+       FROM vehicles
+       WHERE UPPER(TRIM(COALESCE(plate_number, ''))) = UPPER(TRIM($1))
+         AND UPPER(TRIM(COALESCE(plate_code, ''))) = UPPER(TRIM($2))
+         AND id <> $3
+       LIMIT 1`,
+      [plateNumber, plateCode, id]
+    );
+    if (duplicate.rows[0]) throw new Error("Another vehicle already uses this plate");
+  }
+
   const hasCurrentKM =
     data.currentKm !== undefined ||
     data.currentKM !== undefined ||
     data.current_km !== undefined ||
     data.km !== undefined;
-  const currentKM = hasCurrentKM
-    ? numberValue(
-        data.currentKm ?? data.currentKM ?? data.current_km ?? data.km,
-        numberValue(vehicleRow.current_km, 0)
-      )
-    : numberValue(vehicleRow.current_km, 0);
-  // Vehicle Edit form sends lastOilKm (camelCase). Accept all existing
-  // spellings so editing a vehicle cannot silently revert the saved oil reading.
+  const currentRaw = data.currentKm ?? data.currentKM ?? data.current_km ?? data.km;
+  if (hasCurrentKM && (!Number.isFinite(Number(currentRaw)) || Number(currentRaw) < 0)) {
+    throw new Error("Current KM must be a valid non-negative number");
+  }
+  const currentKM = hasCurrentKM ? Number(currentRaw) : numberValue(vehicleRow.current_km, 0);
+
   const hasLastOilKM =
     data.lastOilKm !== undefined ||
     data.lastOilKM !== undefined ||
     data.last_oil_km !== undefined ||
     data.serviceKm !== undefined;
-  const lastOilKM = hasLastOilKM
-    ? numberValue(
-        data.lastOilKm ?? data.lastOilKM ?? data.last_oil_km ?? data.serviceKm,
-        numberValue(vehicleRow.last_oil_km, 0)
-      )
-    : numberValue(vehicleRow.last_oil_km, 0);
+  const lastOilRaw = data.lastOilKm ?? data.lastOilKM ?? data.last_oil_km ?? data.serviceKm;
+  if (hasLastOilKM && (!Number.isFinite(Number(lastOilRaw)) || Number(lastOilRaw) < 0)) {
+    throw new Error("Last Oil Change KM must be a valid non-negative number");
+  }
+  const lastOilKM = hasLastOilKM ? Number(lastOilRaw) : numberValue(vehicleRow.last_oil_km, 0);
+
   const oilInterval = data.oilChangeInterval !== undefined && data.oilChangeInterval !== null && data.oilChangeInterval !== ""
     ? numberValue(data.oilChangeInterval, 5000)
     : numberValue(vehicleRow.oil_change_interval, 5000);
 
-  // Empty date inputs must be stored as NULL, never as an empty PostgreSQL date.
   const requestedOilDate = data.lastOilChangeDate ?? data.last_oil_change_date;
   const oilChangeDate = requestedOilDate === "" || requestedOilDate == null
     ? (vehicleRow.last_oil_change_date || null)
@@ -368,39 +402,53 @@ export async function updateVehicle(id, data = {}) {
   if (driverId === undefined) driverId = vehicleRow.driver_id ?? null;
 
   if (driverId) {
-    const driverCheck = await query(`SELECT id, name, phone FROM drivers WHERE id = $1 LIMIT 1`, [driverId]);
+    const driverCheck = await query(`SELECT id, name, phone, vehicle_id FROM drivers WHERE id = $1 LIMIT 1`, [driverId]);
     if (!driverCheck.rows[0]) throw new Error("Driver not found");
     const assigned = await query(
       `SELECT id FROM vehicles WHERE driver_id = $1 AND id <> $2 LIMIT 1`,
       [driverId, id]
     );
     if (assigned.rows[0]) throw new Error("Driver is already assigned to another vehicle");
+    if (driverCheck.rows[0].vehicle_id && Number(driverCheck.rows[0].vehicle_id) !== Number(id)) {
+      throw new Error("Driver is already assigned to another vehicle");
+    }
   }
+
+  const make = data.make !== undefined ? pgStr(data.make) : (vehicleRow.make || "");
+  const model = data.model !== undefined ? pgStr(data.model) : (vehicleRow.model || "");
+  const year = data.year !== undefined && data.year !== null && data.year !== ""
+    ? numberValue(data.year, vehicleRow.year || 2022)
+    : numberValue(vehicleRow.year, 2022);
+  const nextStatus = data.status ?? data.state ?? vehicleRow.status;
+  const nextLocation = data.location ?? vehicleRow.location ?? "";
+  const meterUpdatedAt = hasCurrentKM ? new Date().toISOString() : (vehicleRow.meter_updated_at || null);
 
   const result = await query(`
     UPDATE vehicles
-    SET current_km = $1,
-        last_oil_km = $2,
-        status = $3,
-        location = $4,
-        driver_id = $5,
-        oil_change_interval = $6,
-        last_oil_change_date = $7,
+    SET plate_number = $1,
+        plate_code = $2,
+        make = $3,
+        model = $4,
+        year = $5,
+        current_km = $6,
+        last_oil_km = $7,
+        status = $8,
+        location = $9,
+        driver_id = $10,
+        oil_change_interval = $11,
+        last_oil_change_date = $12,
+        meter_updated_at = $13,
         updated_at = CURRENT_TIMESTAMP
-    WHERE id = $8
+    WHERE id = $14
   `, [
-    currentKM, lastOilKM,
-    data.status ?? data.state ?? vehicleRow.status,
-    data.location ?? vehicleRow.location ?? "",
-    driverId,
-    oilInterval,
-    oilChangeDate,
-    id
+    plateNumber, plateCode, make, model, year,
+    currentKM, lastOilKM, nextStatus, nextLocation, driverId,
+    oilInterval, oilChangeDate, meterUpdatedAt, id
   ]);
 
   if (result.rowCount && hasLastOilKM) {
-    // Vehicle Edit is an authoritative Last Oil Change edit. Keep the oil history
-    // in sync so no later reconciliation can restore the previous KM value.
+    // Vehicle Master is authoritative for Last Oil Change edits. Keep the
+    // trusted oil history in sync so compliance screens cannot revert it.
     const latestOil = await query(`
       SELECT id
       FROM oil_changes
@@ -428,35 +476,55 @@ export async function updateVehicle(id, data = {}) {
         INSERT INTO oil_changes
           (vehicle_id, oil_change_km, oil_change_date, changed_by, notes)
         VALUES ($1, $2, $3, 'ERP', 'ERP Last Oil Change correction')
-      `, [
-        id,
-        lastOilKM,
-        oilChangeDate
-      ]);
+      `, [id, lastOilKM, oilChangeDate]);
     }
   }
 
   if (result.rowCount) {
-    const d = driverId
-      ? (await query(`SELECT name, phone FROM drivers WHERE id = $1 LIMIT 1`, [driverId])).rows[0]
+    const oldDriverId = vehicleRow.driver_id ? Number(vehicleRow.driver_id) : null;
+    const newDriverId = driverId ? Number(driverId) : null;
+
+    if (oldDriverId && oldDriverId !== newDriverId) {
+      await query(
+        `UPDATE drivers
+         SET vehicle_id = NULL, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 AND vehicle_id = $2`,
+        [oldDriverId, id]
+      );
+    }
+
+    const d = newDriverId
+      ? (await query(`SELECT name, phone FROM drivers WHERE id = $1 LIMIT 1`, [newDriverId])).rows[0]
       : null;
-    await query(`
-      UPDATE vehicles SET driver = $1, phone = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3
-    `, [d?.name || "", d?.phone || "", id]);
+
+    await query(
+      `UPDATE vehicles
+       SET driver = $1, phone = $2, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3`,
+      [d?.name || "", d?.phone || "", id]
+    );
+
+    if (newDriverId) {
+      await query(
+        `UPDATE drivers
+         SET vehicle_id = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [id, newDriverId]
+      );
+    }
 
     await syncV2DriverAssignment({
       legacyVehicleId: id,
-      plateNumber: vehicleRow.plate_number,
-      plateCode: vehicleRow.plate_code,
+      plateNumber,
+      plateCode,
       driverName: d?.name || "",
       phone: d?.phone || "",
-      clear: !driverId
+      clear: !newDriverId
     });
   }
 
   return { changes: result.rowCount };
 }
-
 
 /**
  * One-time safety reconciliation for the known 4481 JUA assignment.

@@ -5,15 +5,11 @@ import {
   DAILY_KM_TZ
 } from "./dailyKm.js";
 
-function plateLabel([number, code]) {
-  return `${number} ${code}`.trim();
-}
-
 export async function getDailySubmissionReport(targetDate = null) {
   const reportDate = await resolveRiyadhDate(targetDate || null);
 
   const fleetResult = await query(`
-    SELECT v.id, v.plate_number, v.plate_code, v.driver, v.phone, v.location, v.current_km,
+    SELECT v.id, v.plate_number, v.plate_code, v.driver, v.phone, v.location, v.current_km,\n           COALESCE(LOWER(TRIM(v.status)), '') AS status,
            COALESCE(oh.oil_change_km, v.last_oil_km) AS last_oil_km,
            COALESCE(oh.oil_change_date::text, v.last_oil_change_date::text) AS last_oil_change_date
     FROM vehicles v

@@ -1097,7 +1097,7 @@ app.get("/api/vehicles/:id/inspection-reminder", async (req, res) => {
   try {
     const r = await pgQuery(`
       SELECT id, plate_number, plate_code, driver, location,
-             inspection_expiry_date::text AS inspection_expiry_date, inspection_reminder_days,
+             inspection_expiry_date::text AS inspection_expiry_date::text AS inspection_expiry_date, inspection_reminder_days,
              inspection_manager_email, inspection_cc_emails,
              inspection_last_email_sent_at, inspection_last_email_key
       FROM vehicles WHERE id=$1
@@ -1210,7 +1210,7 @@ app.post("/api/inspection-reminders/send", async (req, res) => {
 
     const r = await pgQuery(`
       SELECT id, plate_number, plate_code, driver, location,
-             inspection_expiry_date::text AS inspection_expiry_date, inspection_reminder_days,
+             inspection_expiry_date, inspection_reminder_days,
              inspection_manager_email, inspection_cc_emails,
              inspection_last_email_sent_at, inspection_last_email_key
       FROM vehicles
@@ -1598,3 +1598,87 @@ app.get("/api/vehicles/:id/whatsapp-info", async (req, res) => {
       vehiclePlate: plate,
       currentKm: Number(v.current_km || 0)
     });
+  } catch (e) {
+    console.error("Error fetching vehicle WhatsApp info:", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.put("/api/tickets/:id/log-whatsapp", requireRole("Owner"), async (req, res) => {
+  try {
+    const userName = req.user?.full_name || req.user?.username || "Owner";
+    const note = "[" + new Date().toISOString() + "] WhatsApp sent by " + userName;
+    await pgQuery(
+      "UPDATE tickets SET resolution_notes = CASE WHEN COALESCE(resolution_notes, '') = '' THEN $1 ELSE resolution_notes || E'\n' || $1 END WHERE id = $2",
+      [note, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (e) {
+    console.error("Error logging WhatsApp:", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ===== FINANCIAL REPORT =====
+app.get("/api/reports/financial", async (req, res) => {
+  try { res.json({ success: true, ...await getFinancialReportPG() }); }
+  catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ===== ERP V2 =====
+if (process.env.ERP_V2_ENABLED === "true") {
+  try {
+    await mountV2(app);
+  } catch (e) {
+    console.error("[ERP V2] startup failed:", e.message);
+  }
+}
+
+// Narrow startup safety reconciliation for the known 4481 JUA assignment.
+// It is idempotent and only acts when the vehicle is still linked to the old
+// Kamran record and exactly one Abdul Wahid driver record exists.
+try {
+  await db.repairKnownVehicleAssignments();
+} catch (e) {
+  console.error("[DriverRepair] startup reconciliation failed:", e.message);
+}
+
+try { await ensureVehicleRepairSchema(); } catch (e) { console.error("[Schema] vehicle repair schema check failed:", e.message); }
+try { await ensureAnnualInspectionReminderSchema(); } catch (e) { console.error("[Schema] inspection reminder schema check failed:", e.message); }
+setInterval(() => processAnnualInspectionReminders().catch(e => console.error("[InspectionEmail] scheduler failed:", e.message)), 60 * 60 * 1000);
+
+
+// Additive, idempotent ticket-schema guard. Only missing columns are added;
+// existing tickets and historical data are never modified or removed.
+try {
+  await db.ensureTicketSchema();
+} catch (e) {
+  console.error("[Schema] ticket schema check failed:", e.message);
+}
+
+// Same guard for the Building Maintenance tables. Without this, a partially
+// migrated work_orders/projects/purchases/sites table makes the building
+// dashboard, monthly and financial reports return HTTP 500.
+try {
+  await db.ensureBuildingSchema();
+} catch (e) {
+  console.error("[Schema] building schema check failed:", e.message);
+}
+
+app.use(express.static(path.join(__dirname, '../client/dist')));
+app.get('*', async (req, res) => { res.sendFile(path.join(__dirname, '../client/dist/index.html')); });
+
+app.listen(PORT, () => {
+  console.log("");
+  console.log("======================================");
+  console.log("FLEET ERP SERVER");
+  console.log("======================================");
+  console.log("http://localhost:" + PORT);
+  console.log("Vehicle APIs: /api/vehicles, /api/tickets, /api/dashboard");
+  console.log("Building APIs: /api/sites, /api/work-orders, /api/projects, /api/purchases");
+  console.log("======================================");
+});
+
+
+
+

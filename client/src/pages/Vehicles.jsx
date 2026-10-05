@@ -7,6 +7,7 @@ import ExcelImportButton from '../components/ExcelImportButton';
 export default function Vehicles({ onViewVehicle, canWork = false, initialAction = null }) {
   const [vehicles, setVehicles] = useState([]);
   const [sites, setSites] = useState([]);
+  const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -15,16 +16,9 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
   const [filterLocation, setFilterLocation] = useState('all');
   const [showForm, setShowForm] = useState(initialAction === 'add');
   const [editing, setEditing] = useState(null);
-  const [quickEdit, setQuickEdit] = useState(null);
-  const [quickKm, setQuickKm] = useState('');
-  const [quickOilKm, setQuickOilKm] = useState('');
-  const [oilEditOpen, setOilEditOpen] = useState(false);
-  const [oilEditVehicleId, setOilEditVehicleId] = useState('');
-  const [oilEditKm, setOilEditKm] = useState('');
-  const [oilEditDate, setOilEditDate] = useState('');
   const [form, setForm] = useState({
     plate: '', make: 'Toyota', model: 'Hilux', year: 2022,
-    location: '', driver: '', phone: '', currentKm: 0, lastOilKm: 0, oilChangeInterval: 5000
+    location: '', driver: '', driverId: '', phone: '', currentKm: 0, lastOilKm: 0, lastOilChangeDate: '', oilChangeInterval: 5000
   });
 
   useEffect(() => { load(); }, []);
@@ -32,9 +26,10 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
   const load = async () => {
     try {
       setLoading(true);
-      const [res, siteRes] = await Promise.all([api.get('/vehicles'), api.get('/sites')]);
+      const [res, siteRes, driverRes] = await Promise.all([api.get('/vehicles'), api.get('/sites'), api.get('/drivers')]);
       setVehicles(res.data.vehicles || []);
       setSites(siteRes.data.sites || []);
+      setDrivers(driverRes.data.drivers || []);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
@@ -50,13 +45,14 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
     setMessage(''); setError('');
     try {
       if (editing) {
-        await api.put('/vehicles/' + editing.id, form);
+        await api.put('/vehicles/' + editing.id, { ...form, driverId: form.driverId ? Number(form.driverId) : null, driverName: form.driver || '', lastOilChangeDate: form.lastOilChangeDate || null });
         setMessage('Vehicle updated');
-        window.dispatchEvent(new CustomEvent('fleet-vehicles-updated'));
+        window.dispatchEvent(new CustomEvent('fleet-vehicles-updated', { detail: { vehicleId: editing.id } }));
         localStorage.setItem('fleet-vehicles-updated-at', String(Date.now()));
       } else {
-        await api.post('/vehicles', form);
+        await api.post('/vehicles', { ...form, driverId: form.driverId ? Number(form.driverId) : null, driverName: form.driver || '', lastOilChangeDate: form.lastOilChangeDate || null });
         setMessage('Vehicle added');
+        window.dispatchEvent(new CustomEvent('fleet-vehicles-updated'));
       }
       resetForm();
       load();
@@ -65,62 +61,12 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
 
   const handleEdit = (v) => {
     setForm({
-      plate: v.plate, make: v.make, model: v.model, year: v.year,
-      location: v.location, driver: v.driver, phone: v.phone,
-      currentKm: v.currentKm, lastOilKm: v.lastOilKm, oilChangeInterval: v.interval
+      plate: v.plate || '', make: v.make || 'Toyota', model: v.model || 'Hilux', year: v.year || 2022,
+      location: v.location || '', driver: v.driver || '', driverId: v.driverId ? String(v.driverId) : '', phone: v.phone || '',
+      currentKm: Number(v.currentKm || 0), lastOilKm: Number(v.lastOilKm || 0), lastOilChangeDate: v.lastOilChangeDate ? String(v.lastOilChangeDate).slice(0,10) : '', oilChangeInterval: Number(v.interval || 5000)
     });
     setEditing(v);
     setShowForm(true);
-  };
-
-  const handleQuickEdit = (v) => {
-    setQuickEdit(v);
-    setQuickKm(v.currentKm);
-    setQuickOilKm(v.lastOilKm);
-  };
-
-  const openOilEdit = (v = null) => {
-    const vehicle = v || vehicles.find(x => String(x.id) === String(oilEditVehicleId));
-    if (!vehicle) return;
-    setOilEditVehicleId(String(vehicle.id));
-    setOilEditKm(vehicle.lastOilKm ?? '');
-    setOilEditDate(vehicle.lastOilChangeDate ? String(vehicle.lastOilChangeDate).slice(0, 10) : '');
-    setOilEditOpen(true);
-  };
-
-  const handleOilEditVehicleChange = (id) => {
-    const vehicle = vehicles.find(x => String(x.id) === String(id));
-    setOilEditVehicleId(String(id));
-    setOilEditKm(vehicle?.lastOilKm ?? '');
-    setOilEditDate(vehicle?.lastOilChangeDate ? String(vehicle.lastOilChangeDate).slice(0, 10) : '');
-  };
-
-  const handleOilEditSave = async () => {
-    setMessage(''); setError('');
-    const vehicle = vehicles.find(x => String(x.id) === String(oilEditVehicleId));
-    if (!vehicle) { setError('Please select a vehicle'); return; }
-    if (oilEditKm === '' || Number(oilEditKm) < 0) { setError('Last Oil Change KM is required'); return; }
-    try {
-      await api.put('/vehicles/' + vehicle.id + '/last-oil-change', {
-        lastOilKm: Number(oilEditKm),
-        lastOilChangeDate: oilEditDate || null
-      });
-      setMessage('Last Oil Change updated for ' + vehicle.plate);
-      setOilEditOpen(false);
-      window.dispatchEvent(new CustomEvent('fleet-vehicles-updated'));
-      localStorage.setItem('fleet-vehicles-updated-at', String(Date.now()));
-      load();
-    } catch (e) { setError(e.response?.data?.error || e.message); }
-  };
-
-  const handleQuickSave = async () => {
-    setMessage(''); setError('');
-    try {
-      await api.put('/vehicles/' + quickEdit.id, { currentKm: Number(quickKm), lastOilKm: Number(quickOilKm) });
-      setMessage('Reading updated for ' + quickEdit.plate);
-      setQuickEdit(null);
-      load();
-    } catch (e) { setError(e.response?.data?.error || e.message); }
   };
 
   const handleDelete = async (id) => {
@@ -201,7 +147,6 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
           <div className="btn-row" style={{ margin: 0 }}>
             {canWork && <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>{showForm ? 'Cancel' : '+ Add Vehicle'}</button>}
             {canWork && <ExcelImportButton kind="vehicles" onImported={load} label="Import Excel" />}
-            <button className="btn btn-success" onClick={() => openOilEdit()}>Edit Last Oil Change</button>
             <button className="btn btn-warning" onClick={() => exportToCSV(vehicles, "vehicles", [{key:"plate",label:"Plate"},{key:"driver",label:"Driver"},{key:"phone",label:"Phone"},{key:"location",label:"Location"},{key:"currentKm",label:"Current KM"},{key:"lastOilKm",label:"Last Oil KM"},{key:"sinceOil",label:"Since Oil"},{key:"status",label:"Status"}])}>Export CSV</button>
             {canWork && <button className="btn btn-danger" onClick={handleDeleteAll}>Delete All</button>}
           </div>
@@ -227,38 +172,16 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
               <div className="form-group"><label>Make</label><input value={form.make} onChange={e => setForm({ ...form, make: e.target.value })} /></div>
               <div className="form-group"><label>Model</label><input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} /></div>
               <div className="form-group"><label>Year</label><input type="number" value={form.year} onChange={e => setForm({ ...form, year: Number(e.target.value) })} /></div>
-              <div className="form-group"><label>Driver</label><input value={form.driver} onChange={e => setForm({ ...form, driver: e.target.value })} /></div>
-              <div className="form-group"><label>Phone</label><input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></div>
+              <div className="form-group"><label>Driver</label><select value={form.driverId} onChange={e => { const id=e.target.value; const d=drivers.find(x=>String(x.id)===String(id)); setForm({ ...form, driverId:id, driver:d?.name||'', phone:d?.phone||'' }); }}><option value="">-- Unassigned --</option>{drivers.map(d=><option key={d.id} value={d.id}>{d.name}{d.phone ? ' — '+d.phone : ''}</option>)}</select></div>
+              <div className="form-group"><label>Phone</label><input value={form.phone} readOnly placeholder="Taken from Driver record" /></div>
               <div className="form-group"><label>Site *</label><select value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} required><option value="">-- Select Site --</option>{sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}</select></div>
               <div className="form-group"><label>Current KM</label><input type="number" value={form.currentKm} onChange={e => setForm({ ...form, currentKm: Number(e.target.value) })} /></div>
-              <div className="form-group"><label>Last Oil KM</label><input type="number" value={form.lastOilKm} onChange={e => setForm({ ...form, lastOilKm: Number(e.target.value) })} /></div>
+              <div className="form-group"><label>Last Oil KM</label><input type="number" min="0" value={form.lastOilKm} onChange={e => setForm({ ...form, lastOilKm: Number(e.target.value) })} /></div>
+              <div className="form-group"><label>Last Oil Change Date</label><input type="date" value={form.lastOilChangeDate} onChange={e => setForm({ ...form, lastOilChangeDate:e.target.value })} /></div>
               <div className="form-group"><label>Oil Interval</label><input type="number" value={form.oilChangeInterval} onChange={e => setForm({ ...form, oilChangeInterval: Number(e.target.value) })} /></div>
             </div>
             <div className="btn-row"><button type="submit" className="btn btn-success">{editing ? 'Update' : 'Save'}</button><button type="button" className="btn btn-warning" onClick={resetForm}>Cancel</button></div>
           </form>
-        )}
-
-        {oilEditOpen && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-            <div style={{ background: 'white', padding: '24px', borderRadius: '10px', maxWidth: '450px', width: '90%' }}>
-              <h3 style={{ marginTop: 0 }}>Edit Last Oil Change</h3>
-              <div className="form-group"><label>Vehicle *</label><select value={oilEditVehicleId} onChange={e => handleOilEditVehicleChange(e.target.value)} required><option value="">-- Select Vehicle --</option>{vehicles.map(v => <option key={v.id} value={v.id}>{v.plate} — {v.location || 'No Site'}</option>)}</select></div>
-              <div className="form-group"><label>Last Oil Change KM *</label><input type="number" min="0" value={oilEditKm} onChange={e => setOilEditKm(e.target.value)} required /></div>
-              <div className="form-group"><label>Last Oil Change Date</label><input type="date" value={oilEditDate} onChange={e => setOilEditDate(e.target.value)} /></div>
-              <div className="btn-row"><button type="button" className="btn btn-success" onClick={handleOilEditSave}>Save</button><button type="button" className="btn btn-warning" onClick={() => setOilEditOpen(false)}>Cancel</button></div>
-            </div>
-          </div>
-        )}
-
-        {quickEdit && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-            <div style={{ background: 'white', padding: '24px', borderRadius: '10px', maxWidth: '450px', width: '90%' }}>
-              <h3 style={{ marginTop: 0 }}>Quick Edit: {quickEdit.plate}</h3>
-              <div className="form-group"><label>Current Odometer (km)</label><input type="number" value={quickKm} onChange={e => setQuickKm(e.target.value)} /></div>
-              <div className="form-group"><label>Last Oil Change (km)</label><input type="number" value={quickOilKm} onChange={e => setQuickOilKm(e.target.value)} /></div>
-              <div className="btn-row">{canWork && <button type="button" className="btn btn-success" onClick={handleQuickSave}>Save</button>}<button type="button" className="btn btn-warning" onClick={() => setQuickEdit(null)}>Cancel</button></div>
-            </div>
-          </div>
         )}
 
         {loading ? <div className="loading">Loading...</div> : filtered.length === 0 ? <div className="alert alert-info">No vehicles match your filters.</div> : (
@@ -269,7 +192,7 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
                 <td>{v.driver}</td><td>{v.location || '-'}</td><td>{v.currentKm.toLocaleString()}</td><td>{v.lastOilKm.toLocaleString()}</td>
                 <td style={{ fontWeight: 'bold', color: v.sinceOil >= 5000 ? '#dc2626' : v.sinceOil >= 4500 ? '#f59e0b' : '#16a34a' }}>{v.sinceOil.toLocaleString()}</td>
                 <td><span className={'status-badge ' + (v.status === 'Urgent Overdue' ? 'status-urgent' : v.status === 'Warning' ? 'status-warning' : 'status-safe')}>{v.status === 'Urgent Overdue' ? 'Overdue' : v.status}</span></td>
-                <td><button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => onViewVehicle && onViewVehicle(v.id)}>View</button>{canWork && <button className="btn btn-success" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleQuickEdit(v)}>Reading</button>}{canWork && <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(v.id)} >Delete</button>}</td>
+                <td><button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => onViewVehicle && onViewVehicle(v.id)}>View</button>{canWork && <button className="btn btn-success" style={{ padding: '6px 10px', fontSize: '12px', marginRight: '4px' }} onClick={() => handleEdit(v)}>Edit</button>}{canWork && <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleDelete(v.id)} >Delete</button>}</td>
               </tr>
             ))}</tbody>
           </table>

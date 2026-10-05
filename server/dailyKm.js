@@ -86,13 +86,7 @@ async function loadFleetVehicles() {
            COALESCE(LOWER(TRIM(status)), '') AS status
     FROM vehicles
     WHERE COALESCE(LOWER(TRIM(status)), '') <> 'inactive'
-      AND normalize_plate IS NOT NULL
-  `).catch(async () => query(`
-    SELECT id, plate_number, plate_code, driver, phone, current_km, location,
-           COALESCE(LOWER(TRIM(status)), '') AS status
-    FROM vehicles
-    WHERE COALESCE(LOWER(TRIM(status)), '') <> 'inactive'
-  `));
+  `);
 
   const vehicles = [];
   for (const row of result.rows) {

@@ -461,7 +461,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       setReminderSendResult(res.data);
       const sent = (res.data.results || []).filter(x => x.sent);
       const skipped = (res.data.results || []).filter(x => !x.sent);
-      setMessage('Inspection reminders processed: ' + sent.length + ' email(s) sent for ' + (res.data.dueVehicles || 0) + ' vehicle(s).');
+      setMessage('Inspection reminders processed: ' + sent.length + ' email(s) sent for ' + (res.data.dueVehicles || 0) + ' eligible vehicle(s). Vehicles beyond 30 days were not emailed.');
       if (skipped.length) setError(skipped.map(x => x.site + ': ' + x.reason).join(' | '));
     } catch (e) {
       setError(e.response?.data?.error || e.message);
@@ -528,21 +528,22 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
         <div className="panel" style={{marginBottom:16}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap'}}>
             <div>
-              <h2 style={{marginTop:0,marginBottom:4}}>2. Vehicles Due for Email — Next 30 Days</h2>
-              <div style={{fontSize:13,color:'#64748b'}}>Expired and due within 30 days only · Gregorian dates from Vehicle Master</div>
+              <h2 style={{marginTop:0,marginBottom:4}}>2. Annual Inspection Vehicles — Nearest Expiry First</h2>
+              <div style={{fontSize:13,color:'#64748b'}}>Nearest expiry at the top · Vehicles beyond 30 days stay visible but are not included in email sending · Gregorian dates from Vehicle Master</div>
             </div>
             <button className="btn" onClick={openReminderSend} disabled={sendingReminders}>↻ Refresh</button>
           </div>
           {reminderDueVehicles.length===0 ? (
-            <div style={{marginTop:14,color:'#64748b'}}>No vehicles are expired or due within 30 days.</div>
+            <div style={{marginTop:14,color:'#64748b'}}>No vehicles have an annual inspection expiry date configured in Vehicle Master.</div>
           ) : (
             <table style={{marginTop:14}}>
-              <thead><tr><th>Vehicle</th><th>Driver</th><th>Site</th><th>Expiry</th><th>Status</th></tr></thead>
+              <thead><tr><th>Vehicle</th><th>Driver</th><th>Site</th><th>Expiry</th><th>Status</th><th>Email</th></tr></thead>
               <tbody>
                 {reminderDueVehicles.filter(v=>reminderSendMode==='all'||selectedReminderSites.includes(v.location)).map(v=>(
                   <tr key={v.id}>
                     <td><strong>{v.plate||'-'}</strong></td><td>{v.driver||'-'}</td><td>{v.location||'-'}</td><td>{v.expiry||'-'}</td>
-                    <td><span className="status-badge" style={{background:v.days<=0?'#dc2626':'#f59e0b',color:'#fff'}}>{v.days<0?'Expired':v.days===0?'Today':v.days+' days left'}</span></td>
+                    <td><span className="status-badge" style={{background:v.days<=0?'#dc2626':v.days<=30?'#f59e0b':'#16a34a',color:'#fff'}}>{v.days<0?'Expired':v.days===0?'Today':v.days+' days left'}</span></td>
+                    <td><span className="status-badge" style={{background:v.days<=30?'#f59e0b':'#16a34a',color:'#fff'}}>{v.days<=30?'Included':'Not yet'}</span></td>
                   </tr>
                 ))}
               </tbody>

@@ -35,7 +35,7 @@ export default function VehicleTicket({ user, canWork=false }) {
         api.get('/tire/service-requests'),
         api.get('/vehicles'),
         api.get('/google-sheet-submission-report'),
-        api.get('/periodic-maintenance?type=inspection')
+        api.get('/periodic-maintenance')
       ]);
       setTickets(t.data?.tickets||[]);
       setTireRequests(tr.data?.requests||[]);
@@ -203,6 +203,13 @@ export default function VehicleTicket({ user, canWork=false }) {
       }else if(row.kind==='tire'){
         message=closedStatuses.includes(normalStatus(row.status))
           ?msgClosed({driver,plate},row.description):msgOpen({driver,plate},row.description);
+      }else if(row.kind==='inspection'){
+        let confirmationUrl='';
+        try{
+          const info=(await api.get('/vehicles/'+row.vehicle.id+'/whatsapp-info')).data||{};
+          phone=info.driverPhone||phone; driver=info.driverName||driver; plate=info.vehiclePlate||plate; confirmationUrl=info.confirmationUrl||'';
+        }catch(_){}
+        message='Hello '+driver+',\n\nVehicle '+plate+' — Annual Periodic Inspection is still pending. Please arrange the inspection.'+(confirmationUrl?'\n\nIf the inspection has been completed, please confirm here:\n'+confirmationUrl:'')+'\n\nFleet Management';
       }else if(row.kind==='km'){
         message='Hello '+driver+',\n\nNo KM reading has been recorded today for vehicle '+plate+'. Please enter today\'s current KM.\n\nFleet Management';
       }else if(row.kind==='oil'){
@@ -242,7 +249,7 @@ export default function VehicleTicket({ user, canWork=false }) {
       </p>
       <div className="sub-nav" style={{marginTop:12,marginBottom:8}}>
         <button className={activeTab==='maintenance'?'sub-btn active':'sub-btn'} onClick={()=>setActiveTab('maintenance')}>1- Maintenance Issues ({ticketRows.length})</button>
-        <button className={activeTab==='inspection'?'sub-btn active':'sub-btn'} onClick={()=>setActiveTab('inspection')}>2- Inspection Tickets ({inspectionTicketRows.length})</button>
+        <button className={activeTab==='inspection'?'sub-btn active':'sub-btn'} onClick={()=>{setActiveTab('inspection');setStatus('All')}}>2- Inspection Tickets ({inspectionTicketRows.length})</button>
         <button className={activeTab==='km'?'sub-btn active':'sub-btn'} onClick={()=>setActiveTab('km')}>3- Daily KM Missing ({kmMissingRows.length})</button>
         <button className={activeTab==='oil'?'sub-btn active':'sub-btn'} onClick={()=>setActiveTab('oil')}>4- Oil Compliance ({oilRows.length})</button>
       </div>

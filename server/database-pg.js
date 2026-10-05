@@ -268,6 +268,8 @@ export async function createVehicle(vehicleData = {}) {
     if (!driverCheck.rows[0]) throw new Error("Driver not found");
     const assigned = await query(`SELECT id FROM vehicles WHERE driver_id = $1 LIMIT 1`, [driverId]);
     if (assigned.rows[0]) throw new Error("Driver is already assigned to another vehicle");
+    const driverRow = (await query(`SELECT vehicle_id FROM drivers WHERE id = $1 LIMIT 1`, [driverId])).rows[0];
+    if (driverRow?.vehicle_id) throw new Error("Driver is already assigned to another vehicle");
   }
 
   const result = await query(`
@@ -302,6 +304,12 @@ export async function createVehicle(vehicleData = {}) {
   if (driverId) {
     const d = (await query(`SELECT name, phone FROM drivers WHERE id = $1`, [driverId])).rows[0];
     await query(`UPDATE vehicles SET driver = $1, phone = $2 WHERE id = $3`, [d.name || "", d.phone || "", result.rows[0].id]);
+    await query(
+      `UPDATE drivers
+       SET vehicle_id = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [result.rows[0].id, driverId]
+    );
   }
 
   return getVehicleById(result.rows[0].id);

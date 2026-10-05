@@ -132,6 +132,8 @@ function formatVehicle(row) {
     oilChangeInterval: interval,
     last_oil_change_date: row.last_oil_change_date || "",
     lastOilChangeDate: row.last_oil_change_date || "",
+    inspection_expiry_date: row.inspection_expiry_date || "",
+    inspectionExpiryDate: row.inspection_expiry_date || "",
 
     oilStatus,
 
@@ -281,8 +283,8 @@ export async function createVehicle(vehicleData = {}) {
   const result = await query(`
     INSERT INTO vehicles
       (plate_number, plate_code, make, model, year, status, location, driver_id,
-       driver, phone, current_km, last_oil_km, oil_change_interval, last_oil_change_date, meter_updated_at)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       driver, phone, current_km, last_oil_km, oil_change_interval, last_oil_change_date, inspection_expiry_date, meter_updated_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
     RETURNING *
   `, [
     plateNumber, plateCode,
@@ -304,6 +306,7 @@ export async function createVehicle(vehicleData = {}) {
     ),
     numberValue(vehicleData.oilChangeInterval, 5000),
     (vehicleData.lastOilChangeDate === "" || vehicleData.lastOilChangeDate == null) ? null : vehicleData.lastOilChangeDate,
+    (vehicleData.inspectionExpiryDate === "" || vehicleData.inspectionExpiryDate == null) ? null : vehicleData.inspectionExpiryDate,
     new Date().toISOString()
   ]);
 
@@ -392,6 +395,7 @@ export async function updateVehicle(id, data = {}) {
     : numberValue(vehicleRow.oil_change_interval, 5000);
 
   const requestedOilDate = data.lastOilChangeDate ?? data.last_oil_change_date;
+  const inspectionExpiryDate = data.inspectionExpiryDate ?? data.inspection_expiry_date ?? vehicleRow.inspection_expiry_date ?? null;
   const oilChangeDate = requestedOilDate === "" || requestedOilDate == null
     ? (vehicleRow.last_oil_change_date || null)
     : requestedOilDate;
@@ -443,13 +447,14 @@ export async function updateVehicle(id, data = {}) {
         driver_id = $10,
         oil_change_interval = $11,
         last_oil_change_date = $12,
-        meter_updated_at = $13,
+        inspection_expiry_date = $13,
+        meter_updated_at = $14,
         updated_at = CURRENT_TIMESTAMP
-    WHERE id = $14
+    WHERE id = $15
   `, [
     plateNumber, plateCode, make, model, year,
     currentKM, lastOilKM, nextStatus, nextLocation, driverId,
-    oilInterval, oilChangeDate, meterUpdatedAt, id
+    oilInterval, oilChangeDate, inspectionExpiryDate, meterUpdatedAt, id
   ]);
 
   if (result.rowCount && hasLastOilKM) {

@@ -37,86 +37,6 @@ function annualInspectionRecipients(location) {
 }
 
 
-async function seedAnnualInspectionExpiryFromMasterList() {
-  const expiryByPlate = {
-    '2287':'2026-11-03','4980':'2026-10-13','1715':'2026-10-30','1737':'2026-10-27','4430':'2026-09-08',
-    '1543':'2026-12-18','1722':'2026-10-20','4532':'2026-12-25','2344':'2026-09-04','6183':'2026-12-18',
-    '2158':'2026-10-08','8703':'2026-09-18','4463':'2026-10-06','1709':'2026-10-20','2110':'2026-10-27',
-    '4479':'2027-01-28','1713':'2026-10-27','4435':'2026-10-09','8704':'2026-09-18','4534':'2026-12-21',
-    '4538':'2027-02-04','4533':'2026-12-11','1706':'2027-06-24','4541':'2027-03-31','2349':'2026-10-26',
-    '5456':'2026-10-11','1716':'2026-10-21','4481':'2026-10-13','2290':'2026-12-22','2687':'2026-10-30',
-    '2295':'2026-12-14','1738':'2026-10-14','1712':'2026-10-23','4431':'2026-11-05'
-  };
-  let updated = 0;
-  for (const [plate, expiry] of Object.entries(expiryByPlate)) {
-    const result = await pgQuery("UPDATE vehicles SET inspection_expiry_date = $1, updated_at = CURRENT_TIMESTAMP WHERE regexp_replace(COALESCE(plate_number, ''), '[^0-9]', '', 'g') = $2", [expiry, plate]);
-    updated += result.rowCount || 0;
-  }
-  console.log('[InspectionMasterImport] seeded expiry dates for ' + updated + ' vehicle rows.');
-}
-
-async function ensureAnnualInspectionReminderSchema() {
-  await pgQuery(`
-    ALTER TABLE vehicles
-      ADD COLUMN IF NOT EXISTS inspection_expiry_date DATE,
-      ADD COLUMN IF NOT EXISTS inspection_reminder_days INTEGER NOT NULL DEFAULT 30,
-      ADD COLUMN IF NOT EXISTS inspection_manager_email TEXT,
-      ADD COLUMN IF NOT EXISTS inspection_cc_emails TEXT,
-      ADD COLUMN IF NOT EXISTS inspection_last_email_sent_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS inspection_last_email_key TEXT
-  `);
-}
-
-function splitEmails(value) {
-  return String(value || '')
-    .split(/[;,\\s]+/)
-    .map(v => v.trim().toLowerCase())
-    .filter(Boolean)
-    .filter((v, i, a) => a.indexOf(v) === i);
-}
-
-async function sendAnnualInspectionReminderEmail(row) {
-  const apiKey = String(process.env.RESEND_API_KEY || '').trim();
-  const from = String(process.env.INSPECTION_EMAIL_FROM || process.env.EMAIL_FROM || ANNUAL_INSPECTION_EMAIL_FROM).trim();
-  if (!apiKey || !from) return { sent: false, reason: 'Email provider is not configured (RESEND_API_KEY / INSPECTION_EMAIL_FROM).' };
-
-  const defaults = annualInspectionRecipients(row.location);
-  const to = splitEmails(row.inspection_manager_email || defaults.managerEmail);
-  const cc = splitEmails(row.inspection_cc_emails || defaults.ccEmails).filter(e => !to.includes(e));
-  if (!to.length) return { sent: false, reason: 'No site manager email configured.' };
-
-  const expiry = String(row.inspection_expiry_date || '').slice(0, 10);
-  const days = Math.ceil((new Date(expiry + 'T00:00:00Z') - new Date(new Date().toISOString().slice(0,10) + 'T00:00:00Z')) / 86400000);
-  const plate = [row.plate_number, row.plate_code].filter(Boolean).join(' ').trim();
-  const subject = days < 0
-    ? 'URGENT: Annual Vehicle Inspection Expired — ' + plate
-    : 'Annual Vehicle Inspection Due Soon — ' + plate;
-  const textBody = [
-    'Dear Site Manager,',
-    '',
-    'Please arrange the annual periodic inspection for the following vehicle:',
-    '',
-    'Vehicle: ' + plate,
-    'Driver: ' + (row.driver || 'Unassigned'),
-    'Site: ' + (row.location || 'Not specified'),
-    'Inspection expiry date: ' + expiry,
-    'Days remaining: ' + days,
-    '',
-    'Please arrange the inspection appointment before the current inspection expires.',
-    '',
-    'Fleet Management'
-  ].join('\\n');
-
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from, to, cc, subject, text: textBody })
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.message || data?.error || 'Email provider returned HTTP ' + response.status);
-  return { sent: true, id: data?.id || null, days };
-}
-
 async function processAnnualInspectionReminders() {
   const result = await pgQuery(`
     SELECT id, plate_number, plate_code, driver, location,
@@ -1702,7 +1622,6 @@ try {
 
 try { await ensureVehicleRepairSchema(); } catch (e) { console.error("[Schema] vehicle repair schema check failed:", e.message); }
 try { await ensureAnnualInspectionReminderSchema(); } catch (e) { console.error("[Schema] inspection reminder schema check failed:", e.message); }
-try { await seedAnnualInspectionExpiryFromMasterList(); } catch (e) { console.error("[InspectionMasterImport] failed:", e.message); }
 setInterval(() => processAnnualInspectionReminders().catch(e => console.error("[InspectionEmail] scheduler failed:", e.message)), 60 * 60 * 1000);
 
 

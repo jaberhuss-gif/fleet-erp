@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useRef } from 'react';
 import { getVehiclesList, getIssueTypes, reportIssue } from '../api/client';
 
-export default function ReportIssue({ canWork = false }) {
+export default function ReportIssue({ canWork = false, user = null }) {
   const [vehicles, setVehicles] = useState([]);
   const [types, setTypes] = useState([]);
   const [vehicleId, setVehicleId] = useState('');
@@ -54,7 +54,7 @@ export default function ReportIssue({ canWork = false }) {
     if (!issueType) { setError('Please select an issue type'); return; }
     if (!description.trim()) { setError('Please describe the issue'); return; }
     try {
-      const res = await reportIssue({ vehicleId: Number(vehicleId), issueType, description, priority, reportedBy: 'Driver' });
+      const res = await reportIssue({ vehicleId: Number(vehicleId), issueType, description, priority });
       setMessage('Issue reported. Ticket #' + res.ticket.id + ' created.');
       setVehicleId(''); setIssueType(''); setDescription(''); setPriority('Medium');
     } catch (e) { setError(e.response?.data?.error || e.message); }

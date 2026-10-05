@@ -1778,9 +1778,16 @@ if (process.env.ERP_V2_ENABLED === "true") {
   }
 }
 
+// Restore vehicle-specific driver assignments from each vehicle's own
+// stored driver name/phone snapshot. This prevents editing one driver or vehicle
+// from changing the assignment of unrelated vehicles.
+try {
+  await db.repairVehicleDriverAssignmentsFromSnapshots();
+} catch (e) {
+  console.error("[DriverRepair] vehicle-specific assignment reconciliation failed:", e.message);
+}
+
 // Narrow startup safety reconciliation for the known 4481 JUA assignment.
-// It is idempotent and only acts when the vehicle is still linked to the old
-// Kamran record and exactly one Abdul Wahid driver record exists.
 try {
   await db.repairKnownVehicleAssignments();
 } catch (e) {

@@ -44,7 +44,19 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     completedDate: '', technician: '', cost: 0, notes: ''
   });
 
-  useEffect(() => { load(); }, []);
+  const loadReminderQueue = async () => {
+    try {
+      const res = await api.get('/inspection-reminders/due');
+      setReminderDueVehicles(res.data?.vehicles || []);
+    } catch (e) {
+      setError('Unable to load the annual inspection email queue.');
+    }
+  };
+
+  useEffect(() => {
+    load();
+    if (inspectionEmailOnly || inspectionUpcomingOnly) loadReminderQueue();
+  }, [inspectionEmailOnly, inspectionUpcomingOnly]);
 
   const load = async () => {
     try {
@@ -432,14 +444,8 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     setReminderSendMode('all');
     setSelectedReminderSites([]);
     setReminderSendResult(null);
-    setReminderDueVehicles([]);
     setShowReminderSend(true);
-    try {
-      const res = await api.get('/inspection-reminders/due');
-      setReminderDueVehicles(res.data?.vehicles || []);
-    } catch (e) {
-      setMessage('Unable to load the inspection email queue.');
-    }
+    await loadReminderQueue();
   };
 
   const sendInspectionReminders = async () => {
@@ -467,6 +473,93 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       setError(e.response?.data?.error || e.message);
     } finally {
       setSendingReminders(false);
+    }
+  };
+
+  const inspectionEmailGroups = () => {
+    const selected = reminderDueVehicles
+      .filter(v => Number(v.days) <= 31)
+      .filter(v => reminderSendMode === 'all' || selectedReminderSites.includes(v.location));
+
+    const groups = {};
+    selected.forEach(v => {
+      const site = v.location || 'Unknown Site';
+      if (!groups[site]) groups[site] = [];
+      groups[site].push(v);
+    });
+
+    return Object.entries(groups)
+      .map(([site, rows]) => {
+        const first = rows[0] || {};
+        const to = String(first.managerEmail || '').trim();
+        const cc = String(first.ccEmails || '').trim();
+        return { site, rows: rows.sort((a,b) => Number(a.days) - Number(b.days)), to, cc };
+      })
+      .sort((a,b) => {
+        const ad = Number(a.rows[0]?.days ?? 99999);
+        const bd = Number(b.rows[0]?.days ?? 99999);
+        return ad - bd || a.site.localeCompare(b.site);
+      });
+  };
+
+  const buildInspectionEmail = (group) => {
+    const subject = 'Annual Vehicle Inspection Reminder — ' + group.site;
+    const body = [
+      'Dear Team,',
+      '',
+      'Please arrange the annual government inspection for the following vehicle(s):',
+      '',
+      ...group.rows.map((v, i) => {
+        const days = Number(v.days);
+        const timing = days < 0 ? 'EXPIRED by ' + Math.abs(days) + ' day(s)' :
+          days === 0 ? 'EXPIRES TODAY' : days + ' day(s) remaining';
+        return (i + 1) + '. Vehicle: ' + (v.plate || '-') +
+          ' | Driver: ' + (v.driver || '-') +
+          ' | Location: ' + (v.location || group.site) +
+          ' | Inspection Expiry: ' + (v.expiry || '-') +
+          ' | ' + timing;
+      }),
+      '',
+      'Please coordinate the inspection and update the Fleet system once completed.',
+      '',
+      'Regards,',
+      'Hussein Anwar',
+      'Fleet Manager'
+    ].join('\\n');
+
+    const params = new URLSearchParams({
+      to: group.to,
+      cc: group.cc,
+      subject,
+      body
+    });
+    return {
+      subject,
+      body,
+      url: 'https://outlook.office.com/mail/deeplink/compose?' + params.toString()
+    };
+  };
+
+  const openInspectionEmail = (group) => {
+    if (!group.to) {
+      setError(group.site + ': no email recipient is configured.');
+      return;
+    }
+    const email = buildInspectionEmail(group);
+    const w = window.open(email.url, '_blank');
+    if (!w) setError('Please allow pop-ups to open the Outlook email draft.');
+  };
+
+  const copyInspectionEmail = async (group) => {
+    const email = buildInspectionEmail(group);
+    const text = 'To: ' + (group.to || '-') + '\\n' +
+      'CC: ' + (group.cc || '-') + '\\n' +
+      'Subject: ' + email.subject + '\\n\\n' + email.body;
+    try {
+      await navigator.clipboard.writeText(text);
+      setMessage('Email details copied for ' + group.site + '.');
+    } catch (e) {
+      setError('Unable to copy the email details. Please use Open Email.');
     }
   };
 
@@ -539,23 +632,30 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
   }
 
   if (inspectionEmailOnly) {
+    const emailGroups = inspectionEmailGroups();
+    const eligibleRows = reminderDueVehicles
+      .filter(v => Number(v.days) <= 31)
+      .filter(v => reminderSendMode === 'all' || selectedReminderSites.includes(v.location))
+      .sort((a,b) => Number(a.days) - Number(b.days));
+
     return (
       <div className="periodic-maintenance-print-root">
         <div className="panel" style={{marginBottom:16}}>
           <h1 style={{margin:0}}>📧 Annual Vehicle Inspection — Email Control</h1>
           <p style={{margin:'6px 0 0',color:'#64748b'}}>
-            Only expired vehicles and vehicles expiring within the next 31 days are included.
-            Inspection expiry dates are maintained only in Vehicle Master.
+            Prepare Outlook emails for expired vehicles and vehicles expiring within the next 31 days.
+            The system does not send the email automatically — you review it and press Send in Outlook.
           </p>
         </div>
         {error && <div className="alert alert-error" style={{marginBottom:12}}>{error}</div>}
         {message && <div className="alert alert-success" style={{marginBottom:12}}>{message}</div>}
 
         <div className="panel" style={{marginBottom:16}}>
-          <h2 style={{marginTop:0}}>1. Select Email Scope</h2>
+          <h2 style={{marginTop:0}}>1. Email Scope</h2>
           <div className="btn-row">
-            <button className={reminderSendMode==='all'?'btn btn-success':'btn'} onClick={()=>setReminderSendMode('all')}>1️⃣ Send to All Sites</button>
-            <button className={reminderSendMode==='sites'?'btn btn-success':'btn'} onClick={()=>setReminderSendMode('sites')}>2️⃣ Select Sites & Send</button>
+            <button className={reminderSendMode==='all'?'btn btn-success':'btn'} onClick={()=>setReminderSendMode('all')}>1️⃣ All Sites</button>
+            <button className={reminderSendMode==='sites'?'btn btn-success':'btn'} onClick={()=>setReminderSendMode('sites')}>2️⃣ Select Sites</button>
+            <button className="btn" onClick={loadReminderQueue}>↻ Refresh</button>
           </div>
           {reminderSendMode==='sites' && (
             <div style={{marginTop:14}}>
@@ -574,25 +674,32 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
           )}
         </div>
 
-        <div className="panel" style={{marginBottom:16}}>
+        <div className="panel" style={{marginBottom:16,overflowX:'auto'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap'}}>
             <div>
-              <h2 style={{marginTop:0,marginBottom:4}}>2. Annual Inspection Vehicles — Nearest Expiry First</h2>
-              <div style={{fontSize:13,color:'#64748b'}}>Nearest expiry at the top · Only vehicles within 31 days are in this email queue · Gregorian dates from Vehicle Master</div>
+              <h2 style={{marginTop:0,marginBottom:4}}>2. Eligible Vehicles — Nearest Expiry First ({eligibleRows.length})</h2>
+              <div style={{fontSize:13,color:'#64748b'}}>
+                Expired + next 31 days only. Vehicles beyond 31 days are not included.
+              </div>
             </div>
-            <button className="btn" onClick={openReminderSend} disabled={sendingReminders}>↻ Refresh</button>
           </div>
-          {reminderDueVehicles.length===0 ? (
-            <div style={{marginTop:14,color:'#64748b'}}>No vehicles have an annual inspection expiry date configured in Vehicle Master.</div>
+          {eligibleRows.length===0 ? (
+            <div style={{marginTop:14,color:'#64748b'}}>No eligible vehicles found.</div>
           ) : (
             <table style={{marginTop:14}}>
-              <thead><tr><th>Vehicle</th><th>Driver</th><th>Site</th><th>Expiry</th><th>Status</th><th>Email</th><th>To</th><th>CC</th></tr></thead>
+              <thead><tr><th>Vehicle</th><th>Driver</th><th>Site</th><th>Expiry</th><th>Status</th><th>To</th><th>CC</th></tr></thead>
               <tbody>
-                {reminderDueVehicles.filter(v=>(v.days<=31) && (reminderSendMode==='all'||selectedReminderSites.includes(v.location))).map(v=>(
+                {eligibleRows.map(v=>(
                   <tr key={v.id}>
-                    <td><strong>{v.plate||'-'}</strong></td><td>{v.driver||'-'}</td><td>{v.location||'-'}</td><td>{v.expiry||'-'}</td>
-                    <td><span className="status-badge" style={{background:v.days<=0?'#dc2626':v.days<=31?'#f59e0b':'#16a34a',color:'#fff'}}>{v.days<0?'Expired':v.days===0?'Today':v.days+' days left'}</span></td>
-                    <td><span className="status-badge" style={{background:v.days<=30?'#f59e0b':'#16a34a',color:'#fff'}}>{v.days<=31?'Included':'Not yet'}</span></td>
+                    <td><strong>{v.plate||'-'}</strong></td>
+                    <td>{v.driver||'-'}</td>
+                    <td>{v.location||'-'}</td>
+                    <td>{v.expiry||'-'}</td>
+                    <td><span className="status-badge" style={{background:Number(v.days)<=0?'#dc2626':'#f59e0b',color:'#fff'}}>
+                      {Number(v.days)<0?'Expired':Number(v.days)===0?'Today':Number(v.days)+' days left'}
+                    </span></td>
+                    <td>{v.managerEmail||'-'}</td>
+                    <td>{v.ccEmails||'-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -600,15 +707,39 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
           )}
         </div>
 
-        {reminderSendResult && <div className="panel" style={{marginBottom:16}}>
-          <h2 style={{marginTop:0}}>3. Send Result</h2>
-          {(reminderSendResult.results||[]).map(r=><div key={r.site} style={{padding:'7px 0',borderBottom:'1px solid #f1f5f9'}}>
-            {r.sent?'✅':'⚠️'} <strong>{r.site}</strong> — {r.vehicles} vehicle(s){r.reason?' — '+r.reason:''}
-          </div>)}
-        </div>}
-
-        <div className="btn-row">
-          {canWork && <button className="btn btn-success" onClick={sendInspectionReminders} disabled={sendingReminders}>{sendingReminders?'Sending...':'📧 Send Email'}</button>}
+        <div className="panel" style={{marginBottom:16}}>
+          <h2 style={{marginTop:0}}>3. Prepared Outlook Emails ({emailGroups.length})</h2>
+          <div style={{color:'#64748b',fontSize:13,marginBottom:12}}>
+            Each site gets its own email with the vehicles, expiry dates and recipients already filled in.
+          </div>
+          {emailGroups.length===0 ? (
+            <div style={{color:'#64748b'}}>No site email drafts are available for the current selection.</div>
+          ) : (
+            emailGroups.map(group=>{
+              const email = buildInspectionEmail(group);
+              return (
+                <div key={group.site} style={{border:'1px solid #e2e8f0',borderRadius:10,padding:14,marginBottom:10}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,flexWrap:'wrap'}}>
+                    <div>
+                      <strong style={{fontSize:16}}>{group.site}</strong>
+                      <div style={{marginTop:5,fontSize:13}}>Vehicles: {group.rows.length}</div>
+                      <div style={{marginTop:4,fontSize:12,color:'#64748b'}}>To: {group.to||'Not configured'}</div>
+                      <div style={{marginTop:2,fontSize:12,color:'#64748b'}}>CC: {group.cc||'Not configured'}</div>
+                    </div>
+                    <div className="btn-row">
+                      <button className="btn btn-success" onClick={()=>openInspectionEmail(group)} disabled={!group.to}>✉️ Open Outlook Email</button>
+                      <button className="btn btn-primary" onClick={()=>copyInspectionEmail(group)}>📋 Copy Email</button>
+                    </div>
+                  </div>
+                  <div style={{marginTop:10,background:'#f8fafc',padding:10,borderRadius:8,fontSize:12,whiteSpace:'pre-wrap',maxHeight:180,overflowY:'auto'}}>
+                    <strong>Subject:</strong> {email.subject}
+                    {'\\n\\n'}
+                    {email.body}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     );

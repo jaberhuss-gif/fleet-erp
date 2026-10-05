@@ -1,22 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../api/client';
 
-const clean=v=>String(v??'').trim();
-const inspected=r=>{
-  if(!r)return false;
-  if(r.type==='6_months_general') return r.status==='Completed'||!!clean(r.completed_date)||!!clean(r.notes);
-  if(r.type==='inspection') return r.status==='Completed'||!!clean(r.completed_date);
-  return false;
-};
-const latest=(rows,type)=>{
-  const typed=rows.filter(r=>r.type===type);
-  const evidenced=typed.filter(inspected);
-  return (evidenced.length?evidenced:typed).sort((a,b)=>
-    String(b.completed_date||b.scheduled_date||b.created_at||'').localeCompare(
-      String(a.completed_date||a.scheduled_date||a.created_at||'')
-    )
-  )[0]||null;
-};
 const normalStatus=s=>String(s||'').trim().toUpperCase();
 const openStatuses=['OPEN','ACKNOWLEDGED','IN_PROGRESS','PENDING','APPROVED','SUBMITTED'];
 const closedStatuses=['CLOSED','COMPLETED','CANCELLED'];
@@ -34,7 +18,6 @@ export default function VehicleTicket({ user, canWork=false }) {
   const [tickets,setTickets]=useState([]);
   const [tireRequests,setTireRequests]=useState([]);
   const [vehicles,setVehicles]=useState([]);
-  const [periodic,setPeriodic]=useState([]);
   const [dailyReport,setDailyReport]=useState(null);
   const [search,setSearch]=useState('');
   const [status,setStatus]=useState('Open');
@@ -50,13 +33,11 @@ export default function VehicleTicket({ user, canWork=false }) {
         api.get('/tickets?fleetType=maintenance'),
         api.get('/tire/service-requests'),
         api.get('/vehicles'),
-        api.get('/periodic-maintenance'),
         api.get('/google-sheet-submission-report')
       ]);
       setTickets(t.data?.tickets||[]);
       setTireRequests(tr.data?.requests||[]);
       setVehicles(v.data?.vehicles||[]);
-      setPeriodic(p.data?.records||[]);
       setDailyReport(d.data||null);
     }catch(e){
       setError(e.response?.data?.error||e.message);
@@ -145,8 +126,7 @@ export default function VehicleTicket({ user, canWork=false }) {
       };
     }),[vehicles]);
 
-  const rows=activeTab==='inspection'?inspectionTickets:
-    activeTab==='km'?kmMissingRows:
+  const rows=activeTab==='km'?kmMissingRows:
     activeTab==='oil'?oilRows:ticketRows;
 
   const visibleRows=useMemo(()=>rows.filter(r=>{
@@ -191,24 +171,6 @@ export default function VehicleTicket({ user, canWork=false }) {
         }
         await api.put('/tire/service-requests/'+row.id,{status:'COMPLETED'});
       }
-      if(row.kind==='inspection'){
-        let rec=row.record;
-        const type=row.component==='6-Month Maintenance'?'6_months_general':'inspection';
-        if(!rec){
-          const created=await api.post('/periodic-maintenance',{
-            vehicleId:Number(row.vehicle.id),
-            type,
-            scheduledDate:new Date().toISOString().slice(0,10),
-            status:'Pending'
-          });
-          rec=created.data?.record;
-        }
-        if(!rec?.id)throw new Error('Unable to create the pending maintenance record.');
-        await api.put('/periodic-maintenance/'+rec.id+'/complete',{
-          technician:user?.fullName||user?.username||'Fleet Management',
-          notes:row.component+' completed and ticket closed.'
-        });
-      }
       await load();
     }catch(e){alert(e.response?.data?.error||e.message)}
   };
@@ -234,7 +196,7 @@ export default function VehicleTicket({ user, canWork=false }) {
         }catch(_){}
         message=closedStatuses.includes(normalStatus(row.status))
           ?msgClosed({driver,plate},row.description):msgOpen({driver,plate},row.description);
-      }else if(row.kind==='tire'||row.kind==='inspection'){
+      }else if(row.kind==='tire'){
         message=closedStatuses.includes(normalStatus(row.status))
           ?msgClosed({driver,plate},row.description):msgOpen({driver,plate},row.description);
       }else if(row.kind==='km'){
@@ -264,9 +226,6 @@ export default function VehicleTicket({ user, canWork=false }) {
       if(['OPEN','SUBMITTED','APPROVED'].includes(s))return <button className="btn" style={{padding:'6px 10px'}} onClick={()=>close(row)}>Start & Complete</button>;
       if(s==='IN_PROGRESS')return <button className="btn btn-success" style={{padding:'6px 10px'}} onClick={()=>close(row)}>Complete</button>;
     }
-    if(row.kind==='inspection'){
-      return <button className="btn btn-success" style={{padding:'6px 10px'}} onClick={()=>close(row)}>Complete & Close</button>;
-    }
     return null;
   };
 
@@ -275,11 +234,10 @@ export default function VehicleTicket({ user, canWork=false }) {
       <h1 style={{margin:0}}>🎫 Vehicle Ticket</h1>
       <p style={{margin:'6px 0 0',color:'#64748b'}}>
         Controlled workflow: Open → Acknowledged → In Progress → Completed/Closed.
-        Inspection, tire, Daily KM and oil compliance are shown from ERP data.
+        Maintenance, tire, Daily KM and oil compliance are shown from ERP data.
       </p>
       <div className="sub-nav" style={{marginTop:12,marginBottom:8}}>
         <button className={activeTab==='maintenance'?'sub-btn active':'sub-btn'} onClick={()=>setActiveTab('maintenance')}>1- Maintenance Issues ({ticketRows.length})</button>
-        <button className={activeTab==='inspection'?'sub-btn active':'sub-btn'} onClick={()=>setActiveTab('inspection')}>2- Inspection Tickets ({inspectionTickets.length})</button>
         <button className={activeTab==='km'?'sub-btn active':'sub-btn'} onClick={()=>setActiveTab('km')}>3- Daily KM Missing ({kmMissingRows.length})</button>
         <button className={activeTab==='oil'?'sub-btn active':'sub-btn'} onClick={()=>setActiveTab('oil')}>4- Oil Compliance ({oilRows.length})</button>
       </div>
@@ -301,7 +259,7 @@ export default function VehicleTicket({ user, canWork=false }) {
         </tr></thead>
         <tbody>
           {visibleRows.length?visibleRows.map(r=><tr key={r.kind+'-'+r.id}>
-            <td>{r.kind==='maintenance'?'Maintenance Request':r.kind==='inspection'?'Inspection':r.kind==='tire'?'Tire Service':r.kind==='km'?'Daily KM':'Oil Compliance'}</td>
+            <td>{r.kind==='maintenance'?'Maintenance Request':r.kind==='tire'?'Tire Service':r.kind==='km'?'Daily KM':'Oil Compliance'}</td>
             <td><strong>{r.vehicle?.plate||'-'}</strong></td>
             <td>{r.vehicle?.driver||'-'}</td>
             <td style={{minWidth:280}}>{r.description}</td>

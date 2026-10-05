@@ -285,8 +285,14 @@ export async function createVehicle(vehicleData = {}) {
     driverId,
     "",
     "",
-    numberValue(vehicleData.currentKM ?? vehicleData.km, 0),
-    numberValue(vehicleData.lastOilKM ?? vehicleData.serviceKm, 0),
+    numberValue(
+      vehicleData.currentKm ?? vehicleData.currentKM ?? vehicleData.current_km ?? vehicleData.km,
+      0
+    ),
+    numberValue(
+      vehicleData.lastOilKm ?? vehicleData.lastOilKM ?? vehicleData.last_oil_km ?? vehicleData.serviceKm,
+      0
+    ),
     numberValue(vehicleData.oilChangeInterval, 5000),
     vehicleData.lastOilChangeDate || "",
     new Date().toISOString()

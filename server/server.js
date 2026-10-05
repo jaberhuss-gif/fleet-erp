@@ -27,9 +27,31 @@ const ANNUAL_INSPECTION_SITE_CONTACTS = {
   'Al Hulayfa': 'nouman.khan@iemaadex.com'
 };
 
+function canonicalInspectionSite(location) {
+  const key = String(location || '').trim().toLowerCase().replace(/\\s+/g, ' ');
+  const aliases = {
+    'uqlat al soqour': 'Uqlat Al Soqour',
+    'uqlat saqour': 'Uqlat Al Soqour',
+    'uglat asugour': 'Uqlat Al Soqour',
+    'wadi beddah': 'Wadi Beddah',
+    'wadi bidah': 'Wadi Beddah',
+    'wadi bida': 'Wadi Beddah',
+    'al sabiyah': 'Al Sabiyah',
+    'sabeyah': 'Al Sabiyah',
+    'sabayia': 'Al Sabiyah',
+    'sabayah': 'Al Sabiyah',
+    'al hulayfa': 'Al Hulayfa',
+    'al quwayiyah': 'Al Quwayiyah',
+    'al hadar': 'Al Hadar',
+    'mahd': 'Mahd ad Dhahab',
+    'mahd ad dhahab': 'Mahd ad Dhahab'
+  };
+  return aliases[key] || String(location || '').trim();
+}
+
 function annualInspectionRecipients(location) {
-  const key = String(location || '').trim().toLowerCase();
-  const match = Object.entries(ANNUAL_INSPECTION_SITE_CONTACTS).find(([site]) => site.toLowerCase() === key);
+  const canonical = canonicalInspectionSite(location);
+  const match = Object.entries(ANNUAL_INSPECTION_SITE_CONTACTS).find(([site]) => site.toLowerCase() === canonical.toLowerCase());
   return {
     managerEmail: match ? match[1] : '',
     ccEmails: ANNUAL_INSPECTION_CC_EMAILS
@@ -1137,27 +1159,6 @@ app.get("/api/inspection-reminders/due", async (req, res) => {
       FROM vehicles
       WHERE inspection_expiry_date IS NOT NULL
         AND COALESCE(LOWER(TRIM(status)), '') NOT IN ('inactive','sold','disposed','disabled')
-      ORDER BY inspection_expiry_date ASC
-    `);
-    const due = r.rows.map(row => {
-      const expiry = String(row.inspection_expiry_date).slice(0, 10);
-      const days = Math.ceil((new Date(expiry + 'T00:00:00Z') - new Date(todayKey + 'T00:00:00Z')) / 86400000);
-      return { id: row.id, plate: [row.plate_number, row.plate_code].filter(Boolean).join(' ').trim(), driver: row.driver || 'Unassigned', location: row.location || 'Unknown Site', expiry, days };
-    }).filter(row => row.days <= 30);
-    res.json({ success: true, dueVehicles: due.length, vehicles: due });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
-
-app.get("/api/inspection-reminders/due", async (req, res) => {
-  try {
-    const todayKey = new Date().toISOString().slice(0, 10);
-    const r = await pgQuery(`
-      SELECT id, plate_number, plate_code, driver, location, inspection_expiry_date
-      FROM vehicles
-      WHERE inspection_expiry_date IS NOT NULL
-        AND COALESCE(LOWER(TRIM(status)), '') NOT IN ('inactive','sold','disposed','disabled')
       ORDER BY inspection_expiry_date ASC, plate_number ASC
     `);
     const vehicles = r.rows.map(row => {
@@ -1167,7 +1168,7 @@ app.get("/api/inspection-reminders/due", async (req, res) => {
         id: row.id,
         plate: [row.plate_number, row.plate_code].filter(Boolean).join(' ').trim(),
         driver: row.driver || 'Unassigned',
-        location: row.location || '-',
+        location: canonicalInspectionSite(row.location) || '-',
         expiry,
         days
       };
@@ -1202,14 +1203,14 @@ app.post("/api/inspection-reminders/send", async (req, res) => {
     const due = r.rows.filter(row => {
       const expiry = String(row.inspection_expiry_date).slice(0, 10);
       const days = Math.ceil((new Date(expiry + 'T00:00:00Z') - new Date(todayKey + 'T00:00:00Z')) / 86400000);
-      const site = String(row.location || '').trim();
+      const site = canonicalInspectionSite(row.location);
       // Manual email queue is strictly the next 30 days (including expired).
       return days <= 30 && selectedSites.some(s => s.toLowerCase() === site.toLowerCase());
     });
 
     const bySite = {};
     for (const row of due) {
-      const site = canonicalSites.find(s => s.toLowerCase() === String(row.location || '').trim().toLowerCase()) || String(row.location || '').trim() || 'Unknown Site';
+      const site = canonicalInspectionSite(row.location) || 'Unknown Site';
       if (!bySite[site]) bySite[site] = [];
       bySite[site].push(row);
     }

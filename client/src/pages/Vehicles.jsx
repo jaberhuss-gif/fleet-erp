@@ -37,7 +37,9 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
     const target = `${m[1]}-${m[2]}-${m[3]}`;
     const fmt = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura-nu-latn', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' });
     const key = d => { const p = fmt.formatToParts(d); const get = k => p.find(x => x.type === k)?.value || ''; return `${get('year')}-${get('month')}-${get('day')}`; };
-    let lo = Date.UTC(Number(m[1]) - 580, 0, 1), hi = Date.UTC(Number(m[1]) - 560, 11, 31);
+    const hy = Number(m[1]);
+    const estimatedGy = hy + 622 - Math.floor(hy / 33);
+    let lo = Date.UTC(estimatedGy - 2, 0, 1), hi = Date.UTC(estimatedGy + 2, 11, 31);
     while (lo <= hi) {
       const mid = lo + Math.floor((hi - lo) / 86400000 / 2) * 86400000;
       const current = key(new Date(mid));

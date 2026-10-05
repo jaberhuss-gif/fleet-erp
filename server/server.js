@@ -1923,16 +1923,6 @@ app.listen(PORT, () => {
 
 
 
- + (i + 1)).join(', ');
-  await pgQuery('DELETE FROM vehicles WHERE id = $1', [vehicleId]);
-  await pgQuery(`INSERT INTO vehicles (${quoted}) VALUES (${params})`, values);
-  console.log('[Test123Reset] reset complete for test 123, vehicle id', vehicleId);
-}
-try {
-  await resetTestVehicle123Once();
-} catch (e) {
-  console.error('[Test123Reset] reset failed:', e.message);
-}
 
 // Restore vehicle-specific driver assignments from each vehicle's own
 // stored driver name/phone snapshot. This prevents editing one driver or vehicle

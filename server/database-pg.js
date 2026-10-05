@@ -1298,15 +1298,20 @@ export async function acknowledgeTicket(id, data = {}) {
 
   const result = await query(
     `UPDATE tickets
-     SET status = CASE WHEN status = 'Closed' THEN status ELSE 'Acknowledged' END,
-         acknowledged_at = COALESCE(acknowledged_at, CURRENT_TIMESTAMP),
+     SET status = 'Acknowledged',
+         acknowledged_at = CURRENT_TIMESTAMP,
          acknowledged_by = $1
      WHERE id = $2
+       AND status = 'Open'
      RETURNING *`,
     [acknowledgedBy, id]
   );
 
-  if (!result.rows[0]) throw new Error("Ticket not found");
+  if (!result.rows[0]) {
+    const current = await query(`SELECT status FROM tickets WHERE id = $1`, [id]);
+    if (!current.rows[0]) throw new Error("Ticket not found");
+    throw new Error(`Ticket must be Open before it can be acknowledged. Current status: ${current.rows[0].status}`);
+  }
   return result.rows[0];
 }
 
@@ -1316,18 +1321,20 @@ export async function startTicketWork(id, data = {}) {
 
   const result = await query(
     `UPDATE tickets
-     SET status = CASE
-                    WHEN status IN ('Closed','Completed') THEN status
-                    ELSE 'IN_PROGRESS'
-                  END,
+     SET status = 'IN_PROGRESS',
          assigned_to_name = COALESCE(NULLIF($1,''), assigned_to_name),
          assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP)
      WHERE id = $2
+       AND status = 'Acknowledged'
      RETURNING *`,
     [startedBy, id]
   );
 
-  if (!result.rows[0]) throw new Error("Ticket not found");
+  if (!result.rows[0]) {
+    const current = await query(`SELECT status FROM tickets WHERE id = $1`, [id]);
+    if (!current.rows[0]) throw new Error("Ticket not found");
+    throw new Error(`Ticket must be Acknowledged before work can start. Current status: ${current.rows[0].status}`);
+  }
   return result.rows[0];
 }
 
@@ -1345,11 +1352,16 @@ export async function closeTicketWithNotes(id, data = {}) {
          closed_by = $1,
          resolution_notes = $2
      WHERE id = $3
+       AND status = 'IN_PROGRESS'
      RETURNING *`,
     [closedBy, resolutionNotes, id]
   );
 
-  if (!result.rows[0]) throw new Error("Ticket not found");
+  if (!result.rows[0]) {
+    const current = await query(`SELECT status FROM tickets WHERE id = $1`, [id]);
+    if (!current.rows[0]) throw new Error("Ticket not found");
+    throw new Error(`Ticket must be In Progress before it can be closed. Current status: ${current.rows[0].status}`);
+  }
   return result.rows[0];
 }
 

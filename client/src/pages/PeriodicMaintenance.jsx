@@ -868,14 +868,14 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
             <div style={{ marginTop: 14, padding: 12, border: '1px solid #e2e8f0', borderRadius: 8 }}>
               <strong>Vehicles Due for Email — Next 30 Days</strong>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                Only expired vehicles and vehicles expiring within 30 days are shown here. Vehicles beyond 30 days are not included.
+                Only expired vehicles and vehicles expiring within 30 days are shown here. The expiry date in this verification table is Gregorian (YYYY-MM-DD). Vehicles beyond 30 days are not included.
               </div>
               {reminderDueVehicles.length ? (
                 <div style={{ marginTop: 8 }}>
                   {reminderDueVehicles.map(v => (
                     <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '7px 0', borderBottom: '1px solid #f1f5f9' }}>
                       <span><strong>{v.plate || '-'}</strong> · {v.location || '-'}</span>
-                      <span>{v.days < 0 ? 'Expired' : v.days === 0 ? 'Today' : v.days + ' days'} · {v.expiry}</span>
+                      <span>{v.days < 0 ? 'Expired' : v.days === 0 ? 'Today' : v.days + ' days'} · Expiry (Gregorian): {String(v.expiry || '').slice(0, 10)}</span>
                     </div>
                   ))}
                 </div>

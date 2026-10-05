@@ -1175,9 +1175,11 @@ app.get("/api/inspection-reminders/due", async (req, res) => {
         driver: row.driver || 'Unassigned',
         location: canonicalInspectionSite(row.location) || '-',
         expiry,
-        days
+        days,
+        emailEligible: days <= 30
       };
-    }).filter(v => v.days <= 30);
+    });
+    vehicles.sort((a, b) => a.days - b.days || a.plate.localeCompare(b.plate));
     res.json({ success: true, today: todayKey, windowDays: 30, vehicles });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });

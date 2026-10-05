@@ -493,13 +493,13 @@ export async function updateVehicle(id, data = {}) {
     if (oldDriverId && oldDriverId !== newDriverId) {
       await query(
         `UPDATE drivers
-         SET vehicle_id = NULL, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1 AND vehicle_id = $2
-           AND NOT EXISTS (
-             SELECT 1 FROM vehicles
-             WHERE driver_id = $1 AND id <> $3
-           )`,
-        [oldDriverId, id, id]
+         SET vehicle_id = COALESCE(
+           (SELECT id FROM vehicles WHERE driver_id = $1 AND id <> $2 ORDER BY id LIMIT 1),
+           NULL
+         ),
+         updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 AND vehicle_id = $2`,
+        [oldDriverId, id]
       );
     }
 

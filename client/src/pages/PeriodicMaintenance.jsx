@@ -203,6 +203,14 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     }, null);
   };
 
+  const activeVehicles = vehicles.filter(v => String(v.plate || v.plate_number || '').trim().toLowerCase() !== 'test 123');
+  const vehicleById = activeVehicles.reduce((map, v) => { map[String(v.id)] = v; return map; }, {});
+  const getInspectionExpiry = (vehicleId) => {
+    const v = vehicleById[String(vehicleId)];
+    const value = v?.inspectionExpiryDate || v?.inspection_expiry_date || '';
+    return value ? String(value).slice(0, 10) : '—';
+  };
+
   const recordsByVehicle = records.reduce((map, r) => {
     const key = String(r.vehicle_id);
     if (!map[key]) map[key] = [];
@@ -210,7 +218,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     return map;
   }, {});
 
-  const vehicleSummary = vehicles.map(v => {
+  const vehicleSummary = activeVehicles.map(v => {
     const vehicleRecords = recordsByVehicle[String(v.id)] || [];
     const six = pickLatestControl(vehicleRecords, '6_months_general');
     const annual = pickLatestControl(vehicleRecords, 'inspection');
@@ -471,7 +479,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     const rows = report.rows.map(row => {
       const rec = type === '6_months_general' ? row.six : row.annual;
       const done = type === '6_months_general' ? row.sixDone : row.annualDone;
-      return '<tr><td>'+esc(row.plate)+'</td><td>'+esc(row.driver)+'</td><td>'+esc(done ? 'Inspected' : 'Not Inspected')+'</td><td>'+esc(rec?.scheduled_date)+'</td><td>'+esc(rec?.completed_date)+'</td><td>'+esc(rec?.notes)+'</td></tr>';
+      return '<tr><td>'+esc(row.plate)+'</td><td>'+esc(row.driver)+'</td><td>'+esc(done ? 'Inspected' : 'Not Inspected')+'</td><td>'+esc(type === 'inspection' ? getInspectionExpiry(row.vehicle_id) : rec?.scheduled_date)+'</td><td>'+esc(rec?.completed_date)+'</td><td>'+esc(rec?.notes)+'</td></tr>';
     }).join('');
     const w=window.open('', '_blank', 'width=1200,height=800');
     if(!w){setError('Please allow pop-ups for the report.');return;}
@@ -570,7 +578,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
           <button className="btn btn-primary" onClick={() => printComplianceReport(key)}>🖨️ Print / Save PDF</button>
         </div>
         <table>
-          <thead><tr><th>Vehicle</th><th>Driver</th><th>Status</th><th>Scheduled</th><th>Completed</th><th>Notes</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Vehicle</th><th>Driver</th><th>Status</th><th>{type === 'inspection' ? 'Inspection Expiry' : 'Scheduled'}</th><th>Completed</th><th>Notes</th><th>Actions</th></tr></thead>
           <tbody>
             {report.rows.length === 0 ? (
               <tr><td colSpan="7" style={{ textAlign: 'center', padding: 24 }}>No vehicles in this report.</td></tr>
@@ -582,7 +590,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
                   <td><strong>{row.plate}</strong></td>
                   <td>{row.driver || '-'}</td>
                   <td><span className="status-badge" style={{ background: done ? '#16a34a' : '#dc2626', color: '#fff' }}>{done ? 'Inspected' : 'Not Inspected'}</span></td>
-                  <td>{rec?.scheduled_date || '-'}</td>
+                  <td>{type === 'inspection' ? getInspectionExpiry(row.vehicle_id) : (rec?.scheduled_date || '-')}</td>
                   <td>{rec?.completed_date || '-'}</td>
                   <td>{rec?.notes || '-'}</td>
                   <td>
@@ -630,12 +638,12 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       }).join('');
     } else {
       title = 'Vehicle Maintenance';
-      headers = ['Vehicle','Location','Driver','Type','Scheduled','Completed','Status','Technician','Notes'];
+      headers = ['Vehicle','Location','Driver','Type','Scheduled','Inspection Expiry','Completed','Status','Technician','Notes'];
       rows = currentList.map((r) => {
         const status = r.status === 'Completed' ? 'Completed' : (r.scheduled_date < today ? 'Overdue' : 'Pending');
         return '<tr><td>'+esc(r.vehicle_plate)+'</td><td>'+esc(r.vehicle_location)+
           '</td><td>'+esc(r.driver_name)+'</td><td>'+esc(TYPE_LABELS[r.type] || r.type)+
-          '</td><td>'+esc(r.scheduled_date)+'</td><td>'+esc(r.completed_date)+
+          '</td><td>'+esc(r.scheduled_date)+'</td><td>'+esc(getInspectionExpiry(r.vehicle_id))+'</td><td>'+esc(r.completed_date)+
           '</td><td>'+esc(status)+'</td><td>'+esc(r.technician)+'</td><td>'+esc(r.notes)+'</td></tr>';
       }).join('');
     }
@@ -723,6 +731,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
           </div>
         </div>
         <h2 className="print-hide">Periodic Maintenance & Inspection</h2>
+        <div className="print-hide" style={{marginBottom:'12px',padding:'10px 14px',borderRadius:'8px',background:'#f8fafc',border:'1px solid #e2e8f0'}}><strong>Annual Inspection Expiry:</strong> managed only in Vehicle Master. This table shows the current master expiry date.</div>
         <div className="print-hide" style={{marginBottom:'12px',padding:'10px 14px',borderRadius:'8px',background:'#f8fafc',border:'1px solid #e2e8f0'}}><strong>6-Month Control:</strong> <span style={{color:'#15803d'}}>GREEN = inspected (notes or completed)</span> · <span style={{color:'#b91c1c'}}>RED = not inspected (no notes)</span></div>
 
         <div className="btn-row no-print">
@@ -825,7 +834,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
         ) : (
           <table className="periodic-maintenance-screen-table">
             <thead>
-              <tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Completed</th><th>Status</th><th>Technician</th><th>Cost</th><th>Notes</th><th>Actions</th></tr>
+              <tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Inspection Expiry</th><th>Completed</th><th>Status</th><th>Technician</th><th>Cost</th><th>Notes</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {currentList.map((r) => (
@@ -835,6 +844,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
                   <td>{r.driver_name || '-'}</td>
                   <td>{TYPE_LABELS[r.type] || r.type}</td>
                   <td>{r.scheduled_date}</td>
+                  <td>{getInspectionExpiry(r.vehicle_id)}</td>
                   <td>{r.completed_date || '-'}</td>
                   <td>{getStatusBadge(r)}</td>
                   <td>{r.technician || '-'}</td>
@@ -855,7 +865,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
           <table className="periodic-maintenance-print-table">
             <thead>
               <tr>
-                <th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th>
+                <th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Inspection Expiry</th>
                 <th>Completed</th><th>Status</th><th>Technician</th><th>Notes</th>
               </tr>
             </thead>
@@ -867,6 +877,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
                   <td>{r.driver_name || '-'}</td>
                   <td>{TYPE_LABELS[r.type] || r.type}</td>
                   <td>{r.scheduled_date || '-'}</td>
+                  <td>{getInspectionExpiry(r.vehicle_id)}</td>
                   <td>{r.completed_date || '-'}</td>
                   <td>{r.status === 'Completed' ? 'Completed' : (r.scheduled_date < today ? 'Overdue' : 'Pending')}</td>
                   <td>{r.technician || '-'}</td>

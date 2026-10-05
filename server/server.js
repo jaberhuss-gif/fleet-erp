@@ -1152,6 +1152,18 @@ app.post("/api/vehicles/:id/inspection-reminder/test", async (req, res) => {
   } catch(e) { res.status(500).json({success:false,error:e.message}); }
 });
 
+// Normalize PostgreSQL DATE values. node-postgres may return a DATE as a JS Date,
+// so String(date).slice(0,10) can become "Fri Dec 18" and break the reminder math.
+const inspectionExpiryKey = (value) => {
+  if (!value) return '';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  const raw = String(value).trim();
+  const iso = raw.match(/(\\d{4}-\\d{2}-\\d{2})/);
+  if (iso) return iso[1];
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 10);
+};
+
 app.get("/api/inspection-reminders/status", async (req,res) => {
   try { res.json({success:true, ...(await processAnnualInspectionReminders()), configured:!!process.env.RESEND_API_KEY && !!(process.env.INSPECTION_EMAIL_FROM || process.env.EMAIL_FROM)}); }
   catch(e) { res.status(500).json({success:false,error:e.message}); }

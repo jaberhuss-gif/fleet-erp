@@ -315,7 +315,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       }
       const message = inspectedState
         ? 'Hello ' + driver + ',\\n\\nVehicle ' + plate + ' — ' + component + ' has been inspected and recorded.\\n\\nFleet Management'
-        : 'Hello ' + driver + ',\\n\\nVehicle ' + plate + ' — ' + component + ' inspection is still pending. Please arrange the inspection.\\n\\nFleet Management';
+        : 'Hello ' + driver + ',\n\nVehicle ' + plate + ' — ' + component + ' inspection is still pending. Please arrange the inspection.\n\nPlease also inform your Supervisor and the Camp/Campus team accordingly.\n\nFleet Management';
       window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(message), '_blank');
     } catch (e) {
       setError(e.response?.data?.error || e.message);

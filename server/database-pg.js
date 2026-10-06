@@ -1042,6 +1042,12 @@ export async function ensureBuildingSchema() {
       month TEXT,
       year TEXT,
       notes TEXT,
+      final_cost NUMERIC DEFAULT 0,
+      is_contractor INTEGER DEFAULT 0,
+      contractor_name TEXT,
+      performed_by TEXT,
+      completed_date DATE,
+      closing_notes TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -1095,6 +1101,13 @@ export async function ensureBuildingSchema() {
       month TEXT,
       year TEXT,
       notes TEXT,
+      status TEXT DEFAULT 'Open',
+      final_cost NUMERIC DEFAULT 0,
+      is_contractor INTEGER DEFAULT 0,
+      contractor_name TEXT,
+      performed_by TEXT,
+      completed_date DATE,
+      closing_notes TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -1134,7 +1147,11 @@ export async function ensureBuildingSchema() {
       ["status", "TEXT DEFAULT 'Active'"], ["budget", "NUMERIC DEFAULT 0"],
       ["spent", "NUMERIC DEFAULT 0"], ["start_date", "DATE"], ["end_date", "DATE"],
       ["manager", "TEXT"], ["contractor", "TEXT"], ["month", "TEXT"], ["year", "TEXT"],
-      ["notes", "TEXT"],
+      ["notes", "TEXT"], ["final_cost", "NUMERIC DEFAULT 0"], ["is_contractor", "INTEGER DEFAULT 0"],
+      ["contractor_name", "TEXT"], ["performed_by", "TEXT"], ["completed_date", "DATE"],
+      ["closing_notes", "TEXT"], ["final_cost", "NUMERIC DEFAULT 0"],
+      ["is_contractor", "INTEGER DEFAULT 0"], ["contractor_name", "TEXT"],
+      ["performed_by", "TEXT"], ["completed_date", "DATE"], ["closing_notes", "TEXT"],
       ["created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"],
       ["updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"]
     ],
@@ -1144,6 +1161,9 @@ export async function ensureBuildingSchema() {
       ["unit_cost", "NUMERIC DEFAULT 0"], ["total_cost", "NUMERIC DEFAULT 0"],
       ["supplier", "TEXT"], ["purchased_by", "TEXT DEFAULT 'Company'"],
       ["purchase_date", "DATE"], ["month", "TEXT"], ["year", "TEXT"], ["notes", "TEXT"],
+      ["status", "TEXT DEFAULT 'Open'"], ["final_cost", "NUMERIC DEFAULT 0"],
+      ["is_contractor", "INTEGER DEFAULT 0"], ["contractor_name", "TEXT"],
+      ["performed_by", "TEXT"], ["completed_date", "DATE"], ["closing_notes", "TEXT"],
       ["created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"]
     ],
     project_items: [
@@ -2156,15 +2176,21 @@ export async function closeWorkOrder(id, data = {}) {
       contractor_cost = $2,
       labor_cost = $3,
       parts_cost = $4,
-      closing_notes = $5,
+      is_contractor = $5,
+      contractor_name = $6,
+      performed_by = $7,
+      closing_notes = $8,
       updated_at = CURRENT_TIMESTAMP
-    WHERE id = $6
+    WHERE id = $9
     RETURNING *
   `, [
     pgNum(data.finalCost ?? data.final_cost),
     pgNum(data.contractorCost ?? data.contractor_cost),
     pgNum(data.laborCost ?? data.labor_cost),
     pgNum(data.partsCost ?? data.parts_cost),
+    data.isContractor ? 1 : 0,
+    pgStr(data.contractorName ?? data.contractor_name),
+    pgStr(data.performedBy ?? data.performed_by),
     pgStr(data.closingNotes ?? data.closing_notes),
     id
   ]);
@@ -2409,6 +2435,24 @@ export async function updateProject(id, data = {}) {
     id
   ]);
 
+  return result.rows[0];
+}
+
+export async function closeProject(id, data = {}) {
+  const current = await getProject(id);
+  if (!current) throw new Error("Project not found");
+  const isContractor = data.isContractor ? 1 : 0;
+  const contractorName = pgStr(data.contractorName ?? data.contractor_name);
+  const performedBy = pgStr(data.performedBy ?? data.performed_by) || (isContractor ? contractorName : '');
+  if (isContractor && !contractorName) throw new Error("Contractor name is required");
+  if (!isContractor && !performedBy) throw new Error("Employee / executor name is required");
+  const finalCost = pgNum(data.finalCost ?? data.final_cost);
+  const result = await query(`
+    UPDATE projects SET status='Completed', spent=$1, final_cost=$1,
+      is_contractor=$2, contractor_name=$3, performed_by=$4,
+      completed_date=CURRENT_DATE, closing_notes=$5, updated_at=CURRENT_TIMESTAMP
+    WHERE id=$6 RETURNING *
+  `, [finalCost,isContractor,contractorName,performedBy,pgStr(data.closingNotes ?? data.closing_notes),id]);
   return result.rows[0];
 }
 
@@ -2750,6 +2794,51 @@ export async function createPurchase(data = {}) {
     data.recordedAt ?? data.recorded_at ?? null
   ]);
 
+  return result.rows[0];
+}
+
+export async function updatePurchase(id, data = {}) {
+  const current = (await query(`SELECT * FROM purchases WHERE id=$1`, [id])).rows[0];
+  if (!current) throw new Error("Purchase not found");
+  const quantity = data.quantity ?? current.quantity;
+  const unitCost = data.unitCost ?? data.unit_cost ?? current.unit_cost;
+  const totalCost = data.totalCost ?? data.total_cost ?? (Number(quantity) * Number(unitCost));
+  const result = await query(`
+    UPDATE purchases SET type=$1, reference_no=$2, item_name=$3, quantity=$4, unit_cost=$5,
+      total_cost=$6, supplier=$7, purchased_by=$8, purchase_date=$9, notes=$10,
+      status=$11, final_cost=$12, is_contractor=$13, contractor_name=$14,
+      performed_by=$15, completed_date=$16, closing_notes=$17
+    WHERE id=$18 RETURNING *
+  `,[
+    data.type ?? current.type, data.referenceNo ?? data.reference_no ?? current.reference_no,
+    data.itemName ?? data.item_name ?? current.item_name, quantity, unitCost, totalCost,
+    data.supplier ?? current.supplier, data.purchasedBy ?? data.purchased_by ?? current.purchased_by,
+    data.purchaseDate ?? data.purchase_date ?? current.purchase_date, data.notes ?? current.notes,
+    data.status ?? current.status ?? 'Open', data.finalCost ?? data.final_cost ?? current.final_cost,
+    data.isContractor === undefined ? current.is_contractor : (data.isContractor ? 1 : 0),
+    data.contractorName ?? data.contractor_name ?? current.contractor_name,
+    data.performedBy ?? data.performed_by ?? current.performed_by,
+    data.completedDate ?? data.completed_date ?? current.completed_date,
+    data.closingNotes ?? data.closing_notes ?? current.closing_notes, id
+  ]);
+  return result.rows[0];
+}
+
+export async function closePurchase(id, data = {}) {
+  const current = (await query(`SELECT * FROM purchases WHERE id=$1`, [id])).rows[0];
+  if (!current) throw new Error("Purchase not found");
+  const isContractor = data.isContractor ? 1 : 0;
+  const contractorName = pgStr(data.contractorName ?? data.contractor_name);
+  const performedBy = pgStr(data.performedBy ?? data.performed_by) || (isContractor ? contractorName : '');
+  if (isContractor && !contractorName) throw new Error("Contractor name is required");
+  if (!isContractor && !performedBy) throw new Error("Employee / executor name is required");
+  const finalCost = pgNum(data.finalCost ?? data.final_cost);
+  const result = await query(`
+    UPDATE purchases SET status='Closed', final_cost=$1, total_cost=$1,
+      is_contractor=$2, contractor_name=$3, performed_by=$4,
+      completed_date=CURRENT_DATE, closing_notes=$5
+    WHERE id=$6 RETURNING *`,
+    [finalCost,isContractor,contractorName,performedBy,pgStr(data.closingNotes ?? data.closing_notes),id]);
   return result.rows[0];
 }
 

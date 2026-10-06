@@ -39,7 +39,7 @@ export default function MaintenanceRequest({user,access={}}){
       '',
       'Fleet / Building Maintenance'
     ].join('\n');
-    window.location.href='mailto:'+encodeURIComponent(r.executor_email)+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
+    window.location.href='https://outlook.office.com/mail/deeplink/compose?to='+encodeURIComponent(r.executor_email)+'&subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
   };
   if(loading)return <div className="loading">Loading Support & Service...</div>;
   return <div className="form-container" style={{maxWidth:1200}}>

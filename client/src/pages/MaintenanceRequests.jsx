@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
+import api from '../api/client';
 import { getMaintenanceTickets, getMaintenanceWhatsAppInfo } from '../api/client';
 
 const ISSUE_TYPES = ['Tires','Engine','A/C','Lights','Brakes','Battery','Door','Wipers','Oil Engine','Other'];
 
 export default function MaintenanceRequests() {
   const [tickets, setTickets] = useState([]);
+  const [sixMonthNotes, setSixMonthNotes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -17,10 +19,32 @@ export default function MaintenanceRequests() {
     setLoading(true);
     setError('');
     try {
-      const res = await getMaintenanceTickets();
+      const [res, pmRes] = await Promise.all([
+        getMaintenanceTickets(),
+        api.get('/periodic-maintenance')
+      ]);
       setTickets((res.tickets || []).filter(t =>
         ISSUE_TYPES.includes(String(t.category || '').trim())
       ));
+      const pmNotes = (pmRes.data?.records || [])
+        .filter(r =>
+          r.type === '6_months_general' &&
+          String(r.notes || '').trim()
+        )
+        .map(r => ({
+          id: 'pm-' + r.id,
+          source: '6-Month Maintenance',
+          plate: r.vehicle_plate || '',
+          site: r.vehicle_location || '',
+          driver: r.driver_name || '',
+          category: '6-Month Maintenance',
+          description: String(r.notes || '').trim(),
+          priority: 'Medium',
+          status: r.status === 'Completed' ? 'Completed' : 'Repair Required',
+          opened_at: r.completed_date || r.scheduled_date || '',
+          pm_record_id: r.id
+        }));
+      setSixMonthNotes(pmNotes);
     } catch (e) {
       setError(e.response?.data?.error || e.message);
     } finally {
@@ -31,15 +55,16 @@ export default function MaintenanceRequests() {
   useEffect(() => { loadTickets(); }, []);
 
   const filtered = useMemo(() => {
+    const allRows = [...tickets, ...sixMonthNotes];
     const q = search.trim().toLowerCase();
-    return tickets.filter(t => {
+    return allRows.filter(t => {
       const plate = String(t.plate || '').toLowerCase();
       const driver = String(t.driver || '').toLowerCase();
       const site = String(t.site || '').toLowerCase();
       const category = String(t.category || '').trim();
       const status = String(t.status || '');
       const opened = t.opened_at ? String(t.opened_at).slice(0, 10) : '';
-      return (!q || plate.includes(q) || driver.includes(q) || site.includes(q))
+      return (!q || plate.includes(q) || driver.includes(q) || site.includes(q) || String(t.description || '').toLowerCase().includes(q))
         && (!issueFilter || category === issueFilter)
         && (!statusFilter || status === statusFilter)
         && (!dateFilter || opened === dateFilter);
@@ -143,14 +168,14 @@ export default function MaintenanceRequests() {
       <div style={{display:'grid',gridTemplateColumns:'minmax(220px,2fr) repeat(3,minmax(150px,1fr))',gap:10}}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search vehicle, driver or location" />
         <select value={issueFilter} onChange={e=>setIssueFilter(e.target.value)}>
-          <option value="">All Issue Types</option>{ISSUE_TYPES.map(x=><option key={x}>{x}</option>)}
+          <option value="">All Request Types</option>{ISSUE_TYPES.map(x=><option key={x}>{x}</option>)}<option>6-Month Maintenance</option>
         </select>
         <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
           <option value="">All Statuses</option>{statuses.map(x=><option key={x}>{x}</option>)}
         </select>
         <input type="date" value={dateFilter} onChange={e=>setDateFilter(e.target.value)} />
       </div>
-      <div style={{marginTop:10,color:'#64748b',fontSize:13}}>Showing <strong>{filtered.length}</strong> of <strong>{tickets.length}</strong> maintenance requests.</div>
+      <div style={{marginTop:10,color:'#64748b',fontSize:13}}>Showing <strong>{filtered.length}</strong> of <strong>{tickets.length + sixMonthNotes.length}</strong> maintenance requests — including <strong>{sixMonthNotes.length}</strong> 6-month maintenance notes.</div>
     </div>
 
     <div className="panel" style={{padding:0,overflow:'hidden'}}>
@@ -170,7 +195,7 @@ export default function MaintenanceRequests() {
             <td>{t.priority || 'Medium'}</td>
             <td>{t.status || '—'}</td>
             <td>{t.opened_at ? String(t.opened_at).slice(0,10) : '—'}</td>
-            <td>{t.status !== 'Completed' ? <button type="button" className="btn" style={{whiteSpace:'nowrap'}} onClick={()=>sendWhatsApp(t)}>📱 WhatsApp</button> : <span>✓ Confirmed</span>}</td>
+            <td>{t.source === '6-Month Maintenance' ? <span style={{whiteSpace:'nowrap'}}>🛠️ 6-Month Note</span> : t.status !== 'Completed' ? <button type="button" className="btn" style={{whiteSpace:'nowrap'}} onClick={()=>sendWhatsApp(t)}>📱 WhatsApp</button> : <span>✓ Confirmed</span>}</td>
           </tr>)}</tbody>
         </table>
        </div>}

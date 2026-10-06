@@ -53,7 +53,7 @@ export default function MaintenanceRequest({user,access={}}){
       'Thank you,',
       'Fleet / Building Maintenance'
     ];
-    const body=lines.join('\n');
+    const body=lines.join('\r\n');
     const cc=(r.cc_emails||[]).filter(Boolean).join(';');
     const params=[
       cc ? 'cc='+encodeURIComponent(cc) : '',

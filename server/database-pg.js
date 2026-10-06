@@ -4462,7 +4462,7 @@ export async function getFinancialReport() {
     return Number(p.spent ?? p.total_cost ?? 0);
   };
   const effectivePurchaseAmount = (p) => {
-    if (Number(p.closed_at) && Number(p.final_amount || 0) > 0) return Number(p.final_amount);
+    if (p.closed_at && Number(p.final_amount || 0) > 0) return Number(p.final_amount);
     return Number(p.total_cost || 0);
   };
 

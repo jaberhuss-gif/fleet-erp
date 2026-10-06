@@ -18,6 +18,7 @@ import { mountPdfProjectImport } from "./pdfProjectImport.js";
 import { mountTireRoutes } from "./tire-management.js";
 import { toWaMeNumber, toWaMeInternational } from "./phone.js";
 import { syncBuildingFromVelaOnce } from "./vela-project-sync.mjs";
+import { mountBuildingMaintenanceRequestRoutes } from "./building-maintenance-requests.js";
 
 const ANNUAL_INSPECTION_EMAIL_FROM = 'Hussein.Anwar@iemaadex.com';
 const ANNUAL_INSPECTION_CC_EMAILS = 'Mohamed.Hassan@iemaadex.com, Mohammed.Al-Marhabi@iemaadex.com';
@@ -108,6 +109,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+mountBuildingMaintenanceRequestRoutes(app);
 mountPdfWorkOrderImport(app);
 mountPdfProjectImport(app);
 async function syncBuildingProjectAmountsOnce() {

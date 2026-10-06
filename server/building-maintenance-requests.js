@@ -249,6 +249,32 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
     } catch(e){res.status(400).json({success:false,error:e.message});}
   });
 
+  app.post("/api/maintenance-requests/:id/resend-email", async (req,res) => {
+    try {
+      await ensureSchema();
+      const row = await getRequest(req.params.id);
+      if (!row) return res.status(404).json({success:false,error:"Request not found"});
+      if (!row.work_order_id || !row.executor_email || !row.executor_name) {
+        return res.status(400).json({success:false,error:"This request has no assigned executor/email."});
+      }
+      let email;
+      try {
+        email = await notifyAssignment(row);
+        const updated = await query(`UPDATE maintenance_requests
+          SET email_status='Sent', email_sent_at=CURRENT_TIMESTAMP, email_error=NULL, updated_at=CURRENT_TIMESTAMP
+          WHERE id=$1 RETURNING *`, [row.id]);
+        return res.json({success:true,request:updated.rows[0],email});
+      } catch (e) {
+        const updated = await query(`UPDATE maintenance_requests
+          SET email_status='Failed', email_error=$1, updated_at=CURRENT_TIMESTAMP
+          WHERE id=$2 RETURNING *`, [e.message, row.id]);
+        return res.status(502).json({success:false,request:updated.rows[0],email:{sent:false,reason:e.message},error:e.message});
+      }
+    } catch(e) {
+      res.status(400).json({success:false,error:e.message});
+    }
+  });
+
   app.post("/api/maintenance-requests/:id/work-completed", async (req,res) => {
     try {
       await ensureSchema();

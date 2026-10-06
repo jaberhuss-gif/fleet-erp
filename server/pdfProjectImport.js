@@ -130,8 +130,11 @@ export function mountPdfProjectImport(app) {
              completed_date,closing_notes,created_at,updated_at)
           VALUES
             ('PRJ-PDF-' || LPAD(nextval('projects_id_seq')::text,6,'0'),
-             $1,$2,$3,'Development','Not Started',0,0,$4::date,NULL,'','','',
-             NULL,NULL,$5,'',0,0,'','',NULL,'',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+             $1,$2,$3,'Development','Not Started',0,0,$4::date,NULL,
+             '','','',
+             CASE WHEN $4::date IS NULL THEN NULL ELSE to_char($4::date,'MM')::integer END,
+             CASE WHEN $4::date IS NULL THEN NULL ELSE to_char($4::date,'YYYY')::integer END,
+             '',0,0,'','',NULL,'',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
           RETURNING *
         `, [projectName, description, site, safeDate, description]);
         const project = projectResult.rows[0];

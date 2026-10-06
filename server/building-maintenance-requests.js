@@ -321,7 +321,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       const row=await query(`SELECT * FROM maintenance_requests WHERE acknowledgement_token=$1`,[clean(req.params.token)]);
       if(!row.rows[0]) return res.status(403).send("<h2>Invalid acknowledgement link</h2>");
       const r=row.rows[0];
-      await query(`UPDATE maintenance_requests SET acknowledged_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1`,[r.id]);
+      await query(`UPDATE maintenance_requests SET status='Acknowledged', acknowledged_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1`,[r.id]);
       res.send("<html><body style='font-family:Arial;padding:40px'><h2>📩 Assignment Acknowledged</h2><p>Thank you. Fleet / Building Maintenance has been notified that you received the work assignment.</p></body></html>");
     } catch(e){res.status(500).send("<h2>Error processing acknowledgement</h2>");}
   });

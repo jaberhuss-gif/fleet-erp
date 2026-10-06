@@ -81,7 +81,9 @@ function siteCc(site) {
   return CAMPUS_BY_SITE[clean(site)] || [];
 }
 
-async function getRequestByToken(token) { const r=await query(`SELECT * FROM maintenance_requests WHERE completion_token=$1 OR confirmation_token=$1`, [token]); return r.rows[0] || null; }\n\nasync function getRequest(id) {
+async function getRequestByToken(token) { const r=await query(`SELECT * FROM maintenance_requests WHERE completion_token=$1 OR confirmation_token=$1`, [token]); return r.rows[0] || null; }
+
+async function getRequest(id) {
   const r = await query(`SELECT * FROM maintenance_requests WHERE id=$1`, [id]);
   return r.rows[0] || null;
 }

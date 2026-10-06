@@ -21,10 +21,15 @@ export default function DailyKmMissing({ user }) {
 
   useEffect(() => { load(); }, []);
 
-  const openWhatsApp = (row) => {
+  const openWhatsApp = async (row) => {
     if (user?.role !== "Owner") return;
-    const phone = String(row.phone || "").replace(/[^0-9]/g, "");
-    if (!phone) {
+    try {
+      const info = (await api.get("/vehicles/" + row.vehicleId + "/whatsapp-info")).data || {};
+      let phone = String(info.waMeNumber || info.driverPhone || row.phone || "").replace(/[^0-9]/g, "");
+      if (phone.startsWith("00")) phone = phone.slice(2);
+      if (phone.length === 10 && phone.startsWith("05")) phone = "966" + phone.slice(1);
+      if (phone.length === 9 && phone.startsWith("5")) phone = "966" + phone;
+      if (!phone) {
       alert("No phone number found for the current driver assigned to this vehicle.");
       return;
     }
@@ -36,7 +41,10 @@ export default function DailyKmMissing({ user }) {
       "Please record today's KM.\n\n" +
       "Thank you,\nFleet Management";
 
-    window.open("https://wa.me/" + phone + "?text=" + encodeURIComponent(message), "_blank");
+      window.open("https://wa.me/" + phone + "?text=" + encodeURIComponent(message), "_blank");
+    } catch (e) {
+      alert(e.response?.data?.error || e.message || "Unable to open WhatsApp for the current driver.");
+    }
   };
 
   if (loading) return <div className="loading">Loading today's missing records...</div>;

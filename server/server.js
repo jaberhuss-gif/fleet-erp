@@ -130,7 +130,9 @@ async function syncBuildingProjectAmountsOnce() {
   } catch (e) {
     console.error('[BuildingProjects] amount sync failed:', e.message);
   }
-}\n\nconst PORT = process.env.PORT || 3000;
+}
+
+const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 

@@ -19,6 +19,7 @@ try {
   $mail = $outlook.CreateItem(0)
   $mail.BodyFormat = 2
   $mail.To = [string]$json.to
+  if ($json.cc) { $mail.CC = [string]$json.cc }
   $mail.Subject = [string]$json.subject
   $mail.HTMLBody = [string]$json.html
   $mail.Display()

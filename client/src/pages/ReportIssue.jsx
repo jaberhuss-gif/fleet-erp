@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useRef } from 'react';
-import { getVehiclesList, getIssueTypes, reportIssue } from '../api/client';
+import { getVehiclesList, getIssueTypes, reportIssue, getMaintenanceTickets, getMaintenanceWhatsAppInfo } from '../api/client';
 
 export default function ReportIssue({ canWork = false, user = null }) {
   const [vehicles, setVehicles] = useState([]);
@@ -11,9 +11,29 @@ export default function ReportIssue({ canWork = false, user = null }) {
   const [listening, setListening] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [tickets, setTickets] = useState([]);
+  const [loadingTickets, setLoadingTickets] = useState(false);
   const recognitionRef = useRef(null);
 
   useEffect(() => { loadData(); }, []);
+  useEffect(() => { if (canWork) loadTickets(); }, [canWork]);
+  const loadTickets = async () => { setLoadingTickets(true); try { const res=await getMaintenanceTickets(); setTickets(res.tickets||[]); } catch(e){ setError(e.response?.data?.error||e.message); } finally { setLoadingTickets(false); } };
+  const sendRepairConfirmation = async (ticket) => {
+    try {
+      const info=await getMaintenanceWhatsAppInfo(ticket.id);
+      const phone=String(info.driverPhone||'').replace(/\D/g,''); const url=String(info.confirmationUrl||'').trim();
+      const message=[
+        'Hello '+(info.driverName||'Driver')+',','',
+        'Vehicle '+info.vehiclePlate+' — '+info.issueType+' repair has been completed.','',
+        'Has this maintenance issue been repaired?','هل تم إصلاح هذه المشكلة في المركبة؟','',
+        'Please open the link below and select YES if the repair is complete.','يرجى فتح الرابط أدناه واختيار YES إذا تم الإصلاح.',
+        'If the repair is NOT complete, select NO. The ticket will remain open.','إذا لم يتم الإصلاح، اختر NO وسيبقى الطلب مفتوحاً.','',
+        'Maintenance confirmation link / رابط تأكيد الإصلاح:',url,'','Fleet Management'
+      ].join('\n');
+      if(!phone||!url) throw new Error('Driver phone or confirmation link is not available.');
+      window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(message),'_blank'); await loadTickets();
+    } catch(e){ setError(e.response?.data?.error||e.message); }
+  };
 
   const loadData = async () => {
     try {
@@ -119,6 +139,7 @@ export default function ReportIssue({ canWork = false, user = null }) {
           </div>
         </form>
       </div>
+        {canWork && <div className="panel" style={{marginTop:20}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}><div><h2 style={{margin:0}}>Maintenance Requests</h2><p style={{margin:'4px 0 0',color:'#64748b'}}>Receive driver requests and confirm repair completion through WhatsApp.</p></div><button className="btn" onClick={loadTickets}>↻ Refresh</button></div>{loadingTickets?<div className="alert alert-info">Loading maintenance requests...</div>:tickets.length===0?<div className="alert alert-info">No maintenance requests found.</div>:<div style={{overflowX:'auto'}}><table className="data-table"><thead><tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Issue</th><th>Priority</th><th>Status</th><th>Opened</th><th>Actions</th></tr></thead><tbody>{tickets.map(t=><tr key={t.id}><td><strong>{t.plate||'—'}</strong></td><td>{t.site||'—'}</td><td>{t.driver||'—'}</td><td>{t.category||'Maintenance'}<div style={{fontSize:12,color:'#64748b',maxWidth:260}}>{t.description||''}</div></td><td>{t.priority||'Medium'}</td><td>{t.status}</td><td>{t.opened_at?String(t.opened_at).slice(0,10):'—'}</td><td>{t.status!=='Completed'?<button className="btn btn-success" onClick={()=>sendRepairConfirmation(t)}>📱 WhatsApp</button>:<span>✓ Confirmed</span>}</td></tr>)}</tbody></table></div>}</div>}
     </div>
   );
 }

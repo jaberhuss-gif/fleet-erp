@@ -15,7 +15,7 @@ import { getKmDailyNotifications, getDailyKmReport, getDriverDailyKmStatus } fro
 import { updateLastOilChangePG } from "./vehicles-pg.js";
 import { mountPdfWorkOrderImport } from "./pdfWorkOrderImport.js";
 import { mountTireRoutes } from "./tire-management.js";
-import { toWaMeNumber } from "./phone.js";
+import { toWaMeNumber, toWaMeInternational } from "./phone.js";
 
 const ANNUAL_INSPECTION_EMAIL_FROM = 'Hussein.Anwar@iemaadex.com';
 const ANNUAL_INSPECTION_CC_EMAILS = 'Mohamed.Hassan@iemaadex.com, Mohammed.Al-Marhabi@iemaadex.com';
@@ -452,7 +452,7 @@ app.get("/api/tickets/:id/maintenance-whatsapp-info", async (req, res) => {
     if(!String(row.phone||"").trim()) return res.status(400).json({success:false,error:"Driver phone number is not available."});
     const token=randomUUID();
     await pgQuery(`UPDATE tickets SET whatsapp_confirmation_token=$1,whatsapp_confirmed_at=NULL,whatsapp_confirmation_source='Fleet Management - WhatsApp Pending',status='Pending Driver Confirmation' WHERE id=$2`,[token,row.id]);
-    res.json({success:true,driverName:row.driver||"",driverPhone:row.phone||"",vehiclePlate:[row.plate_number,row.plate_code].filter(Boolean).join(" ").trim(),issueType:row.category||"Maintenance Issue",description:row.description||"",confirmationUrl:MAINTENANCE_CONFIRM_BASE_URL()+"/maintenance-confirm/"+token});
+    res.json({success:true,driverName:row.driver||"",driverPhone:row.phone||"",waMeNumber:toWaMeInternational(row.phone),vehiclePlate:[row.plate_number,row.plate_code].filter(Boolean).join(" ").trim(),issueType:row.category||"Maintenance Issue",description:row.description||"",confirmationUrl:MAINTENANCE_CONFIRM_BASE_URL()+"/maintenance-confirm/"+token});
   } catch(e){console.error("[MaintenanceWhatsAppInfo]",e);res.status(500).json({success:false,error:e.message});}
 });
 

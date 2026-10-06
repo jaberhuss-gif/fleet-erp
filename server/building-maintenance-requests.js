@@ -62,6 +62,7 @@ async function ensureSchema() {
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS acknowledgement_token TEXT UNIQUE`);
   await query(`CREATE INDEX IF NOT EXISTS idx_maintenance_requests_status ON maintenance_requests(status)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_maintenance_requests_work_order ON maintenance_requests(work_order_id)`);
+  await query(`UPDATE maintenance_requests SET acknowledgement_token=COALESCE(NULLIF(acknowledgement_token,''), gen_random_uuid()::text), completion_token=COALESCE(NULLIF(completion_token,''), gen_random_uuid()::text) WHERE acknowledgement_token IS NULL OR acknowledgement_token='' OR completion_token IS NULL OR completion_token=''`);
 }
 
 async function sendEmail({ to, cc = [], subject, html }) {

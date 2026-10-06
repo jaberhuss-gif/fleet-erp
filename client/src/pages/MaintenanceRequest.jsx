@@ -19,21 +19,44 @@ export default function MaintenanceRequest({user,access={}}){
     const acknowledgeUrl=base+'/api/maintenance-requests/public/'+r.acknowledgement_token+'/acknowledge';
     const completeUrl=base+'/api/maintenance-requests/public/'+r.completion_token+'/work-completed';
     const subject='Building Maintenance Work Assignment - '+r.request_no+' - '+(r.site||'');
-    const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    const problem=esc(r.description||'-').replace(/\r?\n/g,'<br>');
-    const html='<html><body style="font-family:Arial,sans-serif;color:#1f2937;font-size:14px"><p>Dear '+esc(r.executor_name||'Executor')+',</p><h2>🛠️ BUILDING MAINTENANCE WORK ASSIGNMENT</h2><p>Please review the maintenance assignment below and follow the required steps.</p><hr><h3>REQUEST DETAILS / تفاصيل الطلب</h3><ul><li><b>Request No. / رقم الطلب:</b> '+esc(r.request_no)+'</li><li><b>Site / الموقع:</b> '+esc(r.site||'-')+'</li><li><b>Problem / المشكلة:</b> '+problem+'</li><li><b>Assigned To / تم التكليف إلى:</b> '+esc(r.executor_name||'-')+'</li></ul><h3>STEP 1 — ACKNOWLEDGE RECEIPT / الخطوة 1 — تأكيد استلام المهمة</h3><p>Please click the button below to confirm that you have received this work assignment.<br>يرجى الضغط على الزر أدناه لتأكيد استلام المهمة.</p><p><a href="'+acknowledgeUrl+'" style="display:inline-block;padding:12px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:7px;font-weight:700">📩 ACKNOWLEDGE RECEIPT — تأكيد الاستلام</a></p><h3>STEP 2 — WORK COMPLETED / الخطوة 2 — إكمال العمل</h3><p>After completing the repair, click the button below to notify Fleet / Building Maintenance.<br>بعد إكمال الإصلاح، اضغط على الزر أدناه لإبلاغ إدارة الأسطول / صيانة المباني.</p><p><a href="'+completeUrl+'" style="display:inline-block;padding:12px 18px;background:#15803d;color:#fff;text-decoration:none;border-radius:7px;font-weight:700">✅ WORK COMPLETED — إكمال العمل</a></p><p><b>IMPORTANT / مهم</b><br>These buttons update the maintenance workflow automatically.<br>هذه الأزرار تقوم بتحديث دورة طلب الصيانة تلقائياً.</p><p>Please review this email and click Send.<br>يرجى مراجعة الإيميل ثم الضغط على Send.</p><p>Thank you,<br>Fleet / Building Maintenance</p></body></html>';
-
-    const to=r.executor_email;
+    const lines=[
+      'Dear '+(r.executor_name||'Executor')+',',
+      '',
+      'BUILDING MAINTENANCE WORK ASSIGNMENT',
+      'Please review the maintenance assignment below and follow the required steps.',
+      '',
+      'REQUEST DETAILS / تفاصيل الطلب',
+      '- Request No. / رقم الطلب: '+(r.request_no||'-'),
+      '- Site / الموقع: '+(r.site||'-'),
+      '- Problem / المشكلة: '+(r.description||'-'),
+      '- Assigned To / تم التكليف إلى: '+(r.executor_name||'-'),
+      '',
+      'STEP 1 - ACKNOWLEDGE RECEIPT / الخطوة 1 - تأكيد استلام المهمة',
+      'Please click the link below to confirm that you have received this work assignment.',
+      'يرجى الضغط على الرابط أدناه لتأكيد استلام المهمة.',
+      acknowledgeUrl,
+      '',
+      'STEP 2 - WORK COMPLETED / الخطوة 2 - إكمال العمل',
+      'After completing the repair, click the link below to notify Fleet / Building Maintenance.',
+      'بعد إكمال الإصلاح، اضغط على الرابط أدناه لإبلاغ إدارة الأسطول / صيانة المباني.',
+      completeUrl,
+      '',
+      'IMPORTANT / مهم',
+      'These links update the maintenance workflow automatically.',
+      'هذه الروابط تقوم بتحديث دورة طلب الصيانة تلقائياً.',
+      '',
+      'Please review this email and click Send.',
+      'يرجى مراجعة الإيميل ثم الضغط على Send.',
+      '',
+      'Thank you,',
+      'Fleet / Building Maintenance'
+    ];
+    const body=lines.join('\\r\\n');
     const cc=(r.cc_emails||[]).filter(Boolean).join(';');
-    const json=JSON.stringify({to,cc,subject,html});
-    const bytes=new TextEncoder().encode(json);
-    let binary='';
-    for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));
-    const payload=btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-    const outlookUrl='fleeterp-outlook://open/'+payload;
-
-    window.location.href=outlookUrl;
-    setMessage('📧 Outlook Desktop is opening with the HTML email ready. Review it and click Send. / يتم الآن فتح Outlook Desktop والإيميل جاهز للمراجعة، ثم اضغط Send.');
+    const params=new URLSearchParams({subject,body});
+    if(cc)params.set('cc',cc);
+    window.location.href='mailto:'+encodeURIComponent(r.executor_email)+'?'+params.toString();
+    setMessage('📧 Outlook is opening with the email ready. Review it and click Send. / يتم الآن فتح Outlook والإيميل جاهز للمراجعة، ثم اضغط Send.');
   };
   if(loading)return <div className="loading">Loading Support & Service...</div>;
   return <div className="form-container" style={{maxWidth:1200}}>

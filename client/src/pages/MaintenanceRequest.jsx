@@ -53,10 +53,15 @@ export default function MaintenanceRequest({user,access={}}){
     ];
     const body=lines.join('\n');
     const cc=(r.cc_emails||[]).filter(Boolean).join(';');
-    const params=new URLSearchParams({subject,body});
-    if(cc)params.set('cc',cc);
-    window.location.href='mailto:'+encodeURIComponent(r.executor_email)+'?'+params.toString();
-    setMessage('📧 Outlook is opening with the email ready. Review it and click Send. / يتم الآن فتح Outlook والإيميل جاهز للمراجعة، ثم اضغط Send.');
+    const params=[
+      cc ? 'cc='+encodeURIComponent(cc) : '',
+      'subject='+encodeURIComponent(subject),
+      'body='+encodeURIComponent(body)
+    ].filter(Boolean).join('&');
+    const emailUrl='mailto:'+encodeURIComponent(r.executor_email)+'?'+params;
+    const w=window.open(emailUrl,'_blank');
+    if(!w)setError('Please allow pop-ups to open the Outlook email draft.');
+    else setMessage('📧 Outlook is opening with the email ready. Review it and click Send. / يتم الآن فتح Outlook والإيميل جاهز للمراجعة، ثم اضغط Send.');
   };
   if(loading)return <div className="loading">Loading Support & Service...</div>;
   return <div className="form-container" style={{maxWidth:1200}}>

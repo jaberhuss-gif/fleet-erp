@@ -1124,8 +1124,6 @@ export async function ensureBuildingSchema() {
       ["completed_date", "DATE"], ["final_cost", "NUMERIC DEFAULT 0"],
       ["contractor_cost", "NUMERIC DEFAULT 0"], ["labor_cost", "NUMERIC DEFAULT 0"],
       ["parts_cost", "NUMERIC DEFAULT 0"], ["closing_notes", "TEXT"],
-      ["closed_amount", "NUMERIC DEFAULT 0"], ["close_performed_by", "TEXT"],
-      ["close_performed_name", "TEXT"], ["closed_at", "TIMESTAMP"],
       ["parts_used", "TEXT"], ["month", "TEXT"], ["year", "TEXT"],
       ["created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"],
       ["updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"]
@@ -1136,8 +1134,7 @@ export async function ensureBuildingSchema() {
       ["status", "TEXT DEFAULT 'Active'"], ["budget", "NUMERIC DEFAULT 0"],
       ["spent", "NUMERIC DEFAULT 0"], ["start_date", "DATE"], ["end_date", "DATE"],
       ["manager", "TEXT"], ["contractor", "TEXT"], ["month", "TEXT"], ["year", "TEXT"],
-      ["notes", "TEXT"], ["final_amount", "NUMERIC DEFAULT 0"], ["close_performed_by", "TEXT"],
-      ["close_performed_name", "TEXT"], ["closed_at", "TIMESTAMP"], ["closing_notes", "TEXT"],
+      ["notes", "TEXT"],
       ["created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"],
       ["updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"]
     ],
@@ -1147,8 +1144,6 @@ export async function ensureBuildingSchema() {
       ["unit_cost", "NUMERIC DEFAULT 0"], ["total_cost", "NUMERIC DEFAULT 0"],
       ["supplier", "TEXT"], ["purchased_by", "TEXT DEFAULT 'Company'"],
       ["purchase_date", "DATE"], ["month", "TEXT"], ["year", "TEXT"], ["notes", "TEXT"],
-      ["final_amount", "NUMERIC DEFAULT 0"], ["close_performed_by", "TEXT"],
-      ["close_performed_name", "TEXT"], ["closed_at", "TIMESTAMP"], ["closing_notes", "TEXT"],
       ["created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"]
     ],
     project_items: [
@@ -2152,39 +2147,32 @@ export async function updateWorkOrder(id, data = {}) {
 
 export async function closeWorkOrder(id, data = {}) {
   await ensureGeneralMaintenanceSchema();
-  const current = await getWorkOrder(id);
-  if (!current) throw new Error("Work order not found");
-
-  const performedBy = pgStr(data.performedBy ?? data.closePerformedBy ?? data.close_performed_by);
-  if (!["Employee", "Contractor"].includes(performedBy)) {
-    throw new Error("Performed By must be Employee or Contractor");
-  }
-  const performedName = pgStr(data.performedName ?? data.closePerformedName ?? data.close_performed_name);
-  if (performedBy === "Contractor" && !performedName) {
-    throw new Error("Contractor name is required");
-  }
-
-  const finalAmount = pgNum(data.finalAmount ?? data.final_amount ?? data.finalCost ?? data.final_cost, 0);
   const result = await query(`
     UPDATE work_orders
     SET
       status = 'Closed',
       completed_date = CURRENT_DATE,
       final_cost = $1,
-      closed_amount = $1,
-      contractor_cost = CASE WHEN $2 = 'Contractor' THEN $1 ELSE COALESCE(contractor_cost,0) END,
-      performed_by = CASE WHEN $2 = 'Contractor' THEN $3 ELSE COALESCE(performed_by, $3) END,
-      close_performed_by = $2,
-      close_performed_name = $3,
-      closed_at = CURRENT_TIMESTAMP,
-      closing_notes = $4,
+      contractor_cost = $2,
+      labor_cost = $3,
+      parts_cost = $4,
+      closing_notes = $5,
       updated_at = CURRENT_TIMESTAMP
-    WHERE id = $5
+    WHERE id = $6
     RETURNING *
   `, [
-    finalAmount, performedBy, performedName || (current.assigned_to || current.performed_by || "Employee"),
-    pgStr(data.closingNotes ?? data.closing_notes), id
+    pgNum(data.finalCost ?? data.final_cost),
+    pgNum(data.contractorCost ?? data.contractor_cost),
+    pgNum(data.laborCost ?? data.labor_cost),
+    pgNum(data.partsCost ?? data.parts_cost),
+    pgStr(data.closingNotes ?? data.closing_notes),
+    id
   ]);
+
+  if (!result.rows[0]) {
+    throw new Error("Work order not found");
+  }
+
   return result.rows[0];
 }
 
@@ -2421,37 +2409,6 @@ export async function updateProject(id, data = {}) {
     id
   ]);
 
-  return result.rows[0];
-}
-
-export async function closeProject(id, data = {}) {
-  const current = await getProject(id);
-  if (!current) throw new Error("Project not found");
-
-  const performedBy = pgStr(data.performedBy ?? data.closePerformedBy ?? data.close_performed_by);
-  if (!["Employee", "Contractor"].includes(performedBy)) {
-    throw new Error("Performed By must be Employee or Contractor");
-  }
-  const performedName = pgStr(data.performedName ?? data.closePerformedName ?? data.close_performed_name);
-  if (performedBy === "Contractor" && !performedName) {
-    throw new Error("Contractor name is required");
-  }
-  const finalAmount = pgNum(data.finalAmount ?? data.final_amount ?? current.spent, 0);
-
-  const result = await query(`
-    UPDATE projects
-    SET status='Closed',
-        final_amount=$1,
-        spent=$1,
-        close_performed_by=$2,
-        close_performed_name=$3,
-        closed_at=CURRENT_TIMESTAMP,
-        closing_notes=$4,
-        updated_at=CURRENT_TIMESTAMP
-    WHERE id=$5
-    RETURNING *
-  `, [finalAmount, performedBy, performedName || (current.manager || "Employee"),
-      pgStr(data.closingNotes ?? data.closing_notes), id]);
   return result.rows[0];
 }
 
@@ -2793,65 +2750,6 @@ export async function createPurchase(data = {}) {
     data.recordedAt ?? data.recorded_at ?? null
   ]);
 
-  return result.rows[0];
-}
-
-export async function updatePurchase(id, data = {}) {
-  const current = (await query(`SELECT * FROM purchases WHERE id=$1 LIMIT 1`, [id])).rows[0];
-  if (!current) throw new Error("Purchase not found");
-
-  const purchaseDate = data.purchaseDate !== undefined || data.purchase_date !== undefined
-    ? data.purchaseDate ?? data.purchase_date
-    : current.purchase_date;
-  const quantity = pgNum(data.quantity ?? current.quantity, 1);
-  const unitCost = pgNum(data.unitCost ?? data.unit_cost ?? current.unit_cost, 0);
-  const totalCost = data.totalCost !== undefined || data.total_cost !== undefined
-    ? pgNum(data.totalCost ?? data.total_cost, 0)
-    : quantity * unitCost;
-
-  const result = await query(`
-    UPDATE purchases
-    SET purchase_no=$1, type=$2, reference_no=$3, item_name=$4, quantity=$5,
-        unit_cost=$6, total_cost=$7, supplier=$8, purchased_by=$9,
-        purchase_date=$10, month=$11, year=$12, notes=$13,
-        updated_at=CURRENT_TIMESTAMP
-    WHERE id=$14
-    RETURNING *
-  `, [
-    pgStr(data.purchaseNo ?? data.purchase_no ?? current.purchase_no),
-    pgStr(data.type ?? current.type), pgStr(data.referenceNo ?? data.reference_no ?? current.reference_no),
-    pgStr(data.itemName ?? data.item_name ?? current.item_name), quantity, unitCost, totalCost,
-    pgStr(data.supplier ?? current.supplier), pgStr(data.purchasedBy ?? data.purchased_by ?? current.purchased_by, "Company"),
-    purchaseDate, pgMonthYear(purchaseDate).month, pgMonthYear(purchaseDate).year,
-    pgStr(data.notes ?? current.notes), id
-  ]);
-  return result.rows[0];
-}
-
-export async function closePurchase(id, data = {}) {
-  const current = (await query(`SELECT * FROM purchases WHERE id=$1 LIMIT 1`, [id])).rows[0];
-  if (!current) throw new Error("Purchase not found");
-
-  const performedBy = pgStr(data.performedBy ?? data.closePerformedBy ?? data.close_performed_by);
-  if (!["Employee", "Contractor"].includes(performedBy)) {
-    throw new Error("Performed By must be Employee or Contractor");
-  }
-  const performedName = pgStr(data.performedName ?? data.closePerformedName ?? data.close_performed_name);
-  if (performedBy === "Contractor" && !performedName) throw new Error("Contractor name is required");
-
-  const finalAmount = pgNum(data.finalAmount ?? data.final_amount ?? current.total_cost, 0);
-  const result = await query(`
-    UPDATE purchases
-    SET final_amount=$1,
-        close_performed_by=$2,
-        close_performed_name=$3,
-        closed_at=CURRENT_TIMESTAMP,
-        closing_notes=$4,
-        updated_at=CURRENT_TIMESTAMP
-    WHERE id=$5
-    RETURNING *
-  `, [finalAmount, performedBy, performedName || (current.purchased_by || "Employee"),
-      pgStr(data.closingNotes ?? data.closing_notes), id]);
   return result.rows[0];
 }
 
@@ -4451,152 +4349,191 @@ export async function getFinancialReport() {
   const purchases = await listPurchases();
 
   const months = {};
-  const normalizeRef = (v) => String(v ?? "").replace(/[-\\s]/g, "").toUpperCase();
-  const effectiveWOAmount = (w) => {
-    const closed = String(w.status || "").toLowerCase() === "closed";
-    if (closed && Number(w.closed_amount || 0) > 0) return Number(w.closed_amount);
-    return Number(w.contractor_cost || 0) > 0 ? Number(w.contractor_cost) : Number(w.final_cost || 0);
-  };
-  const effectiveProjectAmount = (p) => {
-    if (String(p.status || "").toLowerCase() === "closed" && Number(p.final_amount || 0) > 0) return Number(p.final_amount);
-    return Number(p.spent ?? p.total_cost ?? 0);
-  };
-  const effectivePurchaseAmount = (p) => {
-    if (p.closed_at && Number(p.final_amount || 0) > 0) return Number(p.final_amount);
-    return Number(p.total_cost || 0);
-  };
+  const normalizeRef = (v) => String(v ?? "").replace(/[-\s]/g, "").toUpperCase();
 
   function bucket(month) {
     const key = month || "Unknown";
     if (!months[key]) {
       months[key] = {
-        month:key, employeeWOCount:0, contractorWOCount:0, contractorWO:0, partsWO:0,
-        salaryMaint:SALARY_MAINT, maintActual:0, maintSavings:0, maintPct:0,
-        internalProjectCount:0, contractorProjectCount:0, contractorDev:0, partsDev:0,
-        salaryDev:SALARY_DEV, devActual:0, devSavings:0, devPct:0,
-        otherPurchases:0, totalCost:0, totalSavings:0, totalSavingsPct:0, contractorBreakdown:{}
+        month: key, employeeWOCount: 0, contractorWOCount: 0,
+        contractorWO: 0, partsWO: 0, salaryMaint: SALARY_MAINT,
+        maintActual: 0, maintSavings: 0, maintPct: 0,
+        internalProjectCount: 0, contractorProjectCount: 0,
+        contractorDev: 0, partsDev: 0, salaryDev: SALARY_DEV,
+        devActual: 0, devSavings: 0, devPct: 0,
+        otherPurchases: 0, totalCost: 0, totalSavings: 0,
+        totalSavingsPct: 0, contractorBreakdown: {}
       };
     }
     return months[key];
   }
 
+  // Contractor = reliable flag OR a real contractor name.
+  // Employee WO cost is covered by the fixed salary and is not added again.
   const contractorWOsByMonth = {};
   for (const w of workOrders) {
     const month = pgMonthKey(w.reported_date) || w.month || "Unknown";
     const b = bucket(month);
     const contractorName = String(w.contractor_name ?? w.contractor ?? "").trim();
-    const isContractor = Number(w.is_contractor ?? 0) === 1 ||
-      (contractorName && !["company","internal"].includes(contractorName.toLowerCase()));
+    const isContractor =
+      Number(w.is_contractor ?? w.isContractor ?? 0) === 1 ||
+      (contractorName !== "" &&
+       !["company", "internal"].includes(contractorName.toLowerCase()));
+
     const woKey = normalizeRef(w.wo_no);
-    const cost = effectiveWOAmount(w);
     if (isContractor) {
-      b.contractorWOCount++; b.contractorWO += cost;
-      if (!contractorWOsByMonth[month]) contractorWOsByMonth[month]=new Set();
+      const cost = Number(w.contractor_cost ?? 0) > 0
+        ? Number(w.contractor_cost)
+        : Number(w.final_cost ?? 0);
+      b.contractorWOCount++;
+      b.contractorWO += cost;
+      if (!contractorWOsByMonth[month]) contractorWOsByMonth[month] = new Set();
       if (woKey) contractorWOsByMonth[month].add(woKey);
+
       const name = contractorName || "Contractor";
-      if (!b.contractorBreakdown[name]) b.contractorBreakdown[name]={woCount:0,woCost:0,projectCount:0,projectCost:0};
-      b.contractorBreakdown[name].woCount++; b.contractorBreakdown[name].woCost += cost;
-    } else b.employeeWOCount++;
+      if (!b.contractorBreakdown[name]) {
+        b.contractorBreakdown[name] = { woCount: 0, woCost: 0, projectCount: 0, projectCost: 0 };
+      }
+      b.contractorBreakdown[name].woCount++;
+      b.contractorBreakdown[name].woCost += cost;
+    } else {
+      b.employeeWOCount++;
+    }
   }
 
+  // Development project.spent is the development actual. PRJ purchases are
+  // deliberately not added again because that would double-count project spend.
   for (const p of projects) {
-    const startDateRaw = p.start_date ?? "";
-    const month = String(startDateRaw).trim() ? (pgMonthKey(startDateRaw)||p.month||"Unknown") : (p.month||"Unknown");
+    const startDateRaw = p.start_date ?? p.startDate ?? "";
+    const month = String(startDateRaw).trim()
+      ? (pgMonthKey(startDateRaw) || p.month || "Unknown")
+      : (p.month || "Unknown");
     const b = bucket(month);
-    const spent = effectiveProjectAmount(p);
-    const contractorName = String(p.contractor ?? "").trim();
-    const isContractor = contractorName && !["company","internal"].includes(contractorName.toLowerCase());
+    const spent = Number(p.spent ?? p.total_cost ?? 0);
+    const contractorName = String(p.contractor ?? p.contractor_name ?? "").trim();
+    const isContractor =
+      contractorName !== "" &&
+      !["company", "internal"].includes(contractorName.toLowerCase());
+
     if (isContractor) {
-      b.contractorProjectCount++; b.contractorDev += spent;
-      const name=contractorName||"Contractor";
-      if (!b.contractorBreakdown[name]) b.contractorBreakdown[name]={woCount:0,woCost:0,projectCount:0,projectCost:0};
-      b.contractorBreakdown[name].projectCount++; b.contractorBreakdown[name].projectCost += spent;
-    } else b.internalProjectCount++;
+      b.contractorProjectCount++;
+      b.contractorDev += spent;
+      const name = contractorName || "Contractor";
+      if (!b.contractorBreakdown[name]) {
+        b.contractorBreakdown[name] = { woCount: 0, woCost: 0, projectCount: 0, projectCost: 0 };
+      }
+      b.contractorBreakdown[name].projectCount++;
+      b.contractorBreakdown[name].projectCost += spent;
+    } else {
+      b.internalProjectCount++;
+    }
   }
 
+  // Maintenance parts only count when the purchase is by Contractor, tied to
+  // a WO, and that WO exists in the SAME month. Cross-month/unlinked purchases
+  // are kept as other purchases so they remain visible without inflating WO cost.
   for (const p of purchases) {
     const month = pgMonthKey(p.purchase_date) || p.month || "Unknown";
-    const amount = effectivePurchaseAmount(p);
+    const amount = Number(p.total_cost ?? 0);
     if (!amount) continue;
-    const purchasedBy = String(p.purchased_by||"").trim().toLowerCase();
-    const type = String(p.type||"").trim().toLowerCase();
-    const ref = normalizeRef(p.reference_no);
+
+    const purchasedBy = String(p.purchased_by ?? "").trim().toLowerCase();
+    const type = String(p.type ?? "").trim().toLowerCase();
+    const ref = normalizeRef(p.reference_no ?? p.reference_id);
     const isContractor = purchasedBy === "contractor";
-    const isWO = ref.startsWith("WO") || type.includes("work") || type.includes("order") || type.includes("maintenance");
+    const isWO = ref.startsWith("WO") || type.includes("work") ||
+      type.includes("order") || type.includes("maintenance");
     const linkedWO = ref && contractorWOsByMonth[month]?.has(ref);
-    if (isContractor && isWO && linkedWO) bucket(month).partsWO += amount;
-    else bucket(month).otherPurchases += amount;
+
+    if (isContractor && isWO && linkedWO) {
+      bucket(month).partsWO += amount;
+    } else {
+      bucket(month).otherPurchases += amount;
+    }
   }
 
   const totalBaseline = MAINT_BASELINE + DEV_BASELINE;
   for (const b of Object.values(months)) {
-    b.maintActual=b.contractorWO+b.partsWO+b.salaryMaint;
-    b.devActual=b.contractorDev+b.salaryDev;
-    b.maintSavings=MAINT_BASELINE-b.maintActual;
-    b.devSavings=DEV_BASELINE-b.devActual;
-    b.totalCost=b.maintActual+b.devActual+b.otherPurchases;
-    b.totalSavings=totalBaseline-b.totalCost;
-    b.maintPct=MAINT_BASELINE?(b.maintSavings/MAINT_BASELINE)*100:0;
-    b.devPct=DEV_BASELINE?(b.devSavings/DEV_BASELINE)*100:0;
-    b.totalSavingsPct=totalBaseline?(b.totalSavings/totalBaseline)*100:0;
+    b.maintActual = b.contractorWO + b.partsWO + b.salaryMaint;
+    b.devActual = b.contractorDev + b.salaryDev;
+    b.maintSavings = MAINT_BASELINE - b.maintActual;
+    b.devSavings = DEV_BASELINE - b.devActual;
+    b.totalCost = b.maintActual + b.devActual + b.otherPurchases;
+    b.totalSavings = totalBaseline - b.totalCost;
+    b.maintPct = MAINT_BASELINE ? (b.maintSavings / MAINT_BASELINE) * 100 : 0;
+    b.devPct = DEV_BASELINE ? (b.devSavings / DEV_BASELINE) * 100 : 0;
+    b.totalSavingsPct = totalBaseline ? (b.totalSavings / totalBaseline) * 100 : 0;
   }
 
-  const rows=Object.values(months).filter(r=>/^\\d{4}-\\d{2}$/.test(String(r.month))).sort((a,b)=>String(a.month).localeCompare(String(b.month)));
-  const hasActivity=r=>Number(r.contractorWO||0)+Number(r.partsWO||0)+Number(r.contractorDev||0)+Number(r.otherPurchases||0)>0;
-  const activeData=rows.filter(hasActivity);
-  for(const r of rows) r.active=hasActivity(r);
-  const sum=field=>activeData.reduce((s,r)=>s+Number(r[field]||0),0);
-  const monthCount=activeData.length;
-  const maintenanceTotalBaseline=MAINT_BASELINE*monthCount;
-  const developmentTotalBaseline=DEV_BASELINE*monthCount;
-  const reportBaseline=maintenanceTotalBaseline+developmentTotalBaseline;
-  const mergedBreakdown={};
-  for(const r of activeData) for(const [name,info] of Object.entries(r.contractorBreakdown||{})){
-    if(!mergedBreakdown[name]) mergedBreakdown[name]={woCount:0,woCost:0,projectCount:0,projectCost:0};
-    mergedBreakdown[name].woCount+=Number(info.woCount||0); mergedBreakdown[name].woCost+=Number(info.woCost||0);
-    mergedBreakdown[name].projectCount+=Number(info.projectCount||0); mergedBreakdown[name].projectCost+=Number(info.projectCost||0);
+  const rows = Object.values(months)
+    .filter(r => /^\d{4}-\d{2}$/.test(String(r.month)))
+    .sort((a, b) => String(a.month).localeCompare(String(b.month)));
+
+  const hasActivity = (r) =>
+    Number(r.contractorWO || 0) +
+    Number(r.partsWO || 0) +
+    Number(r.contractorDev || 0) +
+    Number(r.otherPurchases || 0) > 0;
+
+  const activeData = rows.filter(hasActivity);
+  for (const r of rows) r.active = hasActivity(r);
+
+  const sum = (field) => activeData.reduce((s, r) => s + Number(r[field] || 0), 0);
+  const monthCount = activeData.length;
+  const maintenanceTotalBaseline = MAINT_BASELINE * monthCount;
+  const developmentTotalBaseline = DEV_BASELINE * monthCount;
+  const reportBaseline = maintenanceTotalBaseline + developmentTotalBaseline;
+
+  const mergedBreakdown = {};
+  for (const r of activeData) {
+    for (const [name, info] of Object.entries(r.contractorBreakdown || {})) {
+      if (!mergedBreakdown[name]) {
+        mergedBreakdown[name] = { woCount: 0, woCost: 0, projectCount: 0, projectCost: 0 };
+      }
+      mergedBreakdown[name].woCount += Number(info.woCount || 0);
+      mergedBreakdown[name].woCost += Number(info.woCost || 0);
+      mergedBreakdown[name].projectCount += Number(info.projectCount || 0);
+      mergedBreakdown[name].projectCost += Number(info.projectCost || 0);
+    }
   }
 
-  const detailWorkOrders=workOrders.map(w=>({
-    id:w.id, woNo:w.wo_no||"", site:w.site||"", category:w.category||"", description:w.description||"",
-    status:w.status||"Open", reportedDate:w.reported_date||"", completedDate:w.completed_date||"",
-    amount:effectiveWOAmount(w), finalAmount:Number(w.closed_amount||w.final_cost||0),
-    performedBy:w.close_performed_by||w.performed_by||"", performedName:w.close_performed_name||w.contractor_name||w.assigned_to||"",
-    contractorName:w.contractor_name||"", closingNotes:w.closing_notes||"", closedAt:w.closed_at||null
-  }));
-  const detailProjects=projects.map(p=>({
-    id:p.id, projectNo:p.project_no||"", name:p.name||"", site:p.site||"", projectType:p.project_type||"Development",
-    status:p.status||"Active", budget:Number(p.budget||0), spent:Number(p.spent||0),
-    amount:effectiveProjectAmount(p), finalAmount:Number(p.final_amount||0),
-    contractor:p.contractor||"", performedBy:p.close_performed_by||"", performedName:p.close_performed_name||"",
-    closingNotes:p.closing_notes||"", closedAt:p.closed_at||null, startDate:p.start_date||""
-  }));
-  const detailPurchases=purchases.map(p=>({
-    id:p.id, purchaseNo:p.purchase_no||"", type:p.type||"", referenceNo:p.reference_no||"", itemName:p.item_name||"",
-    quantity:Number(p.quantity||0), unitCost:Number(p.unit_cost||0), totalCost:Number(p.total_cost||0),
-    finalAmount:Number(p.final_amount||0), amount:effectivePurchaseAmount(p), supplier:p.supplier||"",
-    purchasedBy:p.purchased_by||"", purchaseDate:p.purchase_date||"", site:p.site||"", projectNo:p.project_no||"",
-    status:p.closed_at?"Closed":"Open", performedBy:p.close_performed_by||"", performedName:p.close_performed_name||"",
-    closingNotes:p.closing_notes||"", closedAt:p.closed_at||null
-  }));
+  const maintSavings = sum("maintSavings");
+  const devSavings = sum("devSavings");
+  const totalSavings = sum("totalSavings");
 
-  const maintSavings=sum("maintSavings"), devSavings=sum("devSavings"), totalSavings=sum("totalSavings");
   return {
     rows,
-    details:{workOrders:detailWorkOrders,projects:detailProjects,purchases:detailPurchases},
-    grand:{
-      monthCount, baseline:reportBaseline, maintenanceBaseline:MAINT_BASELINE, developmentBaseline:DEV_BASELINE,
-      maintenanceTotalBaseline, developmentTotalBaseline, contractorWO:sum("contractorWO"), partsWO:sum("partsWO"),
-      salaryMaint:sum("salaryMaint"), maintActual:sum("maintActual"), contractorDev:sum("contractorDev"), partsDev:0,
-      salaryDev:sum("salaryDev"), devActual:sum("devActual"), otherPurchases:sum("otherPurchases"), totalCost:sum("totalCost"),
-      maintSavings,devSavings,totalSavings,
-      maintTotalSavingsPct:maintenanceTotalBaseline?(maintSavings/maintenanceTotalBaseline)*100:0,
-      devTotalSavingsPct:developmentTotalBaseline?(devSavings/developmentTotalBaseline)*100:0,
-      totalSavingsPct:reportBaseline?(totalSavings/reportBaseline)*100:0,
-      employeeWOCount:sum("employeeWOCount"), contractorWOCount:sum("contractorWOCount"),
-      totalWOCount:sum("employeeWOCount")+sum("contractorWOCount"),
-      internalProjectCount:sum("internalProjectCount"), contractorProjectCount:sum("contractorProjectCount"),
-      totalProjectCount:sum("internalProjectCount")+sum("contractorProjectCount"), contractorBreakdown:mergedBreakdown
+    grand: {
+      monthCount,
+      baseline: reportBaseline,
+      maintenanceBaseline: MAINT_BASELINE,
+      developmentBaseline: DEV_BASELINE,
+      maintenanceTotalBaseline,
+      developmentTotalBaseline,
+      contractorWO: sum("contractorWO"),
+      partsWO: sum("partsWO"),
+      salaryMaint: sum("salaryMaint"),
+      maintActual: sum("maintActual"),
+      contractorDev: sum("contractorDev"),
+      partsDev: 0,
+      salaryDev: sum("salaryDev"),
+      devActual: sum("devActual"),
+      otherPurchases: sum("otherPurchases"),
+      totalCost: sum("totalCost"),
+      maintSavings,
+      devSavings,
+      totalSavings,
+      maintTotalSavingsPct: maintenanceTotalBaseline ? (maintSavings / maintenanceTotalBaseline) * 100 : 0,
+      devTotalSavingsPct: developmentTotalBaseline ? (devSavings / developmentTotalBaseline) * 100 : 0,
+      totalSavingsPct: reportBaseline ? (totalSavings / reportBaseline) * 100 : 0,
+      employeeWOCount: sum("employeeWOCount"),
+      contractorWOCount: sum("contractorWOCount"),
+      totalWOCount: sum("employeeWOCount") + sum("contractorWOCount"),
+      internalProjectCount: sum("internalProjectCount"),
+      contractorProjectCount: sum("contractorProjectCount"),
+      totalProjectCount: sum("internalProjectCount") + sum("contractorProjectCount"),
+      contractorBreakdown: mergedBreakdown
     }
   };
 }
+

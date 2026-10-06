@@ -26,6 +26,7 @@ export default function WorkOrders({ user, access = {}, entryOnly = false }) {
   });
   const [pdfPreview, setPdfPreview] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfSite, setPdfSite] = useState('');
   const pdfInputRef = useRef(null);
 
   useEffect(() => { load(); }, []);
@@ -110,10 +111,10 @@ export default function WorkOrders({ user, access = {}, entryOnly = false }) {
     try {
       const data = new FormData();
       data.append('file', file);
-      const response = await api.post('/work-orders/import-pdf/preview', data, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const response = await api.post('/building-maintenance/import-pdf/preview', data, {
+        headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000
       });
-      setPdfPreview({ ...response.data, file });
+      setPdfPreview({ ...response.data, file }); setPdfSite(response.data.site || '');
     } catch (e) {
       setError(e.response?.data?.error || e.message);
     } finally {
@@ -129,11 +130,17 @@ export default function WorkOrders({ user, access = {}, entryOnly = false }) {
     try {
       const data = new FormData();
       data.append('file', pdfPreview.file);
-      const response = await api.post('/work-orders/import-pdf', data, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const response = await api.post('/building-maintenance/import-pdf', data, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'X-PDF-Site': pdfSite,
+          'X-PDF-Project-Name': pdfPreview.projectName || pdfPreview.filename || 'PDF Project',
+          'X-PDF-Date': pdfPreview.date || ''
+        },
+        timeout: 120000
       });
-      setMessage(`PDF imported: ${response.data.imported} new, ${response.data.skipped} already existed.`);
-      setPdfPreview(null);
+      setMessage('PDF imported: Project + Work Order created OPEN. Final item amounts remain 0.');
+      setPdfPreview(null); setPdfSite('');
       load();
     } catch (e) {
       setError(e.response?.data?.error || e.message);
@@ -176,14 +183,14 @@ export default function WorkOrders({ user, access = {}, entryOnly = false }) {
   return (
     <div className={entryOnly ? "panel building-entry-only" : "panel"}>
       <style>{`
-        .building-entry-only > *:not(.building-entry-form):not(.building-monthly-table) { display: none !important; }
+         .building-entry-only > *:not(.building-entry-form):not(.building-monthly-table):not(.building-pdf-import-toolbar) { display: none !important; }
         .building-entry-only > .building-entry-form,
-        .building-entry-only > .building-monthly-table { display: block !important; }
+         .building-entry-only > .building-monthly-table, .building-entry-only > .building-pdf-import-toolbar { display: block !important; }
       `}</style>
       <div style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
           <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Work Orders</h2>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+        <div className="building-pdf-import-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px', padding:'10px 0' }}>
         
         <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "work-orders", [{key:"wo_no",label:"WO #"},{key:"site",label:"Site"},{key:"category",label:"Category"},{key:"description",label:"Description"},{key:"assigned_to",label:"Assigned To"},{key:"status",label:"Status"},{key:"reported_date",label:"Reported"},{key:"completed_date",label:"Completed"},{key:"final_cost",label:"Cost"}])}>Export CSV</button>{canWork && <>
           <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
@@ -192,7 +199,7 @@ export default function WorkOrders({ user, access = {}, entryOnly = false }) {
           <ExcelImportButton endpoint="/work-orders" kind="home-maintenance" onImported={load} label="Import Excel" />
           <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" style={{ display: 'none' }} onChange={handlePdfSelected} />
           <button className="btn btn-warning" disabled={pdfLoading} onClick={() => pdfInputRef.current?.click()}>
-            {pdfLoading ? 'Reading PDF...' : 'Import PDF'}
+            {pdfLoading ? 'Reading PDF...' : 'Import PDF → Project + WO'}
           </button>
         </>}
       </div>
@@ -205,10 +212,11 @@ export default function WorkOrders({ user, access = {}, entryOnly = false }) {
           <div style={{ background: '#fff', padding: '24px', borderRadius: '10px', width: '92%', maxWidth: '1100px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ marginTop: 0 }}>PDF Work Order Preview</h3>
             <div style={{ marginBottom: '12px', color: '#64748b' }}>
-              {pdfPreview.filename} · {pdfPreview.pages} pages · {pdfPreview.count} Work Orders detected
+              {pdfPreview.filename} · {pdfPreview.pages} pages · {(pdfPreview.items || []).length} line items detected
             </div>
-            {pdfPreview.count === 0 ? (
-              <div className="alert alert-error">No structured Work Orders were detected in this PDF.</div>
+            {!(pdfPreview.items || []).length ? (
+              <div className="alert alert-error">No line items were detected in this PDF.</div>
+                <div className="form-group"><label>Site *</label><select value={pdfSite} onChange={e=>setPdfSite(e.target.value)}><option value="">-- Select Site --</option>{sites.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}</select></div>
             ) : (
               <>
                 {pdfPreview.valid === false && (
@@ -222,23 +230,21 @@ export default function WorkOrders({ user, access = {}, entryOnly = false }) {
                   </div>
                 )}
                 <div style={{ overflowX: 'auto' }}>
+                  <div className="form-group" style={{marginBottom:12}}><label>Site *</label><select value={pdfSite} onChange={e=>setPdfSite(e.target.value)}><option value="">-- Select Site --</option>{sites.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}</select></div>
                   <table>
-                    <thead><tr><th>WO #</th><th>Site</th><th>Area</th><th>Category</th><th>Description</th><th>Performed By</th><th>Contractor</th><th>Date</th></tr></thead>
-                    <tbody>{pdfPreview.rows.map((r, i) => (
-                      <tr key={r.wo_no || i}>
-                        <td>{r.wo_no}</td><td>{r.site}</td><td>{r.area}</td><td>{r.category}</td>
-                        <td>{r.description}</td><td>{r.performed_by}</td><td>{r.contractor_name}</td><td>{r.reported_date}</td>
-                      </tr>
+                    <thead><tr><th>Sr.</th><th>Item</th><th>Unit</th><th>Qty</th><th>Unit Price (reference)</th><th>Final Cost</th><th>Status</th></tr></thead>
+                    <tbody>{(pdfPreview.items || []).map((r, i) => (
+                      <tr key={r.sr_no || i}><td>{r.sr_no}</td><td>{r.item}</td><td>{r.unit}</td><td>{r.quantity}</td><td>{r.price}</td><td>0</td><td>Not Started</td></tr>
                     ))}</tbody>
                   </table>
                 </div>
               </>
             )}
             <div className="btn-row" style={{ marginTop: '16px' }}>
-              <button className="btn btn-success" disabled={pdfLoading || !pdfPreview.count || pdfPreview.valid !== true} onClick={handlePdfImport}>
+              <button className="btn btn-success" disabled={pdfLoading || !(pdfPreview.items || []).length || !pdfSite} onClick={handlePdfImport}>
                 {pdfLoading ? 'Importing...' : 'Confirm Import'}
               </button>
-              <button className="btn btn-warning" disabled={pdfLoading} onClick={() => setPdfPreview(null)}>Cancel</button>
+              <button className="btn btn-warning" disabled={pdfLoading} onClick={() => { setPdfPreview(null); setPdfSite(''); }}>Cancel</button>
             </div>
           </div>
         </div>

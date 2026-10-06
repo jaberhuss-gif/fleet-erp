@@ -172,6 +172,14 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
     }
   });
 
+  app.get("/api/maintenance-requests/executors", async (req,res) => {
+    try {
+      await ensureSchema();
+      const r=await query(`SELECT id, full_name, username, email FROM users WHERE COALESCE(is_active,1)=1 ORDER BY full_name, username`);
+      res.json({success:true,employees:r.rows,contractors:CONTRACTORS});
+    } catch(e){res.status(500).json({success:false,error:e.message});}
+  });
+
   app.get("/api/maintenance-requests", async (req,res) => {
     try {
       await ensureSchema();

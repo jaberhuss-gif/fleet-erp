@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../api/client';
 
-const initialForm={site:'',priority:'Medium',description:''};
+const initialForm={site:'',category:'',priority:'Medium',description:''};
 export default function MaintenanceRequest({user,access={}}){
   const [form,setForm]=useState(initialForm),[sites,setSites]=useState([]),[requests,setRequests]=useState([]),[employees,setEmployees]=useState([]),[contractors,setContractors]=useState([]),[assign,setAssign]=useState({}),[message,setMessage]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(true);
   const canWork=user?.role==='Owner'||!!access?.support?.can_work||!!access?.building?.can_work;
@@ -26,7 +26,7 @@ export default function MaintenanceRequest({user,access={}}){
       <h2 style={{marginTop:0}}>📝 Report a Building / Facility Problem</h2><p style={{color:'#64748b'}}>Only report the problem here. Contractor and cost are controlled by Fleet / Building Maintenance.</p>
       <div className="cards-grid" style={{gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))'}}>
         <div className="form-group"><label>Site *</label><select value={form.site} onChange={e=>setForm({...form,site:e.target.value})} required><option value="">-- Select site --</option>{sites.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}</select></div>
-        <div className="form-group"><label>Priority</label><select value={form.priority} onChange={e=>setForm({...form,priority:e.target.value})}><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></div>
+        <div className="form-group"><label>Category *</label><select value={form.category} onChange={e=>setForm({...form,category:e.target.value})} required><option value="">-- Select category --</option><option>Electrical</option><option>A/C & HVAC</option><option>Plumbing & Water</option><option>Doors, Locks & Windows</option><option>Civil & Building</option><option>Furniture & Facilities</option><option>Appliances & Equipment</option><option>Other</option></select></div><div className="form-group"><label>Priority</label><select value={form.priority} onChange={e=>setForm({...form,priority:e.target.value})}><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></div>
       </div>
       <div className="form-group"><label>What is the problem? *</label><textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Example: A/C in the accommodation room is not cooling." rows={5} required/></div>
       <button className="btn btn-primary">📨 Submit Maintenance Request</button><button type="button" className="btn btn-warning" style={{marginLeft:8}} onClick={()=>setForm(initialForm)}>Clear</button>

@@ -306,6 +306,37 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
     } catch(e){res.status(400).json({success:false,error:e.message});}
   });
 
+
+  app.get("/api/maintenance-requests/public/workflow/:token", async (req,res) => {
+    try {
+      await ensureSchema();
+      const rowResult = await query(`SELECT * FROM maintenance_requests WHERE acknowledgement_token=$1`, [clean(req.params.token)]);
+      const row = rowResult.rows[0];
+      if (!row) return res.status(403).send("<h2>Invalid or expired work assignment link</h2>");
+      res.set("Cache-Control","no-store, no-cache, must-revalidate, private");
+      const esc = v => String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+      let actionHtml = "";
+      if (!row.acknowledged_at) {
+        actionHtml = `
+          <h3>STEP 1 — Acknowledge Receipt</h3>
+          <p>هل استلمت مهمة الصيانة هذه؟</p>
+          <form method="POST" action="/api/maintenance-requests/public/${esc(req.params.token)}/acknowledge">
+            <button type="submit" style="padding:14px 22px;background:#2563eb;color:#fff;border:0;border-radius:8px;font-weight:700;font-size:16px">📩 YES — Acknowledge Receipt</button>
+          </form>`;
+      } else if (!row.completed_at) {
+        actionHtml = `
+          <h3>STEP 2 — Work Completed</h3>
+          <p>بعد إكمال الإصلاح، اضغط YES لتسجيل إكمال العمل.</p>
+          <a href="/api/maintenance-requests/public/${esc(row.completion_token)}/work-completed" style="display:inline-block;padding:14px 22px;background:#15803d;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:16px">🔵 YES — Work Completed</a>`;
+      } else {
+        actionHtml = `<h3 style="color:#15803d">✅ Work Completed Recorded</h3><p>The requester has been asked to confirm that everything is OK.</p>`;
+      }
+      res.send(`<html><body style="font-family:Arial,sans-serif;background:#f8fafc;padding:30px"><div style="max-width:720px;margin:auto;background:#fff;padding:28px;border-radius:12px;box-shadow:0 2px 10px #ddd"><h2>🛠️ Building Maintenance Work Assignment</h2><p><b>Request:</b> ${esc(row.request_no)}</p><p><b>Site:</b> ${esc(row.site || "-")}</p><p><b>Assigned To:</b> ${esc(row.executor_name || "-")}</p><p><b>Problem:</b><br>${esc(row.description || "").replace(/\\n/g,"<br>")}</p><hr>${actionHtml}</div></body></html>`);
+    } catch(e) {
+      res.status(500).send("<h2>Error loading work assignment</h2>");
+    }
+  });
+
   app.get("/api/maintenance-requests/public/:token", async (req,res) => {
     try {
       await ensureSchema();

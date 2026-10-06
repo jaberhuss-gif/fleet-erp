@@ -21,8 +21,10 @@ export default function ReportIssue({ canWork = false, user = null }) {
     setLoadingTickets(true);
     try {
       const res = await getMaintenanceTickets();
-      // Only real maintenance requests with a note/description belong in this table.
-      setTickets((res.tickets || []).filter(t => String(t.description || '').trim()));
+      // Only requests created from the Driver Report an Issue form belong here.
+      // Filter strictly by the Issue Type values used by that form — not by Note/Description.
+      const maintenanceIssueTypes = ['Tires','Engine','A/C','Lights','Brakes','Battery','Door','Wipers','Oil Engine','Other'];
+      setTickets((res.tickets || []).filter(t => maintenanceIssueTypes.includes(String(t.category || '').trim())));
     } catch(e) {
       setError(e.response?.data?.error || e.message);
     } finally {

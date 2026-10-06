@@ -221,6 +221,9 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       if (!executorName) return res.status(400).json({success:false,error:"Executor name is required"});
       if (executorType === "Contractor" && !executorEmail) return res.status(400).json({success:false,error:"Contractor email is required"});
       const isContractor = executorType === "Contractor";
+      const acknowledgementToken = row.acknowledgement_token || randomUUID();
+      const completionToken = row.completion_token || randomUUID();
+      await query(`UPDATE maintenance_requests SET acknowledgement_token=$1, completion_token=$2 WHERE id=$3`, [acknowledgementToken, completionToken, row.id]);
       const order = await createWorkOrder({
         site: row.site, category: row.category, priority: row.priority, description: row.description,
         assignedTo: executorName, isContractor, contractorName: isContractor ? executorName : "",

@@ -1,0 +1,272 @@
+import { randomUUID } from "crypto";
+import { query } from "./postgres.js";
+import { createWorkOrder, updateWorkOrder, getWorkOrder } from "./database-pg.js";
+
+const OWNER_EMAIL = "Hussein.Anwar@iemaadex.com";
+const CC_EMAILS = ["Mohamed.Hassan@iemaadex.com", "Jahangeer.Mohammed@iemaadex.com"];
+const CONTRACTORS = [
+  { name: "Jodoud Al Khaleej", email: "jodoudalkhaleej.co.sa@gmail.com" },
+  { name: "Raghad Alafq", email: "raghadalafq@gmail.com" }
+];
+const CAMPUS_BY_SITE = {
+  "Uqlat Al Soqour": ["Samer.Abdulmalik@iemaadex.com", "bader.almasrahi@iemaadex.com"],
+  "Wadi Beddah": ["Meshal.Alghamdi@iemaadex.com"],
+  "Al Hadar": ["Amr.Mohamed@iemaadex.com", "Mostafa.Magdy@iemaadex.com"],
+  "Al Quwayiyah": ["Amr.Mohamed@iemaadex.com", "Mostafa.Magdy@iemaadex.com"],
+  "Al Sabiyah": ["shezad.khan@iemaadex.com"],
+  "Al Hulayfa": ["nouman.khan@iemaadex.com"]
+};
+
+const appUrl = () => String(process.env.APP_URL || process.env.PUBLIC_APP_URL || "https://fleet-erp-kn0c.onrender.com").replace(/\/$/, "");
+
+function clean(v) { return String(v ?? "").trim(); }
+
+async function ensureSchema() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS maintenance_requests (
+      id BIGSERIAL PRIMARY KEY,
+      request_no TEXT UNIQUE,
+      site TEXT,
+      category TEXT,
+      priority TEXT,
+      description TEXT NOT NULL,
+      requester_user_id BIGINT,
+      requester_name TEXT,
+      requester_email TEXT,
+      status TEXT NOT NULL DEFAULT 'New',
+      work_order_id BIGINT,
+      executor_type TEXT,
+      executor_name TEXT,
+      executor_email TEXT,
+      completion_token TEXT UNIQUE,
+      confirmation_token TEXT UNIQUE,
+      contractor_notified_at TIMESTAMPTZ,
+      completed_at TIMESTAMPTZ,
+      requester_confirmed_at TIMESTAMPTZ,
+      requester_confirmation TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await query(`ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS maintenance_request_id BIGINT`);
+  await query(`ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS operational_status TEXT DEFAULT 'Open'`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_maintenance_requests_status ON maintenance_requests(status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_maintenance_requests_work_order ON maintenance_requests(work_order_id)`);
+}
+
+async function sendEmail({ to, cc = [], subject, html }) {
+  const apiKey = clean(process.env.RESEND_API_KEY);
+  const from = clean(process.env.EMAIL_FROM || process.env.INSPECTION_EMAIL_FROM || OWNER_EMAIL);
+  const recipients = (Array.isArray(to) ? to : [to]).map(clean).filter(Boolean);
+  if (!apiKey || !from || !recipients.length) {
+    return { sent: false, reason: "Email service is not configured (RESEND_API_KEY / EMAIL_FROM)." };
+  }
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to: recipients, cc: cc.map(clean).filter(Boolean), subject, html })
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Email provider error: ${response.status} ${body}`);
+  }
+  return { sent: true };
+}
+
+function button(url, text, color = "#0f766e") {
+  return `<a href="${url}" style="display:inline-block;padding:11px 18px;background:${color};color:#fff;text-decoration:none;border-radius:7px;font-weight:700;margin:4px">${text}</a>`;
+}
+
+function siteCc(site) {
+  return CAMPUS_BY_SITE[clean(site)] || [];
+}
+
+async function getRequest(id) {
+  const r = await query(`SELECT * FROM maintenance_requests WHERE id=$1`, [id]);
+  return r.rows[0] || null;
+}
+
+async function notifyNewRequest(reqRow) {
+  const cc = [...CC_EMAILS, ...siteCc(reqRow.site)];
+  return sendEmail({
+    to: OWNER_EMAIL,
+    cc,
+    subject: `NEW BUILDING MAINTENANCE REQUEST — ${reqRow.request_no}`,
+    html: `
+      <h2>🛠️ New Building Maintenance Request</h2>
+      <p><b>Request:</b> ${reqRow.request_no}</p>
+      <p><b>Site:</b> ${reqRow.site || "-"}</p>
+      <p><b>Type:</b> ${reqRow.category || "-"}</p>
+      <p><b>Priority:</b> ${reqRow.priority || "-"}</p>
+      <p><b>Requested by:</b> ${reqRow.requester_name || "-"}</p>
+      <p><b>Problem:</b><br>${reqRow.description.replace(/</g,"&lt;").replace(/\n/g,"<br>")}</p>
+      <p>This request is waiting for Fleet / Building Maintenance review and assignment.</p>
+    `
+  });
+}
+
+async function notifyAssignment(reqRow) {
+  const recipients = reqRow.executor_email ? [reqRow.executor_email] : [];
+  const completeUrl = `${appUrl()}/maintenance-confirm/${reqRow.completion_token}`;
+  return sendEmail({
+    to: recipients,
+    cc: [OWNER_EMAIL, ...CC_EMAILS],
+    subject: `BUILDING MAINTENANCE — ${reqRow.request_no} ASSIGNED`,
+    html: `
+      <h2>🛠️ Building Maintenance Work Assigned</h2>
+      <p><b>Request:</b> ${reqRow.request_no}</p>
+      <p><b>Site:</b> ${reqRow.site || "-"}</p>
+      <p><b>Problem:</b> ${reqRow.description}</p>
+      <p><b>Assigned to:</b> ${reqRow.executor_name}</p>
+      <p>After completing the repair, use the button below:</p>
+      ${button(completeUrl, "✅ WORK COMPLETED")}
+    `
+  });
+}
+
+async function notifyRequesterReady(reqRow) {
+  if (!reqRow.requester_email) return { sent: false, reason: "Requester email is not available." };
+  const yes = `${appUrl()}/maintenance-confirm/${reqRow.confirmation_token}?answer=yes`;
+  const no = `${appUrl()}/maintenance-confirm/${reqRow.confirmation_token}?answer=no`;
+  return sendEmail({
+    to: [reqRow.requester_email],
+    cc: [OWNER_EMAIL],
+    subject: `BUILDING MAINTENANCE — ${reqRow.request_no} READY FOR CONFIRMATION`,
+    html: `
+      <h2>🛠️ Maintenance Work Completed</h2>
+      <p>Your building maintenance request <b>${reqRow.request_no}</b> has been reported as completed.</p>
+      <p><b>Site:</b> ${reqRow.site || "-"}</p>
+      <p><b>Problem:</b> ${reqRow.description}</p>
+      <p>Please confirm whether everything is now OK:</p>
+      ${button(yes, "✅ YES — Everything is OK", "#15803d")}
+      ${button(no, "❌ NO — Problem Not Fixed", "#b91c1c")}
+    `
+  });
+}
+
+export function contractorOptions() { return CONTRACTORS; }
+
+export function mountBuildingMaintenanceRequestRoutes(app) {
+  app.post("/api/maintenance-requests", async (req, res) => {
+    try {
+      await ensureSchema();
+      const { site, category, description, priority } = req.body || {};
+      if (!clean(description)) return res.status(400).json({ success:false, error:"Maintenance description is required" });
+      const requesterName = clean(req.user?.full_name || req.user?.username || "Employee");
+      const requesterEmail = clean(req.user?.email);
+      const token = randomUUID();
+      const confirmationToken = randomUUID();
+      const result = await query(`
+        INSERT INTO maintenance_requests
+          (request_no, site, category, priority, description, requester_user_id, requester_name, requester_email, status, completion_token, confirmation_token)
+        VALUES
+          ('MR-' || LPAD(nextval('maintenance_requests_id_seq')::text, 5, '0'), $1,$2,$3,$4,$5,$6,$7,'New',$8,$9)
+        RETURNING *
+      `, [clean(site), clean(category) || "General Maintenance", clean(priority) || "Medium", clean(description), req.user?.id || null, requesterName, requesterEmail, token, confirmationToken]);
+      const row = result.rows[0];
+      const email = await notifyNewRequest(row).catch(e => ({sent:false, reason:e.message}));
+      res.status(201).json({ success:true, request:row, email });
+    } catch (e) {
+      console.error("Building maintenance request:", e);
+      res.status(400).json({success:false,error:e.message});
+    }
+  });
+
+  app.get("/api/maintenance-requests", async (req,res) => {
+    try {
+      await ensureSchema();
+      const r = await query(`SELECT * FROM maintenance_requests ORDER BY created_at DESC, id DESC`);
+      res.json({success:true, requests:r.rows, contractors:CONTRACTORS});
+    } catch(e) { res.status(500).json({success:false,error:e.message}); }
+  });
+
+  app.get("/api/maintenance-requests/:id", async (req,res) => {
+    try { await ensureSchema(); const row=await getRequest(req.params.id); if(!row)return res.status(404).json({success:false,error:"Request not found"}); res.json({success:true,request:row}); }
+    catch(e){res.status(500).json({success:false,error:e.message});}
+  });
+
+  app.post("/api/maintenance-requests/:id/assign", async (req,res) => {
+    try {
+      await ensureSchema();
+      const row = await getRequest(req.params.id);
+      if (!row) return res.status(404).json({success:false,error:"Request not found"});
+      const executorType = clean(req.body?.executorType);
+      const executorName = clean(req.body?.executorName);
+      const executorEmail = clean(req.body?.executorEmail);
+      if (!["Contractor","Our Employee"].includes(executorType)) return res.status(400).json({success:false,error:"Select Contractor or Our Employee"});
+      if (!executorName) return res.status(400).json({success:false,error:"Executor name is required"});
+      if (executorType === "Contractor" && !executorEmail) return res.status(400).json({success:false,error:"Contractor email is required"});
+      const isContractor = executorType === "Contractor";
+      const order = await createWorkOrder({
+        site: row.site, category: row.category, priority: row.priority, description: row.description,
+        assignedTo: executorName, isContractor, contractorName: isContractor ? executorName : "",
+        performedBy: executorName, status: "In Progress", finalCost: 0,
+        reportedDate: row.created_at
+      });
+      await query(`ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS maintenance_request_id BIGINT`);
+      await query(`UPDATE work_orders SET maintenance_request_id=$1, operational_status='In Progress' WHERE id=$2`, [row.id, order.id]);
+      const updated = await query(`
+        UPDATE maintenance_requests
+        SET status='In Progress', work_order_id=$1, executor_type=$2, executor_name=$3, executor_email=$4, contractor_notified_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+        WHERE id=$5 RETURNING *
+      `, [order.id, executorType, executorName, executorEmail || null, row.id]);
+      const updatedRow=updated.rows[0];
+      const email=await notifyAssignment(updatedRow).catch(e=>({sent:false,reason:e.message}));
+      res.json({success:true,request:updatedRow,workOrder:order,email});
+    } catch(e){res.status(400).json({success:false,error:e.message});}
+  });
+
+  app.post("/api/maintenance-requests/:id/work-completed", async (req,res) => {
+    try {
+      await ensureSchema();
+      const token=clean(req.body?.token);
+      const row=await getRequest(req.params.id);
+      if(!row || !token || token!==row.completion_token) return res.status(403).json({success:false,error:"Invalid completion link"});
+      if(!row.work_order_id) return res.status(400).json({success:false,error:"Work Order is not assigned"});
+      await updateWorkOrder(row.work_order_id,{status:"Awaiting Confirmation",completedDate:new Date()});
+      const updated=await query(`UPDATE maintenance_requests SET status='Awaiting Confirmation', completed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING *`,[row.id]);
+      const updatedRow=updated.rows[0];
+      const email=await notifyRequesterReady(updatedRow).catch(e=>({sent:false,reason:e.message}));
+      res.json({success:true,request:updatedRow,email});
+    } catch(e){res.status(400).json({success:false,error:e.message});}
+  });
+
+  app.post("/api/maintenance-requests/:id/confirm", async (req,res) => {
+    try {
+      await ensureSchema();
+      const row=await getRequest(req.params.id);
+      const token=clean(req.body?.token);
+      const answer=clean(req.body?.answer).toLowerCase();
+      if(!row || !token || token!==row.confirmation_token) return res.status(403).json({success:false,error:"Invalid confirmation link"});
+      if(!["yes","no"].includes(answer)) return res.status(400).json({success:false,error:"Answer must be yes or no"});
+      const status=answer==="yes" ? "Operationally Completed" : "Reopened";
+      await query(`UPDATE maintenance_requests SET status=$1, requester_confirmed_at=CURRENT_TIMESTAMP, requester_confirmation=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3`,[status,answer,row.id]);
+      if(row.work_order_id){
+        await updateWorkOrder(row.work_order_id,{status: answer==="yes" ? "Operationally Completed" : "In Progress"});
+        await query(`UPDATE work_orders SET operational_status=$1 WHERE id=$2`,[answer==="yes" ? "Completed" : "In Progress",row.work_order_id]);
+      }
+      if(answer==="no") await sendEmail({to:[OWNER_EMAIL],cc:CC_EMAILS,subject:`BUILDING MAINTENANCE — ${row.request_no} NOT FIXED`,html:`<h2>❌ Maintenance needs more work</h2><p><b>${row.request_no}</b> was not confirmed by the requester.</p><p>${row.description}</p>`}).catch(()=>{});
+      res.json({success:true,status});
+    } catch(e){res.status(400).json({success:false,error:e.message});}
+  });
+
+  app.get("/api/maintenance-requests/public/:token", async (req,res) => {
+    try {
+      await ensureSchema();
+      const r=await query(`SELECT request_no,site,description,status,requester_name FROM maintenance_requests WHERE completion_token=$1 OR confirmation_token=$1`,[clean(req.params.token)]);
+      if(!r.rows[0]) return res.status(404).json({success:false,error:"Link expired or invalid"});
+      res.json({success:true,request:r.rows[0]});
+    } catch(e){res.status(500).json({success:false,error:e.message});}
+  });
+
+  app.post("/api/maintenance-requests/public/:token/action", async (req,res) => {
+    const rowRes=await query(`SELECT id FROM maintenance_requests WHERE completion_token=$1 OR confirmation_token=$1`,[clean(req.params.token)]);
+    if(!rowRes.rows[0]) return res.status(404).json({success:false,error:"Invalid link"});
+    const id=rowRes.rows[0].id;
+    if(clean(req.body?.action)==="work_completed") {
+      req.params.id=id; req.body.token=clean(req.params.token);
+      return app._router.handle(req,res);
+    }
+    return res.status(400).json({success:false,error:"Use the request action endpoint."});
+  });
+}

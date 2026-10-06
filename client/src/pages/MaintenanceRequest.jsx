@@ -15,7 +15,7 @@ export default function MaintenanceRequest({user,access={}}){
     setMessage('');setError('');
     if(!r.executor_email)return setError('Executor email is not available.');
 
-    const base=window.location.origin;
+    const base='https://fleet-erp-kn0c.onrender.com';
     const acknowledgeUrl=base+'/api/maintenance-requests/public/'+r.acknowledgement_token+'/acknowledge';
     const completeUrl=base+'/api/maintenance-requests/public/'+r.completion_token+'/work-completed';
     const subject='Building Maintenance Work Assignment - '+r.request_no+' - '+(r.site||'');
@@ -34,12 +34,14 @@ export default function MaintenanceRequest({user,access={}}){
       'STEP 1 - ACKNOWLEDGE RECEIPT / الخطوة 1 - تأكيد استلام المهمة',
       'Please click the link below to confirm that you have received this work assignment.',
       'يرجى الضغط على الرابط أدناه لتأكيد استلام المهمة.',
-      'Acknowledge Receipt: '+acknowledgeUrl,
+      'Acknowledge Receipt',
+      acknowledgeUrl,
       '',
       'STEP 2 - WORK COMPLETED / الخطوة 2 - إكمال العمل',
       'After completing the repair, click the link below to notify Fleet / Building Maintenance.',
       'بعد إكمال الإصلاح، اضغط على الرابط أدناه لإبلاغ إدارة الأسطول / صيانة المباني.',
-      'Work Completed: '+completeUrl,
+      'Work Completed',
+      completeUrl,
       '',
       'IMPORTANT / مهم',
       'These links update the maintenance workflow automatically.',

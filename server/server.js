@@ -14,6 +14,7 @@ import { mountV2 } from "./v2/index.js";
 import { getKmDailyNotifications, getDailyKmReport, getDriverDailyKmStatus } from "./kmDailyNotifications.js";
 import { updateLastOilChangePG } from "./vehicles-pg.js";
 import { mountPdfWorkOrderImport } from "./pdfWorkOrderImport.js";
+import { mountPdfProjectImport } from "./pdfProjectImport.js";
 import { mountTireRoutes } from "./tire-management.js";
 import { toWaMeNumber, toWaMeInternational } from "./phone.js";
 import { syncBuildingFromVelaOnce } from "./vela-project-sync.mjs";
@@ -108,6 +109,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 mountPdfWorkOrderImport(app);
+mountPdfProjectImport(app);
 async function syncBuildingProjectAmountsOnce() {
   if (String(process.env.SYNC_BUILDING_PROJECT_AMOUNTS || '').toLowerCase() !== 'true') return;
   try {

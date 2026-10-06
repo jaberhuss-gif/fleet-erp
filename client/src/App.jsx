@@ -27,7 +27,6 @@ const TAB_MODULES = {
   'support-service': ['support', 'building', 'projects', 'warehouse', 'purchase_requests'],
   operations: ['building'],
   warehouse: ['warehouse', 'purchase_requests'],
-  'building-maintenance': ['building'],
   fleet: ['fleet'],
   troubleshooter: ['troubleshooter'],
   'fleet-tickets': ['fleet_tickets'],
@@ -149,7 +148,7 @@ export default function App() {
   };
 
   const allowedTabs = useMemo(() => {
-    const allTabs = ['gm', 'support-service', 'operations', 'warehouse', 'building-maintenance', 'fleet', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
+    const allTabs = ['gm', 'support-service', 'operations', 'warehouse', 'fleet', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
     const visible = allTabs.filter(canViewTab);
     if (user?.role === 'Owner') {
       return [...visible, 'drivers', 'users', 'audit', 'backup'];
@@ -256,13 +255,12 @@ export default function App() {
 
           </div>
 
-          {['operations','building-maintenance'].some(t => allowedTabs.includes(t)) && (
+          {allowedTabs.includes('operations') && (
             <div className="erp-nav-group">
-              {['operations','building-maintenance'].filter(t => allowedTabs.includes(t)).map(t => (
-                <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
-                  {TAB_LABELS[t]}
-                </button>
-              ))}
+              <div className="erp-nav-heading">Operations</div>
+              <button className={tab === 'operations' ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange('operations')}>
+                🏢 Operations
+              </button>
             </div>
           )}
 

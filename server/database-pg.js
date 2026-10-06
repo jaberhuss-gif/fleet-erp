@@ -2460,11 +2460,11 @@ export async function closeProject(id, data = {}) {
   if (!isContractor && !performedBy) throw new Error("Employee / executor name is required");
   const finalCost = pgNum(data.finalCost ?? data.final_cost);
   const result = await query(`
-    UPDATE projects SET status='Completed', spent=$1, final_cost=$1,
-      is_contractor=$2, contractor_name=$3, performed_by=$4,
-      completed_date=CURRENT_DATE, closing_notes=$5, updated_at=CURRENT_TIMESTAMP
-    WHERE id=$6 RETURNING *
-  `, [finalCost,isContractor,contractorName,performedBy,pgStr(data.closingNotes ?? data.closing_notes),id]);
+    UPDATE projects SET status='Completed', spent=$1::numeric, final_cost=$2::numeric,
+      is_contractor=$3::integer, contractor_name=$4::text, performed_by=$5::text,
+      completed_date=CURRENT_DATE, closing_notes=$6::text, updated_at=CURRENT_TIMESTAMP
+    WHERE id=$7::bigint RETURNING *
+  `, [finalCost,finalCost,isContractor,contractorName,performedBy,pgStr(data.closingNotes ?? data.closing_notes),id]);
   return result.rows[0];
 }
 

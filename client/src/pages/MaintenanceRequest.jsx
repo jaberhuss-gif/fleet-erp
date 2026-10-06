@@ -54,7 +54,7 @@ export default function MaintenanceRequest({user,access={}}){
       'Fleet / Building Maintenance'
     ];
     const body=lines.join('\n');
-    const cc=(r.cc_emails||[]).filter(Boolean).join(';');
+    const cc=(Array.isArray(r.cc_emails)?r.cc_emails:[r.cc_emails]).filter(Boolean).join(';');
     const params=[
       cc ? 'cc='+encodeURIComponent(cc) : '',
       'subject='+encodeURIComponent(subject),

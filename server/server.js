@@ -1467,6 +1467,9 @@ app.post("/api/periodic-maintenance/whatsapp-confirmation", async (req, res) => 
 
 app.get("/inspection-confirm/:token", async (req, res) => {
   try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
     const token = String(req.params.token || "").trim();
     const result = await pgQuery(
       `SELECT pm.id, pm.status, pm.completed_date, v.plate_number, v.plate_code, v.driver, pm.type
@@ -1484,7 +1487,7 @@ app.get("/inspection-confirm/:token", async (req, res) => {
     if (String(row.status).toLowerCase() === "completed") {
       return res.send("<!doctype html><html><body style='font-family:Arial;padding:30px;text-align:center'><h2>Inspection Already Completed</h2><p>Vehicle <strong>" + safeVehicle + "</strong> is already recorded as completed.</p><p>Completed date: " + (row.completed_date || "-") + "</p></body></html>");
     }
-    res.send("<!doctype html><html><body style='font-family:Arial;max-width:620px;margin:50px auto;padding:24px;text-align:center'>" +
+    res.send("<!doctype html><html><head><meta name='robots' content='noindex,nofollow'><meta http-equiv='Cache-Control' content='no-store'><meta http-equiv='Pragma' content='no-cache'></head><body style='font-family:Arial;max-width:620px;margin:50px auto;padding:24px;text-align:center'>" +
       "<h2>Annual Vehicle Inspection</h2>" +
       "<p>Vehicle <strong>" + safeVehicle + "</strong></p>" +
       "<p>Hello " + safeDriver + ",</p>" +
@@ -1492,14 +1495,24 @@ app.get("/inspection-confirm/:token", async (req, res) => {
       "<div style='display:flex;gap:12px;justify-content:center;flex-wrap:wrap'>" +
       "<form method='POST' action='/inspection-confirm/" + token + "?decision=yes'><button type='submit' style='padding:14px 28px;background:#16a34a;color:white;border:0;border-radius:8px;font-size:16px;cursor:pointer'>YES — Inspection Completed</button></form>" +
       "<form method='POST' action='/inspection-confirm/" + token + "?decision=no'><button type='submit' style='padding:14px 28px;background:#dc2626;color:white;border:0;border-radius:8px;font-size:16px;cursor:pointer'>NO — Not Completed</button></form>" +
-      "</div></body></html>");
+      "</div>" +
+      "<script>(function(){window.addEventListener('pageshow',function(e){if(e.persisted){fetch(window.location.href,{cache:'no-store',credentials:'same-origin'}).then(function(r){if(r.status===404)window.location.replace('/inspection-confirm-invalid');});}});})();</script>" +
+      "</body></html>");
   } catch (e) {
     res.status(500).send("<h2>Unable to load inspection confirmation.</h2>");
   }
 });
 
+app.get("/inspection-confirm-invalid", (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.status(410).send("<!doctype html><html><body style='font-family:Arial;max-width:620px;margin:50px auto;padding:24px;text-align:center'><h2>Inspection Link Expired</h2><p>This WhatsApp inspection confirmation link has already been used.</p><p>Please use the latest WhatsApp message from Fleet Management.</p></body></html>");
+});
+
 app.post("/inspection-confirm/:token", async (req, res) => {
   try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
     const token = String(req.params.token || "").trim();
     const decision = String(req.query?.decision || "yes").trim().toLowerCase();
     const result = await pgQuery(
@@ -1518,10 +1531,12 @@ app.post("/inspection-confirm/:token", async (req, res) => {
     if (decision === "no") {
       await pgQuery(
         `UPDATE periodic_maintenance
-         SET whatsapp_confirmed_at = NULL,
+         SET whatsapp_confirmation_token = NULL,
+             whatsapp_confirmed_at = NULL,
              whatsapp_confirmation_source = 'WhatsApp - NO'
-         WHERE id = $1`,
-        [row.id]
+         WHERE id = $1
+           AND whatsapp_confirmation_token = $2`,
+        [row.id, token]
       );
       return res.send("<!doctype html><html><body style='font-family:Arial;max-width:620px;margin:50px auto;padding:24px;text-align:center'>" +
         "<h2 style='color:#dc2626'>NO — Inspection Not Completed</h2>" +
@@ -1537,10 +1552,12 @@ app.post("/inspection-confirm/:token", async (req, res) => {
     });
     await pgQuery(
       `UPDATE periodic_maintenance
-       SET whatsapp_confirmed_at = NOW(),
+       SET whatsapp_confirmation_token = NULL,
+           whatsapp_confirmed_at = NOW(),
            whatsapp_confirmation_source = 'WhatsApp - YES'
-       WHERE id = $1`,
-      [row.id]
+       WHERE id = $1
+         AND whatsapp_confirmation_token = $2`,
+      [row.id, token]
     );
 
     res.send("<!doctype html><html><body style='font-family:Arial;max-width:620px;margin:50px auto;padding:24px;text-align:center'><h2 style='color:#16a34a'>✓ Inspection Completed</h2><p>The inspection has been recorded in Fleet ERP.</p><p>Date: " + new Date().toISOString().slice(0,10) + "</p></body></html>");

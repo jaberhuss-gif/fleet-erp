@@ -202,14 +202,14 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
   return (
     <div className={entryOnly ? "panel building-entry-only" : "panel"}>
       <style>{`
-        .building-entry-only > *:not(.building-entry-form):not(.building-monthly-table) { display: none !important; }
+         .building-entry-only > *:not(.building-entry-form):not(.building-monthly-table):not(.building-pdf-import-toolbar) { display: none !important; }
         .building-entry-only > .building-entry-form,
-        .building-entry-only > .building-monthly-table { display: block !important; }
+         .building-entry-only > .building-monthly-table, .building-entry-only > .building-pdf-import-toolbar { display: block !important; }
       `}</style>
       <div style={{ background: 'linear-gradient(135deg, #7c3aed, #a78bfa)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
           <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Projects</h2>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+        <div className="building-pdf-import-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px', padding:'10px 0' }}>
         
         <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "projects", [{key:"project_no",label:"Project #"},{key:"name",label:"Name"},{key:"site",label:"Site"},{key:"project_type",label:"Type"},{key:"manager",label:"Manager"},{key:"budget",label:"Budget"},{key:"spent",label:"Spent"},{key:"status",label:"Status"}])}>Export CSV</button>{canWork && <><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
           {showForm ? 'Cancel' : '+ New Project'}

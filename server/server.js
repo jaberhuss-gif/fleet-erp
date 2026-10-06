@@ -16,6 +16,7 @@ import { updateLastOilChangePG } from "./vehicles-pg.js";
 import { mountPdfWorkOrderImport } from "./pdfWorkOrderImport.js";
 import { mountTireRoutes } from "./tire-management.js";
 import { toWaMeNumber, toWaMeInternational } from "./phone.js";
+import { syncBuildingFromVelaOnce } from "./vela-project-sync.mjs";
 
 const ANNUAL_INSPECTION_EMAIL_FROM = 'Hussein.Anwar@iemaadex.com';
 const ANNUAL_INSPECTION_CC_EMAILS = 'Mohamed.Hassan@iemaadex.com, Mohammed.Al-Marhabi@iemaadex.com';
@@ -2185,6 +2186,12 @@ try {
   await db.ensureBuildingSchema();
 } catch (e) {
   console.error("[Schema] building schema check failed:", e.message);
+}
+
+try {
+  await syncBuildingFromVelaOnce();
+} catch (e) {
+  console.error("[VelaBuildingSync] startup sync failed:", e.message);
 }
 
 app.use(express.static(path.join(__dirname, '../client/dist')));

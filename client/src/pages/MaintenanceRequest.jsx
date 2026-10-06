@@ -16,14 +16,13 @@ export default function MaintenanceRequest({user,access={}}){
     if(!r.executor_email)return setError('Executor email is not available.');
 
     const base='https://fleet-erp-kn0c.onrender.com';
-    const acknowledgeUrl=base+'/api/maintenance-requests/public/'+r.acknowledgement_token+'/acknowledge';
-    const completeUrl=base+'/api/maintenance-requests/public/'+r.completion_token+'/work-completed';
+    const workflowUrl=base+'/api/maintenance-requests/public/workflow/'+r.acknowledgement_token;
     const subject='Building Maintenance Work Assignment - '+r.request_no+' - '+(r.site||'');
     const lines=[
       'Dear '+(r.executor_name||'Executor')+',',
       '',
       'BUILDING MAINTENANCE WORK ASSIGNMENT',
-      'Please review the maintenance assignment below and follow the required steps.',
+      'Please open the work assignment link below and follow the steps shown.',
       '',
       'REQUEST DETAILS / تفاصيل الطلب',
       '- Request No. / رقم الطلب: '+(r.request_no||'-'),
@@ -31,19 +30,15 @@ export default function MaintenanceRequest({user,access={}}){
       '- Problem / المشكلة: '+(r.description||'-'),
       '- Assigned To / تم التكليف إلى: '+(r.executor_name||'-'),
       '',
-      'STEP 1 - ACKNOWLEDGE RECEIPT / الخطوة 1 - تأكيد استلام المهمة',
-      'Please click the link below to confirm that you have received this work assignment.',
-      'يرجى الضغط على الرابط أدناه لتأكيد استلام المهمة.',
-      acknowledgeUrl,
+      'WORK ASSIGNMENT LINK / رابط مهمة الصيانة',
+      'Open this link. The page will show the correct YES button for each step.',
+      'افتح الرابط. الصفحة ستعرض زر YES الصحيح لكل خطوة.',
+      workflowUrl,
       '',
-      'STEP 2 - WORK COMPLETED / الخطوة 2 - إكمال العمل',
-      'After completing the repair, click the link below to notify Fleet / Building Maintenance.',
-      'بعد إكمال الإصلاح، اضغط على الرابط أدناه لإبلاغ إدارة الأسطول / صيانة المباني.',
-      completeUrl,
-      '',
-      'IMPORTANT / مهم',
-      'These links update the maintenance workflow automatically.',
-      'هذه الروابط تقوم بتحديث دورة طلب الصيانة تلقائياً.',
+      'STEP 1: Acknowledge Receipt',
+      'STEP 2: Work Completed',
+      'The ERP records each YES action with the date and time.',
+      'يقوم النظام بتسجيل كل ضغطة YES مع التاريخ والوقت.',
       '',
       'Please review this email and click Send.',
       'يرجى مراجعة الإيميل ثم الضغط على Send.',

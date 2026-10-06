@@ -35,16 +35,27 @@ export default function ReportIssue({ canWork = false, user = null }) {
     try {
       const info=await getMaintenanceWhatsAppInfo(ticket.id);
       const phone=String(info.driverPhone||'').replace(/\D/g,''); const url=String(info.confirmationUrl||'').trim();
-      const message=[
-        'Hello '+(info.driverName||'Driver')+',','',
-        'Vehicle '+info.vehiclePlate+' — Maintenance Request: '+info.issueType,'',
-        'Maintenance request: '+info.issueType,
-        'طلب الصيانة: '+info.issueType,'',
-        'Has this maintenance issue been repaired?','هل تم إصلاح طلب الصيانة هذا؟','',
-        'Please open the link below and select YES if the repair is complete.','يرجى فتح الرابط أدناه واختيار YES إذا تم الإصلاح.',
-        'If the repair is NOT complete, select NO. The ticket will remain open.','إذا لم يتم الإصلاح، اختر NO وسيبقى الطلب مفتوحاً.','',
-        'Maintenance confirmation link / رابط تأكيد الإصلاح:',url,'','Fleet Management'
-      ].join('\n'); if(!phone||!url) throw new Error('Driver phone or confirmation link is not available.');
+      const message = [
+        'Hello ' + (info.driverName || 'Driver') + ',',
+        '',
+        'Vehicle ' + info.vehiclePlate + ' — Maintenance Request: ' + info.issueType,
+        'Maintenance request: ' + info.issueType,
+        'طلب الصيانة: ' + info.issueType,
+        '',
+        'Has this maintenance issue been repaired?',
+        'هل تم إصلاح طلب الصيانة هذا؟',
+        '',
+        'Please open the link below and select YES if the repair is complete.',
+        'يرجى فتح الرابط أدناه واختيار YES إذا تم الإصلاح.',
+        'If the repair is NOT complete, select NO. The ticket will remain open.',
+        'إذا لم يتم الإصلاح، اختر NO وسيبقى الطلب مفتوحاً.',
+        '',
+        'Maintenance confirmation link / رابط تأكيد الإصلاح:',
+        url,
+        '',
+        'Fleet Management'
+      ].join('\n');
+      if (!phone || !url) throw new Error('Driver phone or confirmation link is not available.');
       window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(message),'_blank'); await loadTickets();
     } catch(e){ setError(e.response?.data?.error||e.message); }
   };

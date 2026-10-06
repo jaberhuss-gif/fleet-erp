@@ -6,6 +6,9 @@ export default function FinancialReport() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [closeModal, setCloseModal] = useState(null);
+  const [closeForm, setCloseForm] = useState({ finalAmount:'', performedBy:'Employee', performedName:'', closingNotes:'' });
+  const [savingClose, setSavingClose] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -16,6 +19,47 @@ export default function FinancialReport() {
       setData(res.data);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
+  };
+
+  const openClose = (kind, row, edit=false) => {
+    setCloseModal({ kind, row, edit });
+    setCloseForm({
+      finalAmount: row.finalAmount ?? row.amount ?? row.totalCost ?? '',
+      performedBy: row.performedBy === 'Contractor' ? 'Contractor' : 'Employee',
+      performedName: row.performedName || '',
+      closingNotes: row.closingNotes || ''
+    });
+  };
+
+  const submitClose = async () => {
+    if (!closeModal) return;
+    const { kind, row } = closeModal;
+    const amount = Number(closeForm.finalAmount);
+    if (!Number.isFinite(amount) || amount < 0) return setError('Final Amount must be a valid non-negative number.');
+    if (!['Employee','Contractor'].includes(closeForm.performedBy)) return setError('Please select Employee or Contractor.');
+    if (closeForm.performedBy === 'Contractor' && !closeForm.performedName.trim()) return setError('Contractor name is required.');
+
+    const endpoints = {
+      workOrder: `/work-orders/${row.id}/close`,
+      project: `/projects/${row.id}/close`,
+      purchase: `/purchases/${row.id}/close`
+    };
+    try {
+      setSavingClose(true);
+      setError('');
+      await api.put(endpoints[kind], {
+        finalAmount: amount,
+        performedBy: closeForm.performedBy,
+        performedName: closeForm.performedName.trim(),
+        closingNotes: closeForm.closingNotes.trim()
+      });
+      setCloseModal(null);
+      await load();
+    } catch (e) {
+      setError(e.response?.data?.error || e.message || 'Unable to save.');
+    } finally {
+      setSavingClose(false);
+    }
   };
 
   if (loading) return <div className="loading">Loading financial report...</div>;
@@ -350,6 +394,84 @@ export default function FinancialReport() {
         </div>
       )}
 
+      {/* FINANCIAL DETAIL WORKFLOW */}
+      <div className="panel" style={{ borderTop:'5px solid #0f766e', marginBottom:'20px' }}>
+        <h2 style={{ color:'#0f766e', marginTop:0 }}>📋 Financial Detail — Work Orders</h2>
+        <div style={{ overflowX:'auto' }}>
+          <table>
+            <thead><tr style={{ background:'#ecfeff' }}>
+              <th>WO No.</th><th>Site</th><th>Description</th><th>Status</th><th>Final Amount (SAR)</th>
+              <th>Performed By</th><th>Contractor / Employee</th><th>Closed At</th><th>Actions</th>
+            </tr></thead>
+            <tbody>
+              {(data.details?.workOrders || []).map(w => (
+                <tr key={'fw-'+w.id}>
+                  <td style={{fontWeight:'bold'}}>{w.woNo || w.id}</td>
+                  <td>{w.site || '-'}</td><td>{w.description || w.category || '-'}</td>
+                  <td><span className="status-badge" style={{background:String(w.status).toLowerCase()==='closed'?'#dcfce7':'#fef3c7',color:String(w.status).toLowerCase()==='closed'?'#166534':'#92400e'}}>{w.status}</span></td>
+                  <td style={{fontWeight:'bold'}}>{fmt(w.finalAmount || w.amount || 0)}</td>
+                  <td>{w.performedBy || '-'}</td><td>{w.performedName || '-'}</td>
+                  <td>{w.closedAt ? String(w.closedAt).slice(0,16).replace('T',' ') : '-'}</td>
+                  <td style={{whiteSpace:'nowrap'}}>
+                    <button className="btn btn-primary" onClick={()=>openClose('workOrder',w,!String(w.status).toLowerCase().includes('closed'))}>
+                      {String(w.status).toLowerCase()==='closed' ? '✏️ Edit' : '🔒 Close'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="panel" style={{ borderTop:'5px solid #2563eb', marginBottom:'20px' }}>
+        <h2 style={{ color:'#2563eb', marginTop:0 }}>📁 Financial Detail — Projects</h2>
+        <div style={{ overflowX:'auto' }}>
+          <table>
+            <thead><tr style={{ background:'#eff6ff' }}>
+              <th>Project</th><th>Name</th><th>Site</th><th>Type</th><th>Status</th><th>Final Amount (SAR)</th>
+              <th>Performed By</th><th>Contractor / Employee</th><th>Closed At</th><th>Actions</th>
+            </tr></thead>
+            <tbody>
+              {(data.details?.projects || []).map(p => (
+                <tr key={'fp-'+p.id}>
+                  <td style={{fontWeight:'bold'}}>{p.projectNo || p.id}</td><td>{p.name || '-'}</td><td>{p.site || '-'}</td><td>{p.projectType || '-'}</td>
+                  <td><span className="status-badge" style={{background:String(p.status).toLowerCase()==='closed'?'#dcfce7':'#fef3c7',color:String(p.status).toLowerCase()==='closed'?'#166534':'#92400e'}}>{p.status}</span></td>
+                  <td style={{fontWeight:'bold'}}>{fmt(p.finalAmount || p.amount || p.spent || 0)}</td>
+                  <td>{p.performedBy || '-'}</td><td>{p.performedName || p.contractor || '-'}</td>
+                  <td>{p.closedAt ? String(p.closedAt).slice(0,16).replace('T',' ') : '-'}</td>
+                  <td><button className="btn btn-primary" onClick={()=>openClose('project',p,String(p.status).toLowerCase()!=='closed')}>{String(p.status).toLowerCase()==='closed'?'✏️ Edit':'🔒 Close'}</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="panel" style={{ borderTop:'5px solid #ea580c', marginBottom:'20px' }}>
+        <h2 style={{ color:'#ea580c', marginTop:0 }}>🛒 Financial Detail — Purchases</h2>
+        <div style={{ overflowX:'auto' }}>
+          <table>
+            <thead><tr style={{ background:'#fff7ed' }}>
+              <th>Purchase No.</th><th>Date</th><th>Item</th><th>Reference</th><th>Supplier</th><th>Purchased By</th>
+              <th>Original Total</th><th>Final Amount</th><th>Status</th><th>Closed By</th><th>Actions</th>
+            </tr></thead>
+            <tbody>
+              {(data.details?.purchases || []).map(p => (
+                <tr key={'fpur-'+p.id}>
+                  <td style={{fontWeight:'bold'}}>{p.purchaseNo || p.id}</td><td>{p.purchaseDate || '-'}</td><td>{p.itemName || '-'}</td>
+                  <td>{p.referenceNo || p.projectNo || '-'}</td><td>{p.supplier || '-'}</td><td>{p.purchasedBy || '-'}</td>
+                  <td>{fmt(p.totalCost || 0)}</td><td style={{fontWeight:'bold'}}>{fmt(p.finalAmount || p.amount || p.totalCost || 0)}</td>
+                  <td><span className="status-badge" style={{background:p.status==='Closed'?'#dcfce7':'#fef3c7',color:p.status==='Closed'?'#166534':'#92400e'}}>{p.status}</span></td>
+                  <td>{p.performedName || p.performedBy || '-'}</td>
+                  <td><button className="btn btn-primary" onClick={()=>openClose('purchase',p,p.status==='Closed')}>{p.status==='Closed'?'✏️ Edit':'🔒 Close'}</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* GRAND TOTAL */}
       <div className="panel" style={{ borderTop: '5px solid #8b5cf6', background: 'linear-gradient(135deg, #faf5ff 0%, #ffffff 100%)' }}>
         <h2 style={{ color: '#8b5cf6', marginTop: 0 }}>💰 Grand Total — Everything Combined</h2>
@@ -400,6 +522,39 @@ export default function FinancialReport() {
           <div style={{ fontSize: '14px', color: '#16a34a', marginTop: '4px', fontWeight: 'bold' }}>Average {totalSavingsPct.toFixed(1)}% saved vs baseline</div>
         </div>
       </div>
+      {closeModal && (
+        <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999,padding:'20px'}}>
+          <div style={{background:'white',borderRadius:'12px',padding:'22px',width:'min(520px,100%)',boxShadow:'0 20px 50px rgba(0,0,0,.25)'}}>
+            <h3 style={{marginTop:0}}>{closeModal.edit ? '✏️ Edit Financial Closure' : '🔒 Close Financial Item'}</h3>
+            <p style={{fontSize:'13px',color:'#64748b'}}>Enter the final amount, then confirm who performed the work/purchase.</p>
+            <label style={{display:'block',marginTop:'12px',fontWeight:600}}>Final Amount (SAR)</label>
+            <input type="number" min="0" step="0.01" value={closeForm.finalAmount} onChange={e=>setCloseForm({...closeForm,finalAmount:e.target.value})} style={{width:'100%',padding:'10px',marginTop:'5px'}} />
+            <label style={{display:'block',marginTop:'12px',fontWeight:600}}>Performed By</label>
+            <select value={closeForm.performedBy} onChange={e=>setCloseForm({...closeForm,performedBy:e.target.value,performedName:e.target.value==='Employee'?'':closeForm.performedName})} style={{width:'100%',padding:'10px',marginTop:'5px'}}>
+              <option value="Employee">Our Employee</option>
+              <option value="Contractor">Contractor</option>
+            </select>
+            {closeForm.performedBy==='Contractor' && (
+              <>
+                <label style={{display:'block',marginTop:'12px',fontWeight:600}}>Contractor Name</label>
+                <input value={closeForm.performedName} onChange={e=>setCloseForm({...closeForm,performedName:e.target.value})} placeholder="Contractor name" style={{width:'100%',padding:'10px',marginTop:'5px'}} />
+              </>
+            )}
+            {closeForm.performedBy==='Employee' && (
+              <>
+                <label style={{display:'block',marginTop:'12px',fontWeight:600}}>Employee Name (optional)</label>
+                <input value={closeForm.performedName} onChange={e=>setCloseForm({...closeForm,performedName:e.target.value})} placeholder="Employee name" style={{width:'100%',padding:'10px',marginTop:'5px'}} />
+              </>
+            )}
+            <label style={{display:'block',marginTop:'12px',fontWeight:600}}>Closing Notes</label>
+            <textarea value={closeForm.closingNotes} onChange={e=>setCloseForm({...closeForm,closingNotes:e.target.value})} style={{width:'100%',minHeight:'70px',padding:'10px',marginTop:'5px'}} />
+            <div style={{display:'flex',justifyContent:'flex-end',gap:'8px',marginTop:'18px'}}>
+              <button className="btn" onClick={()=>setCloseModal(null)} disabled={savingClose}>Cancel</button>
+              <button className="btn btn-primary" onClick={submitClose} disabled={savingClose}>{savingClose?'Saving...':(closeModal.edit?'Save Changes':'Confirm Close')}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

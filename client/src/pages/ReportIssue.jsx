@@ -17,7 +17,18 @@ export default function ReportIssue({ canWork = false, user = null }) {
 
   useEffect(() => { loadData(); }, []);
   useEffect(() => { if (canWork) loadTickets(); }, [canWork]);
-  const loadTickets = async () => { setLoadingTickets(true); try { const res=await getMaintenanceTickets(); setTickets(res.tickets||[]); } catch(e){ setError(e.response?.data?.error||e.message); } finally { setLoadingTickets(false); } };
+  const loadTickets = async () => {
+    setLoadingTickets(true);
+    try {
+      const res = await getMaintenanceTickets();
+      // Only real maintenance requests with a note/description belong in this table.
+      setTickets((res.tickets || []).filter(t => String(t.description || '').trim()));
+    } catch(e) {
+      setError(e.response?.data?.error || e.message);
+    } finally {
+      setLoadingTickets(false);
+    }
+  };
   const sendRepairConfirmation = async (ticket) => {
     try {
       const info=await getMaintenanceWhatsAppInfo(ticket.id);
@@ -139,7 +150,7 @@ export default function ReportIssue({ canWork = false, user = null }) {
           </div>
         </form>
       </div>
-        {canWork && <div className="panel" style={{marginTop:20}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}><div><h2 style={{margin:0}}>Maintenance Requests</h2><p style={{margin:'4px 0 0',color:'#64748b'}}>Receive driver requests and confirm repair completion through WhatsApp.</p></div><button className="btn" onClick={loadTickets}>↻ Refresh</button></div>{loadingTickets?<div className="alert alert-info">Loading maintenance requests...</div>:tickets.length===0?<div className="alert alert-info">No maintenance requests found.</div>:<div style={{overflowX:'auto'}}><table className="data-table"><thead><tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Issue</th><th>Priority</th><th>Status</th><th>Opened</th><th>Actions</th></tr></thead><tbody>{tickets.map(t=><tr key={t.id}><td><strong>{t.plate||'—'}</strong></td><td>{t.site||'—'}</td><td>{t.driver||'—'}</td><td>{t.category||'Maintenance'}<div style={{fontSize:12,color:'#64748b',maxWidth:260}}>{t.description||''}</div></td><td>{t.priority||'Medium'}</td><td>{t.status}</td><td>{t.opened_at?String(t.opened_at).slice(0,10):'—'}</td><td>{t.status!=='Completed'?<button className="btn btn-success" onClick={()=>sendRepairConfirmation(t)}>📱 WhatsApp</button>:<span>✓ Confirmed</span>}</td></tr>)}</tbody></table></div>}</div>}
+        {canWork && <div className="panel" style={{marginTop:20}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}><div><h2 style={{margin:0}}>Maintenance Requests</h2><p style={{margin:'4px 0 0',color:'#64748b'}}>Receive driver requests and confirm repair completion through WhatsApp.</p></div><button className="btn" onClick={loadTickets}>↻ Refresh</button></div>{loadingTickets?<div className="alert alert-info">Loading maintenance requests...</div>:tickets.length===0?<div className="alert alert-info">No maintenance requests found.</div>:<div style={{overflowX:'auto'}}><table className="data-table"><thead><tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Issue</th><th>Priority</th><th>Status</th><th>Opened</th><th>Actions</th></tr></thead><tbody>{tickets.map(t=><tr key={t.id}><td><strong>{t.plate||'—'}</strong></td><td>{t.site||'—'}</td><td>{t.driver||'—'}</td><td>{t.category||'Maintenance'}<div style={{fontSize:12,color:'#64748b',maxWidth:260}}>{t.description||''}</div></td><td>{t.priority||'Medium'}</td><td>{t.status}</td><td>{t.opened_at?String(t.opened_at).slice(0,10):'—'}</td><td>{t.status!=='Completed'?<button type="button" className="btn" style={{whiteSpace:'nowrap'}} onClick={()=>sendRepairConfirmation(t)}>📱 WhatsApp</button>:<span>✓ Confirmed</span>}</td></tr>)}</tbody></table></div>}</div>}
     </div>
   );
 }

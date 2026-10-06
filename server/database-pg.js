@@ -2411,8 +2411,14 @@ export async function updateProject(id, data = {}) {
       month = $13,
       year = $14,
       notes = $15,
+      final_cost = $16,
+      is_contractor = $17,
+      contractor_name = $18,
+      performed_by = $19,
+      completed_date = $20,
+      closing_notes = $21,
       updated_at = CURRENT_TIMESTAMP
-    WHERE id = $16
+    WHERE id = $22
     RETURNING *
   `, [
     data.projectNo ?? data.project_no ?? current.project_no,
@@ -2432,6 +2438,12 @@ export async function updateProject(id, data = {}) {
     month,
     year,
     data.notes ?? current.notes,
+    data.finalCost ?? data.final_cost ?? current.final_cost,
+    data.isContractor === undefined ? current.is_contractor : (data.isContractor ? 1 : 0),
+    data.contractorName ?? data.contractor_name ?? current.contractor_name,
+    data.performedBy ?? data.performed_by ?? current.performed_by,
+    data.completedDate ?? data.completed_date ?? current.completed_date,
+    data.closingNotes ?? data.closing_notes ?? current.closing_notes,
     id
   ]);
 

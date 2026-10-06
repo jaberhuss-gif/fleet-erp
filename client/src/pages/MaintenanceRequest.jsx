@@ -34,13 +34,11 @@ export default function MaintenanceRequest({user,access={}}){
       'STEP 1 - ACKNOWLEDGE RECEIPT / الخطوة 1 - تأكيد استلام المهمة',
       'Please click the link below to confirm that you have received this work assignment.',
       'يرجى الضغط على الرابط أدناه لتأكيد استلام المهمة.',
-      'Acknowledge Receipt',
       acknowledgeUrl,
       '',
       'STEP 2 - WORK COMPLETED / الخطوة 2 - إكمال العمل',
       'After completing the repair, click the link below to notify Fleet / Building Maintenance.',
       'بعد إكمال الإصلاح، اضغط على الرابط أدناه لإبلاغ إدارة الأسطول / صيانة المباني.',
-      'Work Completed',
       completeUrl,
       '',
       'IMPORTANT / مهم',
@@ -53,17 +51,22 @@ export default function MaintenanceRequest({user,access={}}){
       'Thank you,',
       'Fleet / Building Maintenance'
     ];
-    const body=lines.join('\r\n');
-    const cc=(r.cc_emails||[]).filter(Boolean).join(';');
+    // Outlook Web compose deeplink accepts plain text, not HTML. Keep each URL
+    // on its own line with a CRLF + trailing space so Outlook's auto-linker can
+    // recognize the URL as a clickable hyperlink.
+    const body=lines.join('\\r\\n')+'\\r\\n ';
+    const to=String(r.executor_email||'').split(',').map(x=>x.trim()).filter(Boolean).join(',');
+    const cc=String(r.cc_emails||'').split(',').map(x=>x.trim()).filter(Boolean).join(',');
     const params=[
+      'to='+encodeURIComponent(to),
       cc ? 'cc='+encodeURIComponent(cc) : '',
       'subject='+encodeURIComponent(subject),
       'body='+encodeURIComponent(body)
     ].filter(Boolean).join('&');
-    const emailUrl='mailto:'+encodeURIComponent(r.executor_email)+'?'+params;
+    const emailUrl='https://outlook.office.com/mail/deeplink/compose?'+params;
     const w=window.open(emailUrl,'_blank');
     if(!w)setError('Please allow pop-ups to open the Outlook email draft.');
-    else setMessage('📧 Outlook is opening with the email ready. Review it and click Send. / يتم الآن فتح Outlook والإيميل جاهز للمراجعة، ثم اضغط Send.');
+    else setMessage('📧 Outlook Web is opening with the email ready. The workflow URLs are placed as real URLs for Outlook to make clickable. Review it and click Send. / يتم الآن فتح Outlook والإيميل جاهز للمراجعة ثم اضغط Send.');
   };
   if(loading)return <div className="loading">Loading Support & Service...</div>;
   return <div className="form-container" style={{maxWidth:1200}}>

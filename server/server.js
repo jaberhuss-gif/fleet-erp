@@ -2190,7 +2190,7 @@ try {
 app.use(express.static(path.join(__dirname, '../client/dist')));
 app.get('*', async (req, res) => { res.sendFile(path.join(__dirname, '../client/dist/index.html')); });
 
-syncBuildingProjectAmountsOnce().finally(() => {\napp.listen(PORT, () => {
+app.listen(PORT, () => {
   console.log("");
   console.log("======================================");
   console.log("FLEET ERP SERVER");

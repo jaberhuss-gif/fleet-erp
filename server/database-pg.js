@@ -1614,11 +1614,11 @@ export async function listSites() {
   for (const [code, name, region] of canonicalSites) {
     await query(
       `INSERT INTO sites (code, name, region, status)
-       SELECT $1, $2, $3, 'Active'
+       SELECT $1::text, $2::text, $3::text, 'Active'
        WHERE NOT EXISTS (
          SELECT 1 FROM sites
-         WHERE lower(trim(name)) = lower(trim($2))
-            OR upper(trim(coalesce(code, ''))) = upper(trim($1))
+         WHERE lower(trim(name)) = lower(trim($2::text))
+            OR upper(trim(coalesce(code, ''))) = upper(trim($1::text))
        )`,
       [code, name, region]
     );

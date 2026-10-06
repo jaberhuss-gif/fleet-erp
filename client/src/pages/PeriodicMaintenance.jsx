@@ -893,9 +893,22 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
     return <span className="status-badge status-warning">Pending</span>;
   };
 
+  const reopenInspection = async (rec) => {
+    if (!canWork || !rec?.id) return;
+    if (!confirm('Reopen this annual inspection and return it to Not Inspected?')) return;
+    setError(''); setMessage('');
+    try {
+      await api.put('/periodic-maintenance/' + rec.id + '/reopen');
+      setMessage('Annual inspection reopened and returned to the Not Inspected list.');
+      await load();
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
+  };
+
   const renderControlTable = (kind) => {
     const isSix = kind === 'six';
-    const rows = isSix
+    const pendingRows = isSix
       ? vehicleSummary.filter(v => !v.sixDone)
       : vehicleSummary
           .filter(v => !v.annualDone && (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
@@ -911,70 +924,120 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
             const db = new Date(b.inspectionExpiry + 'T00:00:00Z').getTime();
             return da - db || String(a.plate).localeCompare(String(b.plate));
           });
+
+    const completedRows = isSix ? [] : records
+      .filter(r => r.type === 'inspection' && r.status === 'Completed' && r.completed_date)
+      .sort((a, b) => {
+        const da = new Date(a.completed_date).getTime();
+        const db = new Date(b.completed_date).getTime();
+        return db - da || Number(b.id || 0) - Number(a.id || 0);
+      });
+
     const title = isSix ? '6-Month Mechanical Inspection' : 'Annual Periodic Inspection — Due Within 30 Days';
     const description = isSix
       ? 'Mechanical 6-month inspection control. GREEN means inspection evidence is recorded; RED means no inspection evidence is recorded.'
-      : 'Only expired vehicles and vehicles expiring within the next 30 days are shown. Vehicles are sorted from nearest expiry to farthest expiry. Dates are maintained in Vehicle Master.';
+      : 'Pending section shows expired vehicles and vehicles expiring within the next 30 days. Completed inspections remain listed below with completion date and next due date.';
     return (
-      <div className="panel" style={{ marginBottom: 18, overflowX: 'auto' }}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:12}}>
-          <div>
-            <h2 style={{margin:0}}>{title}</h2>
-            <div style={{marginTop:5,color:'#64748b'}}>{description}</div>
+      <>
+        <div className="panel" style={{ marginBottom: 18, overflowX: 'auto' }}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:12}}>
+            <div>
+              <h2 style={{margin:0}}>{title}</h2>
+              <div style={{marginTop:5,color:'#64748b'}}>{description}</div>
+            </div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {!isSix && onOpenInspectionEmail && <button className="btn btn-success" onClick={onOpenInspectionEmail}>📧 Annual Inspection Email</button>}
+              <button className="btn btn-primary" onClick={() => printComplianceReport(isSix ? 'sixNotInspected' : 'annualNotInspected')}>🖨️ Print / Save PDF</button>
+            </div>
           </div>
-          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-            {!isSix && onOpenInspectionEmail && <button className="btn btn-success" onClick={onOpenInspectionEmail}>📧 Annual Inspection Email</button>}
-            <button className="btn btn-primary" onClick={() => printComplianceReport(isSix ? 'sixNotInspected' : 'annualNotInspected')}>🖨️ Print / Save PDF</button>
-          </div>
+          <table className="periodic-maintenance-screen-table">
+            <thead>
+              <tr>
+                <th>Vehicle</th><th>Location</th><th>Driver</th>
+                {isSix ? <><th>Inspection Date</th><th>Status</th><th>Technician</th><th>Notes</th></> :
+                  <><th>Inspection Expiry</th><th>Status</th><th>Last Completed</th><th>Notes</th></>}
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingRows.map(row => {
+                const rec = isSix ? row.six : row.annual;
+                const done = isSix ? row.sixDone : row.annualDone;
+                return (
+                  <tr key={(isSix ? 'six-' : 'annual-') + row.vehicle_id}>
+                    <td><strong>{row.plate}</strong></td>
+                    <td>{vehicleById[String(row.vehicle_id)]?.location || '-'}</td>
+                    <td>{row.driver || '-'}</td>
+                    {isSix ? (
+                      <>
+                        <td>{rec?.completed_date || (done ? rec?.scheduled_date : '-') || '-'}</td>
+                        <td><span className={done ? 'status-badge status-safe' : 'status-badge status-urgent'}>{done ? 'GREEN — Inspected' : 'RED — Not Inspected'}</span></td>
+                        <td>{rec?.technician || '-'}</td>
+                        <td style={{whiteSpace:'pre-wrap',minWidth:240}}>{rec?.notes || '-'}</td>
+                      </>
+                    ) : (
+                      <>
+                        <td><strong>{row.inspectionExpiry || '—'}</strong></td>
+                        <td><span className={done ? 'status-badge status-safe' : 'status-badge status-urgent'}>{done ? 'GREEN — Inspected' : 'RED — Not Inspected'}</span></td>
+                        <td>{rec?.completed_date || '-'}</td>
+                        <td style={{whiteSpace:'pre-wrap',minWidth:240}}>{rec?.notes || '-'}</td>
+                      </>
+                    )}
+                    <td>
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                        <button className="btn" style={{padding:'6px 10px',background:'#25D366',color:'#fff'}} onClick={() => reportWhatsApp(row, title, done)}>📱 WhatsApp</button>
+                        {canWork && (done
+                          ? <button className="btn btn-success" style={{padding:'6px 10px'}} disabled>✓ Inspected</button>
+                          : <button className="btn btn-danger" style={{padding:'6px 10px'}} onClick={() => closeComplianceReport(row, title, isSix ? '6_months_general' : 'inspection')}>Close Inspection</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!pendingRows.length && <tr><td colSpan={isSix ? 8 : 8} style={{textAlign:'center',padding:18}}>No pending inspections in this section.</td></tr>}
+            </tbody>
+          </table>
         </div>
-        <table className="periodic-maintenance-screen-table">
-          <thead>
-            <tr>
-              <th>Vehicle</th><th>Location</th><th>Driver</th>
-              {isSix ? <><th>Inspection Date</th><th>Status</th><th>Technician</th><th>Notes</th></> :
-                <><th>Inspection Expiry</th><th>Status</th><th>Last Completed</th><th>Notes</th></>}
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(row => {
-              const rec = isSix ? row.six : row.annual;
-              const done = isSix ? row.sixDone : row.annualDone;
-              return (
-                <tr key={(isSix ? 'six-' : 'annual-') + row.vehicle_id}>
-                  <td><strong>{row.plate}</strong></td>
-                  <td>{vehicleById[String(row.vehicle_id)]?.location || '-'}</td>
-                  <td>{row.driver || '-'}</td>
-                  {isSix ? (
-                    <>
-                      <td>{rec?.completed_date || (done ? rec?.scheduled_date : '-') || '-'}</td>
-                      <td><span className={done ? 'status-badge status-safe' : 'status-badge status-urgent'}>{done ? 'GREEN — Inspected' : 'RED — Not Inspected'}</span></td>
-                      <td>{rec?.technician || '-'}</td>
-                      <td style={{whiteSpace:'pre-wrap',minWidth:240}}>{rec?.notes || '-'}</td>
-                    </>
-                  ) : (
-                    <>
-                      <td><strong>{row.inspectionExpiry || '—'}</strong></td>
-                      <td><span className={done ? 'status-badge status-safe' : 'status-badge status-urgent'}>{done ? 'GREEN — Inspected' : 'RED — Not Inspected'}</span></td>
-                      <td>{rec?.completed_date || '-'}</td>
-                      <td style={{whiteSpace:'pre-wrap',minWidth:240}}>{rec?.notes || '-'}</td>
-                    </>
-                  )}
-                  <td>
-                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                      <button className="btn" style={{padding:'6px 10px',background:'#25D366',color:'#fff'}} onClick={() => reportWhatsApp(row, title, done)}>📱 WhatsApp</button>
-                      {canWork && (done
-                        ? <button className="btn btn-success" style={{padding:'6px 10px'}} onClick={() => handleEdit(rec)} disabled={!rec}>✓ Inspected</button>
-                        : <button className="btn btn-danger" style={{padding:'6px 10px'}} onClick={() => closeComplianceReport(row, title, isSix ? '6_months_general' : 'inspection')}>Close Inspection</button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+
+        {!isSix && (
+          <div className="panel" style={{ marginBottom: 18, overflowX: 'auto' }}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:12}}>
+              <div>
+                <h2 style={{margin:0}}>✓ Completed Annual Inspections ({completedRows.length})</h2>
+                <div style={{marginTop:5,color:'#64748b'}}>Completed inspections stay in the system. The completion date and next due date are shown here. Reopen returns the record to Not Inspected.</div>
+              </div>
+            </div>
+            <table className="periodic-maintenance-screen-table">
+              <thead>
+                <tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Completed Date</th><th>Next Due Date</th><th>Status</th><th>Technician</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                {completedRows.map(rec => {
+                  const v = vehicleById[String(rec.vehicle_id)] || {};
+                  const plate = rec.vehicle_plate || v.plate || v.plate_number || '-';
+                  const due = getInspectionExpiry(rec.vehicle_id);
+                  return (
+                    <tr key={'completed-annual-' + rec.id}>
+                      <td><strong>{plate}</strong></td>
+                      <td>{rec.vehicle_location || v.location || '-'}</td>
+                      <td>{rec.driver_name || v.driver || '-'}</td>
+                      <td>{String(rec.completed_date).slice(0,10)}</td>
+                      <td><strong>{due || '—'}</strong></td>
+                      <td><span className="status-badge status-safe">GREEN — Inspected</span></td>
+                      <td>{rec.technician || '-'}</td>
+                      <td>
+                        {canWork && <button className="btn btn-warning" style={{padding:'6px 10px'}} onClick={() => reopenInspection(rec)}>↩ Reopen / Edit</button>}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!completedRows.length && <tr><td colSpan="8" style={{textAlign:'center',padding:18}}>No completed annual inspections recorded yet.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </>
     );
   };
 

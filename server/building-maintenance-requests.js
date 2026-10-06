@@ -235,16 +235,9 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
         WHERE id=$5 RETURNING *
       `, [order.id, executorType, executorName, executorEmail || null, row.id]);
       const updatedRow=updated.rows[0];
-      let email;
-      try {
-        email = await notifyAssignment(updatedRow);
-        await query(`UPDATE maintenance_requests SET email_status='Sent', email_sent_at=CURRENT_TIMESTAMP, email_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=$1`, [row.id]);
-        updatedRow.email_status='Sent';
-      } catch (e) {
-        email = {sent:false, reason:e.message};
-        await query(`UPDATE maintenance_requests SET email_status='Failed', email_error=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`, [e.message, row.id]);
-        updatedRow.email_status='Failed'; updatedRow.email_error=e.message;
-      }
+      // Assignment creates the WO only. The Maintenance Manager sends the contractor email manually via Outlook.
+      // This keeps the approved workflow: Manager -> Contractor -> Acknowledge -> Work Completed -> Campus YES/NO -> Manager closes financially.
+      const email = {sent:false, manual:true, reason:"Ready to send manually via Outlook."};
       res.json({success:true,request:updatedRow,workOrder:order,email});
     } catch(e){res.status(400).json({success:false,error:e.message});}
   });

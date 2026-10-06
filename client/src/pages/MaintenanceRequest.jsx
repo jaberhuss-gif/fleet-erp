@@ -18,7 +18,7 @@ export default function MaintenanceRequest({user,access={}}){
         <div><div style={{fontSize:12,letterSpacing:1,opacity:.8}}>SUPPORT & SERVICE • BUILDING MAINTENANCE</div><h1 style={{margin:'6px 0'}}>🛠️ Request Maintenance / Building</h1><p style={{margin:0,opacity:.9}}>Report the problem. Fleet / Building Maintenance controls assignment, execution and final cost.</p></div><div style={{fontSize:48}}>🛠️</div>
       </div>
       <div className="cards-grid" style={{gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',marginTop:18}}>
-        {['Employee → Report','Fleet → Assign','Executor → Complete','Requester → YES / NO','Fleet → Final Amount'].map((x,i)=><div key={x} style={{background:'rgba(255,255,255,.1)',padding:12,borderRadius:9}}><b>STEP {i+1}</b><div style={{fontSize:12,opacity:.85}}>{x}</div></div>)}
+        {['Employee → Report','Fleet → Assign','Executor → Complete','Requester → YES / NO','Fleet → Final Amount'].map((x,i)=><div key={x} style={{background:'#ffffff',color:'#000000',padding:12,borderRadius:9}}><b>STEP {i+1}</b><div style={{fontSize:12,opacity:.85}}>{x}</div></div>)}
       </div>
     </div>
     {message&&<div className="alert alert-success">{message}</div>}{error&&<div className="alert alert-error">{error}</div>}

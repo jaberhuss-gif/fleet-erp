@@ -105,8 +105,8 @@ export async function sendWhatsAppTemplate({ phone, templateName, language, body
   };
 }
 
-// Daily KM reminder. The template body parameters match the approved
-// `fleet_daily_km_reminder` template: driver name, plate, odometer.
+// Daily KM reminder. The approved WhatsApp template should contain the bilingual
+// English + Urdu wording; these parameters supply the driver, vehicle and odometer.
 export async function sendDailyKmReminderWhatsApp({ driverName, phone, plate, currentKm }) {
   return sendWhatsAppTemplate({
     phone,

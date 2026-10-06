@@ -53,13 +53,13 @@ export default function FinancialReport() {
     contractorWOCount: Number(m.contractorWOCount || 0),
     internalProjectCount: Number(m.internalProjectCount || 0),
     contractorProjectCount: Number(m.contractorProjectCount || 0),
-    maintActual: Number(m.totalCost ?? (Number(m.contractorWO || 0) + Number(m.partsWO || 0))),
-    devActual: Number(m.developmentActual ?? (Number(m.contractorDev || 0) + Number(m.partsDev || 0))),
-    maintSavings: Number(m.maintenanceSavings ?? (MAINT_BASELINE - Number(m.contractorWO || 0) - Number(m.partsWO || 0))),
-    devSavings: Number(m.developmentSavings ?? (DEV_BASELINE - Number(m.contractorDev || 0) - Number(m.partsDev || 0))),
-    maintPct: Number(m.maintenancePct ?? 0),
-    devPct: Number(m.developmentPct ?? 0),
-    totalSavingsPct: Number(m.totalSavingsPct ?? (((MAINT_BASELINE + DEV_BASELINE) - Number(m.contractorWO || 0) - Number(m.partsWO || 0) - Number(m.contractorDev || 0) - Number(m.partsDev || 0)) / (MAINT_BASELINE + DEV_BASELINE)) * 100)
+    maintActual: Number(m.maintActual ?? (Number(m.contractorWO || 0) + Number(m.partsWO || 0) + Number(m.salaryMaint || 0))),
+    devActual: Number(m.devActual ?? (Number(m.contractorDev || 0) + Number(m.salaryDev || 0))),
+    maintSavings: Number(m.maintSavings ?? (MAINT_BASELINE - Number(m.maintActual || 0))),
+    devSavings: Number(m.devSavings ?? (DEV_BASELINE - Number(m.devActual || 0))),
+    maintPct: Number(m.maintPct ?? 0),
+    devPct: Number(m.devPct ?? 0),
+    totalSavingsPct: Number(m.totalSavingsPct ?? (((MAINT_BASELINE + DEV_BASELINE) - Number(m.totalCost || 0)) / (MAINT_BASELINE + DEV_BASELINE)) * 100)
   }));
 
   const maintBaselineTotal = MAINT_BASELINE * monthCount;

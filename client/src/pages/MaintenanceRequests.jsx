@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import api from '../api/client';
-import { getMaintenanceTickets, getMaintenanceWhatsAppInfo } from '../api/client';
+import { getMaintenanceTickets, getMaintenanceWhatsAppInfo, getSixMonthRepairStatuses, getSixMonthRepairWhatsAppInfo } from '../api/client';
 
 const ISSUE_TYPES = ['Tires','Engine','A/C','Lights','Brakes','Battery','Door','Wipers','Oil Engine','Other'];
 
@@ -19,10 +19,12 @@ export default function MaintenanceRequests() {
     setLoading(true);
     setError('');
     try {
-      const [res, pmRes] = await Promise.all([
+      const [res, pmRes, repairRes] = await Promise.all([
         getMaintenanceTickets(),
-        api.get('/periodic-maintenance')
+        api.get('/periodic-maintenance'),
+        getSixMonthRepairStatuses()
       ]);
+      const repairStatuses = repairRes.statuses || {};
       setTickets((res.tickets || []).filter(t =>
         ISSUE_TYPES.includes(String(t.category || '').trim())
       ));
@@ -40,7 +42,7 @@ export default function MaintenanceRequests() {
           category: '6-Month Maintenance',
           description: String(r.notes || '').trim(),
           priority: 'Medium',
-          status: r.status === 'Completed' ? 'Completed' : 'Repair Required',
+          status: repairStatuses[String(r.id)] || 'Open',
           opened_at: r.completed_date || r.scheduled_date || '',
           pm_record_id: r.id
         }));
@@ -115,7 +117,9 @@ export default function MaintenanceRequests() {
 
   const sendWhatsApp = async ticket => {
     try {
-      const info = await getMaintenanceWhatsAppInfo(ticket.id);
+      const info = ticket.source === '6-Month Maintenance'
+        ? await getSixMonthRepairWhatsAppInfo(ticket.pm_record_id)
+        : await getMaintenanceWhatsAppInfo(ticket.id);
       const phone = String(info.waMeNumber || info.driverPhone || '').replace(/\D/g, '');
       const url = String(info.confirmationUrl || '').trim();
       if (!phone || !url) throw new Error('Driver phone or confirmation link is not available.');
@@ -195,7 +199,7 @@ export default function MaintenanceRequests() {
             <td>{t.priority || 'Medium'}</td>
             <td>{t.status || '—'}</td>
             <td>{t.opened_at ? String(t.opened_at).slice(0,10) : '—'}</td>
-            <td>{t.source === '6-Month Maintenance' ? <span style={{whiteSpace:'nowrap'}}>🛠️ 6-Month Note</span> : t.status !== 'Completed' ? <button type="button" className="btn" style={{whiteSpace:'nowrap'}} onClick={()=>sendWhatsApp(t)}>📱 WhatsApp</button> : <span>✓ Confirmed</span>}</td>
+            <td>{t.status !== 'Completed' ? <button type="button" className="btn" style={{whiteSpace:'nowrap'}} onClick={()=>sendWhatsApp(t)}>📱 WhatsApp</button> : <span>✓ Confirmed</span>}</td>
           </tr>)}</tbody>
         </table>
        </div>}

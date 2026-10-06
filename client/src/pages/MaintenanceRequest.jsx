@@ -54,7 +54,7 @@ export default function MaintenanceRequest({user,access={}}){
     // Outlook Web compose deeplink accepts plain text, not HTML. Keep each URL
     // on its own line with a CRLF + trailing space so Outlook's auto-linker can
     // recognize the URL as a clickable hyperlink.
-    const body=lines.join('\\r\\n')+'\\r\\n ';
+    const body=lines.join('\r\n')+'\r\n ';
     const to=String(r.executor_email||'').split(',').map(x=>x.trim()).filter(Boolean).join(',');
     const cc=String(r.cc_emails||'').split(',').map(x=>x.trim()).filter(Boolean).join(',');
     const params=[

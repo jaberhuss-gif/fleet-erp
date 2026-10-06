@@ -439,6 +439,103 @@ app.get("/api/issues/types", async (req, res) => {
     { value: "Oil Engine", label: "Oil Engine" }, { value: "Other", label: "Other" }
   ]});
 });
+// ===== 6-MONTH MAINTENANCE REPAIR WHATSAPP =====
+app.get("/api/periodic-maintenance/repair-statuses", async (req, res) => {
+  try {
+    const result = await pgQuery(`
+      SELECT id, vehicle_id, status, description, resolution_notes
+      FROM tickets
+      WHERE category = '6-Month Maintenance'
+        AND COALESCE(resolution_notes, '') LIKE '[PM_REPAIR:%'
+    `);
+    const statuses = {};
+    for (const row of result.rows) {
+      const match = String(row.resolution_notes || '').match(/^\\[PM_REPAIR:(\\d+)\\]/);
+      if (match) statuses[match[1]] = row.status || 'Open';
+    }
+    res.json({ success: true, statuses });
+  } catch (e) {
+    console.error("[SixMonthRepairStatuses]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get("/api/periodic-maintenance/:id/repair-whatsapp-info", async (req, res) => {
+  try {
+    const pmId = Number(req.params.id);
+    if (!Number.isFinite(pmId)) return res.status(400).json({ success:false, error:"Invalid maintenance record." });
+
+    const pmResult = await pgQuery(`
+      SELECT pm.id, pm.vehicle_id, pm.type, pm.notes, pm.scheduled_date, pm.completed_date,
+             v.plate_number, v.plate_code, v.driver, v.phone, v.location
+      FROM periodic_maintenance pm
+      LEFT JOIN vehicles v ON v.id = pm.vehicle_id
+      WHERE pm.id = $1 AND pm.type = '6_months_general'
+      LIMIT 1
+    `, [pmId]);
+    const pm = pmResult.rows[0];
+    if (!pm) return res.status(404).json({ success:false, error:"6-month maintenance record not found." });
+    if (!String(pm.notes || '').trim()) return res.status(400).json({ success:false, error:"No 6-month repair notes are available." });
+    if (!String(pm.phone || '').trim()) return res.status(400).json({ success:false, error:"Driver phone number is not available." });
+
+    const existing = await pgQuery(`
+      SELECT id, status
+      FROM tickets
+      WHERE category = '6-Month Maintenance'
+        AND vehicle_id = $1
+        AND COALESCE(resolution_notes, '') LIKE $2
+      ORDER BY id DESC
+      LIMIT 1
+    `, [pm.vehicle_id, '[PM_REPAIR:' + pmId + ']%']);
+
+    let ticket = existing.rows[0];
+    if (!ticket) {
+      ticket = (await pgQuery(`
+        INSERT INTO tickets
+          (vehicle_id, title, location, category, priority, status, description, reported_by, opened_at, department)
+        VALUES ($1,$2,$3,'6-Month Maintenance','Medium','Open',$4,'Fleet Management',CURRENT_TIMESTAMP,'Fleet')
+        RETURNING id, status
+      `, [
+        pm.vehicle_id,
+        '6-Month Maintenance Repair',
+        pm.location || '',
+        String(pm.notes).trim()
+      ])).rows[0];
+
+      await pgQuery(
+        `UPDATE tickets SET resolution_notes=$1 WHERE id=$2`,
+        ['[PM_REPAIR:' + pmId + '] 6-month maintenance repair request', ticket.id]
+      );
+    }
+
+    const token = randomUUID();
+    await pgQuery(`
+      UPDATE tickets
+      SET whatsapp_confirmation_token=$1,
+          whatsapp_confirmed_at=NULL,
+          whatsapp_confirmation_source='Fleet Management - WhatsApp Pending',
+          status='Pending Driver Confirmation'
+      WHERE id=$2
+    `, [token, ticket.id]);
+
+    const plate = [pm.plate_number, pm.plate_code].filter(Boolean).join(" ").trim();
+    res.json({
+      success:true,
+      ticketId:ticket.id,
+      driverName:pm.driver || "",
+      driverPhone:pm.phone || "",
+      waMeNumber:toWaMeInternational(pm.phone),
+      vehiclePlate:plate,
+      issueType:"6-Month Maintenance",
+      description:String(pm.notes).trim(),
+      confirmationUrl:MAINTENANCE_CONFIRM_BASE_URL()+"/maintenance-confirm/"+token
+    });
+  } catch(e) {
+    console.error("[SixMonthRepairWhatsAppInfo]", e);
+    res.status(500).json({success:false,error:e.message});
+  }
+});
+
 // ===== MAINTENANCE ISSUE WHATSAPP CONFIRMATION =====
 const MAINTENANCE_CONFIRM_BASE_URL = () =>
   String(process.env.PUBLIC_APP_URL || "https://fleet-erp-kn0c.onrender.com").replace(/\/$/, "");

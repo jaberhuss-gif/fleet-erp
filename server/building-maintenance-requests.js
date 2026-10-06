@@ -318,11 +318,24 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
   app.get("/api/maintenance-requests/public/:token/acknowledge", async (req,res) => {
     try {
       await ensureSchema();
-      const row=await query(`SELECT * FROM maintenance_requests WHERE acknowledgement_token=$1`,[clean(req.params.token)]);
-      if(!row.rows[0]) return res.status(403).send("<h2>Invalid acknowledgement link</h2>");
-      const r=row.rows[0];
-      await query(`UPDATE maintenance_requests SET status='Acknowledged', acknowledged_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1`,[r.id]);
-      res.send("<html><body style='font-family:Arial;padding:40px'><h2>📩 Assignment Acknowledged</h2><p>Thank you. Fleet / Building Maintenance has been notified that you received the work assignment.</p></body></html>");
+      const r=await query(`SELECT * FROM maintenance_requests WHERE acknowledgement_token=$1`,[clean(req.params.token)]);
+      if(!r.rows[0]) return res.status(403).send("<h2>Invalid acknowledgement link</h2>");
+      const row=r.rows[0];
+      res.set("Cache-Control","no-store, no-cache, must-revalidate, private");
+      if(row.acknowledged_at) return res.send(`<html><body style="font-family:Arial;padding:40px"><h2>📩 Assignment Already Acknowledged</h2><p><b>Request:</b> ${row.request_no}</p><p>This assignment has already been acknowledged.</p></body></html>`);
+      res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>📩 Building Maintenance — Acknowledge Receipt</h2><p><b>Request:</b> ${row.request_no}</p><p><b>Site:</b> ${row.site || "-"}</p><p><b>Assigned To:</b> ${row.executor_name || "-"}</p><p><b>Problem:</b><br>${String(row.description || "").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>")}</p><h3>Have you received this work assignment?</h3><p>هل استلمت مهمة الصيانة هذه؟</p><form method="POST" action="/api/maintenance-requests/public/${clean(req.params.token)}/acknowledge"><button type="submit" style="padding:12px 20px;background:#2563eb;color:#fff;border:0;border-radius:7px;font-weight:700">📩 YES — Acknowledge Receipt</button></form></body></html>`);
+    } catch(e){res.status(500).send("<h2>Error loading acknowledgement page</h2>");}
+  });
+
+  app.post("/api/maintenance-requests/public/:token/acknowledge", async (req,res) => {
+    try {
+      await ensureSchema();
+      const r=await query(`SELECT * FROM maintenance_requests WHERE acknowledgement_token=$1`,[clean(req.params.token)]);
+      if(!r.rows[0]) return res.status(403).send("<h2>Invalid acknowledgement link</h2>");
+      const row=r.rows[0];
+      if(row.acknowledged_at) return res.send("<html><body style='font-family:Arial;padding:40px'><h2>📩 Assignment Already Acknowledged</h2><p>This assignment has already been acknowledged.</p></body></html>");
+      await query(`UPDATE maintenance_requests SET status='Acknowledged', acknowledged_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1`,[row.id]);
+      res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>✅ Assignment Acknowledged</h2><p><b>Request:</b> ${row.request_no}</p><p>Thank you. Fleet / Building Maintenance has been notified that you received the work assignment.</p><p>تم تأكيد استلام مهمة الصيانة وتحديث النظام تلقائياً.</p></body></html>`);
     } catch(e){res.status(500).send("<h2>Error processing acknowledgement</h2>");}
   });
 
@@ -331,11 +344,28 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       await ensureSchema();
       const row=await getRequestByToken(req.params.token);
       if(!row || row.completion_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid completion link</h2>");
+      res.set("Cache-Control","no-store, no-cache, must-revalidate, private");
       if(!row.work_order_id) return res.status(400).send("<h2>Work Order is not assigned yet.</h2>");
+      if(row.completed_at || row.status==="Awaiting Confirmation" || row.status==="Operationally Completed") {
+        return res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>✅ Work Already Reported Completed</h2><p><b>Request:</b> ${row.request_no}</p><p>This work has already been reported as completed.</p></body></html>`);
+      }
+      res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>🔧 Building Maintenance — Work Completed</h2><p><b>Request:</b> ${row.request_no}</p><p><b>Site:</b> ${row.site || "-"}</p><p><b>Assigned To:</b> ${row.executor_name || "-"}</p><p><b>Problem:</b><br>${String(row.description || "").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>")}</p><h3>Have you completed the work?</h3><p>هل أكملت أعمال الصيانة؟</p><form method="POST" action="/api/maintenance-requests/public/${clean(req.params.token)}/work-completed"><button type="submit" style="padding:12px 20px;background:#15803d;color:#fff;border:0;border-radius:7px;font-weight:700">✅ YES — Work Completed</button></form></body></html>`);
+    } catch(e){res.status(500).send("<h2>Error loading completion page</h2>");}
+  });
+
+  app.post("/api/maintenance-requests/public/:token/work-completed", async (req,res) => {
+    try {
+      await ensureSchema();
+      const row=await getRequestByToken(req.params.token);
+      if(!row || row.completion_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid completion link</h2>");
+      if(!row.work_order_id) return res.status(400).send("<h2>Work Order is not assigned yet.</h2>");
+      if(row.completed_at || row.status==="Awaiting Confirmation" || row.status==="Operationally Completed") {
+        return res.send("<html><body style='font-family:Arial;padding:40px'><h2>✅ Work Already Reported Completed</h2><p>This work has already been reported as completed.</p></body></html>");
+      }
       await updateWorkOrder(row.work_order_id,{status:"Awaiting Confirmation",completedDate:new Date()});
       const updated=await query(`UPDATE maintenance_requests SET status='Awaiting Confirmation', completed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING *`,[row.id]);
       await notifyRequesterReady(updated.rows[0]).catch(()=>{});
-      res.send("<html><body style='font-family:Arial;padding:40px'><h2>✅ Work Completed</h2><p>The requester has been asked to confirm that everything is OK.</p></body></html>");
+      res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>✅ Work Completed</h2><p><b>Request:</b> ${row.request_no}</p><p>The requester has been asked to confirm that everything is OK.</p><p>تم تسجيل إكمال العمل وإرسال طلب التأكيد إلى مقدم الطلب.</p></body></html>`);
     } catch(e){res.status(500).send("<h2>Error processing completion</h2>");}
   });
 
@@ -343,9 +373,23 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
     try {
       await ensureSchema();
       const row=await getRequestByToken(req.params.token);
-      const answer=clean(req.query.answer).toLowerCase();
+      if(!row || row.confirmation_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid confirmation link</h2>");
+      res.set("Cache-Control","no-store, no-cache, must-revalidate, private");
+      if(row.requester_confirmation) {
+        return res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>Maintenance Confirmation Already Recorded</h2><p><b>Request:</b> ${row.request_no}</p><p><b>Answer:</b> ${row.requester_confirmation==="yes" ? "YES — Everything is OK" : "NO — Problem Not Fixed"}</p></body></html>`);
+      }
+      res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>🛠️ Building Maintenance — Final Confirmation</h2><p><b>Request:</b> ${row.request_no}</p><p><b>Site:</b> ${row.site || "-"}</p><p><b>Problem:</b><br>${String(row.description || "").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>")}</p><h3>Is the maintenance work satisfactory?</h3><p>هل تم إصلاح المشكلة بشكل كامل؟</p><div style="display:flex;gap:12px;flex-wrap:wrap"><form method="POST" action="/api/maintenance-requests/public/${clean(req.params.token)}/confirm"><input type="hidden" name="answer" value="yes"><button type="submit" style="padding:12px 20px;background:#15803d;color:#fff;border:0;border-radius:7px;font-weight:700">✅ YES — Everything is OK</button></form><form method="POST" action="/api/maintenance-requests/public/${clean(req.params.token)}/confirm"><input type="hidden" name="answer" value="no"><button type="submit" style="padding:12px 20px;background:#b91c1c;color:#fff;border:0;border-radius:7px;font-weight:700">❌ NO — Problem Not Fixed</button></form></div></body></html>`);
+    } catch(e){res.status(500).send("<h2>Error loading confirmation page</h2>");}
+  });
+
+  app.post("/api/maintenance-requests/public/:token/confirm", async (req,res) => {
+    try {
+      await ensureSchema();
+      const row=await getRequestByToken(req.params.token);
+      const answer=clean(req.body?.answer).toLowerCase();
       if(!row || row.confirmation_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid confirmation link</h2>");
       if(!["yes","no"].includes(answer)) return res.status(400).send("<h2>Invalid answer</h2>");
+      if(row.requester_confirmation) return res.send("<html><body style='font-family:Arial;padding:40px'><h2>Maintenance Confirmation Already Recorded</h2></body></html>");
       const status=answer==="yes" ? "Operationally Completed" : "Reopened";
       await query(`UPDATE maintenance_requests SET status=$1, requester_confirmed_at=CURRENT_TIMESTAMP, requester_confirmation=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3`,[status,answer,row.id]);
       if(row.work_order_id){
@@ -354,8 +398,8 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       }
       if(answer==="no") await sendEmail({to:[OWNER_EMAIL],cc:CC_EMAILS,subject:`BUILDING MAINTENANCE — ${row.request_no} NOT FIXED`,html:`<h2>❌ Maintenance needs more work</h2><p><b>${row.request_no}</b> was not confirmed by the requester.</p><p>${row.description}</p>`}).catch(()=>{});
       res.send(answer==="yes"
-        ? "<html><body style='font-family:Arial;padding:40px'><h2>✅ Thank you</h2><p>The request is confirmed as fixed. Final cost remains open for Fleet / Building Maintenance.</p></body></html>"
-        : "<html><body style='font-family:Arial;padding:40px'><h2>❌ Not fixed</h2><p>Fleet / Building Maintenance has been notified to continue the work.</p></body></html>");
+        ? "<html><body style='font-family:Arial;padding:40px;max-width:720px;margin:auto'><h2>✅ Thank you</h2><p>The request is confirmed as fixed. Final cost remains open for Fleet / Building Maintenance.</p><p>تم تأكيد إتمام العمل بنجاح.</p></body></html>"
+        : "<html><body style='font-family:Arial;padding:40px;max-width:720px;margin:auto'><h2>❌ Not Fixed</h2><p>Fleet / Building Maintenance has been notified to continue the work.</p><p>تم إبلاغ إدارة الصيانة بضرورة متابعة العمل.</p></body></html>");
     } catch(e){res.status(500).send("<h2>Error processing confirmation</h2>");}
   });
 }

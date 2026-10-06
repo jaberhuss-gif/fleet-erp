@@ -37,8 +37,8 @@ export default function ReportIssue({ canWork = false, user = null }) {
       const phone=String(info.driverPhone||'').replace(/\D/g,''); const url=String(info.confirmationUrl||'').trim();
       const message=[
         'Hello '+(info.driverName||'Driver')+',','',
-        'Vehicle '+info.vehiclePlate+' — '+info.issueType+' repair has been completed.','',
-        'Has this maintenance issue been repaired?','هل تم إصلاح هذه المشكلة في المركبة؟','',
+        'Vehicle '+info.vehiclePlate+' — Maintenance Request: '+info.issueType,'','
+        'Maintenance request: '+info.issueType,'طلب الصيانة: '+info.issueType,'','Has this maintenance issue been repaired?','هل تم إصلاح طلب الصيانة هذا؟','',
         'Please open the link below and select YES if the repair is complete.','يرجى فتح الرابط أدناه واختيار YES إذا تم الإصلاح.',
         'If the repair is NOT complete, select NO. The ticket will remain open.','إذا لم يتم الإصلاح، اختر NO وسيبقى الطلب مفتوحاً.','',
         'Maintenance confirmation link / رابط تأكيد الإصلاح:',url,'','Fleet Management'

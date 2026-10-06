@@ -318,15 +318,46 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
         setError('No driver WhatsApp number found for vehicle ' + plate);
         return;
       }
+
+      const confirmationUrl = String(info.confirmationUrl || '').trim();
+      const cleanUrl = confirmationUrl.match(/^https:\/\/fleet-erp-kn0c\.onrender\.com\/inspection-confirm\/[0-9a-f-]+$/i)?.[0] || '';
+
       const message = inspectedState
-        ? 'Hello ' + driver + ',\\n\\nVehicle ' + plate + ' — ' + component + ' has been inspected and recorded.\\n\\nگاڑی ' + plate + ' — ' + component + ' کا معائنہ مکمل کرکے ریکارڈ کر لیا گیا ہے۔\\n\\nFleet Management'
-        : 'Hello ' + driver + ',\\n\\nVehicle ' + plate + ' — ' + component + ' inspection is still pending. Please arrange the inspection.\\n\\nگاڑی ' + plate + ' — ' + component + ' کا معائنہ ابھی باقی ہے۔ براہ کرم معائنہ کروائیں۔\\n\\nPlease also inform your Supervisor and the Camp/Campus team accordingly.\\nبراہ کرم اپنے سپروائزر اور کیمپ/کیمپس ٹیم کو بھی مطلع کریں۔\\n\\nIMPORTANT: If you have completed the inspection, open the link below and press YES to confirm.\\nاگر معائنہ مکمل ہو چکا ہے تو نیچے دیا گیا لنک کھولیں اور تصدیق کے لیے YES دبائیں۔\\nIf the inspection has NOT been completed yet, DO NOT press YES. Complete the inspection first, then return to this message and press YES.\\nاگر معائنہ ابھی مکمل نہیں ہوا تو YES نہ دبائیں۔ پہلے معائنہ مکمل کریں، پھر اس پیغام پر واپس آکر YES دبائیں۔\\n\\n' + (info.confirmationUrl ? 'Inspection confirmation link / معائنہ کی تصدیق کا لنک:\\n' + info.confirmationUrl : 'The inspection confirmation link is not available yet.\\nمعائنہ کی تصدیق کا لنک ابھی دستیاب نہیں ہے۔') + '\\n\\nFleet Management';
+        ? [
+            'Hello ' + driver + ',',
+            '',
+            'Vehicle ' + plate + ' — ' + component + ' has been inspected and recorded.',
+            '',
+            'گاڑی ' + plate + ' — ' + component + ' کا معائنہ مکمل کرکے ریکارڈ کر لیا گیا ہے۔',
+            '',
+            'Fleet Management'
+          ].join('\n')
+        : [
+            'Hello ' + driver + ',',
+            '',
+            'Vehicle ' + plate + ' — ' + component + ' inspection is still pending. Please arrange the inspection.',
+            '',
+            'گاڑی ' + plate + ' — ' + component + ' کا معائنہ ابھی باقی ہے۔ براہ کرم معائنہ کروائیں۔',
+            '',
+            'Please also inform your Supervisor and the Camp/Campus team accordingly.',
+            'براہ کرم اپنے سپروائزر اور کیمپ/کیمپس ٹیم کو بھی مطلع کریں۔',
+            '',
+            'IMPORTANT: If you have completed the inspection, open the link below and press YES to confirm.',
+            'اگر معائنہ مکمل ہو چکا ہے تو نیچے دیا گیا لنک کھولیں اور تصدیق کے لیے YES دبائیں۔',
+            'If the inspection has NOT been completed yet, DO NOT press YES. Complete the inspection first, then return to this message and press YES.',
+            'اگر معائنہ ابھی مکمل نہیں ہوا تو YES نہ دبائیں۔ پہلے معائنہ مکمل کریں، پھر اس پیغام پر واپس آکر YES دبائیں۔',
+            '',
+            'Inspection confirmation link / معائنہ کی تصدیق کا لنک:',
+            cleanUrl || 'The inspection confirmation link is not available yet.\nمعائنہ کی تصدیق کا لنک ابھی دستیاب نہیں ہے۔',
+            '',
+            'Fleet Management'
+          ].join('\n');
+
       window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(message), '_blank');
     } catch (e) {
       setError(e.response?.data?.error || e.message);
     }
   };
-
   const openConfirmationLink = async (row) => {
     try {
       setError('');

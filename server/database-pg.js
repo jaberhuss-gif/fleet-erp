@@ -967,7 +967,10 @@ export async function ensureTicketSchema() {
       ADD COLUMN IF NOT EXISTS department TEXT,
       ADD COLUMN IF NOT EXISTS assigned_to_user_id BIGINT,
       ADD COLUMN IF NOT EXISTS assigned_to_name TEXT,
-      ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ
+      ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS whatsapp_confirmation_token TEXT,
+      ADD COLUMN IF NOT EXISTS whatsapp_confirmed_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS whatsapp_confirmation_source TEXT
   `);
 
   await query(`

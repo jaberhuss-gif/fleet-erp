@@ -41,6 +41,11 @@ async function ensureSchema() {
       completion_token TEXT UNIQUE,
       confirmation_token TEXT UNIQUE,
       contractor_notified_at TIMESTAMPTZ,
+      email_status TEXT NOT NULL DEFAULT 'Not Sent',
+      email_sent_at TIMESTAMPTZ,
+      email_error TEXT,
+      acknowledged_at TIMESTAMPTZ,
+      acknowledgement_token TEXT UNIQUE,
       completed_at TIMESTAMPTZ,
       requester_confirmed_at TIMESTAMPTZ,
       requester_confirmation TEXT,
@@ -50,6 +55,11 @@ async function ensureSchema() {
   `);
   await query(`ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS maintenance_request_id BIGINT`);
   await query(`ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS operational_status TEXT DEFAULT 'Open'`);
+  await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_status TEXT NOT NULL DEFAULT 'Not Sent'`);
+  await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMPTZ`);
+  await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_error TEXT`);
+  await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMPTZ`);
+  await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS acknowledgement_token TEXT UNIQUE`);
   await query(`CREATE INDEX IF NOT EXISTS idx_maintenance_requests_status ON maintenance_requests(status)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_maintenance_requests_work_order ON maintenance_requests(work_order_id)`);
 }
@@ -109,6 +119,7 @@ async function notifyNewRequest(reqRow) {
 
 async function notifyAssignment(reqRow) {
   const recipients = reqRow.executor_email ? [reqRow.executor_email] : [];
+  const acknowledgeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.acknowledgement_token}/acknowledge`;
   const completeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.completion_token}/work-completed`;
   return sendEmail({
     to: recipients,
@@ -120,6 +131,8 @@ async function notifyAssignment(reqRow) {
       <p><b>Site:</b> ${reqRow.site || "-"}</p>
       <p><b>Problem:</b> ${reqRow.description}</p>
       <p><b>Assigned to:</b> ${reqRow.executor_name}</p>
+      <p>First confirm that you received this work assignment:</p>
+      ${button(acknowledgeUrl, "📩 ACKNOWLEDGE RECEIPT", "#2563eb")}
       <p>After completing the repair, use the button below:</p>
       ${button(completeUrl, "✅ WORK COMPLETED")}
     `
@@ -158,13 +171,14 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       const requesterEmail = clean(req.user?.email);
       const token = randomUUID();
       const confirmationToken = randomUUID();
+      const acknowledgementToken = randomUUID();
       const result = await query(`
         INSERT INTO maintenance_requests
-          (request_no, site, category, priority, description, requester_user_id, requester_name, requester_email, status, completion_token, confirmation_token)
+          (request_no, site, category, priority, description, requester_user_id, requester_name, requester_email, status, completion_token, confirmation_token, acknowledgement_token)
         VALUES
-          ('MR-' || LPAD(nextval('maintenance_requests_id_seq')::text, 5, '0'), $1,$2,$3,$4,$5,$6,$7,'New',$8,$9)
+          ('MR-' || LPAD(nextval('maintenance_requests_id_seq')::text, 5, '0'), $1,$2,$3,$4,$5,$6,$7,'New',$8,$9,$10)
         RETURNING *
-      `, [clean(site), clean(category) || "General Maintenance", clean(priority) || "Medium", clean(description), req.user?.id || null, requesterName, requesterEmail, token, confirmationToken]);
+      `, [clean(site), clean(category) || "General Maintenance", clean(priority) || "Medium", clean(description), req.user?.id || null, requesterName, requesterEmail, token, confirmationToken, acknowledgementToken]);
       const row = result.rows[0];
       const email = await notifyNewRequest(row).catch(e => ({sent:false, reason:e.message}));
       res.status(201).json({ success:true, request:row, email });
@@ -221,7 +235,16 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
         WHERE id=$5 RETURNING *
       `, [order.id, executorType, executorName, executorEmail || null, row.id]);
       const updatedRow=updated.rows[0];
-      const email=await notifyAssignment(updatedRow).catch(e=>({sent:false,reason:e.message}));
+      let email;
+      try {
+        email = await notifyAssignment(updatedRow);
+        await query(`UPDATE maintenance_requests SET email_status='Sent', email_sent_at=CURRENT_TIMESTAMP, email_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=$1`, [row.id]);
+        updatedRow.email_status='Sent';
+      } catch (e) {
+        email = {sent:false, reason:e.message};
+        await query(`UPDATE maintenance_requests SET email_status='Failed', email_error=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`, [e.message, row.id]);
+        updatedRow.email_status='Failed'; updatedRow.email_error=e.message;
+      }
       res.json({success:true,request:updatedRow,workOrder:order,email});
     } catch(e){res.status(400).json({success:false,error:e.message});}
   });
@@ -267,6 +290,17 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       if(!r.rows[0]) return res.status(404).json({success:false,error:"Link expired or invalid"});
       res.json({success:true,request:r.rows[0]});
     } catch(e){res.status(500).json({success:false,error:e.message});}
+  });
+
+  app.get("/api/maintenance-requests/public/:token/acknowledge", async (req,res) => {
+    try {
+      await ensureSchema();
+      const row=await query(`SELECT * FROM maintenance_requests WHERE acknowledgement_token=$1`,[clean(req.params.token)]);
+      if(!row.rows[0]) return res.status(403).send("<h2>Invalid acknowledgement link</h2>");
+      const r=row.rows[0];
+      await query(`UPDATE maintenance_requests SET acknowledged_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1`,[r.id]);
+      res.send("<html><body style='font-family:Arial;padding:40px'><h2>📩 Assignment Acknowledged</h2><p>Thank you. Fleet / Building Maintenance has been notified that you received the work assignment.</p></body></html>");
+    } catch(e){res.status(500).send("<h2>Error processing acknowledgement</h2>");}
   });
 
   app.get("/api/maintenance-requests/public/:token/work-completed", async (req,res) => {

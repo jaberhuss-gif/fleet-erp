@@ -53,6 +53,12 @@ export const reportIssue = (data) =>
 export const getTickets = () =>
   api.get('/tickets').then((r) => r.data);
 
+export const getMaintenanceTickets = () =>
+  api.get('/tickets', { params: { fleetType: 'maintenance' } }).then((r) => r.data);
+
+export const getMaintenanceWhatsAppInfo = (id) =>
+  api.get('/tickets/' + id + '/maintenance-whatsapp-info').then((r) => r.data);
+
 export const deleteAllTickets = () =>
   api.delete('/tickets').then((r) => r.data);
 

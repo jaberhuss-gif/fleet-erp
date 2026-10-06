@@ -91,10 +91,11 @@ export default function MaintenanceRequests() {
   const sendWhatsApp = async ticket => {
     try {
       const info = await getMaintenanceWhatsAppInfo(ticket.id);
-      let phone = String(info.driverPhone || '').replace(/\D/g, '');
-      if (phone.startsWith('00966')) phone = phone.slice(2);
-      if (phone.startsWith('05') && phone.length === 10) phone = '966' + phone.slice(1);
-      else if (phone.startsWith('5') && phone.length === 9) phone = '966' + phone;
+      let phone = String(info.driverPhone || '').trim();
+      phone = phone.replace(/[\s().-]/g, '');
+      if (phone.startsWith('00')) phone = phone.slice(2);
+      else if (phone.startsWith('+')) phone = phone.slice(1);
+      phone = phone.replace(/\D/g, '');
       const url = String(info.confirmationUrl || '').trim();
       if (!phone || !url) throw new Error('Driver phone or confirmation link is not available.');
       const message = [

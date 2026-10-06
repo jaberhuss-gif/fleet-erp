@@ -451,7 +451,7 @@ app.get("/api/tickets/:id/maintenance-whatsapp-info", async (req, res) => {
     if(["Daily KM","Daily Vehicle Submission"].includes(String(row.category||""))) return res.status(400).json({success:false,error:"Daily KM tickets cannot use maintenance confirmation."});
     if(!String(row.phone||"").trim()) return res.status(400).json({success:false,error:"Driver phone number is not available."});
     const token=randomUUID();
-    await pgQuery(`UPDATE tickets SET whatsapp_confirmation_token=$1,whatsapp_confirmed_at=NULL,whatsapp_confirmation_source='Fleet Management - WhatsApp Pending',status='Pending Driver Confirmation',updated_at=CURRENT_TIMESTAMP WHERE id=$2`,[token,row.id]);
+    await pgQuery(`UPDATE tickets SET whatsapp_confirmation_token=$1,whatsapp_confirmed_at=NULL,whatsapp_confirmation_source='Fleet Management - WhatsApp Pending',status='Pending Driver Confirmation' WHERE id=$2`,[token,row.id]);
     res.json({success:true,driverName:row.driver||"",driverPhone:row.phone||"",vehiclePlate:[row.plate_number,row.plate_code].filter(Boolean).join(" ").trim(),issueType:row.category||"Maintenance Issue",description:row.description||"",confirmationUrl:MAINTENANCE_CONFIRM_BASE_URL()+"/maintenance-confirm/"+token});
   } catch(e){console.error("[MaintenanceWhatsAppInfo]",e);res.status(500).json({success:false,error:e.message});}
 });

@@ -447,11 +447,17 @@ app.get("/api/periodic-maintenance/repair-statuses", async (req, res) => {
       FROM tickets
       WHERE category = '6-Month Maintenance'
         AND COALESCE(resolution_notes, '') LIKE '[PM_REPAIR:%'
+      ORDER BY id DESC
     `);
     const statuses = {};
     for (const row of result.rows) {
-      const match = String(row.resolution_notes || '').match(/^\\[PM_REPAIR:(\\d+)\\]/);
-      if (match) statuses[match[1]] = row.status || 'Open';
+      // The PM id is stored in the ticket marker. Use the newest linked
+      // repair ticket so a later confirmation is never overwritten by an
+      // older duplicate/open ticket.
+      const match = String(row.resolution_notes || '').match(/^\[PM_REPAIR:(\d+)\]/);
+      if (match && !Object.prototype.hasOwnProperty.call(statuses, match[1])) {
+        statuses[match[1]] = row.status || 'Open';
+      }
     }
     res.json({ success: true, statuses });
   } catch (e) {

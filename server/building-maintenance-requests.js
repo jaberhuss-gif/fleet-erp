@@ -81,7 +81,7 @@ function siteCc(site) {
   return CAMPUS_BY_SITE[clean(site)] || [];
 }
 
-async function getRequest(id) {
+async function getRequestByToken(token) { const r=await query(`SELECT * FROM maintenance_requests WHERE completion_token=$1 OR confirmation_token=$1`, [token]); return r.rows[0] || null; }\n\nasync function getRequest(id) {
   const r = await query(`SELECT * FROM maintenance_requests WHERE id=$1`, [id]);
   return r.rows[0] || null;
 }
@@ -107,7 +107,7 @@ async function notifyNewRequest(reqRow) {
 
 async function notifyAssignment(reqRow) {
   const recipients = reqRow.executor_email ? [reqRow.executor_email] : [];
-  const completeUrl = `${appUrl()}/maintenance-confirm/${reqRow.completion_token}`;
+  const completeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.completion_token}/work-completed`;
   return sendEmail({
     to: recipients,
     cc: [OWNER_EMAIL, ...CC_EMAILS],
@@ -126,8 +126,8 @@ async function notifyAssignment(reqRow) {
 
 async function notifyRequesterReady(reqRow) {
   if (!reqRow.requester_email) return { sent: false, reason: "Requester email is not available." };
-  const yes = `${appUrl()}/maintenance-confirm/${reqRow.confirmation_token}?answer=yes`;
-  const no = `${appUrl()}/maintenance-confirm/${reqRow.confirmation_token}?answer=no`;
+  const yes = `${appUrl()}/api/maintenance-requests/public/${reqRow.confirmation_token}/confirm?answer=yes`;
+  const no = `${appUrl()}/api/maintenance-requests/public/${reqRow.confirmation_token}/confirm?answer=no`;
   return sendEmail({
     to: [reqRow.requester_email],
     cc: [OWNER_EMAIL],
@@ -259,14 +259,36 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
     } catch(e){res.status(500).json({success:false,error:e.message});}
   });
 
-  app.post("/api/maintenance-requests/public/:token/action", async (req,res) => {
-    const rowRes=await query(`SELECT id FROM maintenance_requests WHERE completion_token=$1 OR confirmation_token=$1`,[clean(req.params.token)]);
-    if(!rowRes.rows[0]) return res.status(404).json({success:false,error:"Invalid link"});
-    const id=rowRes.rows[0].id;
-    if(clean(req.body?.action)==="work_completed") {
-      req.params.id=id; req.body.token=clean(req.params.token);
-      return app._router.handle(req,res);
-    }
-    return res.status(400).json({success:false,error:"Use the request action endpoint."});
+  app.get("/api/maintenance-requests/public/:token/work-completed", async (req,res) => {
+    try {
+      await ensureSchema();
+      const row=await getRequestByToken(req.params.token);
+      if(!row || row.completion_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid completion link</h2>");
+      if(!row.work_order_id) return res.status(400).send("<h2>Work Order is not assigned yet.</h2>");
+      await updateWorkOrder(row.work_order_id,{status:"Awaiting Confirmation",completedDate:new Date()});
+      const updated=await query(`UPDATE maintenance_requests SET status='Awaiting Confirmation', completed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING *`,[row.id]);
+      await notifyRequesterReady(updated.rows[0]).catch(()=>{});
+      res.send("<html><body style='font-family:Arial;padding:40px'><h2>✅ Work Completed</h2><p>The requester has been asked to confirm that everything is OK.</p></body></html>");
+    } catch(e){res.status(500).send("<h2>Error processing completion</h2>");}
+  });
+
+  app.get("/api/maintenance-requests/public/:token/confirm", async (req,res) => {
+    try {
+      await ensureSchema();
+      const row=await getRequestByToken(req.params.token);
+      const answer=clean(req.query.answer).toLowerCase();
+      if(!row || row.confirmation_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid confirmation link</h2>");
+      if(!["yes","no"].includes(answer)) return res.status(400).send("<h2>Invalid answer</h2>");
+      const status=answer==="yes" ? "Operationally Completed" : "Reopened";
+      await query(`UPDATE maintenance_requests SET status=$1, requester_confirmed_at=CURRENT_TIMESTAMP, requester_confirmation=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3`,[status,answer,row.id]);
+      if(row.work_order_id){
+        await updateWorkOrder(row.work_order_id,{status: answer==="yes" ? "Operationally Completed" : "In Progress"});
+        await query(`UPDATE work_orders SET operational_status=$1 WHERE id=$2`,[answer==="yes" ? "Completed" : "In Progress",row.work_order_id]);
+      }
+      if(answer==="no") await sendEmail({to:[OWNER_EMAIL],cc:CC_EMAILS,subject:`BUILDING MAINTENANCE — ${row.request_no} NOT FIXED`,html:`<h2>❌ Maintenance needs more work</h2><p><b>${row.request_no}</b> was not confirmed by the requester.</p><p>${row.description}</p>`}).catch(()=>{});
+      res.send(answer==="yes"
+        ? "<html><body style='font-family:Arial;padding:40px'><h2>✅ Thank you</h2><p>The request is confirmed as fixed. Final cost remains open for Fleet / Building Maintenance.</p></body></html>"
+        : "<html><body style='font-family:Arial;padding:40px'><h2>❌ Not fixed</h2><p>Fleet / Building Maintenance has been notified to continue the work.</p></body></html>");
+    } catch(e){res.status(500).send("<h2>Error processing confirmation</h2>");}
   });
 }

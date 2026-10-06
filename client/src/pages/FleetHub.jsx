@@ -10,6 +10,7 @@ import TireServiceRequests from './TireServiceRequests';
 import DailyKmSubmitted from './DailyKmSubmitted';
 import DailyKmMissing from './DailyKmMissing';
 import MaintenanceReport from './MaintenanceReport';
+import MaintenanceRequests from './MaintenanceRequests';
 import FleetHistory from './FleetHistory';
 import VehicleTicket from './VehicleTicket';
 
@@ -70,7 +71,7 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
   const ownerGroups={
     add:['add-vehicle','add-driver'],
     maintenance:['maintenance'],
-    'maintenance-report':['maintenance-report'],
+    'maintenance-report':['maintenance-report','maintenance-requests'],
     history:['history'],
     'vehicle-ticket':['vehicle-ticket'],
     km:['daily-km-submitted','daily-km-missing'],
@@ -81,6 +82,7 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
     'add-driver':{label:'👨‍🔧 Add Driver',title:'Add Driver',description:'Add and maintain driver records and vehicle assignments.'},
     maintenance:{label:'🔧 Periodic Maintenance',title:'Periodic Maintenance',description:'Existing periodic maintenance records, schedules, edit and delete.'},
     'maintenance-report':{label:'🛠️ Maintenance Report',title:'Maintenance Report',description:'Maintenance issue reports and tire service requests.'},
+    'maintenance-requests':{label:'🛠️ Maintenance Requests',title:'Maintenance Requests',description:'Full-width driver maintenance request report with WhatsApp, Excel and PDF export.'},
     history:{label:'📚 History',title:'History',description:'Maintenance history, oil change history and KM tracking history.'},
     'vehicle-ticket':{label:'🎫 Vehicle Ticket',title:'Vehicle Ticket',description:'Driver maintenance requests, annual inspection tickets and tire service tickets.'},
     'daily-km-submitted':{label:'📋 Daily KM — Submitted',title:'Daily KM — Submitted',description:'View vehicles that submitted a daily KM reading today.'},
@@ -108,7 +110,8 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
     {currentSection==='add-driver'&&<Drivers initialAction="add"/>}
     {currentSection==='maintenance'&&<VehicleMaintenance canWork={fleetWork} onOpenInspectionEmail={()=>{setOwnerGroup('inspection-email');setSection('inspection-email');}}/>}
 
-    {currentSection==='maintenance-report'&&<MaintenanceReport canWork={fleetWork}/>}
+    {currentSection==='maintenance-report'&&<MaintenanceReport canWork={fleetWork}/>} 
+    {currentSection==='maintenance-requests'&&<MaintenanceRequests/>}
     {currentSection==='history'&&<FleetHistory/>}
     {currentSection==='vehicle-ticket'&&<VehicleTicket user={user} canWork={fleetWork}/>}
     {currentSection==='daily-km-submitted'&&<DailyKmSubmitted/>}

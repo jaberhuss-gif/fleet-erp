@@ -228,6 +228,17 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     return '—';
   };
 
+  // Annual inspection is valid for one full year from the actual completion date.
+  // Do not use the old Vehicle Master expiry here because it may be stale after WhatsApp confirmation.
+  const getNextAnnualDueDate = (rec) => {
+    const completed = String(rec?.completed_date || '').slice(0, 10);
+    if (!completed) return '—';
+    const d = new Date(completed + 'T00:00:00Z');
+    if (Number.isNaN(d.getTime())) return '—';
+    d.setUTCFullYear(d.getUTCFullYear() + 1);
+    return d.toISOString().slice(0, 10);
+  };
+
   const recordsByVehicle = records.reduce((map, r) => {
     const key = String(r.vehicle_id);
     if (!map[key]) map[key] = [];
@@ -1038,6 +1049,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
                 <h2 style={{margin:0}}>✓ Completed Annual Inspections ({completedRows.length})</h2>
                 <div style={{marginTop:5,color:'#64748b'}}>Completed inspections stay in the system. The completion date and next due date are shown here. Reopen returns the record to Not Inspected.</div>
               </div>
+              <button className="btn" onClick={load}>↻ Refresh</button>
             </div>
             <table className="periodic-maintenance-screen-table">
               <thead>
@@ -1047,7 +1059,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
                 {completedRows.map(rec => {
                   const v = vehicleById[String(rec.vehicle_id)] || {};
                   const plate = rec.vehicle_plate || v.plate || v.plate_number || '-';
-                  const due = getInspectionExpiry(rec.vehicle_id);
+                  const due = getNextAnnualDueDate(rec);
                   return (
                     <tr key={'completed-annual-' + rec.id}>
                       <td><strong>{plate}</strong></td>

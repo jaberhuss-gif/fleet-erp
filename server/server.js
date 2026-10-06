@@ -63,6 +63,85 @@ function annualInspectionRecipients(location) {
 }
 
 
+function splitEmails(value) {
+  return String(value || '')
+    .split(/[;,\\n]+/)
+    .map(e => e.trim())
+    .filter(Boolean);
+}
+
+async function sendAnnualInspectionReminderEmail(row) {
+  const expiry = String(row.inspection_expiry_date || '').slice(0, 10);
+  if (!expiry) return { sent: false, reason: 'Inspection expiry date is missing.' };
+
+  const today = new Date().toISOString().slice(0, 10);
+  const days = Math.ceil(
+    (new Date(expiry + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000
+  );
+  const site = canonicalInspectionSite(row.location) || 'Unknown Site';
+  const defaults = annualInspectionRecipients(site);
+  const to = splitEmails(row.inspection_manager_email || defaults.managerEmail);
+  const cc = splitEmails(row.inspection_cc_emails || defaults.ccEmails)
+    .filter(email => !to.includes(email));
+
+  if (!to.length) {
+    return { sent: false, reason: 'No site manager email configured for ' + site + '.' };
+  }
+
+  const apiKey = String(process.env.RESEND_API_KEY || '').trim();
+  const from = String(
+    process.env.INSPECTION_EMAIL_FROM ||
+    process.env.EMAIL_FROM ||
+    ANNUAL_INSPECTION_EMAIL_FROM
+  ).trim();
+
+  if (!apiKey || !from) {
+    return { sent: false, reason: 'Email provider is not configured (RESEND_API_KEY / EMAIL_FROM).' };
+  }
+
+  const plate = [row.plate_number, row.plate_code].filter(Boolean).join(' ').trim();
+  const subject = days < 0
+    ? 'URGENT: Annual Vehicle Inspection Overdue — ' + plate
+    : 'Annual Vehicle Inspection Reminder — ' + plate;
+
+  const text = [
+    'Hello ' + (row.driver || 'Team') + ',',
+    '',
+    'Vehicle ' + plate + ' — Annual Periodic Inspection — ' +
+      (days < 0 ? 'OVERDUE by ' + Math.abs(days) + ' day(s)' : 'Due Within ' + days + ' Day(s)') +
+      ' inspection is still pending.',
+    'Please arrange the inspection.',
+    '',
+    'Please also inform your Supervisor and the Camp/Campus team accordingly.',
+    '',
+    'Site: ' + site,
+    'Inspection Expiry: ' + expiry,
+    'Fleet Management'
+  ].join('\\n');
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + apiKey,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      from,
+      to,
+      cc,
+      subject,
+      text
+    })
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.message || data?.error || 'Email provider returned HTTP ' + response.status);
+  }
+
+  return { sent: true, id: data?.id || null, to, cc };
+}
+
 async function processAnnualInspectionReminders() {
   const result = await pgQuery(`
     SELECT id, plate_number, plate_code, driver, location,
@@ -2213,7 +2292,6 @@ app.listen(PORT, () => {
   console.log("Building APIs: /api/sites, /api/work-orders, /api/projects, /api/purchases");
   console.log("======================================");
 });
-
 
 
 

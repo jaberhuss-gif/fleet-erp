@@ -216,7 +216,9 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
         </button><ExcelImportButton endpoint="/projects" kind="projects" onImported={load} label="Import Excel" /><label className="btn btn-warning" style={{cursor:"pointer",margin:0}}>{pdfBusy ? "Reading PDF..." : "Import PDF → Project + WO"}<input type="file" accept=".pdf,application/pdf" style={{display:"none"}} disabled={pdfBusy} onChange={e => previewPdf(e.target.files?.[0])} /></label></>}
       </div>
 
-      {message && <div className="alert alert-success">{message}</div>}\n\n      {pdfPreview && canWork && (
+      {message && <div className="alert alert-success">{message}</div>}
+
+      {pdfPreview && canWork && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
           <div style={{background:'#fff',borderRadius:12,padding:20,maxWidth:1100,width:'100%',maxHeight:'90vh',overflow:'auto'}}>
             <h3 style={{marginTop:0}}>PDF Import — Project + Work Order</h3>

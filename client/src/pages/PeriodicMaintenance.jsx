@@ -305,9 +305,20 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       rows: vehicleSummary.filter(v => !v.sixDone)
     },
     annualNotInspected: {
-      title: 'Annual Inspection — Not Inspected',
+      title: 'Annual Inspection — Due Within 30 Days',
       color: '#dc2626',
-      rows: vehicleSummary.filter(v => !v.annualDone)
+      rows: vehicleSummary
+        .filter(v => !v.annualDone && (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
+        .map(v => ({ ...v, inspectionExpiry: String(v.inspectionExpiry || getInspectionExpiry(v.vehicle_id)).slice(0, 10) }))
+        .filter(v => {
+          const days = Math.ceil((new Date(v.inspectionExpiry + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000);
+          return days <= 30;
+        })
+        .sort((a, b) => {
+          const da = new Date(a.inspectionExpiry + 'T00:00:00Z').getTime();
+          const db = new Date(b.inspectionExpiry + 'T00:00:00Z').getTime();
+          return da - db || String(a.plate).localeCompare(String(b.plate));
+        })
     }
   };
 

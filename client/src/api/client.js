@@ -59,6 +59,12 @@ export const getMaintenanceTickets = () =>
 export const getMaintenanceWhatsAppInfo = (id) =>
   api.get('/tickets/' + id + '/maintenance-whatsapp-info').then((r) => r.data);
 
+export const getSixMonthRepairStatuses = () =>
+  api.get('/periodic-maintenance/repair-statuses').then((r) => r.data);
+
+export const getSixMonthRepairWhatsAppInfo = (id) =>
+  api.get('/periodic-maintenance/' + id + '/repair-whatsapp-info').then((r) => r.data);
+
 export const deleteAllTickets = () =>
   api.delete('/tickets').then((r) => r.data);
 

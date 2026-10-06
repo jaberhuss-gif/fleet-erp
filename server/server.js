@@ -1454,7 +1454,7 @@ app.post("/api/periodic-maintenance/whatsapp-confirmation", async (req, res) => 
       [token, record.id]
     );
 
-    const baseUrl = String(process.env.PUBLIC_APP_URL || process.env.RENDER_EXTERNAL_URL || "https://fleet-erp-kn0c.onrender.com").replace(/\/$/, "");
+    const baseUrl = String(req.protocol + "://" + req.get("host")).replace(/\/$/, "");
     res.json({
       success: true,
       confirmationUrl: baseUrl + "/inspection-confirm/" + token,
@@ -1847,7 +1847,7 @@ app.get("/api/vehicles/:id/whatsapp-info", async (req, res) => {
          WHERE id = $2`,
         [token, annualRecord.id]
       );
-      const baseUrl = String(process.env.PUBLIC_APP_URL || process.env.RENDER_EXTERNAL_URL || "https://fleet-erp-kn0c.onrender.com").replace(/\/$/, "");
+      const baseUrl = String(req.protocol + "://" + req.get("host")).replace(/\/$/, "");
       confirmationUrl = baseUrl + "/inspection-confirm/" + token;
     }
     res.json({

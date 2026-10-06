@@ -43,3 +43,17 @@ export function toWaMeNumber(value) {
 export function toStoredPhone(value) {
   return normalizeSaudiPhone(value) || String(value ?? "").trim();
 }
+
+// Generic WhatsApp recipient normalisation. Preserves an explicit international
+// country code; only assumes Saudi Arabia when a plain Saudi local mobile is supplied.
+export function toWaMeInternational(value) {
+  let raw = String(value ?? "").trim();
+  if (!raw) return null;
+  let digits = raw.replace(/[^0-9]/g, "");
+  if (!digits) return null;
+  if (raw.startsWith("00") && digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("966") && digits.length >= 12) return digits;
+  if (digits.length === 10 && digits.startsWith("05")) return "966" + digits.slice(1);
+  if (digits.length === 9 && digits.startsWith("5")) return "966" + digits;
+  return digits;
+}

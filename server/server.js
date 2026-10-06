@@ -439,6 +439,47 @@ app.get("/api/issues/types", async (req, res) => {
     { value: "Oil Engine", label: "Oil Engine" }, { value: "Other", label: "Other" }
   ]});
 });
+// ===== MAINTENANCE ISSUE WHATSAPP CONFIRMATION =====
+const MAINTENANCE_CONFIRM_BASE_URL = () =>
+  String(process.env.PUBLIC_APP_URL || "https://fleet-erp-kn0c.onrender.com").replace(/\/$/, "");
+
+app.get("/api/tickets/:id/maintenance-whatsapp-info", async (req, res) => {
+  try {
+    const result = await pgQuery(`SELECT t.id,t.status,t.category,t.description,v.plate_number,v.plate_code,v.driver,v.phone FROM tickets t LEFT JOIN vehicles v ON v.id=t.vehicle_id WHERE t.id=$1 AND t.vehicle_id IS NOT NULL LIMIT 1`, [req.params.id]);
+    const row=result.rows[0];
+    if(!row) return res.status(404).json({success:false,error:"Maintenance ticket not found."});
+    if(["Daily KM","Daily Vehicle Submission"].includes(String(row.category||""))) return res.status(400).json({success:false,error:"Daily KM tickets cannot use maintenance confirmation."});
+    if(!String(row.phone||"").trim()) return res.status(400).json({success:false,error:"Driver phone number is not available."});
+    const token=randomUUID();
+    await pgQuery(`UPDATE tickets SET whatsapp_confirmation_token=$1,whatsapp_confirmed_at=NULL,whatsapp_confirmation_source='Fleet Management - WhatsApp Pending',status='Pending Driver Confirmation',updated_at=CURRENT_TIMESTAMP WHERE id=$2`,[token,row.id]);
+    res.json({success:true,driverName:row.driver||"",driverPhone:row.phone||"",vehiclePlate:[row.plate_number,row.plate_code].filter(Boolean).join(" ").trim(),issueType:row.category||"Maintenance Issue",description:row.description||"",confirmationUrl:MAINTENANCE_CONFIRM_BASE_URL()+"/maintenance-confirm/"+token});
+  } catch(e){console.error("[MaintenanceWhatsAppInfo]",e);res.status(500).json({success:false,error:e.message});}
+});
+
+app.get("/maintenance-confirm/:token", async (req,res)=>{
+  try{
+    const token=String(req.params.token||"").trim();
+    const result=await pgQuery(`SELECT t.id,t.status,t.category,t.description,t.whatsapp_confirmed_at,v.plate_number,v.plate_code FROM tickets t LEFT JOIN vehicles v ON v.id=t.vehicle_id WHERE t.whatsapp_confirmation_token=$1 LIMIT 1`,[token]);
+    const row=result.rows[0]; res.set("Cache-Control","no-store,no-cache,must-revalidate,proxy-revalidate");
+    if(!row)return res.status(404).send("<h2>Maintenance confirmation link is invalid or expired.</h2>");
+    if(row.status==="Completed"||row.whatsapp_confirmed_at)return res.send("<h2>Maintenance Already Confirmed</h2><p>This maintenance issue has already been confirmed.</p>");
+    const plate=[row.plate_number,row.plate_code].filter(Boolean).join(" ").trim();
+    const esc=s=>String(s??"").replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    res.send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Maintenance Confirmation</title></head><body style="font-family:Arial,sans-serif;max-width:560px;margin:40px auto;padding:20px"><h2>Vehicle Maintenance Confirmation</h2><p><b>Vehicle:</b> ${esc(plate)}</p><p><b>Issue:</b> ${esc(row.category||"Maintenance Issue")}</p><p>${esc(row.description||"")}</p><hr/><p>Has this maintenance issue been repaired?</p><p>هل تم إصلاح هذه المشكلة في المركبة؟</p><form method="POST" action="/maintenance-confirm/${encodeURIComponent(token)}?decision=yes"><button style="padding:14px 28px;background:#16a34a;color:white;border:0;border-radius:8px;font-size:18px">YES — Repaired</button></form><br/><form method="POST" action="/maintenance-confirm/${encodeURIComponent(token)}?decision=no"><button style="padding:14px 28px;background:#dc2626;color:white;border:0;border-radius:8px;font-size:18px">NO — Not Repaired</button></form></body></html>`);
+  }catch(e){res.status(500).send("Maintenance confirmation error.");}
+});
+app.post("/maintenance-confirm/:token", async(req,res)=>{
+  try{
+    const token=String(req.params.token||"").trim(),decision=String(req.query.decision||req.body?.decision||"").toLowerCase();
+    const result=await pgQuery(`SELECT id,status FROM tickets WHERE whatsapp_confirmation_token=$1 LIMIT 1`,[token]); const row=result.rows[0];
+    if(!row)return res.status(404).send("<h2>Maintenance confirmation link is invalid or expired.</h2>");
+    if(row.status==="Completed")return res.send("<h2>Maintenance Already Confirmed</h2><p>This maintenance issue has already been confirmed.</p>");
+    if(decision==="yes"){await pgQuery(`UPDATE tickets SET status='Completed',closed_at=CURRENT_TIMESTAMP,closed_by='Driver - WhatsApp',resolution_notes=COALESCE(NULLIF(resolution_notes,''),'Driver confirmed repaired via WhatsApp'),whatsapp_confirmed_at=CURRENT_TIMESTAMP,whatsapp_confirmation_source='Fleet Management - WhatsApp YES',whatsapp_confirmation_token=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND whatsapp_confirmation_token=$2`,[row.id,token]);return res.send("<h2>✓ Maintenance Confirmed</h2><p>The repair has been confirmed and recorded in Fleet ERP.</p><p>Date: "+new Date().toISOString().slice(0,10)+"</p>");}
+    if(decision==="no"){await pgQuery(`UPDATE tickets SET status='Open',whatsapp_confirmation_source='Fleet Management - WhatsApp NO',whatsapp_confirmation_token=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND whatsapp_confirmation_token=$2`,[row.id,token]);return res.send("<h2>Maintenance Still Pending</h2><p>The ticket remains open. Fleet Management has been notified.</p>");}
+    res.status(400).send("<h2>Please choose YES or NO.</h2>");
+  }catch(e){console.error("[MaintenanceConfirm]",e);res.status(500).send("Maintenance confirmation error.");}
+});
+
 app.post("/api/issues/report", async (req, res) => {
   try {
     const { vehicleId, issueType, category, description, priority, openedAt } = req.body;

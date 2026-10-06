@@ -51,7 +51,7 @@ export default function MaintenanceRequest({user,access={}}){
       'Thank you,',
       'Fleet / Building Maintenance'
     ];
-    const body=lines.join('\\r\\n');
+    const body=lines.join('\n');
     const cc=(r.cc_emails||[]).filter(Boolean).join(';');
     const params=new URLSearchParams({subject,body});
     if(cc)params.set('cc',cc);

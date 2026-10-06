@@ -122,7 +122,7 @@ export async function syncBuildingFromVelaOnce() {
           ($1,$2,$3,$4,$5,$6,$7::numeric,$8::numeric,$9::date,$10::date,$11,$12,$13,$14,$15,
            $16::numeric,$17,$18,$19,$20::date,$21,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
       `, [
-        projectNo, str(p.name) || projectNo, str(p.description), siteMap.get(String(p.site_id)) || str(p.site),
+        projectNo, str(p.name) || projectNo, str(p.description), siteMap.get(String(p.site_id)) || str(p.site) || 'Unassigned',
         str(p.project_type) || 'Development', status, num(p.budget), total,
         date(p.start_date || p.created_at), date(p.end_date), str(p.manager),
         contractor, str(p.month), str(p.year), str(p.notes), total, isContractor,

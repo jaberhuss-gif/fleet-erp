@@ -107,7 +107,30 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 mountPdfWorkOrderImport(app);
-const PORT = process.env.PORT || 3000;
+async function syncBuildingProjectAmountsOnce() {
+  if (String(process.env.SYNC_BUILDING_PROJECT_AMOUNTS || '').toLowerCase() !== 'true') return;
+  try {
+    const file = path.join(__dirname, 'data', 'building', 'projects.json');
+    const projects = JSON.parse(fs.readFileSync(file, 'utf8'));
+    let updated = 0, missing = 0;
+    for (const p of projects) {
+      const amount = Number(p.total_cost ?? p.spent ?? 0) || 0;
+      const contractorCost = Number(p.contractor_cost ?? amount) || 0;
+      const r = await pgQuery(
+        `UPDATE projects
+         SET spent = $1::numeric,
+             contractor_cost = $2::numeric,
+             contractor = $3::text
+         WHERE project_no = $4::text`,
+        [amount, contractorCost, String(p.contractor || ''), String(p.project_no || '')]
+      );
+      if (r.rowCount) updated++; else missing++;
+    }
+    console.log(`[BuildingProjects] synced amounts: ${updated} updated, ${missing} not found`);
+  } catch (e) {
+    console.error('[BuildingProjects] amount sync failed:', e.message);
+  }
+}\n\nconst PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
@@ -2165,7 +2188,7 @@ try {
 app.use(express.static(path.join(__dirname, '../client/dist')));
 app.get('*', async (req, res) => { res.sendFile(path.join(__dirname, '../client/dist/index.html')); });
 
-app.listen(PORT, () => {
+syncBuildingProjectAmountsOnce().finally(() => {\napp.listen(PORT, () => {
   console.log("");
   console.log("======================================");
   console.log("FLEET ERP SERVER");

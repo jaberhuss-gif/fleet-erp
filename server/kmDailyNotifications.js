@@ -561,7 +561,7 @@ export async function getDriverDailyKmStatus(userId) {
   const userResult = await query(`
     SELECT id, role, phone, full_name, username
     FROM users
-    WHERE id = $1
+    WHERE id = $1::bigint
     LIMIT 1
   `, [userId]);
 
@@ -587,7 +587,7 @@ export async function getDriverDailyKmStatus(userId) {
     WHERE
       (
         COALESCE(v.phone, '') <> ''
-        OR ($2 <> '' AND LOWER(TRIM(v.driver)) = LOWER(TRIM($2)))
+        OR ($2::text <> '' AND LOWER(TRIM(v.driver)) = LOWER(TRIM($2::text)))
       )
       AND COALESCE(LOWER(TRIM(v.status)), '') NOT IN ('inactive', 'sold', 'disposed', 'disabled')
     ORDER BY v.id

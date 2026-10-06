@@ -109,7 +109,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-mountBuildingMaintenanceRequestRoutes(app);
 mountPdfWorkOrderImport(app);
 mountPdfProjectImport(app);
 async function syncBuildingProjectAmountsOnce() {
@@ -162,6 +161,9 @@ app.use("/api", async (req, res, next) => {
 });
 
 app.get("/api/health", async (req, res) => res.json({ status: "ok", time: new Date().toISOString() }));
+
+// Building maintenance request routes must be mounted after JSON parsing and API authentication.
+mountBuildingMaintenanceRequestRoutes(app);
 
 // ===== TEMPORARY VEHICLE MIGRATION FEED (OLD ERP -> VELA) =====
 // Protected by a Render environment secret. This is intentionally limited to

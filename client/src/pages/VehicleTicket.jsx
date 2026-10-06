@@ -19,7 +19,6 @@ export default function VehicleTicket({ user, canWork=false }) {
   const [tireRequests,setTireRequests]=useState([]);
   const [vehicles,setVehicles]=useState([]);
   const [dailyReport,setDailyReport]=useState(null);
-  const [inspectionRows,setInspectionRows]=useState([]);
   const [search,setSearch]=useState('');
   const [status,setStatus]=useState('Open');
   const [activeTab,setActiveTab]=useState('maintenance');
@@ -35,14 +34,11 @@ export default function VehicleTicket({ user, canWork=false }) {
         api.get('/tire/service-requests'),
         api.get('/vehicles'),
         api.get('/google-sheet-submission-report'),
-        api.get('/periodic-maintenance')
-      ]);
+        ]);
       setTickets(t.data?.tickets||[]);
       setTireRequests(tr.data?.requests||[]);
       setVehicles(v.data?.vehicles||[]);
       setDailyReport(d.data||null);
-      const pmData=p.data?.records||p.data?.maintenance||p.data||[];
-      setInspectionRows(Array.isArray(pmData)?pmData:[]);
     }catch(e){
       setError(e.response?.data?.error||e.message);
     }finally{setLoading(false)}
@@ -109,17 +105,7 @@ export default function VehicleTicket({ user, canWork=false }) {
       };
     }),[vehicles]);
 
-  const inspectionTicketRows=useMemo(()=>inspectionRows
-    .filter(x=>String(x.type||'').toLowerCase()==='inspection' && normalStatus(x.status)==='COMPLETED')
-    .map(x=>({
-      kind:'inspection', id:x.id, vehicle:vehicleMap[String(x.vehicle_id)]||{plate:x.vehicle_plate||x.plate,driver:x.driver},
-      description:'Annual Periodic Inspection'+(x.notes?' — '+x.notes:''), status:x.status||'Pending',
-      date:x.completed_date||x.scheduled_date||x.created_at, raw:x
-    }))
-    .filter(r=>!search || String(r.vehicle?.plate||'').toLowerCase().includes(search.toLowerCase()) || String(r.vehicle?.driver||'').toLowerCase().includes(search.toLowerCase()))
-    .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))),[inspectionRows,vehicleMap,search]);
-
-  const rows=activeTab==='inspection'?inspectionTicketRows:activeTab==='km'?kmMissingRows:
+  const rows=activeTab==='km'?kmMissingRows:
     activeTab==='oil'?oilRows:ticketRows;
 
   const visibleRows=useMemo(()=>rows.filter(r=>{
@@ -152,8 +138,7 @@ export default function VehicleTicket({ user, canWork=false }) {
     if(!canManage)return;
     if(!confirm('Confirm that the work is completed and close this request?'))return;
     try{
-      if(row.kind==='inspection') return null;
-    if(row.kind==='maintenance'){
+      if(row.kind==='maintenance'){
         const notes=prompt('Closing notes (optional):','Work completed and verified.');
         if(notes===null)return;
         await api.put('/tickets/'+row.id+'/close-with-notes',{resolutionNotes:notes});
@@ -249,7 +234,6 @@ export default function VehicleTicket({ user, canWork=false }) {
       </p>
       <div className="sub-nav" style={{marginTop:12,marginBottom:8}}>
         <button className={activeTab==='maintenance'?'sub-btn active':'sub-btn'} onClick={()=>setActiveTab('maintenance')}>1- Maintenance Issues ({ticketRows.length})</button>
-        <button className={activeTab==='inspection'?'sub-btn active':'sub-btn'} onClick={()=>{setActiveTab('inspection');setStatus('All')}}>2- Inspection Tickets ({inspectionTicketRows.length})</button>
         <button className={activeTab==='km'?'sub-btn active':'sub-btn'} onClick={()=>setActiveTab('km')}>3- Daily KM Missing ({kmMissingRows.length})</button>
         <button className={activeTab==='oil'?'sub-btn active':'sub-btn'} onClick={()=>setActiveTab('oil')}>4- Oil Compliance ({oilRows.length})</button>
       </div>
@@ -280,7 +264,6 @@ export default function VehicleTicket({ user, canWork=false }) {
             <td>{String(r.date||'').slice(0,10)||'-'}</td>
             <td><strong>{r.status}</strong></td>
             <td><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-              {r.kind==='inspection' && canManage && normalStatus(r.status)==='COMPLETED' && <button className="btn btn-warning" style={{padding:'6px 10px'}} onClick={()=>reopenInspection(r)}>✏️ Edit / Reopen</button>}
               {actionButtons(r)}
               <button className="btn" style={{padding:'6px 10px',background:'#25D366',color:'#fff'}} onClick={()=>whatsapp(r)}>📱 WhatsApp</button>
             </div></td>

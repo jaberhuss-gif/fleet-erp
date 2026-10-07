@@ -57,15 +57,15 @@ export default function MaintenanceRequest({user,access={}}){
       'subject='+encodeURIComponent(subject),
       'body='+encodeURIComponent(body)
     ].filter(Boolean).join('&');
-    const outlookDesktopUrl='ms-outlook://compose?'+params;
-    // Launch the installed Outlook app instead of Outlook Web.
-    // The body remains plain text; the full HTTPS workflow URL is preserved so Outlook can auto-link it.
-    try{
-      window.location.href=outlookDesktopUrl;
-      setMessage('📧 Opening the Outlook Desktop app with the email ready. Review it and click Send. / يتم الآن فتح تطبيق Outlook على الكمبيوتر والإيميل جاهز للمراجعة ثم اضغط Send.');
-    }catch(e){
-      setError('Could not open the Outlook Desktop app. Please make Outlook the default mail app in Windows.');
-    }
+    const mailto='mailto:'+encodeURIComponent(to)+'?'+[
+      'subject='+encodeURIComponent(subject),
+      cc ? 'cc='+encodeURIComponent(cc) : '',
+      'body='+encodeURIComponent(body)
+    ].filter(Boolean).join('&');
+    // Use the standard Windows mailto protocol so the installed Outlook app
+    // creates a prefilled compose window with To, CC, Subject and Body.
+    window.location.href=mailto;
+    setMessage('📧 Opening the Outlook Desktop app with the email prepared. Review it and click Send. / يتم الآن فتح تطبيق Outlook والإيميل مجهز للمراجعة ثم اضغط Send.');
   };
   const financialAction=async(r,action)=>{
     const f=finance[r.id]||{}, amount=Number(f.amount); setMessage('');setError('');

@@ -74,8 +74,9 @@ export default function TireManagement({ user, driverMode=false }) {
   useEffect(()=>{ loadVehicles().catch(e=>setError(e.response?.data?.error||e.message)); },[]);
   useEffect(()=>{ if(vehicleId) load().catch(e=>setError(e.response?.data?.error||e.message)); },[vehicleId]);
 
-  const locked = data?.survey?.status === 'LOCKED';
+  const locked = !!data?.survey && (data.survey.locked === true || ['SUBMITTED','APPROVED','LOCKED'].includes(String(data.survey.status || '').toUpperCase()));
   const vehicle = vehicles.find(v=>String(v.id)===String(vehicleId));
+  const vehicleLabel = (v) => v?.plate || ((v?.plate_number || '') + ' ' + (v?.plate_code || '')).trim() || ('Vehicle ID ' + v?.id);
 
   const choosePhoto = async (position,file) => {
     if (!file) return;
@@ -147,10 +148,10 @@ export default function TireManagement({ user, driverMode=false }) {
       <label>Vehicle</label>
       <select value={vehicleId} onChange={e=>setVehicleId(e.target.value)} style={{maxWidth:500}}>
         <option value="">-- Select vehicle --</option>
-        {vehicles.map(v=><option key={v.id} value={v.id}>{v.plate}</option>)}
+        {vehicles.map(v=><option key={v.id} value={v.id}>{vehicleLabel(v)}</option>)}
       </select>
       {vehicle && data?.survey && <div style={{marginTop:10}}>
-        <strong>Initial Survey:</strong> <Badge status={data.survey.status==='LOCKED'?'green':'yellow'} />
+        <strong>Initial Survey:</strong> <Badge status={['APPROVED','LOCKED'].includes(String(data.survey.status||'').toUpperCase())?'green':'yellow'} />
         {data.survey.submitted_at && <span style={{marginLeft:8,color:'#64748b'}}>Submitted {new Date(data.survey.submitted_at).toLocaleString()}</span>}
       </div>}
     </div>
@@ -166,8 +167,8 @@ export default function TireManagement({ user, driverMode=false }) {
           <thead><tr><th style={{textAlign:'left',padding:8}}>Vehicle</th><th style={{textAlign:'left',padding:8}}>Survey Status</th><th style={{textAlign:'left',padding:8}}>Submitted</th><th style={{textAlign:'left',padding:8}}>Photos</th><th style={{textAlign:'left',padding:8}}>Action</th></tr></thead>
           <tbody>
             {vehicles.filter(v=>v.survey_status||v.submitted_at).map(v=><tr key={v.id}>
-              <td style={{padding:8,fontWeight:700}}>{v.plate}</td>
-              <td style={{padding:8}}><Badge status={v.survey_status==='SUBMITTED'?'green':(v.survey_status||'yellow')}/></td>
+              <td style={{padding:8,fontWeight:700}}>{vehicleLabel(v)}</td>
+              <td style={{padding:8}}><Badge status={String(v.survey_status||'').toUpperCase()==='SUBMITTED'?'yellow':(String(v.survey_status||'').toUpperCase()==='APPROVED'||String(v.survey_status||'').toUpperCase()==='LOCKED'?'green':'yellow')}/></td>
               <td style={{padding:8}}>{v.submitted_at ? new Date(v.submitted_at).toLocaleString() : '-'}</td>
               <td style={{padding:8}}>6 photos stored</td>
               <td style={{padding:8}}><button type="button" className="btn btn-primary" onClick={()=>setVehicleId(String(v.id))}>Open Survey</button></td>

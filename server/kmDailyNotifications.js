@@ -586,8 +586,9 @@ export async function getDriverDailyKmStatus(userId) {
     FROM vehicles v
     WHERE
       (
-        COALESCE(v.phone, '') <> ''
-        OR ($2::text <> '' AND LOWER(TRIM(v.driver)) = LOWER(TRIM($2::text)))
+        ($1::text <> '' AND REGEXP_REPLACE(COALESCE(v.phone, ''), '[^0-9]', '', 'g') = $1::text)
+        OR
+        ($2::text <> '' AND LOWER(TRIM(COALESCE(v.driver, ''))) = LOWER(TRIM($2::text)))
       )
       AND COALESCE(LOWER(TRIM(v.status)), '') NOT IN ('inactive', 'sold', 'disposed', 'disabled')
     ORDER BY v.id

@@ -1162,11 +1162,11 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
                 <option value="all">All Vehicles</option>
                 {vehicles.map(v=><option key={v.id} value={v.id}>{v.plate}</option>)}
               </select>
-              <select value={filterType} onChange={e=>setFilterType(e.target.value)}>
+              {fixedType ? <input value={TYPE_LABELS[fixedType] || fixedType} readOnly style={{minWidth:180}} /> : <select value={filterType} onChange={e=>setFilterType(e.target.value)}>
                 <option value="all">All Types</option>
                 <option value="6_months_general">6-Month General</option>
                 <option value="inspection">Inspection</option>
-              </select>
+              </select>}
               <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
                 <option value="all">All Statuses</option>
                 <option value="Pending">Pending</option>

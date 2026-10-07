@@ -3,6 +3,8 @@ import { query } from "./postgres.js";
 import { createWorkOrder, updateWorkOrder, getWorkOrder, closeWorkOrder } from "./database-pg.js";
 
 const OWNER_EMAIL = "Hussein.Anwar@iemaadex.com";
+const maintenanceTestMode = () => String(process.env.MAINTENANCE_EMAIL_TEST_MODE || "").toLowerCase() === "true";
+const workflowRecipients = email => maintenanceTestMode() ? [clean(process.env.MAINTENANCE_TEST_EMAIL || OWNER_EMAIL)] : (email ? [email] : []);
 const CONTRACTORS = [
   { name: "Jodoud Al Khaleej", email: "jodoudalkhaleej.co.sa@gmail.com" },
   { name: "Raghad Alafq", email: "raghadalafq@gmail.com" }
@@ -144,7 +146,7 @@ async function notifyNewRequest(reqRow) {
 }
 
 async function notifyAssignment(reqRow) {
-  const recipients = reqRow.executor_email ? [reqRow.executor_email] : [];
+  const recipients = workflowRecipients(reqRow.executor_email);
   if (!recipients.length) return { sent: false, reason: "Assigned executor email is not available." };
   const acknowledgeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.acknowledgement_token}/acknowledge`;
   return sendEmail({
@@ -194,7 +196,7 @@ async function notifyCompletionReady(reqRow) {
 }
 
 async function notifyRequesterReady(reqRow) {
-  const recipients = reqRow.requester_email ? [reqRow.requester_email] : [];
+  const recipients = workflowRecipients(reqRow.requester_email);
   if (!recipients.length) return { sent: false, reason: "Requester email is not available." };
   const yes = `${appUrl()}/api/maintenance-requests/public/${reqRow.confirmation_token}/confirm?answer=yes`;
   const no = `${appUrl()}/api/maintenance-requests/public/${reqRow.confirmation_token}/confirm?answer=no`;
@@ -293,8 +295,9 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       if (!executorName) return res.status(400).json({success:false,error:"Executor name is required"});
       if (executorType === "Contractor" && !executorEmail) return res.status(400).json({success:false,error:"Contractor email is required"});
       const isContractor = executorType === "Contractor";
-      const acknowledgementToken = row.acknowledgement_token || randomUUID();
-      const completionToken = row.completion_token || randomUUID();
+      const acknowledgementToken = randomUUID();
+      const completionToken = randomUUID();
+      const confirmationToken = randomUUID();
       await query(`UPDATE maintenance_requests SET acknowledgement_token=$1, completion_token=$2, confirmation_token=$3 WHERE id=$4`, [acknowledgementToken, completionToken, confirmationToken, row.id]);
       const order = await createWorkOrder({
         site: row.site, category: row.category, priority: row.priority, description: row.description,
@@ -312,7 +315,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       const updatedRow=updated.rows[0];
       await auditEvent(row.id, "ASSIGNED", executorType, executorName, {work_order_id: order.id, executor_email: executorEmail || null});
 
-      // Assignment notification is automatic. TEST MODE sends only to OWNER_EMAIL.
+      // Assignment notification is automatic. In test mode it is routed only to MAINTENANCE_TEST_EMAIL.
       let email = {sent:false, reason:"Email was not attempted."};
       try {
         email = await notifyAssignment(updatedRow);
@@ -321,7 +324,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
           WHERE id=$1 RETURNING *`, [row.id]);
         await auditEvent(row.id, "ASSIGNMENT_EMAIL_SENT", "System", "Fleet ERP", {
           provider: email.provider || null,
-          to: OWNER_EMAIL,
+          to: (maintenanceTestMode() ? [clean(process.env.MAINTENANCE_TEST_EMAIL || OWNER_EMAIL)] : [executorEmail]),
           message_id: email.message_id || null
         });
         res.json({success:true,request:emailed.rows[0],workOrder:order,email});
@@ -396,8 +399,8 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
         await updateWorkOrder(row.work_order_id,{status: answer==="yes" ? "Operationally Completed" : "In Progress"});
         await query(`UPDATE work_orders SET operational_status=$1 WHERE id=$2`,[answer==="yes" ? "Completed" : "In Progress",row.work_order_id]);
       }
-      if(answer==="no") await sendEmail({to:[OWNER_EMAIL],subject:`BUILDING MAINTENANCE — ${row.request_no} NOT FIXED`,html:`<h2>❌ Maintenance needs more work</h2><p><b>${row.request_no}</b> was not confirmed by the requester.</p><p>${row.description}</p>`}).catch(()=>{});
-      if(answer==="yes") await sendEmail({to:[OWNER_EMAIL],subject:`BUILDING MAINTENANCE — ${row.request_no} CONFIRMED YES`,html:`<h2>✅ Campus Confirmed Maintenance</h2><p><b>${row.request_no}</b> was confirmed YES by the requester.</p><p><b>Site:</b> ${row.site || "-"}</p><p>The request is ready for final Amount and Close/Open control.</p>`}).catch(()=>{});
+      if(answer==="no") await sendEmail({to:workflowRecipients(OWNER_EMAIL),subject:`BUILDING MAINTENANCE — ${row.request_no} NOT FIXED`,html:`<h2>❌ Maintenance needs more work</h2><p><b>${row.request_no}</b> was not confirmed by the requester.</p><p>${row.description}</p>`}).catch(()=>{});
+      if(answer==="yes") await sendEmail({to:workflowRecipients(OWNER_EMAIL),subject:`BUILDING MAINTENANCE — ${row.request_no} CONFIRMED YES`,html:`<h2>✅ Campus Confirmed Maintenance</h2><p><b>${row.request_no}</b> was confirmed YES by the requester.</p><p><b>Site:</b> ${row.site || "-"}</p><p>The request is ready for final Amount and Close/Open control.</p>`}).catch(()=>{});
       res.json({success:true,status});
     } catch(e){res.status(400).json({success:false,error:e.message});}
   });
@@ -490,7 +493,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       await query(`UPDATE maintenance_requests SET status='Acknowledged', acknowledged_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1`,[row.id]);
       await auditEvent(row.id, "ACKNOWLEDGED", row.executor_type || "Executor", row.executor_name, {executor_email: row.executor_email});
       const completionEmail = await notifyCompletionReady(row).catch(e => ({sent:false, reason:e.message}));
-      await auditEvent(row.id, completionEmail.sent ? "COMPLETION_EMAIL_SENT" : "COMPLETION_EMAIL_FAILED", "System", "Fleet ERP", {to: row.executor_email || null, reason: completionEmail.reason || null});
+      await auditEvent(row.id, completionEmail.sent ? "COMPLETION_EMAIL_SENT" : "COMPLETION_EMAIL_FAILED", "System", "Fleet ERP", {to: (maintenanceTestMode() ? clean(process.env.MAINTENANCE_TEST_EMAIL || OWNER_EMAIL) : row.executor_email) || null, reason: completionEmail.reason || null});
       res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>✅ Assignment Acknowledged</h2><p><b>Request:</b> ${row.request_no}</p><p>Thank you. Fleet / Building Maintenance has been notified that you received the work assignment.</p><p>تم تأكيد استلام مهمة الصيانة وتحديث النظام تلقائياً.</p></body></html>`);
     } catch(e){res.status(500).send("<h2>Error processing acknowledgement</h2>");}
   });

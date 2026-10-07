@@ -23,6 +23,18 @@ function clean(v) { return String(v ?? "").trim(); }
 
 async function ensureSchema() {
   await query(`
+    CREATE TABLE IF NOT EXISTS maintenance_request_events (
+      id BIGSERIAL PRIMARY KEY,
+      request_id BIGINT NOT NULL,
+      action TEXT NOT NULL,
+      actor_type TEXT NOT NULL DEFAULT 'System',
+      actor_name TEXT,
+      details JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_mr_events_request ON maintenance_request_events(request_id, created_at)`);
+  await query(`
     CREATE TABLE IF NOT EXISTS maintenance_requests (
       id BIGSERIAL PRIMARY KEY,
       request_no TEXT UNIQUE,
@@ -73,38 +85,27 @@ async function ensureSchema() {
   await query(`UPDATE maintenance_requests SET acknowledgement_token=COALESCE(NULLIF(acknowledgement_token,''), gen_random_uuid()::text), completion_token=COALESCE(NULLIF(completion_token,''), gen_random_uuid()::text) WHERE acknowledgement_token IS NULL OR acknowledgement_token='' OR completion_token IS NULL OR completion_token=''`);
 }
 
+
+async function auditEvent(requestId, action, actorType, actorName, details = {}) {
+  try {
+    await query(
+      `INSERT INTO maintenance_request_events
+        (request_id, action, actor_type, actor_name, details)
+       VALUES ($1,$2,$3,$4,$5::jsonb)`,
+      [requestId, action, actorType || "System", actorName || "", JSON.stringify(details || {})]
+    );
+  } catch (e) {
+    console.error("Maintenance audit event:", e.message);
+  }
+}
+
 async function sendEmail({ to, cc = [], subject, html }) {
   const recipients = (Array.isArray(to) ? to : [to]).map(clean).filter(Boolean);
   const ccRecipients = (Array.isArray(cc) ? cc : [cc]).map(clean).filter(Boolean);
-  const webhook = clean(process.env.POWER_AUTOMATE_WEBHOOK_URL);
-
-  // Preferred production path: Power Automate -> Microsoft 365 Outlook.
-  // No Resend, DNS changes, or company Outlook credentials are required in Fleet ERP.
-  if (webhook && recipients.length) {
-    const response = await fetch(webhook, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        to: recipients,
-        cc: ccRecipients,
-        subject,
-        html,
-        source: "Fleet ERP",
-        sentAt: new Date().toISOString()
-      })
-    });
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Power Automate email flow error: ${response.status} ${body}`);
-    }
-    return { sent: true, provider: "Power Automate / Microsoft 365 Outlook" };
-  }
-
-  // Temporary legacy fallback only when the Power Automate webhook is not configured.
   const apiKey = clean(process.env.RESEND_API_KEY);
   const from = clean(process.env.EMAIL_FROM || process.env.INSPECTION_EMAIL_FROM || OWNER_EMAIL);
   if (!apiKey || !from || !recipients.length) {
-    return { sent: false, reason: "Power Automate email flow is not configured (POWER_AUTOMATE_WEBHOOK_URL)." };
+    return { sent: false, reason: "Resend email is not configured (RESEND_API_KEY / EMAIL_FROM)." };
   }
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -115,7 +116,7 @@ async function sendEmail({ to, cc = [], subject, html }) {
     const body = await response.text();
     throw new Error(`Email provider error: ${response.status} ${body}`);
   }
-  return { sent: true, provider: "Resend (legacy fallback)" };
+  return { sent: true, provider: "Resend" };
 }
 
 function button(url, text, color = "#0f766e") {
@@ -215,6 +216,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
         RETURNING *
       `, [clean(site), clean(category) || "General Maintenance", clean(priority) || "Medium", clean(description), req.user?.id || null, requesterName, requesterEmail, token, confirmationToken, acknowledgementToken]);
       const row = result.rows[0];
+      await auditEvent(row.id, "REQUEST_CREATED", "Requester", requesterName, {site: row.site, category: row.category, priority: row.priority});
       const email = await notifyNewRequest(row).catch(e => ({sent:false, reason:e.message}));
       res.status(201).json({ success:true, request:row, email });
     } catch (e) {
@@ -237,6 +239,14 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       const r = await query(`SELECT * FROM maintenance_requests ORDER BY created_at DESC, id DESC`);
       res.json({success:true, requests:r.rows, contractors:CONTRACTORS});
     } catch(e) { res.status(500).json({success:false,error:e.message}); }
+  });
+
+  app.get("/api/maintenance-requests/:id/audit", async (req,res) => {
+    try {
+      await ensureSchema();
+      const r = await query(`SELECT * FROM maintenance_request_events WHERE request_id=$1 ORDER BY created_at ASC, id ASC`, [req.params.id]);
+      res.json({success:true,events:r.rows});
+    } catch(e){res.status(500).json({success:false,error:e.message});}
   });
 
   app.get("/api/maintenance-requests/:id", async (req,res) => {
@@ -273,6 +283,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
         WHERE id=$5 RETURNING *
       `, [order.id, executorType, executorName, executorEmail || null, row.id]);
       const updatedRow=updated.rows[0];
+      await auditEvent(row.id, "ASSIGNED", executorType, executorName, {work_order_id: order.id, executor_email: executorEmail || null});
       // Assignment creates the WO only. The Maintenance Manager sends the contractor email manually via Outlook.
       // This keeps the approved workflow: Manager -> Contractor -> Acknowledge -> Work Completed -> Campus YES/NO -> Manager closes financially.
       const email = {sent:false, manual:true, reason:"Ready to send manually via Outlook."};
@@ -294,11 +305,13 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
         const updated = await query(`UPDATE maintenance_requests
           SET email_status='Sent', email_sent_at=CURRENT_TIMESTAMP, email_error=NULL, updated_at=CURRENT_TIMESTAMP
           WHERE id=$1 RETURNING *`, [row.id]);
+        await auditEvent(row.id, "ASSIGNMENT_EMAIL_SENT", "System", "Fleet ERP", {provider: email.provider || null, to: row.executor_email});
         return res.json({success:true,request:updated.rows[0],email});
       } catch (e) {
         const updated = await query(`UPDATE maintenance_requests
           SET email_status='Failed', email_error=$1, updated_at=CURRENT_TIMESTAMP
           WHERE id=$2 RETURNING *`, [e.message, row.id]);
+        await auditEvent(row.id, "ASSIGNMENT_EMAIL_FAILED", "System", "Fleet ERP", {error: e.message});
         return res.status(502).json({success:false,request:updated.rows[0],email:{sent:false,reason:e.message},error:e.message});
       }
     } catch(e) {
@@ -331,6 +344,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       if(!["yes","no"].includes(answer)) return res.status(400).json({success:false,error:"Answer must be yes or no"});
       const status=answer==="yes" ? "Operationally Completed" : "Reopened";
       await query(`UPDATE maintenance_requests SET status=$1, requester_confirmed_at=CURRENT_TIMESTAMP, requester_confirmation=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3`,[status,answer,row.id]);
+      await auditEvent(row.id, answer==="yes" ? "CAMPUS_CONFIRMED" : "CAMPUS_REJECTED", "Campus", row.requester_name, {answer});
       if(row.work_order_id){
         await updateWorkOrder(row.work_order_id,{status: answer==="yes" ? "Operationally Completed" : "In Progress"});
         await query(`UPDATE work_orders SET operational_status=$1 WHERE id=$2`,[answer==="yes" ? "Completed" : "In Progress",row.work_order_id]);
@@ -355,11 +369,14 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       if (action === "close" && (!Number.isFinite(amount) || amount < 0)) return res.status(400).json({success:false,error:"Valid Amount is required to close the request."});
       if (action === "open") {
         const updated = await query(`UPDATE maintenance_requests SET status='Open', final_amount=$1, closing_notes=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3 RETURNING *`,[Number.isFinite(amount)&&amount>=0?amount:null,notes,row.id]);
+        await auditEvent(row.id, "REOPENED_BY_FLEET", "Fleet / Building Maintenance", clean(req.user?.full_name||req.user?.username||"Fleet / Building Maintenance"), {amount, notes});
         if (row.work_order_id) await updateWorkOrder(row.work_order_id,{status:"Open",closingNotes:notes});
         return res.json({success:true,request:updated.rows[0]});
       }
       const wo = row.work_order_id ? await closeWorkOrder(row.work_order_id,{finalCost:amount,contractorCost:row.executor_type==="Contractor"?amount:0,isContractor:row.executor_type==="Contractor",contractorName:row.executor_type==="Contractor"?row.executor_name:"",performedBy:row.executor_name||"",closingNotes:notes}) : null;
-      const updated = await query(`UPDATE maintenance_requests SET status='Closed', final_amount=$1, closed_at=CURRENT_TIMESTAMP, closed_by=$2, closing_notes=$3, updated_at=CURRENT_TIMESTAMP WHERE id=$4 RETURNING *`,[amount,clean(req.user?.full_name||req.user?.username||"Fleet / Building Maintenance"),notes,row.id]);
+      const closedBy = clean(req.user?.full_name||req.user?.username||"Fleet / Building Maintenance");
+      const updated = await query(`UPDATE maintenance_requests SET status='Closed', final_amount=$1, closed_at=CURRENT_TIMESTAMP, closed_by=$2, closing_notes=$3, updated_at=CURRENT_TIMESTAMP WHERE id=$4 RETURNING *`,[amount,closedBy,notes,row.id]);
+      await auditEvent(row.id, "CLOSED", "Fleet / Building Maintenance", closedBy, {amount, notes});
       res.json({success:true,request:updated.rows[0],workOrder:wo});
     } catch(e) { console.error("Maintenance financial close:",e); res.status(400).json({success:false,error:e.message}); }
   });
@@ -423,6 +440,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       const row=r.rows[0];
       if(row.acknowledged_at) return res.send("<html><body style='font-family:Arial;padding:40px'><h2>📩 Assignment Already Acknowledged</h2><p>This assignment has already been acknowledged.</p></body></html>");
       await query(`UPDATE maintenance_requests SET status='Acknowledged', acknowledged_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1`,[row.id]);
+      await auditEvent(row.id, "ACKNOWLEDGED", "Contractor", row.executor_name, {executor_email: row.executor_email});
       res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>✅ Assignment Acknowledged</h2><p><b>Request:</b> ${row.request_no}</p><p>Thank you. Fleet / Building Maintenance has been notified that you received the work assignment.</p><p>تم تأكيد استلام مهمة الصيانة وتحديث النظام تلقائياً.</p></body></html>`);
     } catch(e){res.status(500).send("<h2>Error processing acknowledgement</h2>");}
   });
@@ -452,6 +470,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       }
       await updateWorkOrder(row.work_order_id,{status:"Awaiting Confirmation",completedDate:new Date()});
       const updated=await query(`UPDATE maintenance_requests SET status='Awaiting Confirmation', completed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING *`,[row.id]);
+      await auditEvent(row.id, "WORK_COMPLETED", row.executor_type || "Contractor", row.executor_name, {work_order_id: row.work_order_id});
       await notifyRequesterReady(updated.rows[0]).catch(()=>{});
       res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>✅ Work Completed</h2><p><b>Request:</b> ${row.request_no}</p><p>The requester has been asked to confirm that everything is OK.</p><p>تم تسجيل إكمال العمل وإرسال طلب التأكيد إلى مقدم الطلب.</p></body></html>`);
     } catch(e){res.status(500).send("<h2>Error processing completion</h2>");}

@@ -348,6 +348,20 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
     }
   });
 
+  app.post("/api/maintenance-requests/:id/resend-confirmation", async (req,res) => {
+    try {
+      await ensureSchema();
+      const row = await getRequest(req.params.id);
+      if (!row) return res.status(404).json({success:false,error:"Request not found"});
+      if (!row.completed_at) return res.status(400).json({success:false,error:"Work has not been completed yet."});
+      const email = await notifyRequesterReady(row);
+      if (!email.sent) return res.status(502).json({success:false,error:email.reason||"Confirmation email was not sent.",email});
+      return res.json({success:true,request:row,email});
+    } catch(e) {
+      return res.status(502).json({success:false,error:e.message});
+    }
+  });
+
   app.post("/api/maintenance-requests/:id/work-completed", async (req,res) => {
     try {
       await ensureSchema();

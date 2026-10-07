@@ -225,7 +225,11 @@ export default function TireManagement({ user, driverMode=false }) {
           <h2 style={{margin:0}}>🔒 Initial Tire Survey Locked</h2>
           <p style={{color:'#64748b'}}>The initial survey cannot be edited after submission.</p>
         </div>
-        {user?.role==='Owner' && <button className="btn btn-warning" onClick={reopen}>Reopen Survey</button>}
+        {user?.role==='Owner' && <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          <button className="btn btn-warning" onClick={reopen}>Reopen Survey</button>
+          <button className="btn btn-secondary" onClick={()=>openSurveyPdf(vehicleId)}>📄 Vehicle PDF</button>
+          <button className="btn btn-primary" onClick={openAllSurveyPdf}>📚 All Submitted Surveys PDF</button>
+        </div>}
       </div>
       {data?.survey?.photos && <div style={{marginTop:16}}>
         <h3>📷 Survey Photos (6)</h3>
@@ -233,6 +237,9 @@ export default function TireManagement({ user, driverMode=false }) {
           {POSITIONS.map(p=>data.survey.photos[p] ? <div key={p}><div style={{fontWeight:700,marginBottom:5}}>{p}</div><img src={data.survey.photos[p]} alt={p} style={{width:'100%',height:150,objectFit:'cover',borderRadius:8,border:'1px solid #e2e8f0'}} /></div> : <div key={p}>{p}: photo missing</div>)}
         </div>
       </div>}
+      <div style={{marginTop:12,display:'flex',gap:8,flexWrap:'wrap'}}>
+        <button className="btn btn-secondary" onClick={()=>openSurveyPdf(vehicleId)}>📄 Print / Save Vehicle PDF</button>
+      </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))',gap:12,marginTop:14}}>
         {(data?.tires||[]).map(t=><div key={t.id} style={{border:'1px solid #e2e8f0',borderRadius:10,padding:12}}>
           <strong>{t.position}</strong> <Badge status={t.condition_status}/>

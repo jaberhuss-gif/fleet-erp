@@ -29,7 +29,7 @@ export default function VehicleTicket({ user, canWork=false }) {
   const load=async()=>{
     setLoading(true);setError('');
     try{
-      const [t,tr,v,p,d]=await Promise.all([
+      const [t,tr,v,d]=await Promise.all([
         api.get('/tickets?fleetType=maintenance'),
         api.get('/tire/service-requests'),
         api.get('/vehicles'),

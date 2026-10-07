@@ -1232,6 +1232,30 @@ export async function mountTireRoutes(app) {
 
   await ensureTireSchema();
 
+  app.get("/api/tire/driver/vehicles", async (req, res) => {
+    try {
+      if (req.user?.role !== "Driver") {
+        return res.status(403).json({ success: false, error: "Driver only" });
+      }
+      const me = [req.user?.full_name, req.user?.username]
+        .filter(Boolean)
+        .map(s => String(s).trim().toLowerCase())
+        .filter(Boolean);
+      if (!me.length) return res.json({ success: true, vehicles: [] });
+      const r = await query(
+        `SELECT id, plate, plate_number, plate_code, driver, location
+         FROM vehicles
+         WHERE LOWER(TRIM(COALESCE(driver,''))) = ANY($1::text[])
+         AND LOWER(TRIM(COALESCE(plate,''))) <> 'test 123'
+         ORDER BY plate, plate_number, id`,
+        [me]
+      );
+      res.json({ success: true, vehicles: r.rows });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   app.get("/api/tire/control", async (req, res) => {
     try {
       if (req.user?.role === "Driver") {

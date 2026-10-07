@@ -193,12 +193,15 @@ async function notifyAssignment(reqRow) {
 }
 
 async function notifyRequesterReady(reqRow) {
-  if (!reqRow.requester_email) return { sent: false, reason: "Requester email is not available." };
+  const testMode = clean(process.env.MAINTENANCE_TEST_MODE).toLowerCase() === "true";
+  const testEmail = clean(process.env.MAINTENANCE_TEST_EMAIL);
+  const recipients = testMode && testEmail ? [testEmail] : (reqRow.requester_email ? [reqRow.requester_email] : []);
+  if (!recipients.length) return { sent: false, reason: "Requester email is not available." };
   const yes = `${appUrl()}/api/maintenance-requests/public/${reqRow.confirmation_token}/confirm?answer=yes`;
   const no = `${appUrl()}/api/maintenance-requests/public/${reqRow.confirmation_token}/confirm?answer=no`;
   return sendEmail({
-    to: [reqRow.requester_email],
-    cc: [OWNER_EMAIL],
+    to: recipients,
+    cc: testMode ? [] : [OWNER_EMAIL],
     subject: `BUILDING MAINTENANCE — ${reqRow.request_no} READY FOR CONFIRMATION`,
     html: `
       <h2>🛠️ Maintenance Work Completed</h2>

@@ -1204,62 +1204,39 @@ export async function mountTireRoutes(app) {
         return res.status(403).json({ success: false, error: "Driver only" });
       }
 
-      // Driver portal accounts use the assigned vehicle ID as a negative user ID
-      // (for example, user -40 represents vehicle 40). This is the authoritative
-      // driver-to-vehicle link for the portal and must be checked first.
-      const numericUserId = Number(req.user?.id);
-      let r;
+      // Vehicle Master is the single source of truth for driver assignment.
+      // Resolve the logged-in Driver account to the Driver Master record, then
+      // return only vehicles linked through vehicles.driver_id / drivers.vehicle_id.
+      const userResult = await query(
+        `SELECT id, username, full_name, phone
+         FROM users
+         WHERE id = $1 AND role = 'Driver'
+         LIMIT 1`,
+        [req.user?.id]
+      );
+      const user = userResult.rows[0] || req.user || {};
+      const names = [user.full_name, user.username]
+        .filter(Boolean)
+        .map(v => String(v).trim().toLowerCase())
+        .filter(Boolean);
+      const phones = [user.phone]
+        .filter(Boolean)
+        .map(v => String(v).replace(/\\D/g, ""))
+        .filter(Boolean);
 
-      if (Number.isInteger(numericUserId) && numericUserId < 0) {
-        const vehicleId = Math.abs(numericUserId);
-        r = await query(
-          `SELECT id, plate, plate_number, plate_code, driver, location
-           FROM vehicles
-           WHERE id = $1
-             AND LOWER(TRIM(COALESCE(plate, ''))) <> 'test 123'
-           LIMIT 1`,
-          [vehicleId]
-        );
-      } else {
-        // Fallback for normal Driver accounts: use the real Driver Master
-        // assignment and stored vehicle driver snapshot.
-        const userResult = await query(
-          `SELECT username, full_name, phone
-           FROM users
-           WHERE id = $1
-           LIMIT 1`,
-          [req.user?.id]
-        );
-        const currentUser = userResult.rows[0] || req.user || {};
-        const names = [currentUser.full_name, currentUser.username]
-          .filter(Boolean)
-          .map(s => String(s).trim().toLowerCase())
-          .filter(Boolean);
-        const phones = [currentUser.phone]
-          .filter(Boolean)
-          .map(s => String(s).replace(/\\D/g, ""))
-          .filter(Boolean);
-
-        r = await query(
-          `SELECT DISTINCT
-              v.id, v.plate, v.plate_number, v.plate_code, v.driver, v.location
-           FROM vehicles v
-           LEFT JOIN drivers d ON d.id = v.driver_id
-           WHERE LOWER(TRIM(COALESCE(v.plate, ''))) <> 'test 123'
-             AND (
-               LOWER(TRIM(COALESCE(d.name,''))) = ANY($1::text[])
-               OR LOWER(TRIM(COALESCE(v.driver,''))) = ANY($1::text[])
-               OR REGEXP_REPLACE(COALESCE(d.phone,''), '[^0-9]', '', 'g') = ANY($2::text[])
-               OR REGEXP_REPLACE(COALESCE(v.phone,''), '[^0-9]', '', 'g') = ANY($2::text[])
-               OR d.vehicle_id = v.id AND (
-                 LOWER(TRIM(COALESCE(d.name,''))) = ANY($1::text[])
-                 OR REGEXP_REPLACE(COALESCE(d.phone,''), '[^0-9]', '', 'g') = ANY($2::text[])
-               )
-             )
-           ORDER BY v.plate_number, v.plate_code, v.id`,
-          [names, phones]
-        );
-      }
+      const r = await query(
+        `SELECT DISTINCT
+            v.id, v.plate, v.plate_number, v.plate_code, v.driver, v.location
+         FROM vehicles v
+         INNER JOIN drivers d ON d.id = v.driver_id
+         WHERE LOWER(TRIM(COALESCE(v.plate, ''))) <> 'test 123'
+           AND (
+             LOWER(TRIM(COALESCE(d.name, ''))) = ANY($1::text[])
+             OR REGEXP_REPLACE(COALESCE(d.phone, ''), '[^0-9]', '', 'g') = ANY($2::text[])
+           )
+         ORDER BY v.plate_number, v.plate_code, v.id`,
+        [names, phones]
+      );
 
       res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
       res.json({ success: true, vehicles: r.rows });

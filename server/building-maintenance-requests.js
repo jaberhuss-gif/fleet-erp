@@ -297,8 +297,30 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       `, [order.id, executorType, executorName, executorEmail || null, row.id]);
       const updatedRow=updated.rows[0];
       await auditEvent(row.id, "ASSIGNED", executorType, executorName, {work_order_id: order.id, executor_email: executorEmail || null});
-      const email = {sent:false, ready:true, reason:"Work Order created. Use Send Secure Email to notify the assigned executor."};
-      res.json({success:true,request:updatedRow,workOrder:order,email});
+
+      // Assignment notification is automatic. TEST MODE sends only to OWNER_EMAIL.
+      let email = {sent:false, reason:"Email was not attempted."};
+      try {
+        email = await notifyAssignment(updatedRow);
+        const emailed = await query(`UPDATE maintenance_requests
+          SET email_status='Sent', email_sent_at=CURRENT_TIMESTAMP, email_error=NULL, updated_at=CURRENT_TIMESTAMP
+          WHERE id=$1 RETURNING *`, [row.id]);
+        await auditEvent(row.id, "ASSIGNMENT_EMAIL_SENT", "System", "Fleet ERP", {
+          provider: email.provider || null,
+          to: OWNER_EMAIL,
+          message_id: email.message_id || null
+        });
+        res.json({success:true,request:emailed.rows[0],workOrder:order,email});
+        return;
+      } catch (e) {
+        email = {sent:false, reason:e.message};
+        await query(`UPDATE maintenance_requests
+          SET email_status='Failed', email_error=$1, updated_at=CURRENT_TIMESTAMP
+          WHERE id=$2`, [e.message, row.id]);
+        await auditEvent(row.id, "ASSIGNMENT_EMAIL_FAILED", "System", "Fleet ERP", {error:e.message, to:OWNER_EMAIL});
+      }
+      const failedRow = await getRequest(row.id);
+      res.json({success:true,request:failedRow,workOrder:order,email});
     } catch(e){res.status(400).json({success:false,error:e.message});}
   });
 

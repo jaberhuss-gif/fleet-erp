@@ -310,6 +310,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
         await query(`UPDATE work_orders SET operational_status=$1 WHERE id=$2`,[answer==="yes" ? "Completed" : "In Progress",row.work_order_id]);
       }
       if(answer==="no") await sendEmail({to:[OWNER_EMAIL],cc:CC_EMAILS,subject:`BUILDING MAINTENANCE — ${row.request_no} NOT FIXED`,html:`<h2>❌ Maintenance needs more work</h2><p><b>${row.request_no}</b> was not confirmed by the requester.</p><p>${row.description}</p>`}).catch(()=>{});
+      if(answer==="yes") await sendEmail({to:[OWNER_EMAIL],cc:CC_EMAILS,subject:`BUILDING MAINTENANCE — ${row.request_no} CONFIRMED YES`,html:`<h2>✅ Campus Confirmed Maintenance</h2><p><b>${row.request_no}</b> was confirmed YES by the requester.</p><p><b>Site:</b> ${row.site || "-"}</p><p>The request is ready for final Amount and Close/Open control.</p>`}).catch(()=>{});
       res.json({success:true,status});
     } catch(e){res.status(400).json({success:false,error:e.message});}
   });
@@ -323,7 +324,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       const amount = Number(req.body?.amount);
       const action = clean(req.body?.action).toLowerCase();
       const notes = clean(req.body?.notes);
-      if (row.requester_confirmation !== "yes" || row.status !== "Operationally Completed") return res.status(400).json({success:false,error:"Campus must confirm YES before financial closing."});
+      if (row.requester_confirmation !== "yes" || !["Operationally Completed","Open"].includes(row.status)) return res.status(400).json({success:false,error:"Campus must confirm YES before financial closing."});
       if (!["close","open"].includes(action)) return res.status(400).json({success:false,error:"Action must be close or open"});
       if (action === "close" && (!Number.isFinite(amount) || amount < 0)) return res.status(400).json({success:false,error:"Valid Amount is required to close the request."});
       if (action === "open") {

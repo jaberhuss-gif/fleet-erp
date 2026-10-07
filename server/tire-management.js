@@ -73,11 +73,14 @@ async function assertDriverCanAccessVehicle(req, vehicleId) {
   const r = await query(
     `SELECT v.id
      FROM vehicles v
-     INNER JOIN drivers d ON d.id = v.driver_id
+     LEFT JOIN drivers d ON d.id = v.driver_id
      WHERE v.id = $1
        AND (
          LOWER(TRIM(COALESCE(d.name, ''))) = ANY($2::text[])
+         OR LOWER(TRIM(COALESCE(v.driver, ''))) = ANY($2::text[])
          OR REGEXP_REPLACE(COALESCE(d.phone, ''), '[^0-9]', '', 'g') = ANY($3::text[])
+         OR REGEXP_REPLACE(COALESCE(v.phone, ''), '[^0-9]', '', 'g') = ANY($3::text[])
+         OR d.vehicle_id = v.id
        )
      LIMIT 1`,
     [vehicleId, names, phones]
@@ -1262,6 +1265,7 @@ export async function mountTireRoutes(app) {
              OR LOWER(TRIM(COALESCE(v.driver, ''))) = ANY($1::text[])
              OR REGEXP_REPLACE(COALESCE(d.phone, ''), '[^0-9]', '', 'g') = ANY($2::text[])
              OR REGEXP_REPLACE(COALESCE(v.phone, ''), '[^0-9]', '', 'g') = ANY($2::text[])
+             OR d.vehicle_id = v.id
            )
          ORDER BY v.plate_number, v.plate_code, v.id`,
         [names, phones]

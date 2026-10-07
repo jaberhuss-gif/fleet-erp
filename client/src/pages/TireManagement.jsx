@@ -63,7 +63,7 @@ export default function TireManagement({ user, driverMode=false }) {
   const [error,setError] = useState('');
 
   const loadVehicles = async () => {
-    const r = await api.get('/vehicles/list');
+    const r = await api.get('/tire/control');
     setVehicles(r.data.vehicles || []);
   };
   const load = async (id=vehicleId) => {
@@ -157,6 +157,26 @@ export default function TireManagement({ user, driverMode=false }) {
 
     {message && <div className="alert alert-success">{message}</div>}
     {error && <div className="alert alert-error">{error}</div>}
+
+    <div className="panel" style={{marginTop:16}}>
+      <h2>📋 Initial Tire Survey Records</h2>
+      <p style={{color:'#64748b'}}>Every submitted tire survey is stored by vehicle, with its six inspection photos retained in the survey record.</p>
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse'}}>
+          <thead><tr><th style={{textAlign:'left',padding:8}}>Vehicle</th><th style={{textAlign:'left',padding:8}}>Survey Status</th><th style={{textAlign:'left',padding:8}}>Submitted</th><th style={{textAlign:'left',padding:8}}>Photos</th><th style={{textAlign:'left',padding:8}}>Action</th></tr></thead>
+          <tbody>
+            {vehicles.filter(v=>v.survey_status||v.submitted_at).map(v=><tr key={v.id}>
+              <td style={{padding:8,fontWeight:700}}>{v.plate}</td>
+              <td style={{padding:8}}><Badge status={v.survey_status==='SUBMITTED'?'green':(v.survey_status||'yellow')}/></td>
+              <td style={{padding:8}}>{v.submitted_at ? new Date(v.submitted_at).toLocaleString() : '-'}</td>
+              <td style={{padding:8}}>6 photos stored</td>
+              <td style={{padding:8}}><button type="button" className="btn btn-primary" onClick={()=>setVehicleId(String(v.id))}>Open Survey</button></td>
+            </tr>)}
+            {!vehicles.some(v=>v.survey_status||v.submitted_at) && <tr><td colSpan="5" style={{padding:12,color:'#64748b'}}>No submitted tire surveys found.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
 
     {vehicleId && !locked && <div className="panel">
       <h2>Initial Tire Survey — 6 Tires</h2>

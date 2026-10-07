@@ -159,9 +159,10 @@ async function notifyAssignment(reqRow) {
   const recipients = testMode && testEmail ? [testEmail] : (reqRow.executor_email ? [reqRow.executor_email] : []);
   const acknowledgeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.acknowledgement_token}/acknowledge`;
   const completeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.completion_token}/work-completed`;
+  const ccRecipients = testMode ? [] : [OWNER_EMAIL, ...CC_EMAILS];
   return sendEmail({
     to: recipients,
-    cc: [OWNER_EMAIL, ...CC_EMAILS],
+    cc: ccRecipients,
     subject: `BUILDING MAINTENANCE — ${reqRow.request_no} ASSIGNED`,
     html: `
       <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:24px;color:#1f2937">

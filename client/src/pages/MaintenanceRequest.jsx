@@ -11,61 +11,20 @@ export default function MaintenanceRequest({user,access={}}){
   const setType=(id,type)=>setAssign({...assign,[id]:{type,name:'',email:''}});
   const setExecutor=(id,name)=>{const a=assign[id]||{},list=a.type==='Contractor'?contractors:employees,x=list.find(v=>(v.name||v.full_name)===name);setAssign({...assign,[id]:{...a,name,email:x?.email||''}})};
   const doAssign=async id=>{const a=assign[id]||{};if(!a.type||!a.name)return setError('Select who will execute the work.');try{const r=await api.post('/maintenance-requests/'+id+'/assign',{executorType:a.type,executorName:a.name,executorEmail:a.email});setMessage(r.data.email?.sent ? '📧 '+r.data.request.request_no+' assigned to '+a.name+'. Email sent successfully. WO created.' : '⚠️ '+r.data.request.request_no+' assigned to '+a.name+'. WO created, but email failed: '+(r.data.email?.reason||'Unknown email error'));await load()}catch(e){setError(e.response?.data?.error||e.message)}};
-  const sendWorkflowEmail=r=>{
+  const sendWorkflowEmail=async r=>{
     setMessage('');setError('');
     if(!r.executor_email)return setError('Executor email is not available.');
-
-    const base='https://fleet-erp-kn0c.onrender.com';
-    const workflowUrl=base+'/api/maintenance-requests/public/workflow/'+r.acknowledgement_token;
-    const subject='Building Maintenance Work Assignment - '+r.request_no+' - '+(r.site||'');
-    const lines=[
-      'Dear '+(r.executor_name||'Executor')+',',
-      '',
-      'BUILDING MAINTENANCE WORK ASSIGNMENT',
-      'Please open the work assignment link below and follow the steps shown.',
-      '',
-      'REQUEST DETAILS / تفاصيل الطلب',
-      '- Request No. / رقم الطلب: '+(r.request_no||'-'),
-      '- Site / الموقع: '+(r.site||'-'),
-      '- Problem / المشكلة: '+(r.description||'-'),
-      '- Assigned To / تم التكليف إلى: '+(r.executor_name||'-'),
-      '',
-      'WORK ASSIGNMENT LINK / رابط مهمة الصيانة',
-      'Open this link. The page will show the correct YES button for each step.',
-      'افتح الرابط. الصفحة ستعرض زر YES الصحيح لكل خطوة.',
-      workflowUrl,
-      '',
-      'STEP 1: Acknowledge Receipt',
-      'STEP 2: Work Completed',
-      'The ERP records each YES action with the date and time.',
-      'يقوم النظام بتسجيل كل ضغطة YES مع التاريخ والوقت.',
-      '',
-      'Please review this email and click Send.',
-      'يرجى مراجعة الإيميل ثم الضغط على Send.',
-      '',
-      'Thank you,',
-      'Fleet / Building Maintenance'
-    ];
-    // Outlook Desktop compose URI accepts a prefilled plain-text body. Keep the workflow URL
-    // on its own line with a CRLF + trailing space so Outlook can auto-link the HTTPS URL.
-    const body=lines.join('\r\n')+'\r\n ';
-    const to=String(r.executor_email||'').split(',').map(x=>x.trim()).filter(Boolean).join(',');
-    const cc=String(r.cc_emails||'').split(',').map(x=>x.trim()).filter(Boolean).join(',');
-    const params=[
-      'to='+encodeURIComponent(to),
-      cc ? 'cc='+encodeURIComponent(cc) : '',
-      'subject='+encodeURIComponent(subject),
-      'body='+encodeURIComponent(body)
-    ].filter(Boolean).join('&');
-    const mailto='mailto:'+encodeURIComponent(to)+'?'+[
-      'subject='+encodeURIComponent(subject),
-      cc ? 'cc='+encodeURIComponent(cc) : '',
-      'body='+encodeURIComponent(body)
-    ].filter(Boolean).join('&');
-    // Use the standard Windows mailto protocol so the installed Outlook app
-    // creates a prefilled compose window with To, CC, Subject and Body.
-    window.location.href=mailto;
-    setMessage('📧 Opening the Outlook Desktop app with the email prepared. Review it and click Send. / يتم الآن فتح تطبيق Outlook والإيميل مجهز للمراجعة ثم اضغط Send.');
+    try{
+      const response=await api.post('/maintenance-requests/'+r.id+'/resend-email');
+      if(response.data?.email?.sent){
+        setMessage('📧 Secure workflow email sent to '+r.executor_email+'. It contains direct YES buttons for Acknowledge and Work Completed. / تم إرسال إيميل مهمة الصيانة ويحتوي على أزرار مباشرة للموافقة.');
+        await load();
+      }else{
+        setError('Email was not sent: '+(response.data?.email?.reason||'Unknown email error'));
+      }
+    }catch(e){
+      setError(e.response?.data?.error||e.response?.data?.email?.reason||e.message);
+    }
   };
   const financialAction=async(r,action)=>{
     const f=finance[r.id]||{}, amount=Number(f.amount); setMessage('');setError('');

@@ -278,7 +278,7 @@ export async function getTireControl() {
       COALESCE(today_km.reading_km, 0) AS current_km,
       COALESCE(oil_history.oil_change_km, v.last_oil_km) AS last_oil_km,
       COALESCE(v.oil_change_interval, 5000) AS oil_change_interval,
-      COALESCE(oil_history.oil_change_date, v.last_oil_change_date) AS last_oil_change_date,
+      COALESCE(oil_history.oil_change_date::text, v.last_oil_change_date::text) AS last_oil_change_date,
       today_km.reading_date AS daily_km_date,
       v.inspection_last_date, v.inspection_due_date,
       s.status AS survey_status, s.submitted_at,

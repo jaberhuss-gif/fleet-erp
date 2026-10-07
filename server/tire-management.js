@@ -50,14 +50,41 @@ function statusFor(tire) {
 
 async function assertDriverCanAccessVehicle(req, vehicleId) {
   if (process.env.TIRE_DRIVER_SCOPING !== "true") return;
-  if (req.user?.role !== "Driver") return;
-  const r = await query(`SELECT driver FROM vehicles WHERE id = $1 LIMIT 1`, [vehicleId]);
-  const assigned = clean(r.rows[0]?.driver).toLowerCase();
-  const me = [req.user.full_name, req.user.username]
+  if (String(req.user?.role || "").trim().toLowerCase() !== "driver") return;
+
+  // Vehicle Master is authoritative: users -> Driver Master -> vehicles.driver_id.
+  const userResult = await query(
+    `SELECT id, username, full_name, phone
+     FROM users
+     WHERE id = $1 AND role = 'Driver'
+     LIMIT 1`,
+    [req.user?.id]
+  );
+  const user = userResult.rows[0] || req.user || {};
+  const names = [user.full_name, user.username]
     .filter(Boolean)
-    .map(s => s.trim().toLowerCase());
-  if (!assigned || !me.includes(assigned)) {
-    throw httpError(403, "This vehicle is not assigned to you.");
+    .map(v => String(v).trim().toLowerCase())
+    .filter(Boolean);
+  const phones = [user.phone]
+    .filter(Boolean)
+    .map(v => String(v).replace(/\\D/g, ""))
+    .filter(Boolean);
+
+  const r = await query(
+    `SELECT v.id
+     FROM vehicles v
+     INNER JOIN drivers d ON d.id = v.driver_id
+     WHERE v.id = $1
+       AND (
+         LOWER(TRIM(COALESCE(d.name, ''))) = ANY($2::text[])
+         OR REGEXP_REPLACE(COALESCE(d.phone, ''), '[^0-9]', '', 'g') = ANY($3::text[])
+       )
+     LIMIT 1`,
+    [vehicleId, names, phones]
+  );
+
+  if (!r.rows[0]) {
+    throw httpError(403, "This vehicle is not assigned to you in Vehicle Master.");
   }
 }
 

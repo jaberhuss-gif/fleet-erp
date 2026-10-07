@@ -135,6 +135,32 @@ export default function TireManagement({ user, driverMode=false }) {
     } catch(e){setError(e.response?.data?.error||e.message);}
   };
 
+  const openSurveyPdf = async (id) => {
+    const win = window.open('', '_blank');
+    try {
+      const r = await api.get('/tire/survey-report/' + id, { responseType: 'blob' });
+      const url = URL.createObjectURL(r.data);
+      win.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      win.close();
+      setError(e.response?.data?.error || 'Could not create the PDF report.');
+    }
+  };
+
+  const openAllSurveyPdf = async () => {
+    const win = window.open('', '_blank');
+    try {
+      const r = await api.get('/tire/survey-report/all', { responseType: 'blob' });
+      const url = URL.createObjectURL(r.data);
+      win.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      win.close();
+      setError('Could not create the all-vehicle PDF report.');
+    }
+  };
+
   return <div className="hub-page">
     <div className="panel" style={{marginBottom:16}}>
       <h1 style={{margin:0}}>🛞 {driverMode ? 'Vehicle Tire Inspection' : 'Tire Management'}</h1>
@@ -160,7 +186,7 @@ export default function TireManagement({ user, driverMode=false }) {
     {error && <div className="alert alert-error">{error}</div>}
 
     <div className="panel" style={{marginTop:16}}>
-      <h2>📋 Initial Tire Survey Records</h2>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}><h2 style={{margin:0}}>📋 Initial Tire Survey Records</h2><button type="button" className="btn btn-success" onClick={openAllSurveyPdf}>📄 PDF — All Submitted Vehicles</button></div>
       <p style={{color:'#64748b'}}>Every submitted tire survey is stored by vehicle, with its six inspection photos retained in the survey record.</p>
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse'}}>
@@ -171,7 +197,7 @@ export default function TireManagement({ user, driverMode=false }) {
               <td style={{padding:8}}><Badge status={String(v.survey_status||'').toUpperCase()==='SUBMITTED'?'yellow':(String(v.survey_status||'').toUpperCase()==='APPROVED'||String(v.survey_status||'').toUpperCase()==='LOCKED'?'green':'yellow')}/></td>
               <td style={{padding:8}}>{v.submitted_at ? new Date(v.submitted_at).toLocaleString() : '-'}</td>
               <td style={{padding:8}}>6 photos stored</td>
-              <td style={{padding:8}}><button type="button" className="btn btn-primary" onClick={()=>setVehicleId(String(v.id))}>Open Survey</button></td>
+              <td style={{padding:8,display:"flex",gap:6,flexWrap:"wrap"}}><button type="button" className="btn btn-primary" onClick={()=>setVehicleId(String(v.id))}>Open Survey</button><button type="button" className="btn btn-success" onClick={()=>openSurveyPdf(v.id)}>📄 PDF</button></td>
             </tr>)}
             {!vehicles.some(v=>v.survey_status||v.submitted_at) && <tr><td colSpan="5" style={{padding:12,color:'#64748b'}}>No submitted tire surveys found.</td></tr>}
           </tbody>

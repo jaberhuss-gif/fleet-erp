@@ -67,7 +67,7 @@ async function assertDriverCanAccessVehicle(req, vehicleId) {
     .filter(Boolean);
   const phones = [user.phone]
     .filter(Boolean)
-    .map(v => String(v).replace(/\\D/g, ""))
+    .map(v => String(v).replace(/\D/g, ""))
     .filter(Boolean);
 
   const r = await query(

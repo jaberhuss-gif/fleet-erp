@@ -63,11 +63,20 @@ function annualInspectionRecipients(location) {
 }
 
 
+function isValidEmailAddress(value) {
+  const email = String(value || '').trim();
+  return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email);
+}
+
 function splitEmails(value) {
   return String(value || '')
     .split(/[;,\\n]+/)
     .map(e => e.trim())
     .filter(Boolean);
+}
+
+function validEmails(value) {
+  return splitEmails(value).filter(isValidEmailAddress);
 }
 
 async function sendAnnualInspectionReminderEmail(row) {
@@ -80,12 +89,20 @@ async function sendAnnualInspectionReminderEmail(row) {
   );
   const site = canonicalInspectionSite(row.location) || 'Unknown Site';
   const defaults = annualInspectionRecipients(site);
-  const to = splitEmails(row.inspection_manager_email || defaults.managerEmail);
-  const cc = splitEmails(row.inspection_cc_emails || defaults.ccEmails)
+
+  // Vehicle-level email fields can contain stale/invalid values. Never pass
+  // malformed addresses to the provider; fall back to the site defaults.
+  const configuredTo = validEmails(row.inspection_manager_email);
+  const defaultTo = validEmails(defaults.managerEmail);
+  const to = configuredTo.length ? configuredTo : defaultTo;
+
+  const configuredCc = validEmails(row.inspection_cc_emails);
+  const defaultCc = validEmails(defaults.ccEmails);
+  const cc = (configuredCc.length ? configuredCc : defaultCc)
     .filter(email => !to.includes(email));
 
   if (!to.length) {
-    return { sent: false, reason: 'No site manager email configured for ' + site + '.' };
+    return { sent: false, reason: 'No valid site manager email configured for ' + site + '.' };
   }
 
   const apiKey = String(process.env.RESEND_API_KEY || '').trim();
@@ -165,6 +182,9 @@ async function processAnnualInspectionReminders() {
     if (String(row.inspection_last_email_key || '') === key) { skipped++; continue; }
 
     try {
+      // Resend allows 10 requests/second. Keep this scheduler safely below
+      // that limit even when many vehicles become due at the same time.
+      await new Promise(resolve => setTimeout(resolve, 150));
       const delivery = await sendAnnualInspectionReminderEmail(row);
       if (delivery.sent) {
         await pgQuery(`UPDATE vehicles SET inspection_last_email_sent_at=CURRENT_TIMESTAMP, inspection_last_email_key=$1 WHERE id=$2`, [key, row.id]);

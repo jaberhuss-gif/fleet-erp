@@ -144,7 +144,8 @@ async function notifyNewRequest(reqRow) {
 }
 
 async function notifyAssignment(reqRow) {
-  const recipients = reqRow.executor_email ? [reqRow.executor_email] : [];
+  // TEST MODE: assignment emails go only to the owner's company mailbox.
+  const recipients = [OWNER_EMAIL];
   const acknowledgeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.acknowledgement_token}/acknowledge`;
   const completeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.completion_token}/work-completed`;
   return sendEmail({
@@ -153,7 +154,7 @@ async function notifyAssignment(reqRow) {
     html: `
       <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:24px;color:#1f2937">
         <h2 style="margin-bottom:20px">BUILDING MAINTENANCE WORK ASSIGNMENT</h2>
-        <p>Dear ${clean(reqRow.executor_name) || "Contractor"},</p>
+        <p>Dear Hussein Anwar,</p>
         <p><b>Request No.:</b> ${reqRow.request_no}</p>
         <p><b>Site:</b> ${reqRow.site || "-"}</p>
         <p><b>Category:</b> ${reqRow.category || "-"}</p>

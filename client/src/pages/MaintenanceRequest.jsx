@@ -11,49 +11,24 @@ export default function MaintenanceRequest({user,access={}}){
   const setType=(id,type)=>setAssign({...assign,[id]:{type,name:'',email:''}});
   const setExecutor=(id,name)=>{const a=assign[id]||{},list=a.type==='Contractor'?contractors:employees,x=list.find(v=>(v.name||v.full_name)===name);setAssign({...assign,[id]:{...a,name,email:x?.email||''}})};
   const doAssign=async id=>{const a=assign[id]||{};if(!a.type||!a.name)return setError('Select who will execute the work.');try{const r=await api.post('/maintenance-requests/'+id+'/assign',{executorType:a.type,executorName:a.name,executorEmail:a.email});setMessage(r.data.email?.sent ? '📧 '+r.data.request.request_no+' assigned to '+a.name+'. Email sent successfully. WO created.' : '⚠️ '+r.data.request.request_no+' assigned to '+a.name+'. WO created, but email failed: '+(r.data.email?.reason||'Unknown email error'));await load()}catch(e){setError(e.response?.data?.error||e.message)}};
-  const openOutlookEmail= r => {
-    if(!r.executor_email)return setError('Executor email is not available.');
-    const base=window.location.origin;
-    const ack=`${base}/api/maintenance-requests/public/${r.acknowledgement_token}/acknowledge`;
-    const complete=`${base}/api/maintenance-requests/public/${r.completion_token}/work-completed`;
-    const subject=`Building Maintenance Work Assignment - ${r.request_no} - ${r.site||''}`;
-    const body=[
-      `Dear ${r.executor_name||'Contractor'},`,
-      '',
-      'BUILDING MAINTENANCE WORK ASSIGNMENT',
-      `Request No.: ${r.request_no}`,
-      `Site: ${r.site||'-'}`,
-      `Category: ${r.category||'-'}`,
-      `Priority: ${r.priority||'-'}`,
-      `Description: ${r.description||'-'}`,
-      '',
-      'STEP 1 - ACKNOWLEDGE RECEIPT',
-      'Please open this link and confirm receipt:',
-      ack,
-      '',
-      'STEP 2 - WORK COMPLETED',
-      'After completing the repair, open this link and confirm:',
-      complete,
-      '',
-      'Regards,',
-      'Fleet / Building Maintenance'
-    ].join('\\n');
-    window.location.href=`mailto:${encodeURIComponent(r.executor_email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  };
-
   const sendWorkflowEmail=async r=>{
     setMessage('');setError('');
     if(!r.executor_email)return setError('Executor email is not available.');
+    setEmailSending(prev=>({...prev,[r.id]:true}));
     try{
       const response=await api.post('/maintenance-requests/'+r.id+'/resend-email');
-      if(response.data?.email?.sent){
-        setMessage('📧 Secure workflow email sent to '+r.executor_email+'. It contains direct YES buttons for Acknowledge and Work Completed. / تم إرسال إيميل مهمة الصيانة ويحتوي على أزرار مباشرة للموافقة.');
+      if(response.data?.success && response.data?.email?.sent){
+        const target=response.data?.email?.to||r.executor_email;
+        setMessage('✅ Secure HTML email sent successfully to '+(Array.isArray(target)?target.join(', '):target)+'. The email contains clickable ACKNOWLEDGE RECEIPT and WORK COMPLETED buttons.');
         await load();
       }else{
-        setError('Email was not sent: '+(response.data?.email?.reason||'Unknown email error'));
+        setError('❌ Email was not sent: '+(response.data?.email?.reason||response.data?.error||'Unknown email error'));
       }
     }catch(e){
-      setError(e.response?.data?.error||e.response?.data?.email?.reason||e.message);
+      const data=e.response?.data||{};
+      setError('❌ Email was not sent: '+(data.error||data.email?.reason||e.message));
+    }finally{
+      setEmailSending(prev=>({...prev,[r.id]:false}));
     }
   };
   const financialAction=async(r,action)=>{
@@ -114,8 +89,7 @@ export default function MaintenanceRequest({user,access={}}){
                     {[{t:'1. Report',ok:true},{t:'2. Assigned',ok:!!r.work_order_id},{t:'3. Acknowledged',ok:!!r.acknowledged_at},{t:'4. Work Completed',ok:!!r.completed_at},{t:'5. Requester Confirmed',ok:!!r.requester_confirmed_at}].map(s=><div key={s.t} style={{padding:'8px 6px',textAlign:'center',borderRadius:8,background:s.ok?'#dcfce7':'#fee2e2',color:s.ok?'#166534':'#991b1b',fontSize:12,fontWeight:700}}>{s.ok?'✓':'○'} {s.t}</div>)}
                   </div>
                   {r.executor_email&&<div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:10,alignItems:'center'}}>
-                    <button type="button" className="btn btn-primary" onClick={()=>openOutlookEmail(r)}>📧 Open Outlook Email / فتح إيميل Outlook</button>
-                    <button type="button" className="btn" onClick={()=>sendWorkflowEmail(r)}>📨 Send Secure Email / إرسال الإيميل مباشرة</button>
+                    <button type="button" className="btn btn-primary" disabled={!!emailSending[r.id]} onClick={()=>sendWorkflowEmail(r)}>{emailSending[r.id]?'⏳ Sending...':'📨 Send Secure Email / إرسال الإيميل مباشرة'}</button>
                     {!r.acknowledged_at&&r.acknowledgement_token&&<a className="btn btn-primary" style={{textDecoration:'none',background:'#2563eb'}} href={`/api/maintenance-requests/public/${r.acknowledgement_token}/acknowledge`} target="_blank" rel="noreferrer">📩 Acknowledge Receipt</a>}
                     {r.acknowledged_at&&!r.completed_at&&r.completion_token&&<a className="btn btn-primary" style={{textDecoration:'none',background:'#2563eb'}} href={`/api/maintenance-requests/public/${r.completion_token}/work-completed`} target="_blank" rel="noreferrer">🔵 Work Completed</a>}
                   </div>}

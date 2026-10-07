@@ -12,9 +12,9 @@ export default function MaintenanceRequest({user,access={}}){
   const setExecutor=(id,name)=>{const a=assign[id]||{},list=a.type==='Contractor'?contractors:employees,x=list.find(v=>(v.name||v.full_name)===name);setAssign({...assign,[id]:{...a,name,email:x?.email||''}})};
   const doAssign=async id=>{const a=assign[id]||{};if(!a.type||!a.name)return setError('Select who will execute the work.');try{const r=await api.post('/maintenance-requests/'+id+'/assign',{executorType:a.type,executorName:a.name,executorEmail:a.email});setMessage(r.data.email?.sent ? '📧 '+r.data.request.request_no+' assigned to '+a.name+'. Email sent successfully. WO created.' : '⚠️ '+r.data.request.request_no+' assigned to '+a.name+'. WO created, but email failed: '+(r.data.email?.reason||'Unknown email error'));await load()}catch(e){setError(e.response?.data?.error||e.message)}};
   const financialAction=async(r,action)=>{
-    const f=finance[r.id]||{}, amount=Number(f.amount); setMessage('');setError('');
-    if(action==='close'&&(!Number.isFinite(amount)||amount<0))return setError('Enter a valid Amount before closing.');
-    try{await api.post('/maintenance-requests/'+r.id+'/financial-close',{action,amount:Number.isFinite(amount)&&amount>=0?amount:null,notes:f.notes||''});setMessage(action==='close'?'✅ '+r.request_no+' is CLOSED with Amount '+amount+'.':'🔓 '+r.request_no+' is OPEN for further action.');await load()}catch(e){setError(e.response?.data?.error||e.message)}
+    const f=finance[r.id]||{}, rawAmount=String(f.amount??'').trim(), amount=rawAmount===''?null:Number(rawAmount); setMessage('');setError('');
+    if(action==='close'&&amount!==null&&(!Number.isFinite(amount)||amount<0))return setError('Enter a valid non-negative Amount or leave it blank.');
+    try{await api.post('/maintenance-requests/'+r.id+'/financial-close',{action,amount,notes:f.notes||''});setMessage(action==='close'?(amount===null?'✅ '+r.request_no+' is CLOSED without Amount.':'✅ '+r.request_no+' is CLOSED with Amount '+amount+'.'):'🔓 '+r.request_no+' is OPEN for further action.');await load()}catch(e){setError(e.response?.data?.error||e.message)}
   };
   if(loading)return <div className="loading">Loading Support & Service...</div>;
   return <div className="form-container" style={{maxWidth:1200}}>
@@ -68,10 +68,13 @@ export default function MaintenanceRequest({user,access={}}){
                   <div style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(120px,1fr))',gap:6}}>
                     {[{t:'1. Report',ok:true},{t:'2. Assigned',ok:!!r.work_order_id},{t:'3. Acknowledged',ok:!!r.acknowledged_at},{t:'4. Work Completed',ok:!!r.completed_at},{t:'5. Requester Confirmed',ok:!!r.requester_confirmed_at}].map(s=><div key={s.t} style={{padding:'8px 6px',textAlign:'center',borderRadius:8,background:s.ok?'#dcfce7':'#fee2e2',color:s.ok?'#166534':'#991b1b',fontSize:12,fontWeight:700}}>{s.ok?'✓':'○'} {s.t}</div>)}
                   </div>
-                  {r.work_order_id&&<div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:10,alignItems:'center'}}>
-                    {!r.acknowledged_at&&r.acknowledgement_token&&<a className="btn btn-primary" style={{textDecoration:'none',background:'#2563eb'}} href={`/api/maintenance-requests/public/${r.acknowledgement_token}/acknowledge`} target="_blank" rel="noreferrer">📩 Acknowledge Receipt</a>}
-                    {r.acknowledged_at&&!r.completed_at&&r.completion_token&&<a className="btn btn-primary" style={{textDecoration:'none',background:'#2563eb'}} href={`/api/maintenance-requests/public/${r.completion_token}/work-completed`} target="_blank" rel="noreferrer">🔵 Work Completed</a>}
-                  </div>}
+                  <div style={{marginTop:10,fontSize:13,color:'#475569'}}>
+                    {r.status==='Assigned'&&!r.acknowledged_at&&'📧 Waiting for executor to acknowledge the assignment by email.'}
+                    {r.acknowledged_at&&!r.completed_at&&'📧 Acknowledged. Waiting for executor to report Work Completed by email.'}
+                    {r.completed_at&&!r.requester_confirmed_at&&'📧 Work completed. Waiting for requester / Campus YES or NO confirmation by email.'}
+                    {r.requester_confirmation==='yes'&&'✅ Campus confirmed YES. Ready for final financial control.'}
+                    {r.requester_confirmation==='no'&&'❌ Campus reported NOT FIXED. Request is reopened for rework.'}
+                  </div>
                 </div>}
                 {r.requester_confirmation==='yes'&&['Operationally Completed','Open'].includes(r.status)&&<div style={{marginTop:12,padding:12,borderRadius:10,background:'#ecfdf5',border:'1px solid #86efac'}}>
                   <div style={{fontWeight:700,marginBottom:8}}>💰 Final Financial Control</div>

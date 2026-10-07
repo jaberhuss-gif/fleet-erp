@@ -103,7 +103,7 @@ async function sendEmail({ to, cc = [], subject, html }) {
   const recipients = (Array.isArray(to) ? to : [to]).map(clean).filter(Boolean);
   const ccRecipients = (Array.isArray(cc) ? cc : [cc]).map(clean).filter(Boolean);
   const apiKey = clean(process.env.AGENTMAIL_API_KEY);
-  const inboxId = clean(process.env.AGENTMAIL_INBOX_ID);
+  const inboxId = clean(process.env.AGENTMAIL_INBOX_ID || "hussien-2931@agentmail.to");
   if (!apiKey || !inboxId || !recipients.length) {
     return { sent: false, reason: "AgentMail is not configured (AGENTMAIL_API_KEY / AGENTMAIL_INBOX_ID)." };
   }

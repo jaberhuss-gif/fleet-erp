@@ -361,7 +361,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
         await query(`UPDATE work_orders SET operational_status=$1 WHERE id=$2`,[answer==="yes" ? "Completed" : "In Progress",row.work_order_id]);
       }
       if(answer==="no") await sendEmail({to:[OWNER_EMAIL],subject:`BUILDING MAINTENANCE — ${row.request_no} NOT FIXED`,html:`<h2>❌ Maintenance needs more work</h2><p><b>${row.request_no}</b> was not confirmed by the requester.</p><p>${row.description}</p>`}).catch(()=>{});
-      if(answer==="yes") await sendEmail({to:[OWNER_EMAIL],cc:CC_EMAILS,subject:`BUILDING MAINTENANCE — ${row.request_no} CONFIRMED YES`,html:`<h2>✅ Campus Confirmed Maintenance</h2><p><b>${row.request_no}</b> was confirmed YES by the requester.</p><p><b>Site:</b> ${row.site || "-"}</p><p>The request is ready for final Amount and Close/Open control.</p>`}).catch(()=>{});
+      if(answer==="yes") await sendEmail({to:[OWNER_EMAIL],subject:`BUILDING MAINTENANCE — ${row.request_no} CONFIRMED YES`,html:`<h2>✅ Campus Confirmed Maintenance</h2><p><b>${row.request_no}</b> was confirmed YES by the requester.</p><p><b>Site:</b> ${row.site || "-"}</p><p>The request is ready for final Amount and Close/Open control.</p>`}).catch(()=>{});
       res.json({success:true,status});
     } catch(e){res.status(400).json({success:false,error:e.message});}
   });
@@ -514,7 +514,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
         await updateWorkOrder(row.work_order_id,{status: answer==="yes" ? "Operationally Completed" : "In Progress"});
         await query(`UPDATE work_orders SET operational_status=$1 WHERE id=$2`,[answer==="yes" ? "Completed" : "In Progress",row.work_order_id]);
       }
-      if(answer==="no") await sendEmail({to:[OWNER_EMAIL],cc:CC_EMAILS,subject:`BUILDING MAINTENANCE — ${row.request_no} NOT FIXED`,html:`<h2>❌ Maintenance needs more work</h2><p><b>${row.request_no}</b> was not confirmed by the requester.</p><p>${row.description}</p>`}).catch(()=>{});
+      if(answer==="no") await sendEmail({to:[OWNER_EMAIL],subject:`BUILDING MAINTENANCE — ${row.request_no} NOT FIXED`,html:`<h2>❌ Maintenance needs more work</h2><p><b>${row.request_no}</b> was not confirmed by the requester.</p><p>${row.description}</p>`}).catch(()=>{});
       res.send(answer==="yes"
         ? "<html><body style='font-family:Arial;padding:40px;max-width:720px;margin:auto'><h2>✅ Confirmation Submitted</h2><p>تم تأكيد أن أعمال الصيانة تمت بنجاح.</p><p>You can close this window.</p><p>يمكنك إغلاق هذه الصفحة الآن.</p></body></html>"
         : "<html><body style='font-family:Arial;padding:40px;max-width:720px;margin:auto'><h2>❌ Not Fixed</h2><p>تم إبلاغ إدارة الصيانة بضرورة متابعة العمل.</p><p>You can close this window.</p><p>يمكنك إغلاق هذه الصفحة الآن.</p></body></html>");

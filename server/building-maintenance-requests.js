@@ -102,21 +102,27 @@ async function auditEvent(requestId, action, actorType, actorName, details = {})
 async function sendEmail({ to, cc = [], subject, html }) {
   const recipients = (Array.isArray(to) ? to : [to]).map(clean).filter(Boolean);
   const ccRecipients = (Array.isArray(cc) ? cc : [cc]).map(clean).filter(Boolean);
-  const apiKey = clean(process.env.RESEND_API_KEY);
-  const from = clean(process.env.EMAIL_FROM || process.env.INSPECTION_EMAIL_FROM || OWNER_EMAIL);
-  if (!apiKey || !from || !recipients.length) {
-    return { sent: false, reason: "Resend email is not configured (RESEND_API_KEY / EMAIL_FROM)." };
+  const apiKey = clean(process.env.AGENTMAIL_API_KEY);
+  const inboxId = clean(process.env.AGENTMAIL_INBOX_ID);
+  if (!apiKey || !inboxId || !recipients.length) {
+    return { sent: false, reason: "AgentMail is not configured (AGENTMAIL_API_KEY / AGENTMAIL_INBOX_ID)." };
   }
-  const response = await fetch("https://api.resend.com/emails", {
+  const response = await fetch(`https://api.agentmail.to/v0/inboxes/${encodeURIComponent(inboxId)}/messages/send`, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to: recipients, cc: ccRecipients, subject, html })
+    body: JSON.stringify({
+      to: recipients,
+      cc: ccRecipients,
+      subject,
+      html
+    })
   });
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`Email provider error: ${response.status} ${body}`);
   }
-  return { sent: true, provider: "Resend" };
+  const result = await response.json().catch(() => ({}));
+  return { sent: true, provider: "AgentMail", message_id: result.message_id || null, thread_id: result.thread_id || null };
 }
 
 function button(url, text, color = "#0f766e") {

@@ -1207,11 +1207,22 @@ export async function mountTireRoutes(app) {
       // Use the real Driver master assignment (drivers.vehicle_id / vehicles.driver_id)
       // and the stored vehicle driver snapshot. Do not depend on an exact username
       // == vehicle.driver text match.
-      const names = [req.user?.full_name, req.user?.username]
+      // JWT contains username/role but not full_name/phone. Resolve the real
+      // Driver user first, then match the ERP Driver Master assignment.
+      const userResult = await query(
+        `SELECT username, full_name, phone
+         FROM users
+         WHERE id = $1
+         LIMIT 1`,
+        [req.user?.id]
+      );
+      const currentUser = userResult.rows[0] || req.user || {};
+
+      const names = [currentUser.full_name, currentUser.username]
         .filter(Boolean)
         .map(s => String(s).trim().toLowerCase())
         .filter(Boolean);
-      const phones = [req.user?.phone]
+      const phones = [currentUser.phone]
         .filter(Boolean)
         .map(s => String(s).replace(/\\D/g, ""))
         .filter(Boolean);

@@ -1084,31 +1084,121 @@ function escapeHtml(value) {
 }
 
 function tireSurveyReportHtml(records, title) {
+  const JV_LOGO_URL = "https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png";
+  const COMPANY_NAME = "Maaden Ivanhoe Electric Exploration and Development Limited Company";
+  const FOOTER_ROLE = "Fleet Manager / General Maintenance Supervisor";
+  const FOOTER_NAME = "Hussein Anwar";
+
   const card = r => {
     const v = r.vehicle || {}, survey = r.survey || {}, tires = r.tires || [], photos = survey.photos || {};
     const label = v.plate || [v.plate_number, v.plate_code].filter(Boolean).join(" ") || ("Vehicle ID " + v.id);
+
     return \`<section class="vehicle">
-      <h2>Vehicle \${escapeHtml(label)}</h2>
-      <div class="meta">Survey: \${escapeHtml(survey.status || "SUBMITTED")} | Submitted: \${escapeHtml(survey.submitted_at ? new Date(survey.submitted_at).toLocaleString() : "-")}</div>
-      <div class="tires">\${POSITIONS.map(p => { const t=tires.find(x=>x.position===p)||{}; return \`<div class="tire"><b>\${escapeHtml(p)}</b><br>Serial: \${escapeHtml(t.manufacturer_serial||"-")}<br>Brand: \${escapeHtml(t.brand||"-")} | Model: \${escapeHtml(t.model||"-")}<br>Size: \${escapeHtml(t.size||"-")} | Tread: \${escapeHtml(t.tread_depth_mm??"-")} mm | PSI: \${escapeHtml(t.pressure_psi??"-")}<br>Notes: \${escapeHtml(t.condition_notes||"-")}</div>\`; }).join("")}</div>
-      <div class="photos">\${POSITIONS.map(p => photos[p] ? \`<div><div class="photo-label">\${escapeHtml(p)}</div><img src="\${escapeHtml(photos[p])}"></div>\` : "").join("")}</div>
-      <div class="notes"><b>Survey Notes:</b> \${escapeHtml(survey.notes||"-")}</div>
+      <header class="report-header">
+        <img class="company-logo" src="${JV_LOGO_URL}" alt="Maaden and Ivanhoe Electric">
+        <div class="company-heading">
+          <div class="company-name">${escapeHtml(COMPANY_NAME)}</div>
+          <div class="report-title">Initial Tire Survey Report</div>
+        </div>
+      </header>
+
+      <div class="report-body">
+        <h2>Vehicle ${escapeHtml(label)}</h2>
+        <div class="meta">Survey: ${escapeHtml(survey.status || "SUBMITTED")} | Submitted: ${escapeHtml(survey.submitted_at ? new Date(survey.submitted_at).toLocaleString() : "-")}</div>
+
+        <div class="tires">${POSITIONS.map(p => {
+          const t = tires.find(x => x.position === p) || {};
+          return \`<div class="tire">
+            <b>${escapeHtml(p)}</b><br>
+            Serial: ${escapeHtml(t.manufacturer_serial || "-")}<br>
+            Brand: ${escapeHtml(t.brand || "-")} | Model: ${escapeHtml(t.model || "-")}<br>
+            Size: ${escapeHtml(t.size || "-")} | Tread: ${escapeHtml(t.tread_depth_mm ?? "-")} mm | PSI: ${escapeHtml(t.pressure_psi ?? "-")}<br>
+            Notes: ${escapeHtml(t.condition_notes || "-")}
+          </div>\`;
+        }).join("")}</div>
+
+        <div class="photos">${POSITIONS.map(p => photos[p] ? \`<div>
+          <div class="photo-label">${escapeHtml(p)}</div>
+          <img src="${escapeHtml(photos[p])}" alt="${escapeHtml(p)}">
+        </div>\` : "").join("")}</div>
+
+        <div class="notes"><b>Survey Notes:</b> ${escapeHtml(survey.notes || "-")}</div>
+      </div>
+
+      <footer class="report-footer">
+        <div>${escapeHtml(FOOTER_ROLE)}</div>
+        <div>${escapeHtml(FOOTER_NAME)}</div>
+      </footer>
     </section>\`;
   };
-  return \`<!doctype html><html><head><meta charset="utf-8"><title>\${escapeHtml(title)}</title>
+
+  return \`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
   <style>
-    @page{size:A4;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0}
-    .toolbar{margin-bottom:10px}@media print{.toolbar{display:none}}
-    .page{page-break-after:always;break-after:page;min-height:277mm;display:block}
+    @page{size:A4;margin:10mm}
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0}
+    body{font-family:Arial,sans-serif;color:#111}
+    .toolbar{margin-bottom:10px}
+    @media print{.toolbar{display:none}}
+    .page{
+      width:190mm;
+      height:277mm;
+      page-break-after:always;
+      break-after:page;
+      overflow:hidden;
+    }
     .page:last-child{page-break-after:auto;break-after:auto}
-    .vehicle{height:277mm;border:1px solid #999;border-radius:5px;padding:6px;overflow:hidden}
-    .vehicle h2{font-size:15px;margin:0 0 3px}.meta{font-size:8px;color:#444}
-    .tires{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-top:5px}.tire{font-size:7px;border:1px solid #ddd;padding:3px;min-height:34px}
-    .photos{display:grid;grid-template-columns:repeat(6,1fr);gap:3px;margin-top:5px}.photos img{width:100%;height:62px;object-fit:cover;border:1px solid #aaa;display:block}.photo-label{font-size:6px;font-weight:bold;margin-bottom:2px}
+    .vehicle{
+      width:100%;
+      height:100%;
+      border:1px solid #999;
+      border-radius:5px;
+      padding:6mm;
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+    }
+    .report-header{
+      display:flex;
+      align-items:center;
+      gap:6mm;
+      padding-bottom:4mm;
+      border-bottom:1px solid #aaa;
+      flex:0 0 auto;
+    }
+    .company-logo{
+      width:30mm;
+      height:18mm;
+      object-fit:contain;
+      object-position:center;
+      display:block;
+      flex:0 0 auto;
+    }
+    .company-heading{flex:1;min-width:0}
+    .company-name{font-size:11px;font-weight:700;line-height:1.25}
+    .report-title{font-size:8px;color:#555;margin-top:1mm}
+    .report-body{flex:1;min-height:0;overflow:hidden}
+    .vehicle h2{font-size:15px;margin:4mm 0 2mm}
+    .meta{font-size:8px;color:#444}
+    .tires{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-top:5px}
+    .tire{font-size:7px;border:1px solid #ddd;padding:3px;min-height:34px}
+    .photos{display:grid;grid-template-columns:repeat(6,1fr);gap:3px;margin-top:5px}
+    .photos img{width:100%;height:62px;object-fit:cover;border:1px solid #aaa;display:block}
+    .photo-label{font-size:6px;font-weight:bold;margin-bottom:2px}
     .notes{font-size:7px;margin-top:4px}
+    .report-footer{
+      flex:0 0 auto;
+      margin-top:4mm;
+      padding-top:2mm;
+      border-top:1px solid #ccc;
+      text-align:right;
+      font-size:6.5px;
+      line-height:1.35;
+      color:#555;
+    }
   </style></head><body>
   <div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div>
-  \${records.map(card).map(html => \`<div class="page">\${html}</div>\`).join("")}
+  ${records.map(card).map(html => \`<div class="page">${html}</div>\`).join("")}
   <script>window.addEventListener('load',()=>setTimeout(()=>window.print(),500));</script>
   </body></html>\`;
 }

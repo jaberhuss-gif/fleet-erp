@@ -187,8 +187,6 @@ export default function TireManagement({ user, driverMode=false }) {
     {message && <div className="alert alert-success">{message}</div>}
     {error && <div className="alert alert-error">{error}</div>}
 
-    </div>
-
     {vehicleId && !locked && <div className="panel">
       <h2>Initial Tire Survey — 6 Tires</h2>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(330px,1fr))',gap:16}}>

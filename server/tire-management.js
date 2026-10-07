@@ -1084,34 +1084,33 @@ function escapeHtml(value) {
 }
 
 function tireSurveyReportHtml(records, title) {
-  const pages = [];
-  for (let i = 0; i < records.length; i += 2) pages.push(records.slice(i, i + 2));
   const card = r => {
     const v = r.vehicle || {}, survey = r.survey || {}, tires = r.tires || [], photos = survey.photos || {};
     const label = v.plate || [v.plate_number, v.plate_code].filter(Boolean).join(" ") || ("Vehicle ID " + v.id);
-    return `<section class="vehicle">
-      <h2>Vehicle ${escapeHtml(label)}</h2>
-      <div class="meta">Survey: ${escapeHtml(survey.status || "SUBMITTED")} | Submitted: ${escapeHtml(survey.submitted_at ? new Date(survey.submitted_at).toLocaleString() : "-")}</div>
-      <div class="tires">${POSITIONS.map(p => { const t=tires.find(x=>x.position===p)||{}; return `<div class="tire"><b>${escapeHtml(p)}</b><br>Serial: ${escapeHtml(t.manufacturer_serial||"-")}<br>Brand: ${escapeHtml(t.brand||"-")} | Model: ${escapeHtml(t.model||"-")}<br>Size: ${escapeHtml(t.size||"-")} | Tread: ${escapeHtml(t.tread_depth_mm??"-")} mm | PSI: ${escapeHtml(t.pressure_psi??"-")}<br>Notes: ${escapeHtml(t.condition_notes||"-")}</div>`; }).join("")}</div>
-      <div class="photos">${POSITIONS.map(p => photos[p] ? `<div><div class="photo-label">${escapeHtml(p)}</div><img src="${escapeHtml(photos[p])}"></div>` : "").join("")}</div>
-      <div class="notes"><b>Survey Notes:</b> ${escapeHtml(survey.notes||"-")}</div>
-    </section>`;
+    return \`<section class="vehicle">
+      <h2>Vehicle \${escapeHtml(label)}</h2>
+      <div class="meta">Survey: \${escapeHtml(survey.status || "SUBMITTED")} | Submitted: \${escapeHtml(survey.submitted_at ? new Date(survey.submitted_at).toLocaleString() : "-")}</div>
+      <div class="tires">\${POSITIONS.map(p => { const t=tires.find(x=>x.position===p)||{}; return \`<div class="tire"><b>\${escapeHtml(p)}</b><br>Serial: \${escapeHtml(t.manufacturer_serial||"-")}<br>Brand: \${escapeHtml(t.brand||"-")} | Model: \${escapeHtml(t.model||"-")}<br>Size: \${escapeHtml(t.size||"-")} | Tread: \${escapeHtml(t.tread_depth_mm??"-")} mm | PSI: \${escapeHtml(t.pressure_psi??"-")}<br>Notes: \${escapeHtml(t.condition_notes||"-")}</div>\`; }).join("")}</div>
+      <div class="photos">\${POSITIONS.map(p => photos[p] ? \`<div><div class="photo-label">\${escapeHtml(p)}</div><img src="\${escapeHtml(photos[p])}"></div>\` : "").join("")}</div>
+      <div class="notes"><b>Survey Notes:</b> \${escapeHtml(survey.notes||"-")}</div>
+    </section>\`;
   };
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+  return \`<!doctype html><html><head><meta charset="utf-8"><title>\${escapeHtml(title)}</title>
   <style>
     @page{size:A4;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0}
     .toolbar{margin-bottom:10px}@media print{.toolbar{display:none}}
-    .page{page-break-after:always;display:grid;grid-template-rows:1fr 1fr;gap:7mm;min-height:277mm}.page:last-child{page-break-after:auto}
-    .vehicle{border:1px solid #999;border-radius:5px;padding:6px;overflow:hidden}.vehicle h2{font-size:15px;margin:0 0 3px}.meta{font-size:8px;color:#444}
+    .page{page-break-after:always;break-after:page;min-height:277mm;display:block}
+    .page:last-child{page-break-after:auto;break-after:auto}
+    .vehicle{height:277mm;border:1px solid #999;border-radius:5px;padding:6px;overflow:hidden}
+    .vehicle h2{font-size:15px;margin:0 0 3px}.meta{font-size:8px;color:#444}
     .tires{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-top:5px}.tire{font-size:7px;border:1px solid #ddd;padding:3px;min-height:34px}
     .photos{display:grid;grid-template-columns:repeat(6,1fr);gap:3px;margin-top:5px}.photos img{width:100%;height:62px;object-fit:cover;border:1px solid #aaa;display:block}.photo-label{font-size:6px;font-weight:bold;margin-bottom:2px}
     .notes{font-size:7px;margin-top:4px}
   </style></head><body>
   <div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div>
-  <h1>${escapeHtml(title)}</h1>
-  <div>${pages.map(p => `<div class="page">${p.map(card).join("")}</div>`).join("")}</div>
+  \${records.map(card).map(html => \`<div class="page">\${html}</div>\`).join("")}
   <script>window.addEventListener('load',()=>setTimeout(()=>window.print(),500));</script>
-  </body></html>`;
+  </body></html>\`;
 }
 
 export async function mountTireRoutes(app) {

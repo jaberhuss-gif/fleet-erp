@@ -382,7 +382,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       await ensureSchema();
       const row=await getRequest(req.params.id);
       const token=clean(req.body?.token);
-      const answer=clean(req.body?.answer).toLowerCase();
+      const answer=clean(req.body?.answer || req.query?.answer).toLowerCase();
       if(!row || !token || token!==row.confirmation_token) return res.status(403).json({success:false,error:"Invalid confirmation link"});
       if(!["yes","no"].includes(answer)) return res.status(400).json({success:false,error:"Answer must be yes or no"});
       const status=answer==="yes" ? "Operationally Completed" : "Reopened";
@@ -528,7 +528,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       if(row.requester_confirmation) {
         return res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>Maintenance Confirmation Already Recorded</h2><p><b>Request:</b> ${row.request_no}</p><p><b>Answer:</b> ${row.requester_confirmation==="yes" ? "YES — Everything is OK" : "NO — Problem Not Fixed"}</p></body></html>`);
       }
-      res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>🛠️ Building Maintenance — Final Confirmation</h2><p><b>Request:</b> ${row.request_no}</p><p><b>Site:</b> ${row.site || "-"}</p><p><b>Problem:</b><br>${String(row.description || "").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>")}</p><h3>Is the maintenance work satisfactory?</h3><p>هل تم إصلاح المشكلة بشكل كامل؟</p><div style="display:flex;gap:12px;flex-wrap:wrap"><form method="POST" action="/api/maintenance-requests/public/${clean(req.params.token)}/confirm"><input type="hidden" name="answer" value="yes"><button type="submit" style="padding:12px 20px;background:#15803d;color:#fff;border:0;border-radius:7px;font-weight:700">✅ YES — Everything is OK</button></form><form method="POST" action="/api/maintenance-requests/public/${clean(req.params.token)}/confirm"><input type="hidden" name="answer" value="no"><button type="submit" style="padding:12px 20px;background:#b91c1c;color:#fff;border:0;border-radius:7px;font-weight:700">❌ NO — Problem Not Fixed</button></form></div></body></html>`);
+      res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>🛠️ Building Maintenance — Final Confirmation</h2><p><b>Request:</b> ${row.request_no}</p><p><b>Site:</b> ${row.site || "-"}</p><p><b>Problem:</b><br>${String(row.description || "").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>")}</p><h3>Is the maintenance work satisfactory?</h3><p>هل تم إصلاح المشكلة بشكل كامل؟</p><div style="display:flex;gap:12px;flex-wrap:wrap"><form method="POST" action="/api/maintenance-requests/public/${clean(req.params.token)}/confirm?answer=yes"><input type="hidden" name="answer" value="yes"><button type="submit" style="padding:12px 20px;background:#15803d;color:#fff;border:0;border-radius:7px;font-weight:700">✅ YES — Everything is OK</button></form><form method="POST" action="/api/maintenance-requests/public/${clean(req.params.token)}/confirm?answer=no"><input type="hidden" name="answer" value="no"><button type="submit" style="padding:12px 20px;background:#b91c1c;color:#fff;border:0;border-radius:7px;font-weight:700">❌ NO — Problem Not Fixed</button></form></div></body></html>`);
     } catch(e){res.status(500).send("<h2>Error loading confirmation page</h2>");}
   });
 
@@ -536,7 +536,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
     try {
       await ensureSchema();
       const row=await getRequestByToken(req.params.token);
-      const answer=clean(req.body?.answer).toLowerCase();
+      const answer=clean(req.body?.answer || req.query?.answer).toLowerCase();
       if(!row || row.confirmation_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid confirmation link</h2>");
       if(!["yes","no"].includes(answer)) return res.status(400).send("<h2>Invalid answer</h2>");
       if(row.requester_confirmation) return res.send("<html><body style='font-family:Arial;padding:40px'><h2>Maintenance Confirmation Already Recorded</h2></body></html>");

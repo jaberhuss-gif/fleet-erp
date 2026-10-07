@@ -46,9 +46,8 @@ export default function MaintenanceRequest({user,access={}}){
       'Thank you,',
       'Fleet / Building Maintenance'
     ];
-    // Outlook Web compose deeplink accepts plain text, not HTML. Keep each URL
-    // on its own line with a CRLF + trailing space so Outlook's auto-linker can
-    // recognize the URL as a clickable hyperlink.
+    // Outlook Desktop compose URI accepts a prefilled plain-text body. Keep the workflow URL
+    // on its own line with a CRLF + trailing space so Outlook can auto-link the HTTPS URL.
     const body=lines.join('\r\n')+'\r\n ';
     const to=String(r.executor_email||'').split(',').map(x=>x.trim()).filter(Boolean).join(',');
     const cc=String(r.cc_emails||'').split(',').map(x=>x.trim()).filter(Boolean).join(',');
@@ -58,10 +57,15 @@ export default function MaintenanceRequest({user,access={}}){
       'subject='+encodeURIComponent(subject),
       'body='+encodeURIComponent(body)
     ].filter(Boolean).join('&');
-    const emailUrl='https://outlook.office.com/mail/deeplink/compose?'+params;
-    const w=window.open(emailUrl,'_blank');
-    if(!w)setError('Please allow pop-ups to open the Outlook email draft.');
-    else setMessage('📧 Outlook Web is opening with the email ready. The workflow URLs are placed as real URLs for Outlook to make clickable. Review it and click Send. / يتم الآن فتح Outlook والإيميل جاهز للمراجعة ثم اضغط Send.');
+    const outlookDesktopUrl='ms-outlook://compose?'+params;
+    // Launch the installed Outlook app instead of Outlook Web.
+    // The body remains plain text; the full HTTPS workflow URL is preserved so Outlook can auto-link it.
+    try{
+      window.location.href=outlookDesktopUrl;
+      setMessage('📧 Opening the Outlook Desktop app with the email ready. Review it and click Send. / يتم الآن فتح تطبيق Outlook على الكمبيوتر والإيميل جاهز للمراجعة ثم اضغط Send.');
+    }catch(e){
+      setError('Could not open the Outlook Desktop app. Please make Outlook the default mail app in Windows.');
+    }
   };
   const financialAction=async(r,action)=>{
     const f=finance[r.id]||{}, amount=Number(f.amount); setMessage('');setError('');

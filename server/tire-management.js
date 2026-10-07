@@ -274,7 +274,7 @@ export async function getTireControl() {
       ORDER BY vehicle_id, completed_date DESC, id DESC
     )
     SELECT
-      v.id, v.plate, v.driver, v.location,
+      v.id, v.plate, v.plate_number, v.plate_code, v.driver, v.location,
       COALESCE(today_km.reading_km, 0) AS current_km,
       COALESCE(oil_history.oil_change_km, v.last_oil_km) AS last_oil_km,
       COALESCE(v.oil_change_interval, 5000) AS oil_change_interval,
@@ -325,7 +325,7 @@ export async function getTireControl() {
     LEFT JOIN latest_inspection i ON i.vehicle_id = v.id
     WHERE LOWER(TRIM(COALESCE(v.plate, ''))) <> 'test 123'
     GROUP BY
-      v.id, v.plate, v.driver, v.location, v.last_oil_km,
+      v.id, v.plate, v.plate_number, v.plate_code, v.driver, v.location, v.last_oil_km,
       v.oil_change_interval, v.last_oil_change_date,
       oil_history.oil_change_km, oil_history.oil_change_date,
       today_km.reading_km, today_km.reading_date,

@@ -164,15 +164,29 @@ async function notifyAssignment(reqRow) {
     cc: [OWNER_EMAIL, ...CC_EMAILS],
     subject: `BUILDING MAINTENANCE — ${reqRow.request_no} ASSIGNED`,
     html: `
-      <h2>🛠️ Building Maintenance Work Assigned</h2>
-      <p><b>Request:</b> ${reqRow.request_no}</p>
-      <p><b>Site:</b> ${reqRow.site || "-"}</p>
-      <p><b>Problem:</b> ${reqRow.description}</p>
-      <p><b>Assigned to:</b> ${reqRow.executor_name}</p>
-      <p>First confirm that you received this work assignment:</p>
-      ${button(acknowledgeUrl, "📩 ACKNOWLEDGE RECEIPT", "#2563eb")}
-      <p>After completing the repair, use the button below:</p>
-      ${button(completeUrl, "✅ WORK COMPLETED")}
+      <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:24px;color:#1f2937">
+        <h2 style="margin-bottom:20px">BUILDING MAINTENANCE WORK ASSIGNMENT</h2>
+        <p>Dear ${clean(reqRow.executor_name) || "Contractor"},</p>
+        <p><b>Request No.:</b> ${reqRow.request_no}</p>
+        <p><b>Site:</b> ${reqRow.site || "-"}</p>
+        <p><b>Category:</b> ${reqRow.category || "-"}</p>
+        <p><b>Priority:</b> ${reqRow.priority || "-"}</p>
+        <p><b>Description:</b><br>${clean(reqRow.description).replace(/</g,"&lt;").replace(/\n/g,"<br>")}</p>
+
+        <div style="margin-top:28px;padding:18px;background:#eff6ff;border-radius:10px">
+          <h3 style="margin-top:0">STEP 1 - ACKNOWLEDGE RECEIPT</h3>
+          <p>Please confirm that you received this work assignment:</p>
+          ${button(acknowledgeUrl, "📩 ACKNOWLEDGE RECEIPT", "#2563eb")}
+        </div>
+
+        <div style="margin-top:18px;padding:18px;background:#f0fdf4;border-radius:10px">
+          <h3 style="margin-top:0">STEP 2 - WORK COMPLETED</h3>
+          <p>After completing the repair, confirm that the work is completed:</p>
+          ${button(completeUrl, "✅ WORK COMPLETED", "#15803d")}
+        </div>
+
+        <p style="margin-top:28px">Regards,<br>Fleet / Building Maintenance</p>
+      </div>
     `
   });
 }

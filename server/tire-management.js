@@ -1248,20 +1248,20 @@ export async function mountTireRoutes(app) {
         .filter(Boolean);
       const phones = [user.phone]
         .filter(Boolean)
-        .map(v => String(v).replace(/\\D/g, ""))
+        .map(v => String(v).replace(/\D/g, ""))
         .filter(Boolean);
 
       const r = await query(
         `SELECT DISTINCT
             v.id, v.plate, v.plate_number, v.plate_code, v.driver, v.location
          FROM vehicles v
-         INNER JOIN drivers d ON d.id = v.driver_id
+         LEFT JOIN drivers d ON d.id = v.driver_id
          WHERE LOWER(TRIM(COALESCE(v.plate, ''))) <> 'test 123'
            AND (
              LOWER(TRIM(COALESCE(d.name, ''))) = ANY($1::text[])
              OR LOWER(TRIM(COALESCE(v.driver, ''))) = ANY($1::text[])
              OR REGEXP_REPLACE(COALESCE(d.phone, ''), '[^0-9]', '', 'g') = ANY($2::text[])
-             OR REGEXP_REPLACE(COALESCE(v.driver, ''), '[^0-9]', '', 'g') = ANY($2::text[])
+             OR REGEXP_REPLACE(COALESCE(v.phone, ''), '[^0-9]', '', 'g') = ANY($2::text[])
            )
          ORDER BY v.plate_number, v.plate_code, v.id`,
         [names, phones]

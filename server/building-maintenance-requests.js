@@ -3,20 +3,10 @@ import { query } from "./postgres.js";
 import { createWorkOrder, updateWorkOrder, getWorkOrder, closeWorkOrder } from "./database-pg.js";
 
 const OWNER_EMAIL = "Hussein.Anwar@iemaadex.com";
-const CC_EMAILS = ["Mohamed.Hassan@iemaadex.com", "Jahangeer.Mohammed@iemaadex.com"];
 const CONTRACTORS = [
   { name: "Jodoud Al Khaleej", email: "jodoudalkhaleej.co.sa@gmail.com" },
   { name: "Raghad Alafq", email: "raghadalafq@gmail.com" }
 ];
-const CAMPUS_BY_SITE = {
-  "Uqlat Al Soqour": ["Samer.Abdulmalik@iemaadex.com", "bader.almasrahi@iemaadex.com"],
-  "Wadi Beddah": ["Meshal.Alghamdi@iemaadex.com"],
-  "Al Hadar": ["Amr.Mohamed@iemaadex.com", "Mostafa.Magdy@iemaadex.com"],
-  "Al Quwayiyah": ["Amr.Mohamed@iemaadex.com", "Mostafa.Magdy@iemaadex.com"],
-  "Al Sabiyah": ["shezad.khan@iemaadex.com"],
-  "Al Hulayfa": ["nouman.khan@iemaadex.com"]
-};
-
 const appUrl = () => String(process.env.APP_URL || process.env.PUBLIC_APP_URL || "https://fleet-erp-kn0c.onrender.com").replace(/\/$/, "");
 
 function clean(v) { return String(v ?? "").trim(); }
@@ -129,10 +119,6 @@ function button(url, text, color = "#0f766e") {
   return `<a href="${url}" style="display:inline-block;padding:11px 18px;background:${color};color:#fff;text-decoration:none;border-radius:7px;font-weight:700;margin:4px">${text}</a>`;
 }
 
-function siteCc(site) {
-  return CAMPUS_BY_SITE[clean(site)] || [];
-}
-
 async function getRequestByToken(token) { const r=await query(`SELECT * FROM maintenance_requests WHERE completion_token=$1 OR confirmation_token=$1`, [token]); return r.rows[0] || null; }
 
 async function getRequest(id) {
@@ -141,10 +127,8 @@ async function getRequest(id) {
 }
 
 async function notifyNewRequest(reqRow) {
-  const cc = [...CC_EMAILS, ...siteCc(reqRow.site)];
   return sendEmail({
     to: OWNER_EMAIL,
-    cc,
     subject: `NEW BUILDING MAINTENANCE REQUEST — ${reqRow.request_no}`,
     html: `
       <h2>🛠️ New Building Maintenance Request</h2>
@@ -163,10 +147,8 @@ async function notifyAssignment(reqRow) {
   const recipients = reqRow.executor_email ? [reqRow.executor_email] : [];
   const acknowledgeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.acknowledgement_token}/acknowledge`;
   const completeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.completion_token}/work-completed`;
-  const ccRecipients = [OWNER_EMAIL, ...CC_EMAILS];
   return sendEmail({
     to: recipients,
-    cc: ccRecipients,
     subject: `BUILDING MAINTENANCE — ${reqRow.request_no} ASSIGNED`,
     html: `
       <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:24px;color:#1f2937">
@@ -203,7 +185,6 @@ async function notifyRequesterReady(reqRow) {
   const no = `${appUrl()}/api/maintenance-requests/public/${reqRow.confirmation_token}/confirm?answer=no`;
   return sendEmail({
     to: recipients,
-    cc: [OWNER_EMAIL],
     subject: `BUILDING MAINTENANCE — ${reqRow.request_no} READY FOR CONFIRMATION`,
     html: `
       <h2>🛠️ Maintenance Work Completed</h2>
@@ -378,7 +359,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
         await updateWorkOrder(row.work_order_id,{status: answer==="yes" ? "Operationally Completed" : "In Progress"});
         await query(`UPDATE work_orders SET operational_status=$1 WHERE id=$2`,[answer==="yes" ? "Completed" : "In Progress",row.work_order_id]);
       }
-      if(answer==="no") await sendEmail({to:[OWNER_EMAIL],cc:CC_EMAILS,subject:`BUILDING MAINTENANCE — ${row.request_no} NOT FIXED`,html:`<h2>❌ Maintenance needs more work</h2><p><b>${row.request_no}</b> was not confirmed by the requester.</p><p>${row.description}</p>`}).catch(()=>{});
+      if(answer==="no") await sendEmail({to:[OWNER_EMAIL],subject:`BUILDING MAINTENANCE — ${row.request_no} NOT FIXED`,html:`<h2>❌ Maintenance needs more work</h2><p><b>${row.request_no}</b> was not confirmed by the requester.</p><p>${row.description}</p>`}).catch(()=>{});
       if(answer==="yes") await sendEmail({to:[OWNER_EMAIL],cc:CC_EMAILS,subject:`BUILDING MAINTENANCE — ${row.request_no} CONFIRMED YES`,html:`<h2>✅ Campus Confirmed Maintenance</h2><p><b>${row.request_no}</b> was confirmed YES by the requester.</p><p><b>Site:</b> ${row.site || "-"}</p><p>The request is ready for final Amount and Close/Open control.</p>`}).catch(()=>{});
       res.json({success:true,status});
     } catch(e){res.status(400).json({success:false,error:e.message});}

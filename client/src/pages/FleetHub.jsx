@@ -14,111 +14,88 @@ import MaintenanceRequests from './MaintenanceRequests';
 import FleetHistory from './FleetHistory';
 import VehicleTicket from './VehicleTicket';
 
-const FLEET_ACTIONS = [
-  { id:'daily-km', label:'📏 Add Daily KM', title:'Daily KM / Odometer Reading', description:'Enter today’s vehicle odometer reading and review recent readings.' },
-  { id:'add-vehicle', label:'🚙 Vehicle Master', title:'Vehicle Master', description:'Single place to add and edit vehicle identity, driver assignment and vehicle master data.' },
-  { id:'add-driver', label:'👨‍🔧 Add Driver', title:'Add Driver', description:'Add and maintain driver records and vehicle assignments.' },
-  { id:'maintenance', label:'🔧 Vehicle Maintenance', title:'Vehicle Maintenance', description:'Periodic maintenance, inspections and repair verification.' },
-  { id:'issue', label:'🛠️ Maintenance Issue Report', title:'Report a Vehicle Problem', description:'Report a vehicle problem and create a maintenance ticket.' },
-  { id:'tire-service', label:'🛞 Tire Service Request', title:'Tire Service Request', description:'Submit a tire shop, puncture repair or tire replacement request.' },
-  { id:'tire', label:'🛞 Tire Survey', title:'Vehicle Tire Survey', description:'Initial 6-tire survey, serial numbers, photos and lock control.' },
-  { id:'tire-control', label:'🎫 Tire Control', title:'Tire Control Center', description:'Fleet-wide tire status and serial tracking.' }
-];
-
-export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
+export default function FleetHub({ user, access, initialOwnerGroup='maintenance-requests', onViewVehicle }) {
   const fleetView=user?.role==='Owner'||!!access?.fleet?.can_view;
   const fleetWork=user?.role==='Owner'||!!access?.fleet?.can_work;
   const isDriver=user?.role==='Driver';
+  const [section,setSection]=useState(isDriver?'daily-km':initialOwnerGroup);
+  const [showMaster,setShowMaster]=useState(false);
 
-  const [section,setSection]=useState('add-vehicle');
-  const [ownerGroup,setOwnerGroup]=useState(initialOwnerGroup);
-
-  useEffect(()=>{
-    if(user?.role==='Owner'){
-      setOwnerGroup(initialOwnerGroup);
-      const first={
-        add:'add-vehicle',
-        maintenance:'maintenance',
-        'maintenance-report':'maintenance-issue',
-        history:'history',
-        'vehicle-ticket':'vehicle-ticket',
-        km:'daily-km-submitted'
-      }[initialOwnerGroup]||'add-vehicle';
-      setSection(first);
-    }
-  },[initialOwnerGroup,user?.role]);
+  useEffect(()=>{ if(user?.role==='Owner') setSection(initialOwnerGroup); },[initialOwnerGroup,user?.role]);
 
   if(!fleetView)return <div className="alert alert-error">Access denied: Fleet access is not assigned to this user.</div>;
 
-  const visibleActions=FLEET_ACTIONS.filter(item=>{
-    if(isDriver)return ['daily-km','issue','tire-service','tire'].includes(item.id);
-    if(item.id==='add-driver'||item.id==='tire-control')return user?.role==='Owner';
-    return true;
-  });
-  const safeSection=visibleActions.some(x=>x.id===section)?section:(visibleActions[0]?.id||'daily-km');
-
+  // DRIVER PORTAL: intentionally unchanged in scope and behavior.
   if(user?.role!=='Owner'){
+    const driverActions=[
+      {id:'daily-km',label:'📏 Add Daily KM'},
+      {id:'issue',label:'🛠️ Maintenance Issue Report'},
+      {id:'tire-service',label:'🛞 Tire Service Request'},
+      {id:'tire',label:'🛞 Tire Survey'}
+    ];
+    const safeSection=driverActions.some(x=>x.id===section)?section:'daily-km';
     return <div className="hub-page">
       <div className="panel" style={{marginBottom:16}}><h1 style={{margin:0}}>🚗 Fleet</h1><p style={{margin:'6px 0 0',color:'#64748b'}}>Fleet vehicle and maintenance actions.</p></div>
-      <div className="sub-nav" style={{marginBottom:18}}>{visibleActions.map(item=><button key={item.id} className={safeSection===item.id?'sub-btn active':'sub-btn'} onClick={()=>setSection(item.id)}>{item.label}</button>)}</div>
+      <div className="sub-nav" style={{marginBottom:18}}>{driverActions.map(item=><button key={item.id} className={safeSection===item.id?'sub-btn active':'sub-btn'} onClick={()=>setSection(item.id)}>{item.label}</button>)}</div>
       {safeSection==='daily-km'&&<DriverPortal canWork={fleetWork}/>}
       {safeSection==='issue'&&<ReportIssue canWork={fleetWork} user={user}/>}
-      {safeSection==='tire-service'&&<TireServiceRequests driverMode={isDriver}/>}
-      {safeSection==='tire'&&<TireManagement user={user} driverMode={isDriver}/>}
+      {safeSection==='tire-service'&&<TireServiceRequests driverMode={true}/>}
+      {safeSection==='tire'&&<TireManagement user={user} driverMode={true}/>}
     </div>;
   }
 
-  const ownerGroups={
-    add:['add-vehicle','add-driver'],
-    maintenance:['maintenance'],
-    'maintenance-report':['maintenance-report','maintenance-requests'],
-    history:['history'],
-    'vehicle-ticket':['vehicle-ticket'],
-    km:['daily-km-submitted','daily-km-missing'],
-    'inspection-email':['inspection-email'],
-    'tire-control':['tire-control']
-  };
-  const ownerItems={
-    'add-vehicle':{label:'🚙 Vehicle Master',title:'Vehicle Master',description:'Single place to add and edit vehicle identity, driver assignment and vehicle master data.'},
-    'add-driver':{label:'👨‍🔧 Add Driver',title:'Add Driver',description:'Add and maintain driver records and vehicle assignments.'},
-    maintenance:{label:'🔧 Periodic Maintenance',title:'Periodic Maintenance',description:'Existing periodic maintenance records, schedules, edit and delete.'},
-    'maintenance-report':{label:'🛠️ Maintenance Report',title:'Maintenance Report',description:'Maintenance issue reports and tire service requests.'},
-    'maintenance-requests':{label:'🛠️ Maintenance Requests',title:'Maintenance Requests',description:'Full-width driver maintenance request report with WhatsApp, Excel and PDF export.'},
-    history:{label:'📚 History',title:'History',description:'Maintenance history, oil change history and KM tracking history.'},
-    'vehicle-ticket':{label:'🎫 Vehicle Ticket',title:'Vehicle Ticket',description:'Driver maintenance requests, annual inspection tickets and tire service tickets.'},
-    'daily-km-submitted':{label:'📋 Daily KM — Submitted',title:'Daily KM — Submitted',description:'View vehicles that submitted a daily KM reading today.'},
-    'daily-km-missing':{label:'⚠️ Daily KM — Missing',title:'Daily KM — Missing',description:'View vehicles that have not submitted a daily KM reading today.'},
-    'inspection-email':{label:'📧 Annual Inspection Email',title:'Annual Inspection Email Control',description:'Select all sites or specific sites and send annual inspection reminders for vehicles due within 31 days.'},
-    'inspection-upcoming':{label:'📅 Future Annual Inspections',title:'Future Annual Inspection Schedule',description:'Vehicles more than 31 days from expiry. Monitoring only; they move automatically to the email page when due.'},
-    'tire-control':{label:'🛞 Tire Control',title:'Vehicle Compliance Control Center — Tires',description:'Initial tire survey records, six inspection photos, tire status and management control.'}
-  };
-  const ids=ownerGroups[ownerGroup]||ownerGroups.add;
-  const currentSection=ids.includes(section)?section:ids[0];
+  if(showMaster) return <div className="hub-page">
+    <div className="panel" style={{marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      <div><h1 style={{margin:0}}>🚙 Vehicle Master</h1><p style={{margin:'6px 0 0',color:'#64748b'}}>Vehicle identity, driver assignment and master data.</p></div>
+      <button className="btn btn-secondary" onClick={()=>setShowMaster(false)}>← Back to Vehicle Control</button>
+    </div>
+    <Vehicles canWork={fleetWork} onViewVehicle={onViewVehicle}/>
+  </div>;
+
+  const sections=[
+    {id:'maintenance-requests',icon:'🔧',label:'Vehicle Maintenance',title:'Vehicle Maintenance Requests',description:'Open vehicle maintenance requests, assignment and work-order status.'},
+    {id:'km',icon:'📏',label:'Daily KM',title:'Daily KM Control',description:'Who entered today’s odometer reading and who is still missing.'},
+    {id:'tires',icon:'🛞',label:'Tires',title:'Tire Control',description:'Tire survey, six inspection photos, tire condition and service requests.'},
+    {id:'annual',icon:'📅',label:'Annual Inspection',title:'Annual Inspection',description:'Annual vehicle inspection status, due vehicles and overdue inspections.'},
+    {id:'six-month',icon:'🔍',label:'6-Month Inspection',title:'6-Month Maintenance',description:'Six-month maintenance status, completed work and overdue vehicles.'},
+    {id:'oil',icon:'🛢️',label:'Engine Oil',title:'Engine Oil Control',description:'Current KM, last oil-change KM, KM since oil change and due status.'}
+  ];
+  const current=sections.find(x=>x.id===section)||sections[0];
 
   return <div className="hub-page">
     <div className="panel" style={{marginBottom:16}}>
-      <h1 style={{margin:0}}>🚗 Fleet</h1>
-      <p style={{margin:'6px 0 0',color:'#64748b'}}>Fleet master data, maintenance, history, tickets and KM tracking.</p>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+        <div><h1 style={{margin:0}}>🚗 Vehicle Control Center</h1><p style={{margin:'6px 0 0',color:'#64748b'}}>Your six daily vehicle controls — all in one place.</p></div>
+        <button className="btn btn-secondary" onClick={()=>setShowMaster(true)}>⚙️ Vehicle Master</button>
+      </div>
     </div>
-    <div className="sub-nav" style={{marginBottom:18}}>
-      {ids.map(id=><button key={id} className={currentSection===id?'sub-btn active':'sub-btn'} onClick={()=>setSection(id)}>{ownerItems[id].label}</button>)}
+    <div className="cards-grid" style={{marginBottom:18}}>
+      {sections.map(item=><button key={item.id} onClick={()=>setSection(item.id)} className={section===item.id?'card active':'card'} style={{textAlign:'left',cursor:'pointer',border:'2px solid '+(section===item.id?'#2563eb':'transparent')}}><h3 style={{fontSize:17}}>{item.icon} {item.label}</h3><div style={{color:'var(--text-secondary)',fontSize:13}}>{item.description}</div></button>)}
     </div>
-    <div className="panel" style={{marginBottom:16}}>
-      <h2 style={{margin:0}}>{ownerItems[currentSection].title}</h2>
-      <p style={{margin:'6px 0 0',color:'#64748b',fontSize:13}}>{ownerItems[currentSection].description}</p>
-    </div>
+    <div className="panel" style={{marginBottom:16}}><h2 style={{margin:0}}>{current.title}</h2><p style={{margin:'6px 0 0',color:'#64748b',fontSize:13}}>{current.description}</p></div>
 
-    {currentSection==='add-vehicle'&&<Vehicles canWork={fleetWork}/>} 
-    {currentSection==='add-driver'&&<Drivers initialAction="add"/>}
-    {currentSection==='maintenance'&&<VehicleMaintenance canWork={fleetWork} onOpenInspectionEmail={()=>{setOwnerGroup('inspection-email');setSection('inspection-email');}}/>}
-
-    {currentSection==='maintenance-report'&&<MaintenanceReport canWork={fleetWork}/>} 
-    {currentSection==='maintenance-requests'&&<MaintenanceRequests/>}
-    {currentSection==='history'&&<FleetHistory/>}
-    {currentSection==='vehicle-ticket'&&<VehicleTicket user={user} canWork={fleetWork}/>}
-    {currentSection==='daily-km-submitted'&&<DailyKmSubmitted/>}
-    {currentSection==='daily-km-missing'&&<DailyKmMissing user={user}/>}\n    {currentSection==='inspection-email'&&<PeriodicMaintenance canWork={fleetWork} inspectionEmailOnly onOpenInspectionUpcoming={()=>{setOwnerGroup('inspection-upcoming');setSection('inspection-upcoming');}}/>}
-    {currentSection==='inspection-upcoming'&&<PeriodicMaintenance canWork={fleetWork} inspectionUpcomingOnly onOpenInspectionEmail={()=>{setOwnerGroup('inspection-email');setSection('inspection-email');}}/>}
-    {currentSection==='tire-control'&&<TireManagement user={user} driverMode={false}/>} 
+    {section==='maintenance-requests'&&<MaintenanceRequests/>}
+    {section==='km'&&<DailyKmControl onMissing={()=>setSection('km-missing')}/>}
+    {section==='km-missing'&&<DailyKmMissingControl onSubmitted={()=>setSection('km')}/>}
+    {section==='tires'&&<TireManagement user={user} driverMode={false}/>}
+    {section==='annual'&&<PeriodicMaintenance canWork={fleetWork} fixedType="inspection"/>}
+    {section==='six-month'&&<PeriodicMaintenance canWork={fleetWork} fixedType="6_months_general"/>}
+    {section==='oil'&&<OilControl onViewVehicle={onViewVehicle}/>}
   </div>;
+}
+
+function DailyKmControl({onMissing}){
+  return <div><div className="sub-nav" style={{marginBottom:14}}><button className="sub-btn active">📋 Submitted</button><button className="sub-btn" onClick={onMissing}>⚠️ Missing Today</button></div><DailyKmSubmitted/></div>;
+}
+function DailyKmMissingControl({onSubmitted}){
+  return <div><div className="sub-nav" style={{marginBottom:14}}><button className="sub-btn" onClick={onSubmitted}>📋 Submitted</button><button className="sub-btn active">⚠️ Missing Today</button></div><DailyKmMissing/></div>;
+}
+function OilControl({onViewVehicle}){
+  const [vehicles,setVehicles]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[filter,setFilter]=useState('all'),[search,setSearch]=useState('');
+  const load=async()=>{try{setLoading(true);const api=(await import('../api/client')).default;const r=await api.get('/vehicles');setVehicles((r.data?.vehicles||[]).filter(v=>String(v.plate||'').trim().toLowerCase()!=='test 123'));}catch(e){setError(e.response?.data?.error||e.message)}finally{setLoading(false)}};
+  useEffect(()=>{load()},[]);
+  const status=v=>{const n=Number(v.sinceOil||0);return n>=5000?'overdue':n>=4500?'soon':'ok'};
+  const rows=vehicles.filter(v=>(filter==='all'||status(v)===filter)&&(!search.trim()||String(v.plate||'').toLowerCase().includes(search.trim().toLowerCase())||String(v.driver||'').toLowerCase().includes(search.trim().toLowerCase())));
+  const count=x=>vehicles.filter(v=>status(v)===x).length;
+  return <div><div className="cards-grid" style={{marginBottom:16}}><div className="card danger"><h3>🔴 Oil Overdue</h3><div className="big-number">{count('overdue')}</div></div><div className="card"><h3>🟡 Oil Due Soon</h3><div className="big-number">{count('soon')}</div></div><div className="card"><h3>🟢 Oil OK</h3><div className="big-number">{count('ok')}</div></div></div><div className="panel"><div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:14}}><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search vehicle / driver" style={{minWidth:260}}/><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All</option><option value="overdue">Overdue</option><option value="soon">Due Soon</option><option value="ok">OK</option></select><button className="btn btn-secondary" onClick={load}>↻ Refresh</button></div>{error&&<div className="alert alert-error">{error}</div>}{loading?<div className="loading">Loading oil status...</div>:<div style={{overflowX:'auto'}}><table><thead><tr><th>Vehicle</th><th>Driver</th><th>Site</th><th>Current KM</th><th>Last Oil KM</th><th>KM Since Oil</th><th>Status</th><th>Action</th></tr></thead><tbody>{rows.map(v=>{const n=Number(v.sinceOil||0),cls=n>=5000?'status-urgent':n>=4500?'status-warning':'status-safe',label=n>=5000?'Overdue':n>=4500?'Due Soon':'OK';return <tr key={v.id}><td><strong>{v.plate}</strong></td><td>{v.driver||'-'}</td><td>{v.location||'-'}</td><td>{Number(v.currentKm||0).toLocaleString()}</td><td>{Number(v.lastOilKm||0).toLocaleString()}</td><td><strong>{n.toLocaleString()}</strong></td><td><span className={'status-badge '+cls}>{label}</span></td><td>{onViewVehicle&&<button className="btn btn-primary" onClick={()=>onViewVehicle(v.id)}>View</button>}</td></tr>})}</tbody></table>{!rows.length&&<div className="alert alert-info">No vehicles match this filter.</div>}</div>}</div></div>;
 }

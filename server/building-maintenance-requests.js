@@ -360,22 +360,36 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       await ensureSchema();
       const row = await getRequest(req.params.id);
       if (!row) return res.status(404).json({success:false,error:"Request not found"});
-      if (!row.work_order_id || !row.executor_email || !row.executor_name) {
-        return res.status(400).json({success:false,error:"This request has no assigned executor/email."});
+      if (row.status !== "Assigned" || row.acknowledged_at) {
+        return res.status(400).json({success:false,error:"Assignment email can only be resent while the request is Assigned and awaiting acknowledgement."});
+      }
+      if (!row.work_order_id || !row.executor_name) {
+        return res.status(400).json({success:false,error:"This request has no assigned executor/work order."});
+      }
+      if (!row.executor_email) {
+        return res.status(400).json({success:false,error:"Assigned executor has no email address."});
       }
       let email;
       try {
         email = await notifyAssignment(row);
+        if (!email.sent) throw new Error(email.reason || "AgentMail did not send the assignment email.");
         const updated = await query(`UPDATE maintenance_requests
           SET email_status='Sent', email_sent_at=CURRENT_TIMESTAMP, email_error=NULL, updated_at=CURRENT_TIMESTAMP
           WHERE id=$1 RETURNING *`, [row.id]);
-        await auditEvent(row.id, "ASSIGNMENT_EMAIL_SENT", "System", "Fleet ERP", {provider: email.provider || null, to: row.executor_email});
+        await auditEvent(row.id, "ASSIGNMENT_EMAIL_RESENT", "System", "Fleet ERP", {
+          provider: email.provider || null,
+          to: maintenanceTestMode() ? [clean(process.env.MAINTENANCE_TEST_EMAIL || OWNER_EMAIL)] : [row.executor_email],
+          message_id: email.message_id || null
+        });
         return res.json({success:true,request:updated.rows[0],email});
       } catch (e) {
         const updated = await query(`UPDATE maintenance_requests
           SET email_status='Failed', email_error=$1, updated_at=CURRENT_TIMESTAMP
           WHERE id=$2 RETURNING *`, [e.message, row.id]);
-        await auditEvent(row.id, "ASSIGNMENT_EMAIL_FAILED", "System", "Fleet ERP", {error: e.message});
+        await auditEvent(row.id, "ASSIGNMENT_EMAIL_RESEND_FAILED", "System", "Fleet ERP", {
+          error: e.message,
+          to: maintenanceTestMode() ? [clean(process.env.MAINTENANCE_TEST_EMAIL || OWNER_EMAIL)] : [row.executor_email]
+        });
         return res.status(502).json({success:false,request:updated.rows[0],email:{sent:false,reason:e.message},error:e.message});
       }
     } catch(e) {

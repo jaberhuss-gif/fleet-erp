@@ -290,7 +290,14 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       if (!row) return res.status(404).json({success:false,error:"Request not found"});
       const executorType = clean(req.body?.executorType);
       const executorName = clean(req.body?.executorName);
-      const executorEmail = clean(req.body?.executorEmail);
+      let executorEmail = clean(req.body?.executorEmail);
+      if (executorType === "Our Employee" && executorName && !executorEmail) {
+        const employee = await query(
+          `SELECT email FROM users WHERE COALESCE(is_active,1)=1 AND (full_name=$1 OR username=$1) LIMIT 1`,
+          [executorName]
+        );
+        executorEmail = clean(employee.rows[0]?.email);
+      }
       if (!["Contractor","Our Employee"].includes(executorType)) return res.status(400).json({success:false,error:"Select Contractor or Our Employee"});
       if (!executorName) return res.status(400).json({success:false,error:"Executor name is required"});
       if (executorType === "Contractor" && !executorEmail) return res.status(400).json({success:false,error:"Contractor email is required"});

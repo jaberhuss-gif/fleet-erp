@@ -74,22 +74,48 @@ async function ensureSchema() {
 }
 
 async function sendEmail({ to, cc = [], subject, html }) {
+  const recipients = (Array.isArray(to) ? to : [to]).map(clean).filter(Boolean);
+  const ccRecipients = (Array.isArray(cc) ? cc : [cc]).map(clean).filter(Boolean);
+  const webhook = clean(process.env.POWER_AUTOMATE_WEBHOOK_URL);
+
+  // Preferred production path: Power Automate -> Microsoft 365 Outlook.
+  // No Resend, DNS changes, or company Outlook credentials are required in Fleet ERP.
+  if (webhook && recipients.length) {
+    const response = await fetch(webhook, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: recipients,
+        cc: ccRecipients,
+        subject,
+        html,
+        source: "Fleet ERP",
+        sentAt: new Date().toISOString()
+      })
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Power Automate email flow error: ${response.status} ${body}`);
+    }
+    return { sent: true, provider: "Power Automate / Microsoft 365 Outlook" };
+  }
+
+  // Temporary legacy fallback only when the Power Automate webhook is not configured.
   const apiKey = clean(process.env.RESEND_API_KEY);
   const from = clean(process.env.EMAIL_FROM || process.env.INSPECTION_EMAIL_FROM || OWNER_EMAIL);
-  const recipients = (Array.isArray(to) ? to : [to]).map(clean).filter(Boolean);
   if (!apiKey || !from || !recipients.length) {
-    return { sent: false, reason: "Email service is not configured (RESEND_API_KEY / EMAIL_FROM)." };
+    return { sent: false, reason: "Power Automate email flow is not configured (POWER_AUTOMATE_WEBHOOK_URL)." };
   }
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to: recipients, cc: cc.map(clean).filter(Boolean), subject, html })
+    body: JSON.stringify({ from, to: recipients, cc: ccRecipients, subject, html })
   });
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`Email provider error: ${response.status} ${body}`);
   }
-  return { sent: true };
+  return { sent: true, provider: "Resend (legacy fallback)" };
 }
 
 function button(url, text, color = "#0f766e") {

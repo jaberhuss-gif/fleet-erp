@@ -90,6 +90,7 @@ export default function MaintenanceRequest({user,access={}}){
                   </div>
                   {r.executor_email&&<div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:10,alignItems:'center'}}>
                     <button type="button" className="btn btn-primary" disabled={!!emailSending[r.id]} onClick={()=>sendWorkflowEmail(r)}>{emailSending[r.id]?'⏳ Sending...':'📨 Send Secure Email / إرسال الإيميل مباشرة'}</button>
+                    {r.completed_at&&!r.requester_confirmed_at&&<button type="button" className="btn btn-warning" onClick={async()=>{setMessage('');setError('');try{const x=await api.post('/maintenance-requests/'+r.id+'/resend-confirmation');setMessage('✅ Requester confirmation email sent to '+(x.data.email?.to||'the test email')+'.');}catch(e){setError('❌ Confirmation email was not sent: '+(e.response?.data?.error||e.message));}}}>📧 Resend YES / NO Confirmation</button>}
                     {!r.acknowledged_at&&r.acknowledgement_token&&<a className="btn btn-primary" style={{textDecoration:'none',background:'#2563eb'}} href={`/api/maintenance-requests/public/${r.acknowledgement_token}/acknowledge`} target="_blank" rel="noreferrer">📩 Acknowledge Receipt</a>}
                     {r.acknowledged_at&&!r.completed_at&&r.completion_token&&<a className="btn btn-primary" style={{textDecoration:'none',background:'#2563eb'}} href={`/api/maintenance-requests/public/${r.completion_token}/work-completed`} target="_blank" rel="noreferrer">🔵 Work Completed</a>}
                   </div>}

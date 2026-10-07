@@ -1114,6 +1114,7 @@ function tireSurveyReportHtml(records, title) {
   </body></html>`;
 }
 
+export async function mountTireRoutes(app) {
   app.get("/api/tire/survey-report/:vehicleId", async (req, res) => {
     if (req.user?.role === "Driver") return res.status(403).send("Forbidden");
     try {
@@ -1139,7 +1140,7 @@ function tireSurveyReportHtml(records, title) {
     } catch (e) { res.status(500).send(e.message); }
   });
 
-export async function mountTireRoutes(app) {
+
   await ensureTireSchema();
 
   app.get("/api/tire/control", async (req, res) => {

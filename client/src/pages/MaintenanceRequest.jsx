@@ -11,6 +11,7 @@ export default function MaintenanceRequest({user,access={}}){
   const setType=(id,type)=>setAssign({...assign,[id]:{type,name:'',email:''}});
   const setExecutor=(id,name)=>{const a=assign[id]||{},list=a.type==='Contractor'?contractors:employees,x=list.find(v=>(v.name||v.full_name)===name);setAssign({...assign,[id]:{...a,name,email:x?.email||''}})};
   const doAssign=async id=>{const a=assign[id]||{};if(!a.type||!a.name)return setError('Select who will execute the work.');try{const r=await api.post('/maintenance-requests/'+id+'/assign',{executorType:a.type,executorName:a.name,executorEmail:a.email});setMessage(r.data.email?.sent ? '📧 '+r.data.request.request_no+' assigned to '+a.name+'. Email sent successfully. WO created.' : '⚠️ '+r.data.request.request_no+' assigned to '+a.name+'. WO created, but email failed: '+(r.data.email?.reason||'Unknown email error'));await load()}catch(e){setError(e.response?.data?.error||e.message)}};
+  const resendAssignment=async id=>{setMessage('');setError('');try{const r=await api.post('/maintenance-requests/'+id+'/resend-email');setMessage('📧 '+r.data.request.request_no+' assignment email sent automatically. No new WO was created.');await load()}catch(e){setError(e.response?.data?.error||e.message)}};
   const financialAction=async(r,action)=>{
     const f=finance[r.id]||{}, rawAmount=String(f.amount??'').trim(), amount=rawAmount===''?null:Number(rawAmount); setMessage('');setError('');
     if(action==='close'&&amount!==null&&(!Number.isFinite(amount)||amount<0))return setError('Enter a valid non-negative Amount or leave it blank.');
@@ -62,6 +63,9 @@ export default function MaintenanceRequest({user,access={}}){
                   <div className="form-group" style={{margin:0}}><label>Performed By</label><select value={a.type||''} onChange={e=>setType(r.id,e.target.value)}><option value="">Select...</option><option>Our Employee</option><option>Contractor</option></select></div>
                   <div className="form-group" style={{margin:0}}><label>{a.type==='Contractor'?'Contractor':'Employee'}</label><select value={a.name||''} disabled={!a.type} onChange={e=>setExecutor(r.id,e.target.value)}><option value="">Select...</option>{list.map(x=><option key={x.email||x.id} value={x.name||x.full_name}>{x.name||x.full_name}{x.email?' — '+x.email:''}</option>)}</select></div>
                   <button className="btn btn-primary" onClick={()=>doAssign(r.id)}>🛠️ Assign & Create WO</button>
+                </div>}
+                {r.status==='Assigned'&&!r.acknowledged_at&&<div style={{marginTop:12,display:'flex',justifyContent:'flex-end'}}>
+                  <button type="button" className="btn btn-primary" onClick={()=>resendAssignment(r.id)}>📧 Resend Assignment Email</button>
                 </div>}
                 {r.work_order_id&&<div style={{marginTop:14,padding:12,borderRadius:10,background:'#f8fafc',border:'1px solid #e2e8f0'}}>
                   <div style={{fontWeight:700,marginBottom:8}}>🔄 Maintenance Workflow</div>

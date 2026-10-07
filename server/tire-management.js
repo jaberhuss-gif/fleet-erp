@@ -1200,24 +1200,46 @@ export async function mountTireRoutes(app) {
 
   app.get("/api/tire/driver/vehicles", async (req, res) => {
     try {
-      if (req.user?.role !== "Driver") {
+      if (String(req.user?.role || "").trim().toLowerCase() !== "driver") {
         return res.status(403).json({ success: false, error: "Driver only" });
       }
-      const me = [req.user?.full_name, req.user?.username]
+
+      // Use the real Driver master assignment (drivers.vehicle_id / vehicles.driver_id)
+      // and the stored vehicle driver snapshot. Do not depend on an exact username
+      // == vehicle.driver text match.
+      const names = [req.user?.full_name, req.user?.username]
         .filter(Boolean)
         .map(s => String(s).trim().toLowerCase())
         .filter(Boolean);
-      if (!me.length) return res.json({ success: true, vehicles: [] });
+      const phones = [req.user?.phone]
+        .filter(Boolean)
+        .map(s => String(s).replace(/\\D/g, ""))
+        .filter(Boolean);
+
       const r = await query(
-        `SELECT id, plate, plate_number, plate_code, driver, location
-         FROM vehicles
-         WHERE LOWER(TRIM(COALESCE(driver,''))) = ANY($1::text[])
-         AND LOWER(TRIM(COALESCE(plate,''))) <> 'test 123'
-         ORDER BY plate, plate_number, id`,
-        [me]
+        `SELECT DISTINCT
+            v.id, v.plate, v.plate_number, v.plate_code, v.driver, v.location
+         FROM vehicles v
+         LEFT JOIN drivers d ON d.id = v.driver_id
+         WHERE LOWER(TRIM(CONCAT(COALESCE(v.plate_number,''), ' ', COALESCE(v.plate_code,'')))) <> 'test 123'
+           AND (
+             LOWER(TRIM(COALESCE(d.name,''))) = ANY($1::text[])
+             OR LOWER(TRIM(COALESCE(v.driver,''))) = ANY($1::text[])
+             OR REGEXP_REPLACE(COALESCE(d.phone,''), '[^0-9]', '', 'g') = ANY($2::text[])
+             OR REGEXP_REPLACE(COALESCE(v.phone,''), '[^0-9]', '', 'g') = ANY($2::text[])
+             OR d.vehicle_id = v.id AND (
+               LOWER(TRIM(COALESCE(d.name,''))) = ANY($1::text[])
+               OR REGEXP_REPLACE(COALESCE(d.phone,''), '[^0-9]', '', 'g') = ANY($2::text[])
+             )
+           )
+         ORDER BY v.plate_number, v.plate_code, v.id`,
+        [names, phones]
       );
+
+      res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
       res.json({ success: true, vehicles: r.rows });
     } catch (e) {
+      console.error("[TireDriverVehicles]", e);
       res.status(500).json({ success: false, error: e.message });
     }
   });

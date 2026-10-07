@@ -53,6 +53,19 @@ function canonicalInspectionSite(location) {
   return aliases[key] || String(location || '').trim();
 }
 
+async function ensureAnnualInspectionReminderSchema() {
+  // Vehicle Master owns these reminder settings. Keep this idempotent so every
+  // deployment can start safely whether the columns already exist or not.
+  await pgQuery(`
+    ALTER TABLE vehicles
+      ADD COLUMN IF NOT EXISTS inspection_reminder_days INTEGER NOT NULL DEFAULT 30,
+      ADD COLUMN IF NOT EXISTS inspection_manager_email TEXT NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS inspection_cc_emails TEXT NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS inspection_last_email_sent_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS inspection_last_email_key TEXT
+  `);
+}
+
 function annualInspectionRecipients(location) {
   const canonical = canonicalInspectionSite(location);
   const match = Object.entries(ANNUAL_INSPECTION_SITE_CONTACTS).find(([site]) => site.toLowerCase() === canonical.toLowerCase());

@@ -154,12 +154,10 @@ async function notifyNewRequest(reqRow) {
 }
 
 async function notifyAssignment(reqRow) {
-  const testMode = clean(process.env.MAINTENANCE_TEST_MODE).toLowerCase() === "true";
-  const testEmail = clean(process.env.MAINTENANCE_TEST_EMAIL);
-  const recipients = testMode && testEmail ? [testEmail] : (reqRow.executor_email ? [reqRow.executor_email] : []);
+  const recipients = reqRow.executor_email ? [reqRow.executor_email] : [];
   const acknowledgeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.acknowledgement_token}/acknowledge`;
   const completeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.completion_token}/work-completed`;
-  const ccRecipients = testMode ? [] : [OWNER_EMAIL, ...CC_EMAILS];
+  const ccRecipients = [OWNER_EMAIL, ...CC_EMAILS];
   return sendEmail({
     to: recipients,
     cc: ccRecipients,
@@ -193,15 +191,13 @@ async function notifyAssignment(reqRow) {
 }
 
 async function notifyRequesterReady(reqRow) {
-  const testMode = clean(process.env.MAINTENANCE_TEST_MODE).toLowerCase() === "true";
-  const testEmail = clean(process.env.MAINTENANCE_TEST_EMAIL);
-  const recipients = testMode && testEmail ? [testEmail] : (reqRow.requester_email ? [reqRow.requester_email] : []);
+  const recipients = reqRow.requester_email ? [reqRow.requester_email] : [];
   if (!recipients.length) return { sent: false, reason: "Requester email is not available." };
   const yes = `${appUrl()}/api/maintenance-requests/public/${reqRow.confirmation_token}/confirm?answer=yes`;
   const no = `${appUrl()}/api/maintenance-requests/public/${reqRow.confirmation_token}/confirm?answer=no`;
   return sendEmail({
     to: recipients,
-    cc: testMode ? [] : [OWNER_EMAIL],
+    cc: [OWNER_EMAIL],
     subject: `BUILDING MAINTENANCE — ${reqRow.request_no} READY FOR CONFIRMATION`,
     html: `
       <h2>🛠️ Maintenance Work Completed</h2>
@@ -313,9 +309,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       `, [order.id, executorType, executorName, executorEmail || null, row.id]);
       const updatedRow=updated.rows[0];
       await auditEvent(row.id, "ASSIGNED", executorType, executorName, {work_order_id: order.id, executor_email: executorEmail || null});
-      // Assignment creates the WO only. The Maintenance Manager sends the contractor email manually via Outlook.
-      // This keeps the approved workflow: Manager -> Contractor -> Acknowledge -> Work Completed -> Campus YES/NO -> Manager closes financially.
-      const email = {sent:false, manual:true, reason:"Ready to send manually via Outlook."};
+      const email = {sent:false, ready:true, reason:"Work Order created. Use Send Secure Email to notify the assigned executor."};
       res.json({success:true,request:updatedRow,workOrder:order,email});
     } catch(e){res.status(400).json({success:false,error:e.message});}
   });
@@ -334,7 +328,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
         const updated = await query(`UPDATE maintenance_requests
           SET email_status='Sent', email_sent_at=CURRENT_TIMESTAMP, email_error=NULL, updated_at=CURRENT_TIMESTAMP
           WHERE id=$1 RETURNING *`, [row.id]);
-        await auditEvent(row.id, "ASSIGNMENT_EMAIL_SENT", "System", "Fleet ERP", {provider: email.provider || null, to: (clean(process.env.MAINTENANCE_TEST_MODE).toLowerCase() === "true" && clean(process.env.MAINTENANCE_TEST_EMAIL)) || row.executor_email});
+        await auditEvent(row.id, "ASSIGNMENT_EMAIL_SENT", "System", "Fleet ERP", {provider: email.provider || null, to: row.executor_email});
         return res.json({success:true,request:updated.rows[0],email});
       } catch (e) {
         const updated = await query(`UPDATE maintenance_requests
@@ -345,20 +339,6 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       }
     } catch(e) {
       res.status(400).json({success:false,error:e.message});
-    }
-  });
-
-  app.post("/api/maintenance-requests/:id/resend-confirmation", async (req,res) => {
-    try {
-      await ensureSchema();
-      const row = await getRequest(req.params.id);
-      if (!row) return res.status(404).json({success:false,error:"Request not found"});
-      if (!row.completed_at) return res.status(400).json({success:false,error:"Work has not been completed yet."});
-      const email = await notifyRequesterReady(row);
-      if (!email.sent) return res.status(502).json({success:false,error:email.reason||"Confirmation email was not sent.",email});
-      return res.json({success:true,request:row,email});
-    } catch(e) {
-      return res.status(502).json({success:false,error:e.message});
     }
   });
 
@@ -548,8 +528,8 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       }
       if(answer==="no") await sendEmail({to:[OWNER_EMAIL],cc:CC_EMAILS,subject:`BUILDING MAINTENANCE — ${row.request_no} NOT FIXED`,html:`<h2>❌ Maintenance needs more work</h2><p><b>${row.request_no}</b> was not confirmed by the requester.</p><p>${row.description}</p>`}).catch(()=>{});
       res.send(answer==="yes"
-        ? "<html><body style='font-family:Arial;padding:40px;max-width:720px;margin:auto'><h2>✅ Thank you</h2><p>The request is confirmed as fixed. Final cost remains open for Fleet / Building Maintenance.</p><p>تم تأكيد إتمام العمل بنجاح.</p></body></html>"
-        : "<html><body style='font-family:Arial;padding:40px;max-width:720px;margin:auto'><h2>❌ Not Fixed</h2><p>Fleet / Building Maintenance has been notified to continue the work.</p><p>تم إبلاغ إدارة الصيانة بضرورة متابعة العمل.</p></body></html>");
+        ? "<html><body style='font-family:Arial;padding:40px;max-width:720px;margin:auto'><h2>✅ Confirmation Submitted</h2><p>تم تأكيد أن أعمال الصيانة تمت بنجاح.</p><p>You can close this window.</p><p>يمكنك إغلاق هذه الصفحة الآن.</p></body></html>"
+        : "<html><body style='font-family:Arial;padding:40px;max-width:720px;margin:auto'><h2>❌ Not Fixed</h2><p>تم إبلاغ إدارة الصيانة بضرورة متابعة العمل.</p><p>You can close this window.</p><p>يمكنك إغلاق هذه الصفحة الآن.</p></body></html>");
     } catch(e){res.status(500).send("<h2>Error processing confirmation</h2>");}
   });
 }

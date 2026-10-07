@@ -331,7 +331,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
         await query(`UPDATE maintenance_requests
           SET email_status='Failed', email_error=$1, updated_at=CURRENT_TIMESTAMP
           WHERE id=$2`, [e.message, row.id]);
-        await auditEvent(row.id, "ASSIGNMENT_EMAIL_FAILED", "System", "Fleet ERP", {error:e.message, to:OWNER_EMAIL});
+        await auditEvent(row.id, "ASSIGNMENT_EMAIL_FAILED", "System", "Fleet ERP", {error:e.message, to:executorEmail || null});
       }
       const failedRow = await getRequest(row.id);
       res.json({success:true,request:failedRow,workOrder:order,email});

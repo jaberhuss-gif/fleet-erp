@@ -7,7 +7,7 @@ const TYPE_LABELS = {
   'inspection': 'Periodic Inspection'
 };
 
-export default function PeriodicMaintenance({ canWork = false, inspectionEmailOnly = false, inspectionUpcomingOnly = false, onOpenInspectionEmail = null, onOpenInspectionUpcoming = null }) {
+export default function PeriodicMaintenance({ canWork = false, inspectionEmailOnly = false, inspectionUpcomingOnly = false, onOpenInspectionEmail = null, onOpenInspectionUpcoming = null, fixedType = null }) {
   const [subTab, setSubTab] = useState('all');
   const [records, setRecords] = useState([]);
   const [alerts, setAlerts] = useState({ overdue: [], dueSoon: [] });
@@ -19,7 +19,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
   const [editing, setEditing] = useState(null);
   const [completing, setCompleting] = useState(null);
   const [filterVehicle, setFilterVehicle] = useState('all');
-  const [filterType, setFilterType] = useState('all');
+  const [filterType, setFilterType] = useState(fixedType || 'all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [search, setSearch] = useState('');
   const [reportTab, setReportTab] = useState('original');

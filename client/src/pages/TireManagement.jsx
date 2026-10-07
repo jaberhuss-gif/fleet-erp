@@ -245,14 +245,11 @@ export default function TireManagement({ user, driverMode=false }) {
         </div>)}
       </div>
     </div>}
-
-    {vehicleId && locked && !driverMode && <div className="panel" style={{marginTop:16}}>
+    {!driverMode && vehicleId && locked && <div className="panel" style={{marginTop:16}}>
       <h2>🔧 Tire Event</h2>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:8}}>
         <select value={event.eventType} onChange={e=>setEvent({...event,eventType:e.target.value})}>{EVENT_TYPES.map(x=><option key={x}>{x}</option>)}</select>
-        <select value={event.tireAssetId} onChange={e=>setEvent({...event,tireAssetId:e.target.value})}>
-          <option value="">Tire</option>{(data?.tires||[]).map(t=><option key={t.id} value={t.id}>{t.position} — {t.tire_id}</option>)}
-        </select>
+        <select value={event.tireAssetId} onChange={e=>setEvent({...event,tireAssetId:e.target.value})}><option value="">Tire</option>{(data?.tires||[]).map(t=><option key={t.id} value={t.id}>{t.position} — {t.tire_id}</option>)}</select>
         <input placeholder="Position" value={event.position} onChange={e=>setEvent({...event,position:e.target.value})}/>
         <input placeholder="Old Tire ID" value={event.oldTireId} onChange={e=>setEvent({...event,oldTireId:e.target.value})}/>
         <input placeholder="New Tire ID" value={event.newTireId} onChange={e=>setEvent({...event,newTireId:e.target.value})}/>

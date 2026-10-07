@@ -253,6 +253,15 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
   app.get("/api/maintenance-requests", async (req,res) => {
     try {
       await ensureSchema();
+      // Keep the displayed request status synchronized with the workflow timestamps.
+      // A recorded completion must never remain visually stuck at Acknowledged.
+      await query(`
+        UPDATE maintenance_requests
+        SET status='Awaiting Confirmation', updated_at=CURRENT_TIMESTAMP
+        WHERE completed_at IS NOT NULL
+          AND requester_confirmation IS NULL
+          AND status NOT IN ('Awaiting Confirmation','Operationally Completed','Reopened','Open','Closed')
+      `);
       const r = await query(`SELECT * FROM maintenance_requests ORDER BY created_at DESC, id DESC`);
       res.json({success:true, requests:r.rows, contractors:CONTRACTORS});
     } catch(e) { res.status(500).json({success:false,error:e.message}); }

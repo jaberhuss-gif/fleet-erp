@@ -63,8 +63,10 @@ export default function TireManagement({ user, driverMode=false }) {
   const [error,setError] = useState('');
 
   const loadVehicles = async () => {
-    const r = await api.get('/tire/control');
-    setVehicles(r.data.vehicles || []);
+    const r = await api.get(driverMode ? '/tire/driver/vehicles' : '/tire/control');
+    const list = r.data.vehicles || [];
+    setVehicles(list);
+    if (driverMode && list.length === 1) setVehicleId(String(list[0].id));
   };
   const load = async (id=vehicleId) => {
     if (!id) return;
@@ -185,24 +187,6 @@ export default function TireManagement({ user, driverMode=false }) {
     {message && <div className="alert alert-success">{message}</div>}
     {error && <div className="alert alert-error">{error}</div>}
 
-    <div className="panel" style={{marginTop:16}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}><h2 style={{margin:0}}>📋 Initial Tire Survey Records</h2><button type="button" className="btn btn-success" onClick={openAllSurveyPdf}>📄 PDF — All Submitted Vehicles</button></div>
-      <p style={{color:'#64748b'}}>Every submitted tire survey is stored by vehicle, with its six inspection photos retained in the survey record.</p>
-      <div style={{overflowX:'auto'}}>
-        <table style={{width:'100%',borderCollapse:'collapse'}}>
-          <thead><tr><th style={{textAlign:'left',padding:8}}>Vehicle</th><th style={{textAlign:'left',padding:8}}>Survey Status</th><th style={{textAlign:'left',padding:8}}>Submitted</th><th style={{textAlign:'left',padding:8}}>Photos</th><th style={{textAlign:'left',padding:8}}>Action</th></tr></thead>
-          <tbody>
-            {vehicles.filter(v=>v.survey_status||v.submitted_at).map(v=><tr key={v.id}>
-              <td style={{padding:8,fontWeight:700}}>{vehicleLabel(v)}</td>
-              <td style={{padding:8}}><Badge status={String(v.survey_status||'').toUpperCase()==='SUBMITTED'?'yellow':(String(v.survey_status||'').toUpperCase()==='APPROVED'||String(v.survey_status||'').toUpperCase()==='LOCKED'?'green':'yellow')}/></td>
-              <td style={{padding:8}}>{v.submitted_at ? new Date(v.submitted_at).toLocaleString() : '-'}</td>
-              <td style={{padding:8}}>6 photos stored</td>
-              <td style={{padding:8,display:"flex",gap:6,flexWrap:"wrap"}}><button type="button" className="btn btn-primary" onClick={()=>setVehicleId(String(v.id))}>Open Survey</button><button type="button" className="btn btn-success" onClick={()=>openSurveyPdf(v.id)}>📄 PDF</button></td>
-            </tr>)}
-            {!vehicles.some(v=>v.survey_status||v.submitted_at) && <tr><td colSpan="5" style={{padding:12,color:'#64748b'}}>No submitted tire surveys found.</td></tr>}
-          </tbody>
-        </table>
-      </div>
     </div>
 
     {vehicleId && !locked && <div className="panel">
@@ -260,66 +244,6 @@ export default function TireManagement({ user, driverMode=false }) {
           <div style={{fontSize:13}}>Pressure: {t.pressure_psi ?? '-'} PSI</div>
         </div>)}
       </div>
-    </div>}
-
-    {vehicleId && locked && driverMode && <div className="panel" style={{marginTop:16}}>
-      <h2>🛠️ Tire Service Request</h2>
-      <p style={{color:'#64748b',marginTop:4}}>
-        Use this request if the vehicle is going to the tire shop, a tire has a puncture, or a tire must be replaced because of damage.
-        This does not change the tire record automatically; management reviews the request first.
-      </p>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:8}}>
-        <select value={serviceRequest.requestType} onChange={e=>setServiceRequest({...serviceRequest,requestType:e.target.value})}>
-          <option value="TIRE_SHOP_VISIT">Tire Shop Visit</option>
-          <option value="TIRE_REPLACEMENT_DAMAGE">Tire Replacement — Damage</option>
-          <option value="PUNCTURE_REPAIR">Puncture / Repair</option>
-          <option value="OTHER">Other Tire Service</option>
-        </select>
-        <select value={serviceRequest.position} onChange={e=>setServiceRequest({...serviceRequest,position:e.target.value})}>
-          <option value="">Tire Position</option>
-          {POSITIONS.map(p=><option key={p} value={p}>{p}</option>)}
-        </select>
-      </div>
-      <textarea
-        placeholder="Describe the tire problem / required service"
-        value={serviceRequest.notes}
-        onChange={e=>setServiceRequest({...serviceRequest,notes:e.target.value})}
-        style={{marginTop:8,minHeight:90}}
-      />
-      <label style={{display:'block',marginTop:8,fontWeight:600}}>📷 Damage / Tire Photo (optional)</label>
-      <input
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={async e=>{
-          const file=e.target.files?.[0];
-          if(!file) return;
-          try {
-            const photo=await readPhoto(file);
-            setServiceRequest({...serviceRequest,photo});
-          } catch(err) {
-            setError('Could not read the tire photo.');
-          }
-        }}
-      />
-      {serviceRequest.photo && <img src={serviceRequest.photo} alt="Tire service request" style={{width:'100%',maxWidth:420,height:180,objectFit:'cover',borderRadius:8,marginTop:8}} />}
-      <button className="btn btn-primary" onClick={submitServiceRequest} style={{marginTop:10}}>Submit Tire Service Request</button>
-    </div>}
-
-    {vehicleId && !driverMode && (data?.serviceRequests||[]).length > 0 && <div className="panel" style={{marginTop:16}}>
-      <h2>🛠️ Tire Service Requests</h2>
-      <table>
-        <thead><tr><th>Date</th><th>Request</th><th>Position</th><th>Status</th><th>Notes</th></tr></thead>
-        <tbody>
-          {(data?.serviceRequests||[]).map(r=><tr key={r.id}>
-            <td>{new Date(r.created_at).toLocaleString()}</td>
-            <td>{r.request_type}</td>
-            <td>{r.position||'-'}</td>
-            <td>{r.status}</td>
-            <td>{r.notes||'-'}</td>
-          </tr>)}
-        </tbody>
-      </table>
     </div>}
 
     {vehicleId && locked && !driverMode && <div className="panel" style={{marginTop:16}}>

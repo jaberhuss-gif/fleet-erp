@@ -75,7 +75,8 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
     history:['history'],
     'vehicle-ticket':['vehicle-ticket'],
     km:['daily-km-submitted','daily-km-missing'],
-    'inspection-email':['inspection-email']
+    'inspection-email':['inspection-email'],
+    'tire-control':['tire-control']
   };
   const ownerItems={
     'add-vehicle':{label:'🚙 Vehicle Master',title:'Vehicle Master',description:'Single place to add and edit vehicle identity, driver assignment and vehicle master data.'},
@@ -88,7 +89,8 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
     'daily-km-submitted':{label:'📋 Daily KM — Submitted',title:'Daily KM — Submitted',description:'View vehicles that submitted a daily KM reading today.'},
     'daily-km-missing':{label:'⚠️ Daily KM — Missing',title:'Daily KM — Missing',description:'View vehicles that have not submitted a daily KM reading today.'},
     'inspection-email':{label:'📧 Annual Inspection Email',title:'Annual Inspection Email Control',description:'Select all sites or specific sites and send annual inspection reminders for vehicles due within 31 days.'},
-    'inspection-upcoming':{label:'📅 Future Annual Inspections',title:'Future Annual Inspection Schedule',description:'Vehicles more than 31 days from expiry. Monitoring only; they move automatically to the email page when due.'}
+    'inspection-upcoming':{label:'📅 Future Annual Inspections',title:'Future Annual Inspection Schedule',description:'Vehicles more than 31 days from expiry. Monitoring only; they move automatically to the email page when due.'},
+    'tire-control':{label:'🛞 Tire Control',title:'Vehicle Compliance Control Center — Tires',description:'Initial tire survey records, six inspection photos, tire status and management control.'}
   };
   const ids=ownerGroups[ownerGroup]||ownerGroups.add;
   const currentSection=ids.includes(section)?section:ids[0];
@@ -117,5 +119,6 @@ export default function FleetHub({ user, access, initialOwnerGroup='add' }) {
     {currentSection==='daily-km-submitted'&&<DailyKmSubmitted/>}
     {currentSection==='daily-km-missing'&&<DailyKmMissing user={user}/>}\n    {currentSection==='inspection-email'&&<PeriodicMaintenance canWork={fleetWork} inspectionEmailOnly onOpenInspectionUpcoming={()=>{setOwnerGroup('inspection-upcoming');setSection('inspection-upcoming');}}/>}
     {currentSection==='inspection-upcoming'&&<PeriodicMaintenance canWork={fleetWork} inspectionUpcomingOnly onOpenInspectionEmail={()=>{setOwnerGroup('inspection-email');setSection('inspection-email');}}/>}
+    {currentSection==='tire-control'&&<TireManagement user={user} driverMode={false}/>} 
   </div>;
 }

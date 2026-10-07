@@ -144,35 +144,49 @@ async function notifyNewRequest(reqRow) {
 }
 
 async function notifyAssignment(reqRow) {
-  // TEST MODE: assignment emails go only to the owner's company mailbox.
-  const recipients = [OWNER_EMAIL];
+  const recipients = reqRow.executor_email ? [reqRow.executor_email] : [];
+  if (!recipients.length) return { sent: false, reason: "Assigned executor email is not available." };
   const acknowledgeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.acknowledgement_token}/acknowledge`;
-  const completeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.completion_token}/work-completed`;
   return sendEmail({
     to: recipients,
     subject: `BUILDING MAINTENANCE — ${reqRow.request_no} ASSIGNED`,
     html: `
       <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:24px;color:#1f2937">
-        <h2 style="margin-bottom:20px">BUILDING MAINTENANCE WORK ASSIGNMENT</h2>
-        <p>Dear Hussein Anwar,</p>
+        <h2>BUILDING MAINTENANCE WORK ASSIGNMENT</h2>
+        <p>Dear ${clean(reqRow.executor_name) || "Executor"},</p>
         <p><b>Request No.:</b> ${reqRow.request_no}</p>
         <p><b>Site:</b> ${reqRow.site || "-"}</p>
         <p><b>Category:</b> ${reqRow.category || "-"}</p>
         <p><b>Priority:</b> ${reqRow.priority || "-"}</p>
         <p><b>Description:</b><br>${clean(reqRow.description).replace(/</g,"&lt;").replace(/\n/g,"<br>")}</p>
-
         <div style="margin-top:28px;padding:18px;background:#eff6ff;border-radius:10px">
-          <h3 style="margin-top:0">STEP 1 - ACKNOWLEDGE RECEIPT</h3>
-          <p>Please confirm that you received this work assignment:</p>
+          <h3>STEP 1 — ACKNOWLEDGE RECEIPT</h3>
+          <p>Please confirm that you received this work assignment.</p>
           ${button(acknowledgeUrl, "📩 ACKNOWLEDGE RECEIPT", "#2563eb")}
         </div>
+        <p style="margin-top:28px">Regards,<br>Fleet / Building Maintenance</p>
+      </div>
+    `
+  });
+}
 
-        <div style="margin-top:18px;padding:18px;background:#f0fdf4;border-radius:10px">
-          <h3 style="margin-top:0">STEP 2 - WORK COMPLETED</h3>
-          <p>After completing the repair, confirm that the work is completed:</p>
+async function notifyCompletionReady(reqRow) {
+  const recipients = reqRow.executor_email ? [reqRow.executor_email] : [];
+  if (!recipients.length) return { sent: false, reason: "Assigned executor email is not available." };
+  const completeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.completion_token}/work-completed`;
+  return sendEmail({
+    to: recipients,
+    subject: `BUILDING MAINTENANCE — ${reqRow.request_no} READY TO COMPLETE`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:24px;color:#1f2937">
+        <h2>BUILDING MAINTENANCE — WORK IN PROGRESS</h2>
+        <p><b>Request No.:</b> ${reqRow.request_no}</p>
+        <p><b>Site:</b> ${reqRow.site || "-"}</p>
+        <p>Your assignment has been acknowledged. After finishing the work, use the button below.</p>
+        <div style="margin-top:28px;padding:18px;background:#f0fdf4;border-radius:10px">
+          <h3>STEP 2 — WORK COMPLETED</h3>
           ${button(completeUrl, "✅ WORK COMPLETED", "#15803d")}
         </div>
-
         <p style="margin-top:28px">Regards,<br>Fleet / Building Maintenance</p>
       </div>
     `
@@ -281,7 +295,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       const isContractor = executorType === "Contractor";
       const acknowledgementToken = row.acknowledgement_token || randomUUID();
       const completionToken = row.completion_token || randomUUID();
-      await query(`UPDATE maintenance_requests SET acknowledgement_token=$1, completion_token=$2 WHERE id=$3`, [acknowledgementToken, completionToken, row.id]);
+      await query(`UPDATE maintenance_requests SET acknowledgement_token=$1, completion_token=$2, confirmation_token=$3 WHERE id=$4`, [acknowledgementToken, completionToken, confirmationToken, row.id]);
       const order = await createWorkOrder({
         site: row.site, category: row.category, priority: row.priority, description: row.description,
         assignedTo: executorName, isContractor, contractorName: isContractor ? executorName : "",
@@ -292,7 +306,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       await query(`UPDATE work_orders SET maintenance_request_id=$1, operational_status='In Progress' WHERE id=$2`, [row.id, order.id]);
       const updated = await query(`
         UPDATE maintenance_requests
-        SET status='In Progress', work_order_id=$1, executor_type=$2, executor_name=$3, executor_email=$4, contractor_notified_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+        SET status='Assigned', work_order_id=$1, executor_type=$2, executor_name=$3, executor_email=$4, contractor_notified_at=CURRENT_TIMESTAMP, acknowledged_at=NULL, completed_at=NULL, requester_confirmed_at=NULL, requester_confirmation=NULL, final_amount=NULL, closed_at=NULL, closed_by=NULL, closing_notes=NULL, email_status='Not Sent', email_sent_at=NULL, email_error=NULL, updated_at=CURRENT_TIMESTAMP
         WHERE id=$5 RETURNING *
       `, [order.id, executorType, executorName, executorEmail || null, row.id]);
       const updatedRow=updated.rows[0];
@@ -394,14 +408,15 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       await ensureSchema();
       const row = await getRequest(req.params.id);
       if (!row) return res.status(404).json({success:false,error:"Request not found"});
-      const amount = Number(req.body?.amount);
+      const rawAmount = clean(req.body?.amount);
+      const amount = rawAmount === "" ? null : Number(rawAmount);
       const action = clean(req.body?.action).toLowerCase();
       const notes = clean(req.body?.notes);
       if (row.requester_confirmation !== "yes" || !["Operationally Completed","Open"].includes(row.status)) return res.status(400).json({success:false,error:"Campus must confirm YES before financial closing."});
       if (!["close","open"].includes(action)) return res.status(400).json({success:false,error:"Action must be close or open"});
-      if (action === "close" && (!Number.isFinite(amount) || amount < 0)) return res.status(400).json({success:false,error:"Valid Amount is required to close the request."});
+      if (action === "close" && amount !== null && (!Number.isFinite(amount) || amount < 0)) return res.status(400).json({success:false,error:"Amount must be empty or a valid non-negative number."});
       if (action === "open") {
-        const updated = await query(`UPDATE maintenance_requests SET status='Open', final_amount=$1, closing_notes=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3 RETURNING *`,[Number.isFinite(amount)&&amount>=0?amount:null,notes,row.id]);
+        const updated = await query(`UPDATE maintenance_requests SET status='Open', final_amount=$1, closing_notes=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3 RETURNING *`,[amount !== null && Number.isFinite(amount) && amount >= 0 ? amount : null,notes,row.id]);
         await auditEvent(row.id, "REOPENED_BY_FLEET", "Fleet / Building Maintenance", clean(req.user?.full_name||req.user?.username||"Fleet / Building Maintenance"), {amount, notes});
         if (row.work_order_id) await updateWorkOrder(row.work_order_id,{status:"Open",closingNotes:notes});
         return res.json({success:true,request:updated.rows[0]});
@@ -473,7 +488,9 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       const row=r.rows[0];
       if(row.acknowledged_at) return res.send("<html><body style='font-family:Arial;padding:40px'><h2>📩 Assignment Already Acknowledged</h2><p>This assignment has already been acknowledged.</p></body></html>");
       await query(`UPDATE maintenance_requests SET status='Acknowledged', acknowledged_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1`,[row.id]);
-      await auditEvent(row.id, "ACKNOWLEDGED", "Contractor", row.executor_name, {executor_email: row.executor_email});
+      await auditEvent(row.id, "ACKNOWLEDGED", row.executor_type || "Executor", row.executor_name, {executor_email: row.executor_email});
+      const completionEmail = await notifyCompletionReady(row).catch(e => ({sent:false, reason:e.message}));
+      await auditEvent(row.id, completionEmail.sent ? "COMPLETION_EMAIL_SENT" : "COMPLETION_EMAIL_FAILED", "System", "Fleet ERP", {to: row.executor_email || null, reason: completionEmail.reason || null});
       res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>✅ Assignment Acknowledged</h2><p><b>Request:</b> ${row.request_no}</p><p>Thank you. Fleet / Building Maintenance has been notified that you received the work assignment.</p><p>تم تأكيد استلام مهمة الصيانة وتحديث النظام تلقائياً.</p></body></html>`);
     } catch(e){res.status(500).send("<h2>Error processing acknowledgement</h2>");}
   });

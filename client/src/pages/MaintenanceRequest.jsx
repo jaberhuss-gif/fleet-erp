@@ -59,7 +59,18 @@ export default function MaintenanceRequest({user,access={}}){
           <button type="button" className="btn btn-primary" onClick={()=>sendWorkflowEmail(r)}>📧 Send Secure Workflow Email / إرسال إيميل المهمة</button>
           {!r.acknowledged_at&&r.acknowledgement_token&&<a className="btn btn-primary" style={{textDecoration:'none',background:'#2563eb'}} href={`/api/maintenance-requests/public/${r.acknowledgement_token}/acknowledge`} target="_blank" rel="noreferrer">📩 Acknowledge Receipt</a>}
           {r.acknowledged_at&&!r.completed_at&&r.completion_token&&<a className="btn btn-primary" style={{textDecoration:'none',background:'#2563eb'}} href={`/api/maintenance-requests/public/${r.completion_token}/work-completed`} target="_blank" rel="noreferrer">🔵 Work Completed</a>}
-        </div>}</div>}
+        </div>}
+        {r.requester_confirmation==='yes'&&['Operationally Completed','Open'].includes(r.status)&&<div style={{marginTop:12,padding:12,borderRadius:10,background:'#ecfdf5',border:'1px solid #86efac'}}>
+          <div style={{fontWeight:700,marginBottom:8}}>💰 Final Financial Control</div>
+          <div style={{fontSize:13,color:'#166534',marginBottom:10}}>Campus confirmed <b>YES</b>. Enter the final amount, then choose Close or Open.</div>
+          <div style={{display:'grid',gridTemplateColumns:'180px 1fr auto auto',gap:8,alignItems:'end'}}>
+            <div className="form-group" style={{margin:0}}><label>Amount (SAR)</label><input type="number" min="0" step="0.01" value={finance[r.id]?.amount??''} onChange={e=>setFinance({...finance,[r.id]:{...(finance[r.id]||{}),amount:e.target.value}})} placeholder="0.00"/></div>
+            <div className="form-group" style={{margin:0}}><label>Closing Notes</label><input value={finance[r.id]?.notes??''} onChange={e=>setFinance({...finance,[r.id]:{...(finance[r.id]||{}),notes:e.target.value}})} placeholder="Optional notes"/></div>
+            <button type="button" className="btn btn-primary" onClick={()=>financialAction(r,'close')}>🔒 Close</button>
+            <button type="button" className="btn btn-warning" onClick={()=>financialAction(r,'open')}>🔓 Open</button>
+          </div>
+        </div>}
+        {r.status==='Closed'&&<div style={{marginTop:12,padding:10,borderRadius:8,background:'#dcfce7',color:'#166534'}}><b>🔒 CLOSED</b> • Final Amount: SAR {Number(r.final_amount||0).toFixed(2)} • Closed by: {r.closed_by||'Fleet / Building Maintenance'}</div>}
       </div>})}</div>}
     </div>}
   </div>

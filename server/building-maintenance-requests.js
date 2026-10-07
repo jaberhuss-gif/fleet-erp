@@ -366,8 +366,16 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       if (!row.work_order_id || !row.executor_name) {
         return res.status(400).json({success:false,error:"This request has no assigned executor/work order."});
       }
-      if (!row.executor_email) {
-        return res.status(400).json({success:false,error:"Assigned executor has no email address."});
+      let executorEmail = clean(row.executor_email);
+      if (!executorEmail && row.executor_type === "Our Employee" && row.executor_name) {
+        executorEmail = await resolveEmployeeEmail(row.executor_name);
+        if (executorEmail) {
+          await query(`UPDATE maintenance_requests SET executor_email=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`, [executorEmail, row.id]);
+          row.executor_email = executorEmail;
+        }
+      }
+      if (!executorEmail && !maintenanceTestMode()) {
+        return res.status(400).json({success:false,error:"Assigned employee has no email address in the ERP users table."});
       }
       let email;
       try {

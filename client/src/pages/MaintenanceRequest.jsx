@@ -3,7 +3,7 @@ import api from '../api/client';
 
 const initialForm={site:'',category:'',priority:'Medium',description:''};
 export default function MaintenanceRequest({user,access={}}){
-  const [form,setForm]=useState(initialForm),[sites,setSites]=useState([]),[requests,setRequests]=useState([]),[employees,setEmployees]=useState([]),[contractors,setContractors]=useState([]),[assign,setAssign]=useState({}),[message,setMessage]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(true),[emailSending,setEmailSending]=useState({});
+  const [form,setForm]=useState(initialForm),[sites,setSites]=useState([]),[requests,setRequests]=useState([]),[employees,setEmployees]=useState([]),[contractors,setContractors]=useState([]),[assign,setAssign]=useState({}),[message,setMessage]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(true),[emailSending,setEmailSending]=useState({}),[finance,setFinance]=useState({});
   const canWork=user?.role==='Owner'||!!access?.support?.can_work||!!access?.building?.can_work;
   const load=async()=>{if(!canWork)return;try{const [r,e]=await Promise.all([api.get('/maintenance-requests'),api.get('/maintenance-requests/executors')]);setRequests(r.data.requests||[]);setEmployees(e.data.employees||[]);setContractors(e.data.contractors||[])}catch(e){setError(e.response?.data?.error||e.message)}};
   useEffect(()=>{Promise.all([api.get('/sites').then(r=>setSites(r.data.sites||[])),load()]).catch(e=>setError(e.response?.data?.error||e.message)).finally(()=>setLoading(false))},[]);
@@ -62,6 +62,11 @@ export default function MaintenanceRequest({user,access={}}){
     const w=window.open(emailUrl,'_blank');
     if(!w)setError('Please allow pop-ups to open the Outlook email draft.');
     else setMessage('📧 Outlook Web is opening with the email ready. The workflow URLs are placed as real URLs for Outlook to make clickable. Review it and click Send. / يتم الآن فتح Outlook والإيميل جاهز للمراجعة ثم اضغط Send.');
+  };
+  const financialAction=async(r,action)=>{
+    const f=finance[r.id]||{}, amount=Number(f.amount); setMessage('');setError('');
+    if(action==='close'&&(!Number.isFinite(amount)||amount<0))return setError('Enter a valid Amount before closing.');
+    try{await api.post('/maintenance-requests/'+r.id+'/financial-close',{action,amount:Number.isFinite(amount)&&amount>=0?amount:null,notes:f.notes||''});setMessage(action==='close'?'✅ '+r.request_no+' is CLOSED with Amount '+amount+'.':'🔓 '+r.request_no+' is OPEN for further action.');await load()}catch(e){setError(e.response?.data?.error||e.message)}
   };
   if(loading)return <div className="loading">Loading Support & Service...</div>;
   return <div className="form-container" style={{maxWidth:1200}}>

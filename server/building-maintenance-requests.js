@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { query } from "./postgres.js";
-import { createWorkOrder, updateWorkOrder, getWorkOrder } from "./database-pg.js";
+import { createWorkOrder, updateWorkOrder, getWorkOrder, closeWorkOrder } from "./database-pg.js";
 
 const OWNER_EMAIL = "Hussein.Anwar@iemaadex.com";
 const CC_EMAILS = ["Mohamed.Hassan@iemaadex.com", "Jahangeer.Mohammed@iemaadex.com"];
@@ -49,6 +49,10 @@ async function ensureSchema() {
       completed_at TIMESTAMPTZ,
       requester_confirmed_at TIMESTAMPTZ,
       requester_confirmation TEXT,
+      final_amount NUMERIC(14,2),
+      closed_at TIMESTAMPTZ,
+      closed_by TEXT,
+      closing_notes TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -59,6 +63,10 @@ async function ensureSchema() {
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMPTZ`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_error TEXT`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMPTZ`);
+  await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS final_amount NUMERIC(14,2)`);
+  await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ`);
+  await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS closed_by TEXT`);
+  await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS closing_notes TEXT`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS acknowledgement_token TEXT UNIQUE`);
   await query(`CREATE INDEX IF NOT EXISTS idx_maintenance_requests_status ON maintenance_requests(status)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_maintenance_requests_work_order ON maintenance_requests(work_order_id)`);
@@ -306,6 +314,28 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
     } catch(e){res.status(400).json({success:false,error:e.message});}
   });
 
+
+  app.post("/api/maintenance-requests/:id/financial-close", async (req,res) => {
+    try {
+      await ensureSchema();
+      const row = await getRequest(req.params.id);
+      if (!row) return res.status(404).json({success:false,error:"Request not found"});
+      const amount = Number(req.body?.amount);
+      const action = clean(req.body?.action).toLowerCase();
+      const notes = clean(req.body?.notes);
+      if (row.requester_confirmation !== "yes" || row.status !== "Operationally Completed") return res.status(400).json({success:false,error:"Campus must confirm YES before financial closing."});
+      if (!["close","open"].includes(action)) return res.status(400).json({success:false,error:"Action must be close or open"});
+      if (action === "close" && (!Number.isFinite(amount) || amount < 0)) return res.status(400).json({success:false,error:"Valid Amount is required to close the request."});
+      if (action === "open") {
+        const updated = await query(`UPDATE maintenance_requests SET status='Open', final_amount=$1, closing_notes=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3 RETURNING *`,[Number.isFinite(amount)&&amount>=0?amount:null,notes,row.id]);
+        if (row.work_order_id) await updateWorkOrder(row.work_order_id,{status:"Open",closingNotes:notes});
+        return res.json({success:true,request:updated.rows[0]});
+      }
+      const wo = row.work_order_id ? await closeWorkOrder(row.work_order_id,{finalCost:amount,contractorCost:row.executor_type==="Contractor"?amount:0,isContractor:row.executor_type==="Contractor",contractorName:row.executor_type==="Contractor"?row.executor_name:"",performedBy:row.executor_name||"",closingNotes:notes}) : null;
+      const updated = await query(`UPDATE maintenance_requests SET status='Closed', final_amount=$1, closed_at=CURRENT_TIMESTAMP, closed_by=$2, closing_notes=$3, updated_at=CURRENT_TIMESTAMP WHERE id=$4 RETURNING *`,[amount,clean(req.user?.full_name||req.user?.username||"Fleet / Building Maintenance"),notes,row.id]);
+      res.json({success:true,request:updated.rows[0],workOrder:wo});
+    } catch(e) { console.error("Maintenance financial close:",e); res.status(400).json({success:false,error:e.message}); }
+  });
 
   app.get("/api/maintenance-requests/public/workflow/:token", async (req,res) => {
     try {

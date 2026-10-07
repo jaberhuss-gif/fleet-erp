@@ -5,6 +5,13 @@ import { createWorkOrder, updateWorkOrder, getWorkOrder, closeWorkOrder } from "
 const OWNER_EMAIL = "Hussein.Anwar@iemaadex.com";
 const maintenanceTestMode = () => String(process.env.MAINTENANCE_EMAIL_TEST_MODE || "").toLowerCase() === "true";
 const workflowRecipients = email => maintenanceTestMode() ? [clean(process.env.MAINTENANCE_TEST_EMAIL || OWNER_EMAIL)] : (email ? [email] : []);
+
+async function resolveEmployeeEmail(name) {
+  const n = clean(name);
+  if (!n) return "";
+  const r = await query("SELECT email FROM users WHERE COALESCE(is_active,1)=1 AND (LOWER(TRIM(full_name))=LOWER(TRIM($1)) OR LOWER(TRIM(username))=LOWER(TRIM($1))) AND COALESCE(TRIM(email),'')<>'' LIMIT 1", [n]);
+  return clean(r.rows[0]?.email);
+}
 const CONTRACTORS = [
   { name: "Jodoud Al Khaleej", email: "jodoudalkhaleej.co.sa@gmail.com" },
   { name: "Raghad Alafq", email: "raghadalafq@gmail.com" }
@@ -292,11 +299,10 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       const executorName = clean(req.body?.executorName);
       let executorEmail = clean(req.body?.executorEmail);
       if (executorType === "Our Employee" && executorName && !executorEmail) {
-        const employee = await query(
-          `SELECT email FROM users WHERE COALESCE(is_active,1)=1 AND (full_name=$1 OR username=$1) LIMIT 1`,
-          [executorName]
-        );
-        executorEmail = clean(employee.rows[0]?.email);
+        executorEmail = await resolveEmployeeEmail(executorName);
+      }
+      if (executorType === "Our Employee" && !executorEmail) {
+        return res.status(400).json({success:false,error:"Selected employee has no email address in the ERP users table."});
       }
       if (!["Contractor","Our Employee"].includes(executorType)) return res.status(400).json({success:false,error:"Select Contractor or Our Employee"});
       if (!executorName) return res.status(400).json({success:false,error:"Executor name is required"});
@@ -326,6 +332,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       let email = {sent:false, reason:"Email was not attempted."};
       try {
         email = await notifyAssignment(updatedRow);
+        if (!email.sent) throw new Error(email.reason || "AgentMail did not send the assignment email.");
         const emailed = await query(`UPDATE maintenance_requests
           SET email_status='Sent', email_sent_at=CURRENT_TIMESTAMP, email_error=NULL, updated_at=CURRENT_TIMESTAMP
           WHERE id=$1 RETURNING *`, [row.id]);

@@ -154,7 +154,9 @@ async function notifyNewRequest(reqRow) {
 }
 
 async function notifyAssignment(reqRow) {
-  const recipients = reqRow.executor_email ? [reqRow.executor_email] : [];
+  const testMode = clean(process.env.MAINTENANCE_TEST_MODE).toLowerCase() === "true";
+  const testEmail = clean(process.env.MAINTENANCE_TEST_EMAIL);
+  const recipients = testMode && testEmail ? [testEmail] : (reqRow.executor_email ? [reqRow.executor_email] : []);
   const acknowledgeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.acknowledgement_token}/acknowledge`;
   const completeUrl = `${appUrl()}/api/maintenance-requests/public/${reqRow.completion_token}/work-completed`;
   return sendEmail({
@@ -305,7 +307,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
         const updated = await query(`UPDATE maintenance_requests
           SET email_status='Sent', email_sent_at=CURRENT_TIMESTAMP, email_error=NULL, updated_at=CURRENT_TIMESTAMP
           WHERE id=$1 RETURNING *`, [row.id]);
-        await auditEvent(row.id, "ASSIGNMENT_EMAIL_SENT", "System", "Fleet ERP", {provider: email.provider || null, to: row.executor_email});
+        await auditEvent(row.id, "ASSIGNMENT_EMAIL_SENT", "System", "Fleet ERP", {provider: email.provider || null, to: (clean(process.env.MAINTENANCE_TEST_MODE).toLowerCase() === "true" && clean(process.env.MAINTENANCE_TEST_EMAIL)) || row.executor_email});
         return res.json({success:true,request:updated.rows[0],email});
       } catch (e) {
         const updated = await query(`UPDATE maintenance_requests

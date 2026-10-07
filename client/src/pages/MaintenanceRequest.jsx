@@ -51,28 +51,59 @@ export default function MaintenanceRequest({user,access={}}){
       <div className="form-group"><label>What is the problem? *</label><textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Example: A/C in the accommodation room is not cooling." rows={5} required/></div>
       <button className="btn btn-primary">📨 Submit Maintenance Request</button><button type="button" className="btn btn-warning" style={{marginLeft:8}} onClick={()=>setForm(initialForm)}>Clear</button>
     </form>
-    {canWork&&<div className="panel"><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><h2 style={{margin:0}}>📥 Maintenance Request Inbox</h2><p style={{margin:'6px 0',color:'#64748b'}}>Choose Our Employee or the contractor you want.</p></div><button className="btn" onClick={load}>↻ Refresh</button></div>
-      {!requests.length?<div className="alert alert-info" style={{marginTop:14}}>No maintenance requests.</div>:<div style={{display:'grid',gap:12,marginTop:14}}>{requests.map(r=>{const a=assign[r.id]||{},open=r.status==='New'||r.status==='Reopened',list=a.type==='Contractor'?contractors:employees;return (<div key={r.id} className="panel" style={{margin:0,border:'1px solid #e2e8f0',boxShadow:'none'}}>
-        <div style={{display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}><div><b>{r.request_no}</b> <span className="badge">{r.status}</span><div><b>{r.site}</b> • {r.priority}</div><div style={{marginTop:6}}>{r.description}</div><small style={{color:'#64748b'}}>Requested by: {r.requester_name||'-'} {r.requester_email?' • '+r.requester_email:''}</small></div>{r.work_order_id&&<div><b>WO #{r.work_order_id}</b><div>{r.executor_name||'-'}</div></div>}</div>
-        {open&&<div style={{display:'grid',gridTemplateColumns:'180px 1fr auto',gap:8,marginTop:12,alignItems:'end'}}><div className="form-group" style={{margin:0}}><label>Performed By</label><select value={a.type||''} onChange={e=>setType(r.id,e.target.value)}><option value="">Select...</option><option>Our Employee</option><option>Contractor</option></select></div><div className="form-group" style={{margin:0}}><label>{a.type==='Contractor'?'Contractor':'Employee'}</label><select value={a.name||''} disabled={!a.type} onChange={e=>setExecutor(r.id,e.target.value)}><option value="">Select...</option>{list.map(x=><option key={x.email||x.id} value={x.name||x.full_name}>{x.name||x.full_name}{x.email?' — '+x.email:''}</option>)}</select></div><button className="btn btn-primary" onClick={()=>doAssign(r.id)}>🛠️ Assign & Create WO</button></div>}
-        {r.work_order_id&&<div style={{marginTop:14,padding:12,borderRadius:10,background:'#f8fafc',border:'1px solid #e2e8f0'}}><div style={{fontWeight:700,marginBottom:8}}>🔄 Maintenance Workflow</div><div style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(120px,1fr))',gap:6}}>{[{t:'1. Report',ok:true},{t:'2. Assigned',ok:!!r.work_order_id},{t:'3. Acknowledged',ok:!!r.acknowledged_at},{t:'4. Work Completed',ok:!!r.completed_at},{t:'5. Requester Confirmed',ok:!!r.requester_confirmed_at}].map(s=><div key={s.t} style={{padding:'8px 6px',textAlign:'center',borderRadius:8,background:s.ok?'#dcfce7':'#fee2e2',color:s.ok?'#166534':'#991b1b',fontSize:12,fontWeight:700}}>{s.ok?'✓':'○'} {s.t}</div>)}</div>{r.executor_email&&<div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:10,alignItems:'center'}}>
-          <button type="button" className="btn btn-primary" onClick={()=>sendWorkflowEmail(r)}>📧 Send Secure Workflow Email / إرسال إيميل المهمة</button>
-          {!r.acknowledged_at&&r.acknowledgement_token&&<a className="btn btn-primary" style={{textDecoration:'none',background:'#2563eb'}} href={`/api/maintenance-requests/public/${r.acknowledgement_token}/acknowledge`} target="_blank" rel="noreferrer">📩 Acknowledge Receipt</a>}
-          {r.acknowledged_at&&!r.completed_at&&r.completion_token&&<a className="btn btn-primary" style={{textDecoration:'none',background:'#2563eb'}} href={`/api/maintenance-requests/public/${r.completion_token}/work-completed`} target="_blank" rel="noreferrer">🔵 Work Completed</a>}
+    {canWork&&<div className="panel">
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div><h2 style={{margin:0}}>📥 Maintenance Request Inbox</h2><p style={{margin:'6px 0',color:'#64748b'}}>Choose Our Employee or the contractor you want.</p></div>
+        <button className="btn" onClick={load}>↻ Refresh</button>
+      </div>
+      {!requests.length ? <div className="alert alert-info" style={{marginTop:14}}>No maintenance requests.</div> :
+        <div style={{display:'grid',gap:12,marginTop:14}}>
+          {requests.map(r => {
+            const a=assign[r.id]||{};
+            const open=r.status==='New'||r.status==='Reopened';
+            const list=a.type==='Contractor'?contractors:employees;
+            return (
+              <div key={r.id} className="panel" style={{margin:0,border:'1px solid #e2e8f0',boxShadow:'none'}}>
+                <div style={{display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
+                  <div>
+                    <b>{r.request_no}</b> <span className="badge">{r.status}</span>
+                    <div><b>{r.site}</b> • {r.priority}</div>
+                    <div style={{marginTop:6}}>{r.description}</div>
+                    <small style={{color:'#64748b'}}>Requested by: {r.requester_name||'-'} {r.requester_email?' • '+r.requester_email:''}</small>
+                  </div>
+                  {r.work_order_id&&<div><b>WO #{r.work_order_id}</b><div>{r.executor_name||'-'}</div></div>}
+                </div>
+                {open&&<div style={{display:'grid',gridTemplateColumns:'180px 1fr auto',gap:8,marginTop:12,alignItems:'end'}}>
+                  <div className="form-group" style={{margin:0}}><label>Performed By</label><select value={a.type||''} onChange={e=>setType(r.id,e.target.value)}><option value="">Select...</option><option>Our Employee</option><option>Contractor</option></select></div>
+                  <div className="form-group" style={{margin:0}}><label>{a.type==='Contractor'?'Contractor':'Employee'}</label><select value={a.name||''} disabled={!a.type} onChange={e=>setExecutor(r.id,e.target.value)}><option value="">Select...</option>{list.map(x=><option key={x.email||x.id} value={x.name||x.full_name}>{x.name||x.full_name}{x.email?' — '+x.email:''}</option>)}</select></div>
+                  <button className="btn btn-primary" onClick={()=>doAssign(r.id)}>🛠️ Assign & Create WO</button>
+                </div>}
+                {r.work_order_id&&<div style={{marginTop:14,padding:12,borderRadius:10,background:'#f8fafc',border:'1px solid #e2e8f0'}}>
+                  <div style={{fontWeight:700,marginBottom:8}}>🔄 Maintenance Workflow</div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(120px,1fr))',gap:6}}>
+                    {[{t:'1. Report',ok:true},{t:'2. Assigned',ok:!!r.work_order_id},{t:'3. Acknowledged',ok:!!r.acknowledged_at},{t:'4. Work Completed',ok:!!r.completed_at},{t:'5. Requester Confirmed',ok:!!r.requester_confirmed_at}].map(s=><div key={s.t} style={{padding:'8px 6px',textAlign:'center',borderRadius:8,background:s.ok?'#dcfce7':'#fee2e2',color:s.ok?'#166534':'#991b1b',fontSize:12,fontWeight:700}}>{s.ok?'✓':'○'} {s.t}</div>)}
+                  </div>
+                  {r.executor_email&&<div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:10,alignItems:'center'}}>
+                    <button type="button" className="btn btn-primary" onClick={()=>sendWorkflowEmail(r)}>📧 Send Secure Workflow Email / إرسال إيميل المهمة</button>
+                    {!r.acknowledged_at&&r.acknowledgement_token&&<a className="btn btn-primary" style={{textDecoration:'none',background:'#2563eb'}} href={`/api/maintenance-requests/public/${r.acknowledgement_token}/acknowledge`} target="_blank" rel="noreferrer">📩 Acknowledge Receipt</a>}
+                    {r.acknowledged_at&&!r.completed_at&&r.completion_token&&<a className="btn btn-primary" style={{textDecoration:'none',background:'#2563eb'}} href={`/api/maintenance-requests/public/${r.completion_token}/work-completed`} target="_blank" rel="noreferrer">🔵 Work Completed</a>}
+                  </div>}
+                </div>}
+                {r.requester_confirmation==='yes'&&['Operationally Completed','Open'].includes(r.status)&&<div style={{marginTop:12,padding:12,borderRadius:10,background:'#ecfdf5',border:'1px solid #86efac'}}>
+                  <div style={{fontWeight:700,marginBottom:8}}>💰 Final Financial Control</div>
+                  <div style={{fontSize:13,color:'#166534',marginBottom:10}}>Campus confirmed <b>YES</b>. Enter the final amount, then choose Close or Open.</div>
+                  <div style={{display:'grid',gridTemplateColumns:'180px 1fr auto auto',gap:8,alignItems:'end'}}>
+                    <div className="form-group" style={{margin:0}}><label>Amount (SAR)</label><input type="number" min="0" step="0.01" value={finance[r.id]?.amount??''} onChange={e=>setFinance({...finance,[r.id]:{...(finance[r.id]||{}),amount:e.target.value}})} placeholder="0.00"/></div>
+                    <div className="form-group" style={{margin:0}}><label>Closing Notes</label><input value={finance[r.id]?.notes??''} onChange={e=>setFinance({...finance,[r.id]:{...(finance[r.id]||{}),notes:e.target.value}})} placeholder="Optional notes"/></div>
+                    <button type="button" className="btn btn-primary" onClick={()=>financialAction(r,'close')}>🔒 Close</button>
+                    <button type="button" className="btn btn-warning" onClick={()=>financialAction(r,'open')}>🔓 Open</button>
+                  </div>
+                </div>}
+                {r.status==='Closed'&&<div style={{marginTop:12,padding:10,borderRadius:8,background:'#dcfce7',color:'#166534'}}><b>🔒 CLOSED</b> • Final Amount: SAR {Number(r.final_amount||0).toFixed(2)} • Closed by: {r.closed_by||'Fleet / Building Maintenance'}</div>}
+              </div>
+            );
+          })}
         </div>}
-        {r.requester_confirmation==='yes'&&['Operationally Completed','Open'].includes(r.status)&&<div style={{marginTop:12,padding:12,borderRadius:10,background:'#ecfdf5',border:'1px solid #86efac'}}>
-          <div style={{fontWeight:700,marginBottom:8}}>💰 Final Financial Control</div>
-          <div style={{fontSize:13,color:'#166534',marginBottom:10}}>Campus confirmed <b>YES</b>. Enter the final amount, then choose Close or Open.</div>
-          <div style={{display:'grid',gridTemplateColumns:'180px 1fr auto auto',gap:8,alignItems:'end'}}>
-            <div className="form-group" style={{margin:0}}><label>Amount (SAR)</label><input type="number" min="0" step="0.01" value={finance[r.id]?.amount??''} onChange={e=>setFinance({...finance,[r.id]:{...(finance[r.id]||{}),amount:e.target.value}})} placeholder="0.00"/></div>
-            <div className="form-group" style={{margin:0}}><label>Closing Notes</label><input value={finance[r.id]?.notes??''} onChange={e=>setFinance({...finance,[r.id]:{...(finance[r.id]||{}),notes:e.target.value}})} placeholder="Optional notes"/></div>
-            <button type="button" className="btn btn-primary" onClick={()=>financialAction(r,'close')}>🔒 Close</button>
-            <button type="button" className="btn btn-warning" onClick={()=>financialAction(r,'open')}>🔓 Open</button>
-          </div>
-        </div>}
-        {r.status==='Closed'&&<div style={{marginTop:12,padding:10,borderRadius:8,background:'#dcfce7',color:'#166534'}}><b>🔒 CLOSED</b> • Final Amount: SAR {Number(r.final_amount||0).toFixed(2)} • Closed by: {r.closed_by||'Fleet / Building Maintenance'}</div>}
-      </div>);
-        })}</div>}
     </div>}
   </div>
 }

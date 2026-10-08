@@ -905,6 +905,9 @@ export async function createTireServiceRequest(vehicleId, body, userId) {
     if (requestType === "DAMAGED_TIRE_REPLACEMENT" && !photo) {
       throw httpError(400, "A photo of the damaged tire is required.");
     }
+  } else if (requestType === "PUNCTURE_REPAIR") {
+    if (!POSITIONS.includes(position)) throw httpError(400, "Select the punctured tire position.");
+    if (!photo) throw httpError(400, "A photo of the punctured tire is required.");
   } else {
     if (!notes) throw httpError(400, "Please describe the tire issue or required service.");
   }

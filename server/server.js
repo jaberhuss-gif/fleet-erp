@@ -2114,7 +2114,7 @@ app.get("/api/tickets/:id/whatsapp-info", async (req, res) => {
 app.get("/api/vehicles/:id/whatsapp-info", async (req, res) => {
   try {
     const vehicleResult = await pgQuery(
-      "SELECT id, plate_number, plate_code, driver, phone, current_km FROM vehicles WHERE id = $1",
+      "SELECT v.id, v.plate_number, v.plate_code, COALESCE(d.name, v.driver, '') AS driver, COALESCE(d.phone, v.phone, '') AS phone, v.current_km FROM vehicles v LEFT JOIN drivers d ON d.id = v.driver_id WHERE v.id = $1",
       [req.params.id]
     );
     if (!vehicleResult.rows[0]) {

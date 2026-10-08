@@ -61,7 +61,8 @@ async function assertDriverCanAccessVehicle(req, vehicleId) {
      LIMIT 1`,
     [req.user?.id]
   );
-  const user = userResult.rows[0] || req.user || {};
+  const user = userResult.rows[0];
+  if (!user) throw httpError(403, "Driver account was not found in the ERP users table.");
   const names = [user.full_name, user.username]
     .filter(Boolean)
     .map(v => String(v).trim().toLowerCase())
@@ -81,7 +82,6 @@ async function assertDriverCanAccessVehicle(req, vehicleId) {
          OR LOWER(TRIM(COALESCE(v.driver, ''))) = ANY($2::text[])
          OR REGEXP_REPLACE(COALESCE(d.phone, ''), '[^0-9]', '', 'g') = ANY($3::text[])
          OR REGEXP_REPLACE(COALESCE(v.phone, ''), '[^0-9]', '', 'g') = ANY($3::text[])
-         OR d.vehicle_id = v.id
        )
      LIMIT 1`,
     [vehicleId, names, phones]

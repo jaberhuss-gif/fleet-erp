@@ -21,7 +21,7 @@ export default function TireServiceRequests({ driverMode=false }) {
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
 
-  const loadVehicles=async()=>{try{const r=await api.get('/vehicles/list');setVehicles(r.data.vehicles||[]);}catch(e){setError(e.response?.data?.error||e.message);}};
+  const loadVehicles=async()=>{try{const endpoint=driverMode?'/tire/driver/vehicles':'/vehicles/list';const r=await api.get(endpoint);setVehicles(r.data.vehicles||[]);}catch(e){setError(e.response?.data?.error||e.message);}};
   const loadRequests=async()=>{try{
     const p=new URLSearchParams();
     if(search.trim())p.set('vehicle',search.trim());
@@ -31,6 +31,7 @@ export default function TireServiceRequests({ driverMode=false }) {
   }catch(e){setError(e.response?.data?.error||e.message);}};
 
   useEffect(()=>{loadVehicles();if(!driverMode)loadRequests();},[]);
+  useEffect(()=>{if(driverMode&&vehicles.length===1)setVehicleId(String(vehicles[0].id));},[driverMode,vehicles]);
   useEffect(()=>{if(!driverMode){const t=setTimeout(loadRequests,250);return()=>clearTimeout(t);}},[search,statusFilter]);
 
   const selectedVehicle=vehicles.find(v=>String(v.id)===String(vehicleId));

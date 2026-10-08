@@ -95,7 +95,7 @@ function DailyKmMissingControl({user,onSubmitted}){
 function normalizeWhatsAppNumber(phone){
   const raw=String(phone||'').trim();
   if(!raw)return '';
-  const digits=raw.replace(/\\D/g,'');
+  const digits=raw.replace(/\D/g,'');
   if(!digits)return '';
   if(digits.startsWith('00'))return digits.slice(2);
   if(digits.startsWith('0'))return '966'+digits.slice(1);

@@ -53,7 +53,7 @@ async function assertDriverCanAccessVehicle(req, vehicleId) {
   // environment flag that can accidentally be omitted or changed in production.
   if (String(req.user?.role || "").trim().toLowerCase() !== "driver") return;
 
-  // Vehicle Master is authoritative: users -> Driver Master -> vehicles.driver_id.
+  // Vehicle Master is authoritative: Driver Master assignment (drivers.vehicle_id) and vehicles.driver_id, with name/phone fallback.
   const userResult = await query(
     `SELECT id, username, full_name, phone
      FROM users
@@ -78,7 +78,8 @@ async function assertDriverCanAccessVehicle(req, vehicleId) {
      LEFT JOIN drivers d ON d.id = v.driver_id
      WHERE v.id = $1
        AND (
-         LOWER(TRIM(COALESCE(d.name, ''))) = ANY($2::text[])
+         d.vehicle_id = v.id
+         OR LOWER(TRIM(COALESCE(d.name, ''))) = ANY($2::text[])
          OR LOWER(TRIM(COALESCE(v.driver, ''))) = ANY($2::text[])
          OR REGEXP_REPLACE(COALESCE(d.phone, ''), '[^0-9]', '', 'g') = ANY($3::text[])
          OR REGEXP_REPLACE(COALESCE(v.phone, ''), '[^0-9]', '', 'g') = ANY($3::text[])

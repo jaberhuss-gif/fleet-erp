@@ -242,6 +242,12 @@ export async function ensureTireSchema() {
       position TEXT,
       notes TEXT NOT NULL,
       photo TEXT,
+      from_position TEXT,
+      to_position TEXT,
+      tire_serial TEXT,
+      tire_date DATE,
+      tire_size TEXT,
+      pressure_psi NUMERIC(8,2),
       status TEXT NOT NULL DEFAULT 'PENDING',
       created_by BIGINT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -281,6 +287,12 @@ export async function ensureTireSchema() {
     END $$;
     ALTER TABLE tire_assets ADD COLUMN IF NOT EXISTS dot TEXT;
     ALTER TABLE tire_events ADD COLUMN IF NOT EXISTS outcome TEXT;
+    ALTER TABLE tire_service_requests ADD COLUMN IF NOT EXISTS from_position TEXT;
+    ALTER TABLE tire_service_requests ADD COLUMN IF NOT EXISTS to_position TEXT;
+    ALTER TABLE tire_service_requests ADD COLUMN IF NOT EXISTS tire_serial TEXT;
+    ALTER TABLE tire_service_requests ADD COLUMN IF NOT EXISTS tire_date DATE;
+    ALTER TABLE tire_service_requests ADD COLUMN IF NOT EXISTS tire_size TEXT;
+    ALTER TABLE tire_service_requests ADD COLUMN IF NOT EXISTS pressure_psi NUMERIC(8,2);
   `);
 }
 
@@ -849,26 +861,71 @@ export async function changeTirePosition(vehicleId, tireId, newPosition, user, n
 }
 
 export async function createTireServiceRequest(vehicleId, body, userId) {
-  const allowed = ["TIRE_SHOP_VISIT", "TIRE_REPLACEMENT_DAMAGE", "PUNCTURE_REPAIR", "OTHER"];
+  const allowed = [
+    "TIRE_ROTATION",
+    "NEW_TIRE_INSTALLATION",
+    "DAMAGED_TIRE_REPLACEMENT",
+    // Keep legacy values readable for existing historical requests.
+    "TIRE_SHOP_VISIT",
+    "TIRE_REPLACEMENT_DAMAGE",
+    "PUNCTURE_REPAIR",
+    "OTHER"
+  ];
   const requestType = clean(body.requestType);
   if (!allowed.includes(requestType)) {
     throw httpError(400, "Invalid tire service request type.");
   }
 
   const notes = clean(body.notes);
-  if (!notes) throw httpError(400, "Please describe the tire issue or required service.");
+  const position = clean(body.position);
+  const fromPosition = clean(body.fromPosition);
+  const toPosition = clean(body.toPosition);
+  const tireSerial = clean(body.tireSerial);
+  const tireDate = clean(body.tireDate);
+  const tireSize = clean(body.tireSize);
+  const pressurePsi = body.pressurePsi === "" || body.pressurePsi == null ? null : Number(body.pressurePsi);
+  const photo = clean(body.photo);
+
+  if (requestType === "TIRE_ROTATION") {
+    if (!POSITIONS.includes(fromPosition) || !POSITIONS.includes(toPosition)) {
+      throw httpError(400, "Tire rotation requires valid From and To positions.");
+    }
+    if (fromPosition === toPosition) {
+      throw httpError(400, "Tire rotation source and target positions must be different.");
+    }
+  } else if (["NEW_TIRE_INSTALLATION", "DAMAGED_TIRE_REPLACEMENT"].includes(requestType)) {
+    if (!POSITIONS.includes(position)) throw httpError(400, "Select a valid tire installation position.");
+    if (!tireSerial) throw httpError(400, "Tire serial number is required.");
+    if (!tireDate) throw httpError(400, "Tire date is required.");
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(tireDate)) throw httpError(400, "Tire date must be a valid date.");
+    if (!tireSize) throw httpError(400, "Tire size is required.");
+    if (pressurePsi == null || !Number.isFinite(pressurePsi) || pressurePsi < 0) {
+      throw httpError(400, "Valid tire air pressure is required.");
+    }
+    if (requestType === "DAMAGED_TIRE_REPLACEMENT" && !photo) {
+      throw httpError(400, "A photo of the damaged tire is required.");
+    }
+  } else {
+    if (!notes) throw httpError(400, "Please describe the tire issue or required service.");
+  }
 
   const result = await query(
     `INSERT INTO tire_service_requests
-     (vehicle_id,request_type,position,notes,photo,created_by)
-     VALUES ($1,$2,$3,$4,$5,$6)
+     (vehicle_id,request_type,position,from_position,to_position,tire_serial,tire_date,tire_size,pressure_psi,notes,photo,created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7::date,$8,$9,$10,$11,$12)
      RETURNING *`,
     [
       vehicleId,
       requestType,
-      clean(body.position) || null,
-      notes,
-      clean(body.photo) || null,
+      position || null,
+      fromPosition || null,
+      toPosition || null,
+      tireSerial || null,
+      tireDate || null,
+      tireSize || null,
+      pressurePsi,
+      notes || null,
+      photo || null,
       userId || null
     ]
   );

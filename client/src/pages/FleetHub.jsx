@@ -54,6 +54,7 @@ export default function FleetHub({ user, access, initialOwnerGroup='maintenance-
 
   const sections=[
     {id:'maintenance-requests',icon:'🔧',label:'Vehicle Maintenance',title:'Vehicle Maintenance Requests',description:'Open vehicle maintenance requests, assignment and work-order status.'},
+    {id:'maintenance-report',icon:'🛠️',label:'Maintenance Report',title:'Maintenance Report',description:'Maintenance issues and Tire Service Requests.'},
     {id:'km',icon:'📏',label:'Daily KM',title:'Daily KM Control',description:'Who entered today’s odometer reading and who is still missing.'},
     {id:'tires',icon:'🛞',label:'Tires',title:'Tire Control',description:'Tire survey, six inspection photos, tire condition and service requests.'},
     {id:'annual',icon:'📅',label:'Annual Inspection',title:'Annual Inspection',description:'Annual vehicle inspection status, due vehicles and overdue inspections.'},
@@ -75,6 +76,7 @@ export default function FleetHub({ user, access, initialOwnerGroup='maintenance-
     <div className="panel" style={{marginBottom:16}}><h2 style={{margin:0}}>{current.title}</h2><p style={{margin:'6px 0 0',color:'#64748b',fontSize:13}}>{current.description}</p></div>
 
     {section==='maintenance-requests'&&<MaintenanceRequests/>}
+    {section==='maintenance-report'&&<MaintenanceReport canWork={fleetWork}/>}
     {section==='km'&&<DailyKmControl onMissing={()=>setSection('km-missing')}/>}
     {section==='km-missing'&&<DailyKmMissingControl user={user} onSubmitted={()=>setSection('km')}/>}
     {section==='tires'&&<TireManagement user={user} driverMode={false}/>}

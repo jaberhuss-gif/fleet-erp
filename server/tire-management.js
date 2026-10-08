@@ -49,7 +49,8 @@ function statusFor(tire) {
 }
 
 async function assertDriverCanAccessVehicle(req, vehicleId) {
-  if (process.env.TIRE_DRIVER_SCOPING !== "true") return;
+  // Driver scoping is a server-side security rule. It must never depend on an
+  // environment flag that can accidentally be omitted or changed in production.
   if (String(req.user?.role || "").trim().toLowerCase() !== "driver") return;
 
   // Vehicle Master is authoritative: users -> Driver Master -> vehicles.driver_id.
@@ -423,7 +424,7 @@ export async function getTireControl() {
     } else if (drivenSinceOil > oilInterval) {
       oilStatus = "red";
       oilReason = `Overdue by ${(drivenSinceOil - oilInterval).toLocaleString()} km`;
-    } else if (drivenSinceOil >= oilInterval * 0.8) {
+    } else if (drivenSinceOil >= Math.max(0, oilInterval - 500)) {
       oilStatus = "yellow";
       oilReason = `Due Soon — ${Math.max(0, oilRemaining).toLocaleString()} km remaining`;
     } else {
@@ -910,6 +911,25 @@ export async function updateTireServiceRequestStatus(id, status, user) {
   const allowed = ["PENDING", "APPROVED", "IN_PROGRESS", "COMPLETED", "REJECTED", "CANCELLED"];
   const next = clean(status).toUpperCase();
   if (!allowed.includes(next)) throw httpError(400, "Invalid tire service request status.");
+
+  const currentResult = await query(
+    "SELECT status FROM tire_service_requests WHERE id=$1 LIMIT 1",
+    [id]
+  );
+  const current = clean(currentResult.rows[0]?.status).toUpperCase();
+  if (!current) throw httpError(404, "Tire service request not found.");
+
+  const transitions = {
+    PENDING: new Set(["APPROVED", "REJECTED", "CANCELLED"]),
+    APPROVED: new Set(["IN_PROGRESS", "REJECTED", "CANCELLED"]),
+    IN_PROGRESS: new Set(["COMPLETED", "CANCELLED"]),
+    COMPLETED: new Set(),
+    REJECTED: new Set(),
+    CANCELLED: new Set()
+  };
+  if (!transitions[current]?.has(next)) {
+    throw httpError(409, `Invalid tire service request transition: ${current} → ${next}.`);
+  }
 
   const result = await query(
     `UPDATE tire_service_requests

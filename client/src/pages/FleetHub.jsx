@@ -76,7 +76,7 @@ export default function FleetHub({ user, access, initialOwnerGroup='maintenance-
 
     {section==='maintenance-requests'&&<MaintenanceRequests/>}
     {section==='km'&&<DailyKmControl onMissing={()=>setSection('km-missing')}/>}
-    {section==='km-missing'&&<DailyKmMissingControl onSubmitted={()=>setSection('km')}/>}
+    {section==='km-missing'&&<DailyKmMissingControl user={user} onSubmitted={()=>setSection('km')}/>}
     {section==='tires'&&<TireManagement user={user} driverMode={false}/>}
     {section==='annual'&&<PeriodicMaintenance canWork={fleetWork} fixedType="inspection"/>}
     {section==='six-month'&&<PeriodicMaintenance canWork={fleetWork} fixedType="6_months_general"/>}
@@ -87,7 +87,7 @@ export default function FleetHub({ user, access, initialOwnerGroup='maintenance-
 function DailyKmControl({onMissing}){
   return <div><div className="sub-nav" style={{marginBottom:14}}><button className="sub-btn active">📋 Submitted</button><button className="sub-btn" onClick={onMissing}>⚠️ Missing Today</button></div><DailyKmSubmitted/></div>;
 }
-function DailyKmMissingControl({onSubmitted}){
+function DailyKmMissingControl({user,onSubmitted}){
   return <div><div className="sub-nav" style={{marginBottom:14}}><button className="sub-btn" onClick={onSubmitted}>📋 Submitted</button><button className="sub-btn active">⚠️ Missing Today</button></div><DailyKmMissing user={user}/></div>;
 }
 function OilControl({onViewVehicle}){

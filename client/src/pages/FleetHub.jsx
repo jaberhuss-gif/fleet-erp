@@ -88,7 +88,7 @@ function DailyKmControl({onMissing}){
   return <div><div className="sub-nav" style={{marginBottom:14}}><button className="sub-btn active">📋 Submitted</button><button className="sub-btn" onClick={onMissing}>⚠️ Missing Today</button></div><DailyKmSubmitted/></div>;
 }
 function DailyKmMissingControl({onSubmitted}){
-  return <div><div className="sub-nav" style={{marginBottom:14}}><button className="sub-btn" onClick={onSubmitted}>📋 Submitted</button><button className="sub-btn active">⚠️ Missing Today</button></div><DailyKmMissing/></div>;
+  return <div><div className="sub-nav" style={{marginBottom:14}}><button className="sub-btn" onClick={onSubmitted}>📋 Submitted</button><button className="sub-btn active">⚠️ Missing Today</button></div><DailyKmMissing user={user}/></div>;
 }
 function OilControl({onViewVehicle}){
   const [vehicles,setVehicles]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[filter,setFilter]=useState('all'),[search,setSearch]=useState('');

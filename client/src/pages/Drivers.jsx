@@ -88,7 +88,12 @@ export default function Drivers({ initialAction = null }) {
 
   const isLicenseExpiring = (dateStr) => {
     if (!dateStr) return false;
-    const exp = new Date(dateStr);
+    // PostgreSQL can contain out-of-range DATE values (for example +275760...).
+    // Never pass those values to the browser Date parser.
+    const raw = String(dateStr).trim();
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(raw)) return false;
+    const exp = new Date(raw + 'T00:00:00');
+    if (!Number.isFinite(exp.getTime())) return false;
     const now = new Date();
     const diff = (exp - now) / (1000 * 60 * 60 * 24);
     return diff < 30;

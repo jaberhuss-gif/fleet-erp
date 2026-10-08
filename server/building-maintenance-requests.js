@@ -295,6 +295,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       await ensureSchema();
       const row = await getRequest(req.params.id);
       if (!row) return res.status(404).json({success:false,error:"Request not found"});
+      if (row.status !== "New" || row.closed_at) return res.status(409).json({success:false,error:"This request cannot be reassigned after the workflow has started or after financial closure."});
       const executorType = clean(req.body?.executorType);
       const executorName = clean(req.body?.executorName);
       let executorEmail = clean(req.body?.executorEmail);
@@ -453,7 +454,8 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       const notes = clean(req.body?.notes);
       if (row.requester_confirmation !== "yes" || !["Operationally Completed","Open"].includes(row.status)) return res.status(400).json({success:false,error:"Campus must confirm YES before financial closing."});
       if (!["close","open"].includes(action)) return res.status(400).json({success:false,error:"Action must be close or open"});
-      if (action === "close" && amount !== null && (!Number.isFinite(amount) || amount < 0)) return res.status(400).json({success:false,error:"Amount must be empty or a valid non-negative number."});
+            if (row.status === "Closed" || row.closed_at) return res.status(409).json({success:false,error:"This work order is financially closed and cannot be modified again."});
+if (action === "close" && amount !== null && (!Number.isFinite(amount) || amount < 0)) return res.status(400).json({success:false,error:"Amount must be empty or a valid non-negative number."});
       if (action === "open") {
         const updated = await query(`UPDATE maintenance_requests SET status='Open', final_amount=$1, closing_notes=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3 RETURNING *`,[amount !== null && Number.isFinite(amount) && amount >= 0 ? amount : null,notes,row.id]);
         await auditEvent(row.id, "REOPENED_BY_FLEET", "Fleet / Building Maintenance", clean(req.user?.full_name||req.user?.username||"Fleet / Building Maintenance"), {amount, notes});
@@ -514,6 +516,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       if(!r.rows[0]) return res.status(403).send("<h2>Invalid acknowledgement link</h2>");
       const row=r.rows[0];
       res.set("Cache-Control","no-store, no-cache, must-revalidate, private");
+      if (row.status !== "Assigned" || row.completed_at || row.closed_at) return res.status(409).send("<h2>This assignment is no longer awaiting acknowledgement.</h2>");
       if(row.acknowledged_at) return res.send(`<html><body style="font-family:Arial;padding:40px"><h2>📩 Assignment Already Acknowledged</h2><p><b>Request:</b> ${row.request_no}</p><p>This assignment has already been acknowledged.</p></body></html>`);
       res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>📩 Building Maintenance — Acknowledge Receipt</h2><p><b>Request:</b> ${row.request_no}</p><p><b>Site:</b> ${row.site || "-"}</p><p><b>Assigned To:</b> ${row.executor_name || "-"}</p><p><b>Problem:</b><br>${String(row.description || "").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>")}</p><h3>Have you received this work assignment?</h3><p>هل استلمت مهمة الصيانة هذه؟</p><form method="POST" action="/api/maintenance-requests/public/${clean(req.params.token)}/acknowledge"><button type="submit" style="padding:12px 20px;background:#2563eb;color:#fff;border:0;border-radius:7px;font-weight:700">📩 YES — Acknowledge Receipt</button></form></body></html>`);
     } catch(e){res.status(500).send("<h2>Error loading acknowledgement page</h2>");}
@@ -525,6 +528,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       const r=await query(`SELECT * FROM maintenance_requests WHERE acknowledgement_token=$1`,[clean(req.params.token)]);
       if(!r.rows[0]) return res.status(403).send("<h2>Invalid acknowledgement link</h2>");
       const row=r.rows[0];
+      if (row.status !== "Assigned" || row.completed_at || row.closed_at) return res.status(409).send("<h2>This assignment is no longer awaiting acknowledgement.</h2>");
       if(row.acknowledged_at) return res.send("<html><body style='font-family:Arial;padding:40px'><h2>📩 Assignment Already Acknowledged</h2><p>This assignment has already been acknowledged.</p></body></html>");
       await query(`UPDATE maintenance_requests SET status='Acknowledged', acknowledged_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1`,[row.id]);
       await auditEvent(row.id, "ACKNOWLEDGED", row.executor_type || "Executor", row.executor_name, {executor_email: row.executor_email});
@@ -541,6 +545,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       if(!row || row.completion_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid completion link</h2>");
       res.set("Cache-Control","no-store, no-cache, must-revalidate, private");
       if(!row.work_order_id) return res.status(400).send("<h2>Work Order is not assigned yet.</h2>");
+      if(row.status !== "Acknowledged" || !row.acknowledged_at) return res.status(409).send("<h2>Work must be acknowledged before it can be completed.</h2>");
       if(row.completed_at || row.status==="Awaiting Confirmation" || row.status==="Operationally Completed") {
         return res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>✅ Work Already Reported Completed</h2><p><b>Request:</b> ${row.request_no}</p><p>This work has already been reported as completed.</p></body></html>`);
       }
@@ -554,6 +559,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       const row=await getRequestByToken(req.params.token);
       if(!row || row.completion_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid completion link</h2>");
       if(!row.work_order_id) return res.status(400).send("<h2>Work Order is not assigned yet.</h2>");
+      if(row.status !== "Acknowledged" || !row.acknowledged_at) return res.status(409).send("<h2>Work must be acknowledged before it can be completed.</h2>");
       if(row.completed_at || row.status==="Awaiting Confirmation" || row.status==="Operationally Completed") {
         return res.send("<html><body style='font-family:Arial;padding:40px'><h2>✅ Work Already Reported Completed</h2><p>This work has already been reported as completed.</p></body></html>");
       }
@@ -570,6 +576,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       await ensureSchema();
       const row=await getRequestByToken(req.params.token);
       if(!row || row.confirmation_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid confirmation link</h2>");
+      if (row.status !== "Awaiting Confirmation" || !row.completed_at) return res.status(409).send("<h2>This request is not awaiting final confirmation.</h2>");
       res.set("Cache-Control","no-store, no-cache, must-revalidate, private");
       if(row.requester_confirmation) {
         return res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>Maintenance Confirmation Already Recorded</h2><p><b>Request:</b> ${row.request_no}</p><p><b>Answer:</b> ${row.requester_confirmation==="yes" ? "YES — Everything is OK" : "NO — Problem Not Fixed"}</p></body></html>`);
@@ -584,6 +591,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       const row=await getRequestByToken(req.params.token);
       const answer=clean(req.body?.answer || req.query?.answer).toLowerCase();
       if(!row || row.confirmation_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid confirmation link</h2>");
+      if (row.status !== "Awaiting Confirmation" || !row.completed_at) return res.status(409).send("<h2>This request is not awaiting final confirmation.</h2>");
       if(!["yes","no"].includes(answer)) return res.status(400).send("<h2>Invalid answer</h2>");
       if(row.requester_confirmation) return res.send("<html><body style='font-family:Arial;padding:40px'><h2>Maintenance Confirmation Already Recorded</h2></body></html>");
       const status=answer==="yes" ? "Operationally Completed" : "Reopened";

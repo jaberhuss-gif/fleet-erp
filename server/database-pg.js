@@ -95,8 +95,8 @@ function formatVehicle(row) {
   }
 
   const plate = `${row.plate_number || ""} ${row.plate_code || ""}`.trim();
-  const driver = row.driver || "";
-  const phone = row.phone || "";
+  const driver = row.relational_driver_name || row.driver || "";
+  const phone = row.relational_driver_phone || row.phone || "";
 
   return {
     id: row.id,
@@ -166,8 +166,8 @@ export async function getVehicleById(id) {
     ...result.rows[0],
     last_oil_km: result.rows[0]?.canonical_last_oil_km ?? result.rows[0]?.last_oil_km,
     last_oil_change_date: result.rows[0]?.canonical_last_oil_change_date ?? result.rows[0]?.last_oil_change_date,
-    driver: result.rows[0]?.driver ?? "",
-    phone: result.rows[0]?.phone ?? ""
+    driver: result.rows[0]?.relational_driver_name ?? result.rows[0]?.driver ?? "",
+    phone: result.rows[0]?.relational_driver_phone ?? result.rows[0]?.phone ?? ""
   });
 }
 
@@ -199,8 +199,8 @@ export async function getVehicleByPlate(plate) {
   if (!row) return null;
   return formatVehicle({
     ...row,
-    driver: row.driver ?? "",
-    phone: row.phone ?? ""
+    driver: row.relational_driver_name ?? row.driver ?? "",
+    phone: row.relational_driver_phone ?? row.phone ?? ""
   });
 }
 
@@ -254,8 +254,8 @@ export async function listVehicles() {
     ...row,
     last_oil_km: row.canonical_last_oil_km ?? row.last_oil_km,
     last_oil_change_date: row.canonical_last_oil_change_date ?? row.last_oil_change_date,
-    driver: row.driver ?? "",
-    phone: row.phone ?? ""
+    driver: row.relational_driver_name ?? row.driver ?? "",
+    phone: row.relational_driver_phone ?? row.phone ?? ""
   }));
 }
 

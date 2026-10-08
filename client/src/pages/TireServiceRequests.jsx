@@ -4,7 +4,8 @@ import api from '../api/client';
 const REQUEST_TYPES = [
   ['TIRE_ROTATION', 'Tire Rotation'],
   ['NEW_TIRE_INSTALLATION', 'New Tire Installation'],
-  ['DAMAGED_TIRE_REPLACEMENT', 'Damaged Tire Replacement']
+  ['DAMAGED_TIRE_REPLACEMENT', 'Damaged Tire Replacement'],
+  ['PUNCTURE_REPAIR', 'Puncture Repair']
 ];
 const POSITIONS = ['Front Left','Front Right','Rear Left','Rear Right','Spare','Sixth'];
 const STATUSES = ['PENDING','APPROVED','IN_PROGRESS','COMPLETED','REJECTED','CANCELLED'];
@@ -64,7 +65,8 @@ export default function TireServiceRequests({ driverMode=false }) {
       if(!form.tireDate)return setError('Enter the tire date.');
       if(!form.tireSize.trim())return setError('Enter the tire size.');
       if(form.pressurePsi===''||Number(form.pressurePsi)<0)return setError('Enter the tire air pressure.');
-      if(form.requestType==='DAMAGED_TIRE_REPLACEMENT'&&!form.photo)return setError('A photo of the damaged tire is required.');
+      if(['DAMAGED_TIRE_REPLACEMENT','PUNCTURE_REPAIR'].includes(form.requestType)&&!form.photo)return setError('A photo of the tire is required.');
+      if(form.requestType==='PUNCTURE_REPAIR'&&!form.position)return setError('Select the punctured tire position.');
     }
     setLoading(true);
     try{
@@ -109,7 +111,7 @@ export default function TireServiceRequests({ driverMode=false }) {
         <div><label>To Position</label><select value={form.toPosition} onChange={e=>setForm({...form,toPosition:e.target.value})}><option value="">-- Select new position --</option>{POSITIONS.map(p=><option key={p}>{p}</option>)}</select></div>
       </div>}
 
-      {form.requestType!=='TIRE_ROTATION'&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:8,marginTop:12}}>
+      {['NEW_TIRE_INSTALLATION','DAMAGED_TIRE_REPLACEMENT'].includes(form.requestType)&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:8,marginTop:12}}>
         <div><label>Installation Position</label><select value={form.position} onChange={e=>setForm({...form,position:e.target.value})}><option value="">-- Select position --</option>{POSITIONS.map(p=><option key={p}>{p}</option>)}</select></div>
         <div><label>Tire Serial Number</label><input value={form.tireSerial} onChange={e=>setForm({...form,tireSerial:e.target.value})} placeholder="Serial number"/></div>
         <div><label>Tire Date</label><input type="date" value={form.tireDate} onChange={e=>setForm({...form,tireDate:e.target.value})}/></div>
@@ -117,8 +119,9 @@ export default function TireServiceRequests({ driverMode=false }) {
         <div><label>Air Pressure (PSI)</label><input type="number" min="0" step="0.1" value={form.pressurePsi} onChange={e=>setForm({...form,pressurePsi:e.target.value})} placeholder="PSI"/></div>
       </div>}
 
-      {form.requestType==='DAMAGED_TIRE_REPLACEMENT'&&<>
-        <label style={{display:'block',marginTop:12,fontWeight:600}}>📷 Damaged Tire Photo (required)</label>
+      {['DAMAGED_TIRE_REPLACEMENT','PUNCTURE_REPAIR'].includes(form.requestType)&&<>
+        {form.requestType==='PUNCTURE_REPAIR'&&<div style={{marginTop:12}}><label>Repair Position</label><select value={form.position} onChange={e=>setForm({...form,position:e.target.value})}><option value="">-- Select punctured tire position --</option>{POSITIONS.map(p=><option key={p}>{p}</option>)}</select></div>}
+        <label style={{display:'block',marginTop:12,fontWeight:600}}>📷 Tire Photo (required)</label>
         <input type="file" accept="image/*" capture="environment" onChange={e=>choosePhoto(e.target.files?.[0])}/>
         {form.photo&&<img src={form.photo} alt="Damaged tire" style={{width:'100%',maxWidth:420,height:180,objectFit:'cover',borderRadius:8,marginTop:8}}/>}
       </>}

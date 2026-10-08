@@ -241,6 +241,14 @@ export default function App() {
                     {label}
                   </button>
                 ))}
+                {user?.role === 'Owner' && (
+                  <button
+                    className="erp-nav-btn"
+                    onClick={() => { setFleetGroup('maintenance-report'); handleTabChange('fleet'); }}
+                  >
+                    🛠️ Maintenance Report
+                  </button>
+                )}
               </>
             )}
 

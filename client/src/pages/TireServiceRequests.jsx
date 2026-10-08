@@ -2,10 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import api from '../api/client';
 
 const REQUEST_TYPES = [
-  ['TIRE_SHOP_VISIT', 'Tire Shop Visit'],
-  ['TIRE_REPLACEMENT_DAMAGE', 'Tire Replacement — Damage'],
-  ['PUNCTURE_REPAIR', 'Puncture / Repair'],
-  ['OTHER', 'Other Tire Service']
+  ['TIRE_ROTATION', 'Tire Rotation'],
+  ['NEW_TIRE_INSTALLATION', 'New Tire Installation'],
+  ['DAMAGED_TIRE_REPLACEMENT', 'Damaged Tire Replacement']
 ];
 const POSITIONS = ['Front Left','Front Right','Rear Left','Rear Right','Spare','Sixth'];
 const STATUSES = ['PENDING','APPROVED','IN_PROGRESS','COMPLETED','REJECTED','CANCELLED'];
@@ -13,7 +12,18 @@ const STATUSES = ['PENDING','APPROVED','IN_PROGRESS','COMPLETED','REJECTED','CAN
 export default function TireServiceRequests({ driverMode=false }) {
   const [vehicles,setVehicles]=useState([]);
   const [vehicleId,setVehicleId]=useState('');
-  const [form,setForm]=useState({requestType:'TIRE_SHOP_VISIT',position:'',notes:'',photo:''});
+  const [form,setForm]=useState({
+    requestType:'TIRE_ROTATION',
+    position:'',
+    fromPosition:'',
+    toPosition:'',
+    tireSerial:'',
+    tireDate:'',
+    tireSize:'',
+    pressurePsi:'',
+    notes:'',
+    photo:''
+  });
   const [rows,setRows]=useState([]);
   const [search,setSearch]=useState('');
   const [statusFilter,setStatusFilter]=useState('');
@@ -45,11 +55,32 @@ export default function TireServiceRequests({ driverMode=false }) {
   const submit=async()=>{
     setMessage('');setError('');
     if(!vehicleId)return setError('Select a vehicle first.');
-    if(!form.notes.trim())return setError('Please describe the tire issue or required service.');
+    if(form.requestType==='TIRE_ROTATION'){
+      if(!form.fromPosition||!form.toPosition)return setError('Select both the current and new tire positions.');
+      if(form.fromPosition===form.toPosition)return setError('The rotation source and target positions must be different.');
+    }else{
+      if(!form.position)return setError('Select the tire installation position.');
+      if(!form.tireSerial.trim())return setError('Enter the tire serial number.');
+      if(!form.tireDate)return setError('Enter the tire date.');
+      if(!form.tireSize.trim())return setError('Enter the tire size.');
+      if(form.pressurePsi===''||Number(form.pressurePsi)<0)return setError('Enter the tire air pressure.');
+      if(form.requestType==='DAMAGED_TIRE_REPLACEMENT'&&!form.photo)return setError('A photo of the damaged tire is required.');
+    }
     setLoading(true);
     try{
       await api.post('/tire/vehicle/'+vehicleId+'/service-request',form);
-      setForm({requestType:'TIRE_SHOP_VISIT',position:'',notes:'',photo:''});
+      setForm({
+        requestType:'TIRE_ROTATION',
+        position:'',
+        fromPosition:'',
+        toPosition:'',
+        tireSerial:'',
+        tireDate:'',
+        tireSize:'',
+        pressurePsi:'',
+        notes:'',
+        photo:''
+      });
       setMessage('Tire Service Request submitted successfully.');
       if(!driverMode)await loadRequests();
     }catch(e){setError(e.response?.data?.error||e.message);}
@@ -66,14 +97,33 @@ export default function TireServiceRequests({ driverMode=false }) {
         <option value="">-- Select vehicle --</option>{vehicles.map(v=><option key={v.id} value={v.id}>{v.plate}</option>)}
       </select>
       {selectedVehicle&&<div style={{marginTop:8,color:'#64748b',fontSize:13}}>Vehicle: <strong>{selectedVehicle.plate}</strong>{selectedVehicle.driver?' — '+selectedVehicle.driver:''}</div>}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:8,marginTop:12}}>
-        <select value={form.requestType} onChange={e=>setForm({...form,requestType:e.target.value})}>{REQUEST_TYPES.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
-        <select value={form.position} onChange={e=>setForm({...form,position:e.target.value})}><option value="">Tire Position</option>{POSITIONS.map(p=><option key={p}>{p}</option>)}</select>
+      <div style={{marginTop:12}}>
+        <label>Request Type</label>
+        <select value={form.requestType} onChange={e=>setForm({...form,requestType:e.target.value})}>
+          {REQUEST_TYPES.map(([v,l])=><option key={v} value={v}>{l}</option>)}
+        </select>
       </div>
-      <textarea placeholder="Describe the tire problem / required service" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} style={{marginTop:8,minHeight:100}}/>
-      <label style={{display:'block',marginTop:8,fontWeight:600}}>📷 Damage / Tire Photo (optional)</label>
-      <input type="file" accept="image/*" capture="environment" onChange={e=>choosePhoto(e.target.files?.[0])}/>
-      {form.photo&&<img src={form.photo} alt="Tire service request" style={{width:'100%',maxWidth:420,height:180,objectFit:'cover',borderRadius:8,marginTop:8}}/>}
+
+      {form.requestType==='TIRE_ROTATION'&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:8,marginTop:12}}>
+        <div><label>From Position</label><select value={form.fromPosition} onChange={e=>setForm({...form,fromPosition:e.target.value})}><option value="">-- Select current position --</option>{POSITIONS.map(p=><option key={p}>{p}</option>)}</select></div>
+        <div><label>To Position</label><select value={form.toPosition} onChange={e=>setForm({...form,toPosition:e.target.value})}><option value="">-- Select new position --</option>{POSITIONS.map(p=><option key={p}>{p}</option>)}</select></div>
+      </div>}
+
+      {form.requestType!=='TIRE_ROTATION'&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:8,marginTop:12}}>
+        <div><label>Installation Position</label><select value={form.position} onChange={e=>setForm({...form,position:e.target.value})}><option value="">-- Select position --</option>{POSITIONS.map(p=><option key={p}>{p}</option>)}</select></div>
+        <div><label>Tire Serial Number</label><input value={form.tireSerial} onChange={e=>setForm({...form,tireSerial:e.target.value})} placeholder="Serial number"/></div>
+        <div><label>Tire Date</label><input type="date" value={form.tireDate} onChange={e=>setForm({...form,tireDate:e.target.value})}/></div>
+        <div><label>Tire Size</label><input value={form.tireSize} onChange={e=>setForm({...form,tireSize:e.target.value})} placeholder="e.g. 265/65R17"/></div>
+        <div><label>Air Pressure (PSI)</label><input type="number" min="0" step="0.1" value={form.pressurePsi} onChange={e=>setForm({...form,pressurePsi:e.target.value})} placeholder="PSI"/></div>
+      </div>}
+
+      {form.requestType==='DAMAGED_TIRE_REPLACEMENT'&&<>
+        <label style={{display:'block',marginTop:12,fontWeight:600}}>📷 Damaged Tire Photo (required)</label>
+        <input type="file" accept="image/*" capture="environment" onChange={e=>choosePhoto(e.target.files?.[0])}/>
+        {form.photo&&<img src={form.photo} alt="Damaged tire" style={{width:'100%',maxWidth:420,height:180,objectFit:'cover',borderRadius:8,marginTop:8}}/>}
+      </>}
+
+      {form.requestType!=='TIRE_ROTATION'&&<textarea placeholder="Notes (optional)" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} style={{marginTop:12,minHeight:100}}/>}
       <button className="btn btn-primary" disabled={loading} onClick={submit} style={{marginTop:10}}>{loading?'Submitting...':'Submit Tire Service Request'}</button>
     </div>
   </div>;
@@ -91,10 +141,13 @@ export default function TireServiceRequests({ driverMode=false }) {
     </div>
     <div className="panel" style={{marginTop:12}}>
       <div style={{display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap',marginBottom:10}}><h2 style={{margin:0}}>Request Log</h2><strong>Total: {filteredRows.length}</strong></div>
-      <div style={{overflowX:'auto'}}><table><thead><tr><th>Date</th><th>Vehicle</th><th>Request</th><th>Position</th><th>Driver / User</th><th>Notes</th><th>Status</th></tr></thead>
-      <tbody>{filteredRows.length===0?<tr><td colSpan="7" style={{textAlign:'center',padding:24,color:'#64748b'}}>No tire service requests found.</td></tr>:filteredRows.map(r=><tr key={r.id}>
+      <div style={{overflowX:'auto'}}><table><thead><tr><th>Date</th><th>Vehicle</th><th>Request</th><th>Position</th><th>Serial</th><th>Tire Date</th><th>Size</th><th>PSI</th><th>Driver / User</th><th>Notes</th><th>Status</th></tr></thead>
+      <tbody>{filteredRows.length===0?<tr><td colSpan="11" style={{textAlign:'center',padding:24,color:'#64748b'}}>No tire service requests found.</td></tr>:filteredRows.map(r=><tr key={r.id}>
         <td>{r.created_at?new Date(r.created_at).toLocaleString():'-'}</td><td><strong>{r.plate||r.vehicle_id}</strong></td>
-        <td>{REQUEST_TYPES.find(x=>x[0]===r.request_type)?.[1]||r.request_type}</td><td>{r.position||'-'}</td><td>{r.created_by_name||r.driver||r.created_by||'-'}</td>
+        <td>{REQUEST_TYPES.find(x=>x[0]===r.request_type)?.[1]||r.request_type}</td>
+        <td>{r.request_type==='TIRE_ROTATION'?(r.from_position&&r.to_position?r.from_position+' → '+r.to_position:(r.position||'-')):(r.position||'-')}</td>
+        <td>{r.tire_serial||'-'}</td><td>{r.tire_date||'-'}</td><td>{r.tire_size||'-'}</td><td>{r.pressure_psi??'-'}</td>
+        <td>{r.created_by_name||r.driver||r.created_by||'-'}</td>
         <td style={{minWidth:240}}>{r.notes||'-'}{r.photo&&<div><a href={r.photo} target="_blank" rel="noreferrer">View Photo</a></div>}</td>
         <td><select value={r.status||'PENDING'} onChange={e=>updateStatus(r.id,e.target.value)}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></td>
       </tr>)}</tbody></table></div>

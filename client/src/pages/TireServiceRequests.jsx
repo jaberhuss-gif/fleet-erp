@@ -84,7 +84,7 @@ export default function TireServiceRequests({ driverMode=false }) {
       <h1 style={{margin:0}}>🛞 Tire Service Requests</h1><p style={{color:'#64748b'}}>Track driver tire-service requests by vehicle number and status.</p>
       {error&&<div className="alert alert-error">{error}</div>}
       <div style={{display:'grid',gridTemplateColumns:'minmax(260px,1fr) 220px auto',gap:8,alignItems:'end',marginTop:12}}>
-        <div><label>Search by Vehicle Number</label><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="e.g. 2344 or 2344 EUA"/></div>
+        <div><label>Vehicle</label><select value={search} onChange={e=>setSearch(e.target.value)}><option value="">All Vehicles</option>{vehicles.map(v=><option key={v.id} value={v.plate}>{v.plate}</option>)}</select></div>
         <div><label>Status</label><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="">All Statuses</option>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></div>
         <button className="btn btn-secondary" onClick={loadRequests}>Refresh</button>
       </div>

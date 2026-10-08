@@ -117,7 +117,7 @@ export default function DriverPortal({ canWork = false }) {
               <div className="vehicle-info-row"><span>Location</span><span>{v.location || '-'}</span></div>
               <div className="vehicle-info-row"><span>Current Odometer</span><span>{v.currentKm.toLocaleString()} km</span></div>
               <div className="vehicle-info-row"><span>Last Oil Change</span><span>{v.lastOilKm.toLocaleString()} km</span></div>
-              <div className="vehicle-info-row"><span>KM Since Oil Change</span><span style={{ color: v.sinceOil >= 5000 ? '#dc2626' : v.sinceOil >= 4500 ? '#f59e0b' : '#16a34a' }}>{v.sinceOil.toLocaleString()} km</span></div>
+              <div className="vehicle-info-row"><span>KM Since Oil Change</span><span style={{ color: v.sinceOil >= Number(v.oilChangeInterval || 5000) ? '#dc2626' : v.sinceOil >= Math.max(0, Number(v.oilChangeInterval || 5000) - 500) ? '#f59e0b' : '#16a34a' }}>{v.sinceOil.toLocaleString()} km</span></div>
               <div className="vehicle-info-row"><span>Remaining to Next Oil Change</span><span style={{ color: v.remaining <= 0 ? '#dc2626' : '#1e293b' }}>{v.remaining.toLocaleString()} km</span></div>
               <div className="vehicle-info-row"><span>Status</span><span><span className={'status-badge ' + statusClass}>{statusText}</span></span></div>
             </div>

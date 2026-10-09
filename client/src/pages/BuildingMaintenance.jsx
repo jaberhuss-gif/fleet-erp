@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../api/client';
 import BuildingMaintenanceWorkflow from './BuildingMaintenanceWorkflow';
 
@@ -24,7 +24,7 @@ const emptyProject = () => ({ name:'', description:'', site:'', projectType:'Dev
 const emptyPurchase = () => ({ type:'Work Order', referenceNo:'', itemName:'', quantity:1, unitCost:0, supplier:'', purchasedBy:'Company', purchaseDate:'', notes:'', finalCost:0, isContractor:false, contractorName:'', performedBy:'', completedDate:'', closingNotes:'' });
 
 export default function BuildingMaintenance({ user, access = {} }) {
-  const canWork = user?.role === 'Owner' || !!access?.building?.can_work;
+  const canWork = ['Owner', 'System Owner'].includes(user?.role) || !!access?.building?.can_work;
   const [section, setSection] = useState(null);
   const [month, setMonth] = useState(currentMonth());
   const [data, setData] = useState({ workOrders:[], projects:[], purchases:[] });
@@ -40,6 +40,11 @@ export default function BuildingMaintenance({ user, access = {} }) {
   const [project, setProject] = useState(emptyProject());
   const [purchase, setPurchase] = useState(emptyPurchase());
   const [closeForm, setCloseForm] = useState({ finalCost:0, isContractor:false, contractorName:'', performedBy:'', closingNotes:'' });
+  const [pdfPreview, setPdfPreview] = useState(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfSite, setPdfSite] = useState('');
+  const [pdfMonth, setPdfMonth] = useState(currentMonth());
+  const pdfInputRef = useRef(null);
 
   const load = async () => {
     setLoading(true); setError('');
@@ -153,6 +158,46 @@ export default function BuildingMaintenance({ user, access = {} }) {
     } catch(e) { setError(e.response?.data?.error||e.message); }
   };
 
+
+  const handlePdfSelected = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!/\.pdf$/i.test(file.name)) { setError('Please select a PDF file.'); return; }
+    setError(''); setMessage(''); setPdfLoading(true);
+    try {
+      const data = new FormData(); data.append('file', file);
+      const response = await api.post('/building-maintenance/import-pdf/preview', data, {
+        headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000
+      });
+      setPdfPreview({ ...response.data, file });
+      setPdfSite(response.data.site || '');
+    } catch (e) { setError(e.response?.data?.error || e.message); }
+    finally { setPdfLoading(false); }
+  };
+
+  const handlePdfImport = async () => {
+    if (!pdfPreview?.file) return;
+    setError(''); setMessage(''); setPdfLoading(true);
+    try {
+      const data = new FormData(); data.append('file', pdfPreview.file);
+      await api.post('/building-maintenance/import-pdf', data, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'X-PDF-Site': pdfSite,
+          'X-PDF-Project-Name': pdfPreview.projectName || pdfPreview.filename || 'PDF Project',
+          'X-PDF-Date': pdfPreview.date || '',
+          'X-PDF-Month': pdfMonth
+        },
+        timeout: 120000
+      });
+      setMessage('PDF imported successfully. Project and Work Order created open; enter actual cost when closing.');
+      setPdfPreview(null); setPdfSite('');
+      await load();
+    } catch (e) { setError(e.response?.data?.error || e.message); }
+    finally { setPdfLoading(false); }
+  };
+
   const setW=(k,v)=>setWo(x=>({...x,[k]:v}));
   const setP=(k,v)=>setProject(x=>({...x,[k]:v}));
   const setBuy=(k,v)=>setPurchase(x=>({...x,[k]:v}));
@@ -205,17 +250,52 @@ export default function BuildingMaintenance({ user, access = {} }) {
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:16}}>
             <button className="btn btn-warning" onClick={()=>{setSection(null);resetEntry();setClosing(null);}}>Back</button>
             <h3 style={{margin:0}}>{title} — {monthLabel(month)}</h3>
-            <div style={{display:'flex',gap:8}}>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
               <select value={month} onChange={e=>setMonth(e.target.value)} style={{padding:'8px 10px',borderRadius:6}}>
                 {months.map(m=><option key={m} value={m}>{monthLabel(m)}</option>)}
               </select>
               {canWork && <button className="btn btn-primary" onClick={()=>{setEditing(null);setShowForm(x=>!x);setMessage('');setError('');}}>
                 {showForm ? 'Close Entry' : '+ New Entry'}
               </button>}
+              {canWork && (section==='work-orders' || section==='projects') && <>
+                <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" style={{display:'none'}} onChange={handlePdfSelected} />
+                <button type="button" className="btn btn-warning" disabled={pdfLoading} onClick={()=>pdfInputRef.current?.click()} style={{fontWeight:700}}>
+                  {pdfLoading ? 'Reading PDF...' : '📄 Import PDF'}
+                </button>
+              </>}
             </div>
           </div>
 
           {message && <div className="alert alert-success">{message}</div>}
+
+          {pdfPreview && <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1200}}>
+            <div style={{background:'#fff',color:'#111827',padding:24,borderRadius:10,width:'92%',maxWidth:1000,maxHeight:'90vh',overflowY:'auto'}}>
+              <h3 style={{marginTop:0}}>Import PDF — Preview</h3>
+              <p style={{color:'#64748b'}}>{pdfPreview.filename} · {pdfPreview.pages || 1} page(s) · {(pdfPreview.items || []).length} detected line item(s)</p>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:12,marginBottom:16}}>
+                <label style={fieldStyle}>Site *
+                  <select value={pdfSite} onChange={e=>setPdfSite(e.target.value)} style={inputStyle} required>
+                    <option value="">Select site</option>{sites.map(site=><option key={site.id||site.name} value={site.name}>{site.name}</option>)}
+                  </select>
+                </label>
+                <label style={fieldStyle}>Report Month *
+                  <input type="month" value={pdfMonth} onChange={e=>setPdfMonth(e.target.value)} style={inputStyle} required />
+                </label>
+              </div>
+              {pdfPreview.valid === false && <div className="alert alert-error">The PDF needs review before importing. {(pdfPreview.warnings||[]).join(' ')}</div>}
+              {(pdfPreview.items || []).length > 0 ? <div style={{overflowX:'auto'}}>
+                <table className="data-table" style={{width:'100%'}}>
+                  <thead><tr><th>Sr.</th><th>Item / Description</th><th>Unit</th><th>Qty</th><th>Reference Price</th><th>Final Cost</th><th>Status</th></tr></thead>
+                  <tbody>{pdfPreview.items.map((item,i)=><tr key={item.sr_no||i}><td>{item.sr_no||i+1}</td><td>{item.item||item.description||''}</td><td>{item.unit||''}</td><td>{item.quantity??''}</td><td>{item.price??''}</td><td>0</td><td>Open</td></tr>)}</tbody>
+                </table>
+              </div> : <div className="alert alert-error">No line items were detected. Do not confirm this import.</div>}
+              <div className="btn-row" style={{marginTop:16}}>
+                <button className="btn btn-success" disabled={pdfLoading || pdfPreview.valid===false || !(pdfPreview.items||[]).length || !pdfSite || !pdfMonth} onClick={handlePdfImport}>{pdfLoading?'Importing...':'Confirm Import'}</button>
+                <button className="btn btn-warning" disabled={pdfLoading} onClick={()=>{setPdfPreview(null);setPdfSite('');}}>Cancel</button>
+              </div>
+            </div>
+          </div>}
+
           {error && <div className="alert alert-error">{error}</div>}
 
           {showForm && canWork && (

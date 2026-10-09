@@ -38,7 +38,7 @@ const VEHICLE_FIELDS = [
   { key:'oilChangeInterval', label:'Oil Interval', aliases:['oilchangeinterval','interval','oilinterval','فترة الزيت','فاصل الزيت'] }
 ];
 
-export default function ExcelImportButton({ kind, onImported, label='Import Excel', accept={accept} }) {
+export default function ExcelImportButton({ kind, onImported, label='Import Excel', accept='.xlsx,.xls' }) {
   const inputRef = useRef(null);
   const isProject = kind === 'projects';
   const isVehicle = kind === 'vehicles';
@@ -360,7 +360,7 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
     <input
       ref={inputRef}
       type='file'
-      accept='.xlsx,.xls'
+      accept={accept}
       style={{display:'none'}}
       onChange={e => e.target.files?.[0] && readFile(e.target.files[0])}
     />

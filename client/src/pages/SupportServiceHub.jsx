@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import Warehouse from './Warehouse';
-import MaintenanceRequest from './MaintenanceRequest';
 
 export default function SupportServiceHub({ user, access = {} }) {
   const can = (module, mode = 'view') =>
@@ -8,11 +7,10 @@ export default function SupportServiceHub({ user, access = {} }) {
     !!access?.[module]?.[mode === 'work' ? 'can_work' : 'can_view'];
 
   const tabs = [
-    { id: 'request', label: '📝 Request Maintenance / Building', title: 'Request Maintenance / Building', show: user?.role === 'Driver' || can('support','work') || can('building','work') },
     { id: 'warehouse', label: '📦 Warehouse', title: 'Warehouse & Stock', show: can('warehouse') }
   ].filter(t => t.show);
 
-  const [tab, setTab] = useState(() => tabs[0]?.id || 'request');
+  const [tab, setTab] = useState(() => tabs[0]?.id || 'warehouse');
   const current = tabs.find(t => t.id === tab) || tabs[0];
 
   if (!current) {
@@ -26,12 +24,9 @@ export default function SupportServiceHub({ user, access = {} }) {
           <div>
             <h1 style={{ margin:0 }}>🛠️ Support & Service</h1>
             <p style={{ margin:'6px 0 0', color:'#64748b' }}>
-              Maintenance requests and warehouse services.
+              Warehouse services and stock.
             </p>
           </div>
-          {can('building','work') && (
-            <button className="btn btn-primary" onClick={() => setTab('request')}>+ Request Maintenance</button>
-          )}
         </div>
       </div>
 
@@ -47,7 +42,6 @@ export default function SupportServiceHub({ user, access = {} }) {
         <h2 style={{ margin:0 }}>{current.title}</h2>
       </div>
 
-      {tab === 'request' && <MaintenanceRequest user={user} access={access} />}
       {tab === 'warehouse' && <Warehouse user={user} access={access} />}
     </div>
   );

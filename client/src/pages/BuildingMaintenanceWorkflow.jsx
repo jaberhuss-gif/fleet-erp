@@ -92,7 +92,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
   };
   const createDetectedTickets = async () => {
     if(!emailIssues.length) return;
-    if(!form.site) { setError('Select the site / اختر الموقع أولاً.'); return; }
+    if(!form.city || !form.site) { setError('Select the city and site / اختر المدينة والموقع أولاً.'); return; }
     setBusy(true); setError(''); setMessage('');
     const created=[];
     try {
@@ -220,7 +220,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       <h3 style={{marginTop:0}}>📝 New maintenance request / طلب صيانة جديد</h3>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:12}}>
         <label style={field}>City / المدينة
-          <input style={control} value={form.city||''} onChange={e=>setForm(p=>({...p,city:e.target.value}))} placeholder="Enter city / أدخل المدينة"/>
+          <input required style={control} value={form.city||''} onChange={e=>setForm(p=>({...p,city:e.target.value}))} placeholder="Enter city / أدخل المدينة"/>
         </label>
         <label style={field}>Camp / Site / الكامب أو الموقع
           <select style={control} required value={form.site} onChange={e=>setForm(p=>({...p,site:e.target.value}))}><option value="">Select site / اختر الموقع</option>{sites.map(s=><option key={s.id||s.name} value={s.name}>{s.name}</option>)}</select>

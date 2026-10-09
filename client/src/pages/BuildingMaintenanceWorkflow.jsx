@@ -97,7 +97,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     const created=[];
     try {
       for(const issue of emailIssues) {
-        const res=await api.post('/maintenance-requests',{city:form.city,site:form.site,category:issue.category,priority:issue.priority,description:issue.description+'\\n\\nSource email: '+emailFileName});
+        const res=await api.post('/maintenance-requests',{city:form.city,site:form.site,category:issue.category,priority:issue.priority,description:issue.description+'\n\nSource email: '+emailFileName});
         created.push(res.data.request?.request_no||'');
       }
       setMessage('Created '+created.length+' tickets: '+created.filter(Boolean).join(', ')+'. / تم إنشاء '+created.length+' تذاكر من البريد.');

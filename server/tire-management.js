@@ -1298,13 +1298,31 @@ export async function mountTireRoutes(app) {
     try {
       const vehicles = await query(`SELECT id, plate, plate_number, plate_code FROM vehicles WHERE LOWER(TRIM(COALESCE(plate,''))) <> 'test 123' AND id IN (SELECT vehicle_id FROM tire_surveys WHERE submitted_at IS NOT NULL) ORDER BY plate, plate_number, id`);
       const records = [];
-      for (const vehicle of vehicles.rows) {
-        const data = await getVehicleTires(vehicle.id);
-        if (data.survey?.submitted_at) records.push({vehicle, ...data});
+      const failures = [];
+      // Load in small batches so a fleet-wide report does not time out on photo-heavy surveys.
+      for (let i = 0; i < vehicles.rows.length; i += 5) {
+        const batch = vehicles.rows.slice(i, i + 5);
+        const results = await Promise.all(batch.map(async vehicle => {
+          try {
+            const data = await getVehicleTires(vehicle.id);
+            return data.survey?.submitted_at ? { record: { vehicle, ...data } } : { skipped: vehicle.id };
+          } catch (err) {
+            console.error("[TireSurveyAllPDF] Vehicle", vehicle.id, err.message);
+            return { failed: vehicle.id, error: err.message };
+          }
+        }));
+        for (const result of results) {
+          if (result.record) records.push(result.record);
+          else if (result.failed) failures.push(result);
+        }
       }
-      if (!records.length) return res.status(404).send("No submitted tire surveys found");
+      if (!records.length) return res.status(404).send("No submitted tire surveys could be loaded");
+      res.set("Cache-Control", "no-store");
       res.type("html").send(tireSurveyReportHtml(records, "Initial Tire Survey — All Submitted Vehicles"));
-    } catch (e) { res.status(500).send(e.message); }
+    } catch (e) {
+      console.error("[TireSurveyAllPDF]", e);
+      res.status(500).send(e.message || "Unable to create all-vehicle tire survey report");
+    }
   });
 
 

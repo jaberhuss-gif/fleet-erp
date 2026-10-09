@@ -69,12 +69,12 @@ export default function MaintenanceRequest({user,access={}}){
                 </div>}
                 {r.work_order_id&&<div style={{marginTop:14,padding:12,borderRadius:10,background:'#f8fafc',border:'1px solid #e2e8f0'}}>
                   <div style={{fontWeight:700,marginBottom:8}}>🔄 Maintenance Workflow</div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(120px,1fr))',gap:6}}>
-                    {[{t:'1. Report',ok:true},{t:'2. Assigned',ok:!!r.work_order_id},{t:'3. Acknowledged',ok:!!r.acknowledged_at},{t:'4. Work Completed',ok:!!r.completed_at},{t:'5. Requester Confirmed',ok:!!r.requester_confirmed_at}].map(s=><div key={s.t} style={{padding:'8px 6px',textAlign:'center',borderRadius:8,background:s.ok?'#dcfce7':'#fee2e2',color:s.ok?'#166534':'#991b1b',fontSize:12,fontWeight:700}}>{s.ok?'✓':'○'} {s.t}</div>)}
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(120px,1fr))',gap:6}}>
+                    {[{t:'1. Report',ok:true},{t:'2. Assigned',ok:!!r.work_order_id},{t:'3. Work Completed',ok:!!r.completed_at},{t:'4. Campus Confirmed',ok:!!r.requester_confirmed_at}].map(s=><div key={s.t} style={{padding:'8px 6px',textAlign:'center',borderRadius:8,background:s.ok?'#dcfce7':'#fee2e2',color:s.ok?'#166534':'#991b1b',fontSize:12,fontWeight:700}}>{s.ok?'✓':'○'} {s.t}</div>)}
                   </div>
                   <div style={{marginTop:10,fontSize:13,color:'#475569'}}>
-                    {r.status==='Assigned'&&!r.acknowledged_at&&'📧 Waiting for executor to acknowledge the assignment by email.'}
-                    {r.acknowledged_at&&!r.completed_at&&'📧 Acknowledged. Waiting for executor to report Work Completed by email.'}
+                    {r.status==='Assigned'&&!r.completed_at&&'📧 Waiting for executor to report Work Completed.'}
+                    
                     {r.completed_at&&!r.requester_confirmed_at&&'📧 Work completed. Waiting for requester / Campus YES or NO confirmation by email.'}
                     {r.requester_confirmation==='yes'&&'✅ Campus confirmed YES. Ready for final financial control.'}
                     {r.requester_confirmation==='no'&&'❌ Campus reported NOT FIXED. Request is reopened for rework.'}

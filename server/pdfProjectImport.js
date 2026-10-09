@@ -203,7 +203,7 @@ export function mountPdfProjectImport(app) {
               (work_order_id,sr_no,item,unit,quantity,price,cost,item_no,location,discount_percent,tax_percent,net_amount,total_with_vat)
             VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,$10,$11,$12)
             RETURNING *
-          `, [workOrder.id, String(x.sr_no), x.item, x.unit, x.quantity, x.price, x.item_no || "", x.location || "", x.discount_percent || 0, x.net_amount || 0, x.total_with_vat || 0]);
+          `, [workOrder.id, String(x.sr_no), x.item, x.unit, x.quantity, x.price, x.item_no || "", x.location || "", x.discount_percent || 0, x.tax_percent || 0, x.net_amount || 0, x.total_with_vat || 0]);
           workOrderItems.push(wi.rows[0]);
         }
 

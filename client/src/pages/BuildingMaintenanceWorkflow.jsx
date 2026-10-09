@@ -198,17 +198,31 @@ export default function BuildingMaintenanceWorkflow({ user }) {
   const createDetectedTickets = async () => {
     if(!emailIssues.length) return;
     if(emailIssues.some(issue=>!issue.site)) { setError('Select a site for every detected issue / اختر الموقع لكل عطل مكتشف.'); return; }
+    // Combine all faults from this email into one ticket per selected site.
+    const grouped = emailIssues.reduce((acc, issue) => {
+      const key = String(issue.site || '').trim();
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(issue);
+      return acc;
+    }, {});
+    const priorityRank = {Low:1, Medium:2, High:3, Critical:4};
+    const groups = Object.entries(grouped);
     setBusy(true); setError(''); setMessage('');
     const created=[];
     try {
-      for(const issue of emailIssues) {
-        const res=await api.post('/maintenance-requests',{city:siteCity(sites,issue.site),site:issue.site,category:issue.category,priority:issue.priority,description:issue.description+'\n\nSource email: '+emailFileName});
-        created.push(res.data.request?.request_no||'');
+      for(const [site, issues] of groups) {
+        const categories = [...new Set(issues.map(x => x.category || 'General Maintenance'))];
+        const priority = issues.reduce((best, issue) => (priorityRank[issue.priority] || 2) > (priorityRank[best] || 2) ? issue.priority : best, 'Low');
+        const category = categories.length === 1 ? categories[0] : 'General Maintenance';
+        const details = issues.map((issue, index) => (index + 1) + '. [' + (issue.category || 'General Maintenance') + ' | ' + (issue.priority || 'Medium') + '] ' + String(issue.description || '').trim()).join('\\n');
+        const description = 'Multiple maintenance issues reported in one email (' + issues.length + ' issues):\\n\\n' + details + '\\n\\nSource email: ' + (emailFileName || 'uploaded email');
+        const res = await api.post('/maintenance-requests', {city:siteCity(sites,site),site,category,priority,description});
+        created.push(res.data.request?.request_no || '');
       }
-      setMessage('Created '+created.length+' tickets: '+created.filter(Boolean).join(', ')+'. / تم إنشاء '+created.length+' تذاكر من البريد.');
+      setMessage('Created ' + created.length + ' ticket(s) for ' + groups.length + ' site(s), covering ' + emailIssues.length + ' issue(s): ' + created.filter(Boolean).join(', ') + '. / تم إنشاء ' + created.length + ' تذكرة للمواقع المحددة، تشمل ' + emailIssues.length + ' أعطال: ' + created.filter(Boolean).join(', ') + '.');
       setEmailIssues([]); setEmailText(''); setEmailFileName(''); await load();
     } catch(err) {
-      setError('Some tickets may have been created: '+created.filter(Boolean).join(', ')+'. '+(err.response?.data?.error||err.message));
+      setError('Some tickets may have been created: ' + created.filter(Boolean).join(', ') + '. ' + (err.response?.data?.error || err.message));
       await load();
     } finally { setBusy(false); }
   };
@@ -414,12 +428,12 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     </form>
     <section style={panel}>
       <h3 style={{marginTop:0}}>📩 Upload maintenance email / رفع بريد الصيانة</h3>
-      <p style={{marginTop:0,fontSize:13,color:'#64748b'}}>Upload an Outlook email saved as .eml, or a .txt/.html email file. The page detects likely faults and proposes a separate ticket for each one. Review the results before creating tickets. / ارفع البريد بصيغة EML أو TXT أو HTML؛ يحاول النظام تحديد كل عطل وإنشاء تذكرة مستقلة له بعد مراجعتك.</p>
+      <p style={{marginTop:0,fontSize:13,color:'#64748b'}}>Upload an Outlook email saved as .eml, or a .txt/.html email file. Review detected faults; the system creates one combined ticket per site, with all faults listed inside it. / راجع الأعطال؛ ينشئ النظام تذكرة واحدة لكل موقع وتُدرج جميع أعطاله داخلها.</p>
       <input type="file" accept=".eml,.txt,.html,.htm,text/plain,text/html,message/rfc822" onChange={readEmailFile} disabled={busy} style={{maxWidth:'100%'}}/>
       {(emailFileName || emailText || emailIssues.length > 0) && <button type="button" disabled={busy} onClick={() => { setEmailFileName(''); setEmailText(''); setEmailIssues([]); setError(''); setMessage('Detected issues cleared. No tickets were created by clearing this preview. / تم مسح الأعطال المكتشفة من المعاينة. مسح المعاينة لا ينشئ ولا يحذف تذاكر.'); }} style={{...btn, marginTop:10, background:'#fee2e2', color:'#991b1b'}}>Clear all detected issues / مسح جميع الأعطال المكتشفة</button>}
       {emailFileName&&<div style={{marginTop:8,fontSize:13}}>Selected file / الملف: <b>{emailFileName}</b></div>}
       {emailIssues.length>0&&<>
-        <div style={{marginTop:12,padding:10,background:'#f8fafc',borderRadius:8,fontSize:13}}>Choose the site for each detected issue below. Each ticket will use its own selected site. / اختر الموقع لكل عطل أدناه؛ ستأخذ كل تذكرة الموقع المحدد لها.</div>
+        <div style={{marginTop:12,padding:10,background:'#f8fafc',borderRadius:8,fontSize:13}}>Choose the site for each detected issue. Issues assigned to the same site will be combined into one ticket. / اختر الموقع لكل عطل؛ ستُجمع الأعطال التي لها الموقع نفسه في تذكرة واحدة.</div>
         <h4>Detected issues / الأعطال المكتشفة ({emailIssues.length})</h4>
         <div style={{display:'grid',gap:10}}>
           {emailIssues.map((issue,i)=><div key={i} style={{border:'1px solid #cbd5e1',borderRadius:8,padding:10,display:'grid',gap:8}}>
@@ -433,7 +447,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
             </div>
           </div>)}
         </div>
-        <button type="button" disabled={busy||!emailIssues.length} onClick={createDetectedTickets} style={{...btn,background:'#0f766e',color:'#fff',marginTop:12}}>Create {emailIssues.length} tickets / إنشاء التذاكر</button>
+        <button type="button" disabled={busy||!emailIssues.length} onClick={createDetectedTickets} style={{...btn,background:'#0f766e',color:'#fff',marginTop:12}}>Create ticket(s) for {new Set(emailIssues.map(x=>x.site).filter(Boolean)).size} site(s) / إنشاء تذاكر حسب المواقع</button>
       </>}
       {emailText&&<details style={{marginTop:12}}><summary>View extracted email text / عرض نص البريد المستخرج</summary><pre style={{whiteSpace:'pre-wrap',fontSize:12,maxHeight:260,overflow:'auto'}}>{emailText}</pre></details>}
     </section>

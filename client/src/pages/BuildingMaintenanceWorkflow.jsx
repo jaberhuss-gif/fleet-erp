@@ -147,6 +147,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
   const [audit,setAudit] = useState({});
   const [query,setQuery] = useState('');
   const [editingRequest,setEditingRequest] = useState(null);
+  const [mailDraft,setMailDraft] = useState(null);
   const [busy,setBusy] = useState(false);
   const [loading,setLoading] = useState(true);
   const [message,setMessage] = useState('');
@@ -272,9 +273,16 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     const x=list.find(v=>(v.name||v.full_name)===name);
     setAssign(p=>({...p,[id]:{...a,name,email:x?.email||'',whatsapp:x?.whatsapp||x?.phone||''}}));
   };
-  const openOutlookDraft = (to,subject,body,target='_blank') => {
-    const url='https://outlook.office.com/mail/deeplink/compose?to='+encodeURIComponent(to||'')+'&subject='+encodeURIComponent(subject||'')+'&body='+encodeURIComponent(body||'');
-    return window.open(url,target,'noopener,noreferrer');
+  // Keep email composition inside the ERP. This prepares an editable draft; sending still requires the company's approved mail system.
+  const openOutlookDraft = (to,subject,body) => {
+    setMailDraft({to:String(to||''),subject:String(subject||''),body:String(body||'')});
+    return true;
+  };
+  const copyMailDraft = async () => {
+    if(!mailDraft) return;
+    const text='To: '+mailDraft.to+'\nSubject: '+mailDraft.subject+'\n\n'+mailDraft.body;
+    try { await navigator.clipboard.writeText(text); setMessage('Email draft copied. Paste it into the company email system to send. / تم نسخ مسودة البريد؛ الصقها في بريد الشركة لإرسالها.'); }
+    catch(e) { setError('Clipboard access was blocked. Select and copy the email fields manually. / تعذر النسخ تلقائيًا؛ انسخ حقول البريد يدويًا.'); }
   };
   const openWhatsAppDraft = (phone,body) => {
     const digits=String(phone||'').replace(/[^0-9]/g,'');
@@ -309,8 +317,6 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     const a=assign[id]||{};
     if(!a.type||!a.name) { setError('Select an executor / اختر المنفذ أولاً.'); return; }
     if(!a.email) { setError('Executor email is required / البريد الإلكتروني للمنفذ مطلوب.'); return; }
-    // Open a blank tab synchronously from the user's click, then load the company Outlook draft.
-    const mailTab=window.open('about:blank','_blank');
     setBusy(true); setError(''); setMessage('');
     try {
       const r=await api.post('/maintenance-requests/'+id+'/assign',{executorType:a.type,executorName:a.name,executorEmail:a.email,executorWhatsapp:a.whatsapp||''});
@@ -348,12 +354,10 @@ export default function BuildingMaintenanceWorkflow({ user }) {
         'Regards, Fleet / Building Maintenance',
         'مع التحية، إدارة الأسطول / صيانة المباني'
       ].join('\n');
-      const outlookUrl='https://outlook.office.com/mail/deeplink/compose?to='+encodeURIComponent(a.email)+'&subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
-      if(mailTab) mailTab.location.href=outlookUrl;
-      else openOutlookDraft(a.email,subject,body);
-      setMessage((ticket.request_no||'Request')+' assigned. Company Outlook draft opened — review and press Send. / تم التعيين وفتح مسودة بريد الشركة؛ راجعها واضغط إرسال.');
+      openOutlookDraft(a.email,subject,body);
+      setMessage((ticket.request_no||'Request')+' assigned. Email draft opened inside the ERP. Copy it into the company email system to send. / تم التعيين وفتحت مسودة البريد داخل النظام؛ انسخها إلى بريد الشركة لإرسالها.');
       await load();
-    } catch(e) { if(mailTab) mailTab.close(); setError(e.response?.data?.error||e.message); }
+    } catch(e) { setError(e.response?.data?.error||e.message); }
     finally { setBusy(false); }
   };
   const resend = async id => {
@@ -577,6 +581,16 @@ export default function BuildingMaintenanceWorkflow({ user }) {
         })}
       </div>
     </section>
+    {mailDraft&&<div role="dialog" aria-modal="true" aria-label="Email draft / مسودة البريد" style={{position:'fixed',inset:0,zIndex:10000,background:'rgba(15,23,42,.58)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <section style={{background:'#fff',color:'#0f172a',borderRadius:12,padding:20,width:'min(760px,100%)',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.25)'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,marginBottom:14}}><h3 style={{margin:0}}>Company email draft / مسودة بريد الشركة</h3><button type="button" style={btn} onClick={()=>setMailDraft(null)}>Close / إغلاق</button></div>
+        <p style={{fontSize:13,color:'#475569',marginTop:0}}>This draft stays inside the ERP. It is not sent automatically; copy it into your approved company email to send. / تبقى المسودة داخل النظام ولا تُرسل تلقائيًا؛ انسخها إلى بريد الشركة المعتمد لإرسالها.</p>
+        <label style={field}>To / إلى<input style={control} type="email" value={mailDraft.to} onChange={e=>setMailDraft(p=>({...p,to:e.target.value}))}/></label>
+        <label style={{...field,marginTop:10}}>Subject / الموضوع<input style={control} value={mailDraft.subject} onChange={e=>setMailDraft(p=>({...p,subject:e.target.value}))}/></label>
+        <label style={{...field,marginTop:10}}>Message / نص الرسالة<textarea style={{...control,minHeight:260,resize:'vertical',whiteSpace:'pre-wrap'}} value={mailDraft.body} onChange={e=>setMailDraft(p=>({...p,body:e.target.value}))}/></label>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}><button type="button" style={{...btn,background:'#0f766e',color:'#fff'}} onClick={copyMailDraft}>Copy email draft / نسخ مسودة البريد</button><button type="button" style={btn} onClick={()=>setMailDraft(null)}>Done / تم</button></div>
+      </section>
+    </div>}
     <div style={{fontSize:12,color:'#64748b'}}>Email and WhatsApp buttons prepare a message only unless the corresponding provider is configured. Automated WhatsApp delivery is not claimed here. / أزرار البريد والواتساب تجهّز الرسالة فقط ما لم يتم إعداد مزوّد الإرسال؛ لا ندّعي أن الواتساب الآلي مفعّل.</div>
   </div>;
 }

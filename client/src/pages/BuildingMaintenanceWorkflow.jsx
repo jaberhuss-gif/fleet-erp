@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import api from '../api/client';
 
 const initial = { site:'', category:'General Maintenance', priority:'Medium', description:'' };
+const blankContact = { contact_role:'Campus Manager', full_name:'', city:'', site:'', work_type:'', email:'', phone:'', whatsapp:'', notes:'', active:true };
 const field = { display:'flex', flexDirection:'column', gap:5, minWidth:0 };
 const control = { width:'100%', boxSizing:'border-box', padding:'10px', border:'1px solid #cbd5e1', borderRadius:7, background:'#fff' };
 const btn = { padding:'9px 13px', border:0, borderRadius:7, cursor:'pointer', fontWeight:700 };
@@ -26,13 +27,14 @@ export default function BuildingMaintenanceWorkflow({ user }) {
   const load = async () => {
     setError('');
     try {
-      const [s,r,e] = await Promise.all([
-        api.get('/sites'), api.get('/maintenance-requests'), api.get('/maintenance-requests/executors')
+      const [s,r,e,c] = await Promise.all([
+        api.get('/sites'), api.get('/maintenance-requests'), api.get('/maintenance-requests/executors'), api.get('/maintenance-requests/config/contacts')
       ]);
       setSites(s.data.sites || []);
       setRequests(r.data.requests || []);
       setEmployees(e.data.employees || []);
       setContractors(e.data.contractors || []);
+      setContacts(c.data.contacts || []);
     } catch (e) { setError(e.response?.data?.error || e.message); }
     finally { setLoading(false); }
   };
@@ -48,6 +50,27 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       setMessage('Created / تم إنشاء الطلب: '+(r.data.request?.request_no || 'Maintenance Request')+'. Email notification: '+(r.data.email?.sent?'sent / تم الإرسال':'not sent / لم يُرسل — '+(r.data.email?.reason||'check configuration')));
       setForm(initial); await load();
     } catch(e) { setError(e.response?.data?.error||e.message); }
+    finally { setBusy(false); }
+  };
+  const saveContact = async e => {
+    e.preventDefault(); setBusy(true); setError(''); setMessage('');
+    try {
+      await api.post('/maintenance-requests/config/contacts',{...contactForm,...(editingContact?{id:editingContact}:{})});
+      setMessage('Contact saved / تم حفظ جهة الاتصال.');
+      setContactForm(blankContact); setEditingContact(null); await load();
+    } catch(e) { setError(e.response?.data?.error||e.message); }
+    finally { setBusy(false); }
+  };
+  const editContact = c => {
+    setContactForm({contact_role:c.contact_role||'Campus Manager',full_name:c.full_name||'',city:c.city||'',site:c.site||'',work_type:c.work_type||'',email:c.email||'',phone:c.phone||'',whatsapp:c.whatsapp||'',notes:c.notes||'',active:c.active!==false});
+    setEditingContact(c.id);
+    window.scrollTo({top:0,behavior:'smooth'});
+  };
+  const deleteContact = async id => {
+    if(!window.confirm('Delete this contact? / هل تريد حذف جهة الاتصال؟')) return;
+    setBusy(true); setError(''); setMessage('');
+    try { await api.delete('/maintenance-requests/config/contacts/'+id); setMessage('Contact deleted / تم حذف جهة الاتصال.'); await load(); }
+    catch(e) { setError(e.response?.data?.error||e.message); }
     finally { setBusy(false); }
   };
   const chooseType = (id,type) => setAssign(p=>({...p,[id]:{type,name:'',email:''}}));
@@ -97,6 +120,38 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     </div>
     {message&&<div role="status" style={{...panel,background:'#ecfdf5',color:'#166534'}}>{message}</div>}
     {error&&<div role="alert" style={{...panel,background:'#fef2f2',color:'#991b1b'}}>{error}</div>}
+    <section style={panel}>
+      <h3 style={{marginTop:0}}>⚙️ First-time setup — Contact & Responsibility Directory / الإعداد لأول مرة — دليل الأشخاص والمسؤوليات</h3>
+      <p style={{marginTop:0,color:'#64748b',fontSize:13}}>Enter your actual team, managers and vendors once. These records are saved in the ERP database and can be updated later. / أدخل أسماء فريق العمل والمديرين والمقاولين مرة واحدة؛ تُحفظ البيانات في قاعدة النظام ويمكن تعديلها لاحقاً.</p>
+      <form onSubmit={saveContact} style={{display:'grid',gap:10}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:10}}>
+          <label style={field}>Responsibility / المسؤولية
+            <select style={control} required value={contactForm.contact_role} onChange={e=>setContactForm(p=>({...p,contact_role:e.target.value}))}>
+              <option>Campus Manager</option><option>Services & Support Manager</option><option>Maintenance Manager</option><option>Requester / Campus Contact</option><option>Our Employee / Technician</option><option>Contractor / Vendor</option><option>Approver</option><option>Other</option>
+            </select>
+          </label>
+          <label style={field}>Full name / الاسم الكامل<input required style={control} value={contactForm.full_name} onChange={e=>setContactForm(p=>({...p,full_name:e.target.value}))} placeholder="Name / الاسم"/></label>
+          <label style={field}>City / المدينة<input style={control} value={contactForm.city} onChange={e=>setContactForm(p=>({...p,city:e.target.value}))}/></label>
+          <label style={field}>Camp / Site / الموقع<input style={control} value={contactForm.site} onChange={e=>setContactForm(p=>({...p,site:e.target.value}))} placeholder="Site or All sites / الموقع أو جميع المواقع"/></label>
+          <label style={field}>Work type / تخصص العمل<input style={control} value={contactForm.work_type} onChange={e=>setContactForm(p=>({...p,work_type:e.target.value}))} placeholder="Electrical, AC, plumbing…"/></label>
+          <label style={field}>Email / البريد الإلكتروني<input type="email" style={control} value={contactForm.email} onChange={e=>setContactForm(p=>({...p,email:e.target.value}))}/></label>
+          <label style={field}>Phone / رقم الهاتف<input style={control} value={contactForm.phone} onChange={e=>setContactForm(p=>({...p,phone:e.target.value}))}/></label>
+          <label style={field}>WhatsApp / رقم الواتساب<input style={control} value={contactForm.whatsapp} onChange={e=>setContactForm(p=>({...p,whatsapp:e.target.value}))} placeholder="Country code, e.g. 9665…"/></label>
+        </div>
+        <label style={field}>Notes / ملاحظات<input style={control} value={contactForm.notes} onChange={e=>setContactForm(p=>({...p,notes:e.target.value}))} placeholder="Responsibilities, coverage, working hours…"/></label>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          <button disabled={busy} style={{...btn,background:'#0f766e',color:'#fff'}}>{editingContact?'Save changes / حفظ التعديلات':'Add contact / إضافة جهة اتصال'}</button>
+          {editingContact&&<button type="button" style={btn} onClick={()=>{setEditingContact(null);setContactForm(blankContact);}}>Cancel / إلغاء</button>}
+        </div>
+      </form>
+      <div style={{display:'grid',gap:8,marginTop:14}}>
+        {!contacts.length&&<div style={{padding:12,background:'#f8fafc',borderRadius:8}}>No contacts configured yet. Add the campus manager, services & support manager, maintenance manager, employees and contractors above. / لم تتم إضافة جهات اتصال بعد.</div>}
+        {contacts.map(c=><div key={c.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap',border:'1px solid #e2e8f0',borderRadius:8,padding:10}}>
+          <div><b>{c.full_name}</b> · {c.contact_role}{c.active===false?' · Inactive / غير نشط':''}<div style={{fontSize:12,color:'#64748b',marginTop:4}}>{[c.city,c.site,c.work_type,c.email,c.phone,c.whatsapp].filter(Boolean).join(' · ')}</div>{c.notes&&<div style={{fontSize:12,marginTop:4}}>{c.notes}</div>}</div>
+          <div style={{display:'flex',gap:6}}><button type="button" style={btn} onClick={()=>editContact(c)}>Edit / تعديل</button><button type="button" style={{...btn,background:'#fee2e2',color:'#991b1b'}} disabled={busy} onClick={()=>deleteContact(c.id)}>Delete / حذف</button></div>
+        </div>)}
+      </div>
+    </section>
     <form onSubmit={submit} style={panel}>
       <h3 style={{marginTop:0}}>📝 New maintenance request / طلب صيانة جديد</h3>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:12}}>

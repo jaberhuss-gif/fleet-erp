@@ -664,7 +664,7 @@ const openInspectionEmail = (group) => {
     }).join('');
     const w=window.open('', '_blank', 'width=1200,height=800');
     if(!w){setError('Please allow pop-ups for the report.');return;}
-    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>'+esc(report.title)+'</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial;font-size:9pt}h1{margin-bottom:4mm}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:5px;text-align:left;vertical-align:top}th{background:#e9eef5}</style></head><body><h1>'+esc(report.title)+'</h1><div>Generated: '+esc(new Date().toLocaleString())+' · Records: '+report.rows.length+'</div><table><thead><tr><th>Vehicle</th><th>Driver</th><th>Status</th><th>Scheduled</th><th>Completed</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table></body></html>');
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>'+esc(report.title)+'</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial;font-size:9pt}h1{margin-bottom:4mm}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:5px;text-align:left;vertical-align:top}th{background:#e9eef5}</style></head><body>${brandHtml}<h1>'+esc(report.title)+'</h1><div>Generated: '+esc(new Date().toLocaleString())+' · Records: '+report.rows.length+'</div><table><thead><tr><th>Vehicle</th><th>Driver</th><th>Status</th><th>Scheduled</th><th>Completed</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table></body></html>');
     w.document.close();w.focus();setTimeout(()=>w.print(),250);
   };
 
@@ -925,7 +925,7 @@ const openInspectionEmail = (group) => {
 .title{font-size:18pt;font-weight:700;margin:0 0 3mm}.meta{font-size:8pt;color:#555;margin-bottom:4mm;padding-bottom:3mm;border-bottom:2px solid #1e3a8a}
 table{width:100%;border-collapse:collapse;table-layout:fixed}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}
 th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:top;line-height:1.2;overflow-wrap:anywhere}th{background:#e9eef5;font-weight:700}</style>
-</head><body><div class="title">${esc(title)}</div><div class="meta">Generated: ${esc(new Date().toLocaleString())} · Records: ${inspectionMode ? (subTab === 'partial' ? partiallyInspectedVehicles.length : subTab === 'none' ? notInspectedVehicles.length : fullyInspectedVehicles.length) : currentList.length}</div>
+</head><body>${brandHtml}<div class="title">${esc(title)}</div><div class="meta">Generated: ${esc(new Date().toLocaleString())} · Records: ${inspectionMode ? (subTab === 'partial' ? partiallyInspectedVehicles.length : subTab === 'none' ? notInspectedVehicles.length : fullyInspectedVehicles.length) : currentList.length}</div>
 <table><thead><tr>${headers.map(h => '<th>'+esc(h)+'</th>').join('')}</tr></thead><tbody>${rows}</tbody></table>
 </body></html>`);
     printWindow.document.close(); printWindow.focus();
@@ -977,7 +977,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
       'table{width:100%;border-collapse:collapse;table-layout:fixed}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}' +
       'th,td{border:1px solid #94a3b8;padding:6px;text-align:left;vertical-align:top;overflow-wrap:anywhere;line-height:1.25}' +
       'th{background:#e9eef5;font-weight:700}footer{margin-top:20px;border-top:1px solid #cbd5e1;padding-top:8px;color:#475569}' +
-      '</style></head><body><div class="brand"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Company logo"><div><h1>Completed Annual Inspections</h1>' +
+      '</style></head><body>${brandHtml}<div class="brand"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Company logo"><div><h1>Completed Annual Inspections</h1>' +
       '<div class="sub">Maaden Ivanhoe Electric Exploration and Development Limited Company</div></div></div>' +
       '<div class="meta">Generated: ' + esc(new Date().toLocaleString()) + ' · Total completed inspections: ' + completedRows.length + '</div>' +
       '<table><thead><tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Completed Date</th><th>Next Due Date</th><th>Technician</th><th>Notes</th></tr></thead><tbody>' +

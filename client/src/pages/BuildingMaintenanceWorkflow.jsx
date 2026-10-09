@@ -134,6 +134,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
   const [employees,setEmployees] = useState([]);
   const [contractors,setContractors] = useState([]);
   const [contacts,setContacts] = useState([]);
+  const [subPage,setSubPage] = useState('workflow');
   const [contactForm,setContactForm] = useState(blankContact);
   const [editingContact,setEditingContact] = useState(null);
   const [emailFileName,setEmailFileName] = useState('');
@@ -443,9 +444,13 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       <div>Receive → Assign → Acknowledge → Repair → Requester confirmation → Final closure</div>
       <div dir="rtl" style={{marginTop:5}}>استقبال الطلب ← تعيين المنفذ ← تأكيد الاستلام ← الإصلاح ← تأكيد مقدم الطلب ← الإغلاق النهائي</div>
     </div>
+    <nav aria-label="Building maintenance pages" style={{...panel,display:'flex',gap:8,flexWrap:'wrap',padding:10}}>
+      <button type="button" onClick={()=>setSubPage('workflow')} style={{...btn,background:subPage==='workflow'?'#0f766e':'#f1f5f9',color:subPage==='workflow'?'#fff':'#0f172a'}}>📨 Maintenance Intake & Dispatch / استقبال وتوزيع الصيانة</button>
+      <button type="button" onClick={()=>setSubPage('directory')} style={{...btn,background:subPage==='directory'?'#0f766e':'#f1f5f9',color:subPage==='directory'?'#fff':'#0f172a'}}>⚙️ Contact & Responsibility Directory / دليل الأشخاص والمسؤوليات</button>
+    </nav>
     {message&&<div role="status" style={{...panel,background:'#ecfdf5',color:'#166534'}}>{message}</div>}
     {error&&<div role="alert" style={{...panel,background:'#fef2f2',color:'#991b1b'}}>{error}</div>}
-    <section style={panel}>
+    {subPage==='directory'&&<section style={panel}>
       <h3 style={{marginTop:0}}>⚙️ First-time setup — Contact & Responsibility Directory / الإعداد لأول مرة — دليل الأشخاص والمسؤوليات</h3>
       <p style={{marginTop:0,color:'#64748b',fontSize:13}}>Enter your actual team, managers and vendors once. These records are saved in the ERP database and can be updated later. / أدخل أسماء فريق العمل والمديرين والمقاولين مرة واحدة؛ تُحفظ البيانات في قاعدة النظام ويمكن تعديلها لاحقاً.</p>
       <form onSubmit={saveContact} style={{display:'grid',gap:10}}>
@@ -476,7 +481,9 @@ export default function BuildingMaintenanceWorkflow({ user }) {
           <div style={{display:'flex',gap:6}}><button type="button" style={btn} onClick={()=>editContact(c)}>Edit / تعديل</button><button type="button" style={{...btn,background:'#fee2e2',color:'#991b1b'}} disabled={busy} onClick={()=>deleteContact(c.id)}>Delete / حذف</button></div>
         </div>)}
       </div>
-    </section>
+    </section>}
+    {subPage==='workflow'&&<>
+
     <form onSubmit={submit} style={panel}>
       <h3 style={{marginTop:0}}>📝 New maintenance request / طلب صيانة جديد</h3>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:12}}>
@@ -616,6 +623,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
         <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}><button type="button" style={{...btn,background:'#0f766e',color:'#fff'}} onClick={copyMailDraft}>Copy email draft / نسخ مسودة البريد</button><button type="button" style={btn} onClick={()=>setMailDraft(null)}>Done / تم</button></div>
       </section>
     </div>}
+    </>}
     <div style={{fontSize:12,color:'#64748b'}}>Email and WhatsApp buttons prepare a message only unless the corresponding provider is configured. Automated WhatsApp delivery is not claimed here. / أزرار البريد والواتساب تجهّز الرسالة فقط ما لم يتم إعداد مزوّد الإرسال؛ لا ندّعي أن الواتساب الآلي مفعّل.</div>
   </div>;
 }

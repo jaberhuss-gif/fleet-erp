@@ -1282,17 +1282,6 @@ function tireSurveyReportHtml(records, title) {
   '</body></html>';
 }
 export async function mountTireRoutes(app) {
-  app.get("/api/tire/survey-report/:vehicleId", async (req, res) => {
-    if (req.user?.role === "Driver") return res.status(403).send("Forbidden");
-    try {
-      const v = await query(`SELECT id, plate, plate_number, plate_code FROM vehicles WHERE id=$1 LIMIT 1`, [req.params.vehicleId]);
-      if (!v.rows[0]) return res.status(404).send("Vehicle not found");
-      const data = await getVehicleTires(req.params.vehicleId);
-      if (!data.survey) return res.status(404).send("No tire survey found for this vehicle");
-      res.type("html").send(tireSurveyReportHtml([{vehicle:v.rows[0], ...data}], "Initial Tire Survey Report"));
-    } catch (e) { res.status(500).send(e.message); }
-  });
-
   app.get("/api/tire/survey-report/all", async (req, res) => {
     if (req.user?.role === "Driver") return res.status(403).send("Forbidden");
     try {
@@ -1324,6 +1313,19 @@ export async function mountTireRoutes(app) {
       res.status(500).send(e.message || "Unable to create all-vehicle tire survey report");
     }
   });
+
+  app.get("/api/tire/survey-report/:vehicleId", async (req, res) => {
+    if (req.user?.role === "Driver") return res.status(403).send("Forbidden");
+    try {
+      const v = await query(`SELECT id, plate, plate_number, plate_code FROM vehicles WHERE id=$1 LIMIT 1`, [req.params.vehicleId]);
+      if (!v.rows[0]) return res.status(404).send("Vehicle not found");
+      const data = await getVehicleTires(req.params.vehicleId);
+      if (!data.survey) return res.status(404).send("No tire survey found for this vehicle");
+      res.type("html").send(tireSurveyReportHtml([{vehicle:v.rows[0], ...data}], "Initial Tire Survey Report"));
+    } catch (e) { res.status(500).send(e.message); }
+  });
+
+
 
 
   await ensureTireSchema();

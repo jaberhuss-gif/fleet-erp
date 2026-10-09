@@ -244,6 +244,17 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     } catch(e) { setError(e.response?.data?.error||e.message); }
     finally { setBusy(false); }
   };
+  const archiveRequest = async request => {
+    const number = request?.request_no || 'this ticket';
+    if (!window.confirm('Remove '+number+' from the maintenance register? This is allowed only for a new, unassigned ticket. The audit history is retained.\\n\\nهل تريد شطب '+number+' من سجل الصيانة؟ هذا متاح للطلب الجديد غير المعيّن فقط، وسيبقى سجل الإجراءات محفوظاً.')) return;
+    setBusy(true); setError(''); setMessage('');
+    try {
+      await api.post('/maintenance-requests/'+request.id+'/archive');
+      setMessage('Ticket '+number+' removed from the register. Audit history retained. / تم شطب التذكرة من السجل مع الاحتفاظ بسجل الإجراءات.');
+      await load();
+    } catch(e) { setError(e.response?.data?.error||e.message); }
+    finally { setBusy(false); }
+  };
   const assignRequest = async id => {
     const a=assign[id]||{};
     if(!a.type||!a.name) { setError('Select an executor / اختر المنفذ أولاً.'); return; }
@@ -452,6 +463,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
             {r.work_order_id && r.executor_whatsapp && !r.acknowledged_at && <div style={{marginTop:10}}><button type="button" style={{...btn,background:'#dcfce7',color:'#166534'}} onClick={()=>openWhatsAppDraft(r.executor_whatsapp,'BUILDING MAINTENANCE / صيانة المباني\nRequest / الطلب: '+r.request_no+'\nSite / الموقع: '+(r.site||'-')+'\nProblem / المشكلة: '+(r.description||'-')+'\n\nLINK 1 — ACKNOWLEDGE / الرابط 1 — تأكيد الاستلام: '+window.location.origin+'/api/maintenance-requests/public/'+r.acknowledgement_token+'/acknowledge\n\nLINK 2 — WORK COMPLETED / الرابط 2 — تأكيد إتمام التصليح: '+window.location.origin+'/api/maintenance-requests/public/'+r.completion_token+'/work-completed\n\nPlease open Link 1 first, then Link 2 after repair.\nيرجى فتح الرابط 1 أولاً، ثم الرابط 2 بعد انتهاء التصليح.')}>Prepare executor WhatsApp / تجهيز واتساب للمنفذ</button><span style={{fontSize:12,color:'#64748b',marginInlineStart:8}}>Draft only — press Send in WhatsApp / مسودة فقط — اضغط إرسال في واتساب</span></div>}
             {r.status==='Awaiting Confirmation' && !r.requester_confirmation && (()=>{const campus=campusForSite(r.site);const phone=campus?.whatsapp||campus?.phone||'';const link=window.location.origin+'/api/maintenance-requests/public/'+r.confirmation_token+'/confirm';const body='BUILDING MAINTENANCE — WORK COMPLETED / صيانة المباني — تم تنفيذ العمل\nRequest / الطلب: '+r.request_no+'\nSite / الموقع: '+(r.site||'-')+'\nProblem / المشكلة: '+(r.description||'-')+'\n\nPlease open the link and choose YES if the repair is accepted, or NO if the problem remains.\nيرجى فتح الرابط واختيار نعم إذا تم استلام العمل، أو لا إذا ما زالت المشكلة قائمة.\n'+link;return <div style={{marginTop:10,padding:10,background:'#eff6ff',borderRadius:8}}><b>Campus confirmation / تأكيد الكامب</b><div style={{fontSize:13,margin:'5px 0 9px'}}>Campus contact / مسؤول الموقع: {campus?.full_name||'Not configured / غير محدد'}</div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button type="button" style={btn} disabled={!phone} onClick={()=>openWhatsAppDraft(phone,body)}>Prepare campus WhatsApp / تجهيز واتساب للكامب</button><button type="button" style={btn} disabled={!campus?.email} onClick={()=>openOutlookDraft(campus.email,'Maintenance '+r.request_no+' — Campus confirmation / تأكيد الكامب',body)}>Prepare campus email / تجهيز بريد الكامب</button></div><div style={{fontSize:12,color:'#64748b',marginTop:6}}>Messages are drafts until you press Send / الرسائل مسودات حتى تضغط إرسال.</div></div>})()}
             <div style={{display:'flex',gap:8,marginTop:10,flexWrap:'wrap'}}>
+              {r.status==='New'&&!r.work_order_id&&!r.closed_at&&canWork&&<button type="button" disabled={busy} style={{...btn,background:'#fee2e2',color:'#991b1b'}} onClick={()=>archiveRequest(r)}>Delete ticket / شطب التذكرة</button>}
               <button style={btn} onClick={()=>showAudit(r.id)}>View audit trail / سجل الإجراءات</button>
               {r.status==='New'&&!r.work_order_id&&canWork&&<button style={btn} onClick={()=>setEditingRequest({id:r.id,site:r.site||'',category:r.category||'General Maintenance',priority:r.priority||'Medium',description:r.description||''})}>Edit request / تعديل الطلب</button>}
               <button style={btn} onClick={()=>window.open('https://wa.me/?text='+encodeURIComponent('Maintenance '+r.request_no+' | Site: '+(r.site||'-')+' | '+r.category+' | Priority: '+r.priority+'\\n'+r.description+'\\nPlease review this maintenance request. / يرجى مراجعة طلب الصيانة.'),'_blank','noopener,noreferrer')}>Prepare WhatsApp / تجهيز واتساب</button>

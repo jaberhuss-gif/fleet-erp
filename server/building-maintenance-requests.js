@@ -72,6 +72,7 @@ async function ensureSchema() {
   await query(`ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS maintenance_request_id BIGINT`);
   await query(`ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS operational_status TEXT DEFAULT 'Open'`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS city TEXT`);
+  await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS executor_whatsapp TEXT`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);
   // Hide only the four explicitly identified demonstration tickets from this intake register.
   // Their linked work orders and all other modules/data remain untouched.
@@ -104,30 +105,9 @@ async function auditEvent(requestId, action, actorType, actorName, details = {})
   }
 }
 
-async function sendEmail({ to, cc = [], subject, html }) {
-  const recipients = (Array.isArray(to) ? to : [to]).map(clean).filter(Boolean);
-  const ccRecipients = (Array.isArray(cc) ? cc : [cc]).map(clean).filter(Boolean);
-  const apiKey = clean(process.env.AGENTMAIL_API_KEY);
-  const inboxId = clean(process.env.AGENTMAIL_INBOX_ID || "hussien-2931@agentmail.to");
-  if (!apiKey || !inboxId || !recipients.length) {
-    return { sent: false, reason: "AgentMail is not configured (AGENTMAIL_API_KEY / AGENTMAIL_INBOX_ID)." };
-  }
-  const response = await fetch(`https://api.agentmail.to/v0/inboxes/${encodeURIComponent(inboxId)}/messages/send`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      to: recipients,
-      cc: ccRecipients,
-      subject,
-      html
-    })
-  });
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Email provider error: ${response.status} ${body}`);
-  }
-  const result = await response.json().catch(() => ({}));
-  return { sent: true, provider: "AgentMail", message_id: result.message_id || null, thread_id: result.thread_id || null };
+async function sendEmail() {
+  // Company email is sent manually by the owner from Outlook. Never send via AgentMail.
+  return { sent: false, reason: "Automatic email sending is disabled. Open the company email draft and send it manually." };
 }
 
 function button(url, text, color = "#0f766e") {
@@ -387,6 +367,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       const executorType = clean(req.body?.executorType);
       const executorName = clean(req.body?.executorName);
       let executorEmail = clean(req.body?.executorEmail);
+      const executorWhatsapp = clean(req.body?.executorWhatsapp);
       if (executorType === "Our Employee" && executorName && !executorEmail) {
         executorEmail = await resolveEmployeeEmail(executorName);
       }
@@ -411,36 +392,15 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       await query(`UPDATE work_orders SET maintenance_request_id=$1, operational_status='In Progress' WHERE id=$2`, [row.id, order.id]);
       const updated = await query(`
         UPDATE maintenance_requests
-        SET status='Assigned', work_order_id=$1, executor_type=$2, executor_name=$3, executor_email=$4, contractor_notified_at=CURRENT_TIMESTAMP, acknowledged_at=NULL, completed_at=NULL, requester_confirmed_at=NULL, requester_confirmation=NULL, final_amount=NULL, closed_at=NULL, closed_by=NULL, closing_notes=NULL, email_status='Not Sent', email_sent_at=NULL, email_error=NULL, updated_at=CURRENT_TIMESTAMP
-        WHERE id=$5 RETURNING *
-      `, [order.id, executorType, executorName, executorEmail || null, row.id]);
+        SET status='Assigned', work_order_id=$1, executor_type=$2, executor_name=$3, executor_email=$4, executor_whatsapp=$5, contractor_notified_at=NULL, acknowledged_at=NULL, completed_at=NULL, requester_confirmed_at=NULL, requester_confirmation=NULL, final_amount=NULL, closed_at=NULL, closed_by=NULL, closing_notes=NULL, email_status='Draft Ready', email_sent_at=NULL, email_error=NULL, updated_at=CURRENT_TIMESTAMP
+        WHERE id=$6 RETURNING *
+      `, [order.id, executorType, executorName, executorEmail || null, executorWhatsapp || null, row.id]);
       const updatedRow=updated.rows[0];
       await auditEvent(row.id, "ASSIGNED", executorType, executorName, {work_order_id: order.id, executor_email: executorEmail || null});
 
-      // Assignment notification is automatic. In test mode it is routed only to MAINTENANCE_TEST_EMAIL.
-      let email = {sent:false, reason:"Email was not attempted."};
-      try {
-        email = await notifyAssignment(updatedRow);
-        if (!email.sent) throw new Error(email.reason || "AgentMail did not send the assignment email.");
-        const emailed = await query(`UPDATE maintenance_requests
-          SET email_status='Sent', email_sent_at=CURRENT_TIMESTAMP, email_error=NULL, updated_at=CURRENT_TIMESTAMP
-          WHERE id=$1 RETURNING *`, [row.id]);
-        await auditEvent(row.id, "ASSIGNMENT_EMAIL_SENT", "System", "Fleet ERP", {
-          provider: email.provider || null,
-          to: (maintenanceTestMode() ? [clean(process.env.MAINTENANCE_TEST_EMAIL || OWNER_EMAIL)] : [executorEmail]),
-          message_id: email.message_id || null
-        });
-        res.json({success:true,request:emailed.rows[0],workOrder:order,email});
-        return;
-      } catch (e) {
-        email = {sent:false, reason:e.message};
-        await query(`UPDATE maintenance_requests
-          SET email_status='Failed', email_error=$1, updated_at=CURRENT_TIMESTAMP
-          WHERE id=$2`, [e.message, row.id]);
-        await auditEvent(row.id, "ASSIGNMENT_EMAIL_FAILED", "System", "Fleet ERP", {error:e.message, to:executorEmail || null});
-      }
-      const failedRow = await getRequest(row.id);
-      res.json({success:true,request:failedRow,workOrder:order,email});
+      // No third-party mail sending: the UI opens a company Outlook draft for manual review/send.
+      await auditEvent(row.id, "ASSIGNMENT_EMAIL_DRAFT_READY", "Fleet / Building Maintenance", clean(req.user?.full_name || req.user?.username || "Fleet / Building Maintenance"), {to: executorEmail || null});
+      res.json({success:true,request:updatedRow,workOrder:order,email:{sent:false,draftReady:true,reason:"Company email draft must be reviewed and sent manually."}});
     } catch(e){res.status(400).json({success:false,error:e.message});}
   });
 
@@ -466,29 +426,9 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       if (!executorEmail && !maintenanceTestMode()) {
         return res.status(400).json({success:false,error:"Assigned employee has no email address in the ERP users table."});
       }
-      let email;
-      try {
-        email = await notifyAssignment(row);
-        if (!email.sent) throw new Error(email.reason || "AgentMail did not send the assignment email.");
-        const updated = await query(`UPDATE maintenance_requests
-          SET email_status='Sent', email_sent_at=CURRENT_TIMESTAMP, email_error=NULL, updated_at=CURRENT_TIMESTAMP
-          WHERE id=$1 RETURNING *`, [row.id]);
-        await auditEvent(row.id, "ASSIGNMENT_EMAIL_RESENT", "System", "Fleet ERP", {
-          provider: email.provider || null,
-          to: maintenanceTestMode() ? [clean(process.env.MAINTENANCE_TEST_EMAIL || OWNER_EMAIL)] : [row.executor_email],
-          message_id: email.message_id || null
-        });
-        return res.json({success:true,request:updated.rows[0],email});
-      } catch (e) {
-        const updated = await query(`UPDATE maintenance_requests
-          SET email_status='Failed', email_error=$1, updated_at=CURRENT_TIMESTAMP
-          WHERE id=$2 RETURNING *`, [e.message, row.id]);
-        await auditEvent(row.id, "ASSIGNMENT_EMAIL_RESEND_FAILED", "System", "Fleet ERP", {
-          error: e.message,
-          to: maintenanceTestMode() ? [clean(process.env.MAINTENANCE_TEST_EMAIL || OWNER_EMAIL)] : [row.executor_email]
-        });
-        return res.status(502).json({success:false,request:updated.rows[0],email:{sent:false,reason:e.message},error:e.message});
-      }
+      const updated = await query(`UPDATE maintenance_requests SET email_status='Draft Ready', email_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING *`, [row.id]);
+      await auditEvent(row.id, "ASSIGNMENT_EMAIL_DRAFT_REOPENED", "Fleet / Building Maintenance", clean(req.user?.full_name || req.user?.username || "Fleet / Building Maintenance"), {to: row.executor_email || null});
+      return res.json({success:true,request:updated.rows[0],email:{sent:false,draftReady:true,reason:"Open the company Outlook draft and send manually."}});
     } catch(e) {
       res.status(400).json({success:false,error:e.message});
     }

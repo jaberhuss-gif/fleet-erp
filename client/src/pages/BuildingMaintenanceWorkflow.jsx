@@ -139,6 +139,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
   const [editingContact,setEditingContact] = useState(null);
   const [emailFileName,setEmailFileName] = useState('');
   const [emailIssues,setEmailIssues] = useState([]);
+  const [combinedTicket,setCombinedTicket] = useState({site:'',category:'General Maintenance',priority:'Medium'});
   const [emailText,setEmailText] = useState('');
   const [assign,setAssign] = useState({});
   const [finance,setFinance] = useState({});
@@ -201,7 +202,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
         return;
       }
       const parsed=parseMaintenanceEmail(raw);
-      setEmailFileName(file.name); setEmailText(parsed.text); setEmailIssues(parsed.issues.map(issue=>({...issue,site:''})));
+      setEmailFileName(file.name); setEmailText(parsed.text); setEmailIssues(parsed.issues.map(issue=>({...issue}))); setCombinedTicket({site:'',category:'General Maintenance',priority:'Medium'});
       if(!parsed.issues.length) setError('No reliable maintenance issue was detected. No tickets were created. Please check that the file contains the email body only. / لم يتم اكتشاف عطل صيانة واضح وموثوق. لم يتم إنشاء أي تذاكر. تأكد أن الملف يحتوي على نص الرسالة فقط.');
       else setMessage('Email read. Review the detected issues below before creating tickets. / تمت قراءة البريد؛ راجع الأعطال المكتشفة أدناه قبل إنشاء التذاكر.');
     } catch(err) { setError('Could not read this email file. Please use .eml, .txt or .html. / تعذرت قراءة الملف. استخدم EML أو TXT أو HTML.'); }
@@ -209,27 +210,19 @@ export default function BuildingMaintenanceWorkflow({ user }) {
   };
   const createDetectedTickets = async () => {
     if(!emailIssues.length) return;
-    if(emailIssues.some(issue=>!issue.site)) { setError('Select a site for every detected issue / اختر الموقع لكل عطل مكتشف.'); return; }
-    // One source email always creates one ticket. The reviewed issue list is combined into its description.
-    const selectedSites = [...new Set(emailIssues.map(issue => String(issue.site || '').trim()).filter(Boolean))];
-    if (selectedSites.length > 1) { setError('One email must use one site. Select the same site for the combined ticket. / يجب أن يكون للبريد الواحد موقع واحد؛ اختر الموقع نفسه للتذكرة الموحّدة.'); return; }
-    const grouped = {[selectedSites[0] || String(emailIssues[0]?.site || '').trim()]: emailIssues};
-    const priorityRank = {Low:1, Medium:2, High:3, Critical:4};
-    const groups = Object.entries(grouped);
+    if(!combinedTicket.site) { setError('Select one site for the whole ticket / اختر موقعًا واحدًا للتذكرة كاملة.'); return; }
+    if(!String(combinedTicket.category||'').trim() || !String(combinedTicket.priority||'').trim()) { setError('Select the ticket category and priority / اختر تصنيف التذكرة وأولويتها.'); return; }
+    // One source email always creates exactly one ticket; issue descriptions remain separate lines within it.
+    const site=String(combinedTicket.site).trim();
     setBusy(true); setError(''); setMessage('');
     const created=[];
     try {
-      for(const [site, issues] of groups) {
-        const categories = [...new Set(issues.map(x => x.category || 'General Maintenance'))];
-        const priority = issues.reduce((best, issue) => (priorityRank[issue.priority] || 2) > (priorityRank[best] || 2) ? issue.priority : best, 'Low');
-        const category = categories.length === 1 ? categories[0] : 'General Maintenance';
-        const details = issues.map((issue, index) => (index + 1) + '. [' + (issue.category || 'General Maintenance') + ' | ' + (issue.priority || 'Medium') + '] ' + String(issue.description || '').trim()).join('\n');
-        const description = 'Multiple maintenance issues reported in one email (' + issues.length + ' issues):\n\n' + details + '\n\nSource email: ' + (emailFileName || 'pasted email text');
-        const res = await api.post('/maintenance-requests', {city:siteCity(sites,site),site,category,priority,description});
-        created.push(res.data.request?.request_no || '');
-      }
-      setMessage('Created ' + created.length + ' ticket(s) for ' + groups.length + ' site(s), covering ' + emailIssues.length + ' issue(s): ' + created.filter(Boolean).join(', ') + '. / تم إنشاء ' + created.length + ' تذكرة للمواقع المحددة، تشمل ' + emailIssues.length + ' أعطال: ' + created.filter(Boolean).join(', ') + '.');
-      setEmailIssues([]); setEmailText(''); setEmailFileName(''); await load();
+      const details = emailIssues.map((issue, index) => (index + 1) + '. ' + String(issue.description || '').trim()).join('\n');
+      const description = 'Multiple maintenance issues reported in one email (' + emailIssues.length + ' issues):\n\n' + details + '\n\nSource email: ' + (emailFileName || 'pasted email text');
+      const res = await api.post('/maintenance-requests', {city:siteCity(sites,site),site,category:combinedTicket.category,priority:combinedTicket.priority,description});
+      created.push(res.data.request?.request_no || '');
+      setMessage('Created one combined ticket for ' + site + ', covering ' + emailIssues.length + ' issues: ' + created.filter(Boolean).join(', ') + '. / تم إنشاء تذكرة موحّدة واحدة للموقع ' + site + ' تشمل ' + emailIssues.length + ' أعطال: ' + created.filter(Boolean).join(', ') + '.');
+      setEmailIssues([]); setEmailText(''); setEmailFileName(''); setCombinedTicket({site:'',category:'General Maintenance',priority:'Medium'}); await load();
     } catch(err) {
       setError('Some tickets may have been created: ' + created.filter(Boolean).join(', ') + '. ' + (err.response?.data?.error || err.message));
       await load();
@@ -516,7 +509,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
             const parsed=parseMaintenanceEmail(emailText);
             setEmailText(parsed.text);
             setEmailFileName('pasted email text');
-            setEmailIssues(parsed.issues.map(issue=>({...issue,site:''})));
+            setEmailIssues(parsed.issues.map(issue=>({...issue}))); setCombinedTicket({site:'',category:'General Maintenance',priority:'Medium'});
             if(!parsed.issues.length) setError('No reliable maintenance issue was detected. No tickets were created. Please paste the email body with the problem description. / لم يتم اكتشاف عطل صيانة واضح. لم تُنشأ أي تذاكر. الصق نص البريد الذي يحتوي على وصف المشكلة.');
             else setMessage('Email text read. Review the detected issues below before creating tickets. / تمت قراءة نص البريد؛ راجع الأعطال المكتشفة أدناه قبل إنشاء التذاكر.');
           } catch(err) { setError('Could not read the pasted email text. / تعذرت قراءة نص البريد الملصق.'); }
@@ -531,17 +524,17 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       {emailFileName&&<div style={{marginTop:8,fontSize:13}}>Selected file / الملف: <b>{emailFileName}</b></div>}
       {emailIssues.length>0&&<>
         <div style={{marginTop:12,padding:10,background:'#f8fafc',borderRadius:8,fontSize:13}}>One email creates one ticket. All detected faults are listed inside it; choose one site for the whole ticket. / البريد الواحد ينشئ تذكرة واحدة، وتُجمع الأعطال داخلها؛ اختر موقعًا واحدًا للتذكرة.</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:10,marginTop:12,padding:12,border:'1px solid #cbd5e1',borderRadius:8,background:'#f8fafc'}}>
+          <label style={field}>Site for the whole ticket / موقع التذكرة كاملة<select required style={control} value={combinedTicket.site} onChange={e=>setCombinedTicket(p=>({...p,site:e.target.value}))}><option value="">Select site / اختر الموقع</option>{sites.map(s=><option key={s.id||s.name} value={s.name}>{s.name}</option>)}</select></label>
+          <label style={field}>Ticket category / تصنيف التذكرة<select style={control} value={combinedTicket.category} onChange={e=>setCombinedTicket(p=>({...p,category:e.target.value}))}>{['General Maintenance','Electrical','Plumbing & Water','A/C & HVAC','Doors, Locks & Windows','Civil & Building','Furniture & Facilities','Other'].map(x=><option key={x}>{x}</option>)}</select></label>
+          <label style={field}>Ticket priority / أولوية التذكرة<select style={control} value={combinedTicket.priority} onChange={e=>setCombinedTicket(p=>({...p,priority:e.target.value}))}>{['Low','Medium','High','Critical'].map(x=><option key={x}>{x}</option>)}</select></label>
+        </div>
         <h4>Detected issues / الأعطال المكتشفة ({emailIssues.length})</h4>
         <div style={{display:'grid',gap:10}}>
           {emailIssues.map((issue,i)=><div key={i} style={{border:'1px solid #cbd5e1',borderRadius:8,padding:10,display:'grid',gap:8}}>
             <b>Issue {i+1} / العطل {i+1}</b>
             <label style={field}>Description / وصف العطل<textarea style={{...control,minHeight:65}} value={issue.description} onChange={e=>setEmailIssues(p=>p.map((x,j)=>j===i?{...x,description:e.target.value}:x))}/></label>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:8}}>
-              <label style={field}>Site / الموقع<select required style={control} value={issue.site||''} onChange={e=>setEmailIssues(p=>p.map((x,j)=>j===i?{...x,site:e.target.value}:x))}><option value="">Select site / اختر الموقع</option>{sites.map(s=><option key={s.id||s.name} value={s.name}>{s.name}</option>)}</select></label>
-              <label style={field}>Category / التصنيف<select style={control} value={issue.category} onChange={e=>setEmailIssues(p=>p.map((x,j)=>j===i?{...x,category:e.target.value}:x))}>{['General Maintenance','Electrical','Plumbing & Water','A/C & HVAC','Doors, Locks & Windows','Civil & Building','Furniture & Facilities','Other'].map(x=><option key={x}>{x}</option>)}</select></label>
-              <label style={field}>Priority / الأولوية<select style={control} value={issue.priority} onChange={e=>setEmailIssues(p=>p.map((x,j)=>j===i?{...x,priority:e.target.value}:x))}>{['Low','Medium','High','Critical'].map(x=><option key={x}>{x}</option>)}</select></label>
-              <div style={{display:'flex',alignItems:'end'}}><button type="button" style={{...btn,background:'#fee2e2',color:'#991b1b'}} onClick={()=>setEmailIssues(p=>p.filter((_,j)=>j!==i))}>Remove issue / حذف العطل</button></div>
-            </div>
+            <div style={{display:'flex',justifyContent:'flex-end'}}><button type="button" style={{...btn,background:'#fee2e2',color:'#991b1b'}} onClick={()=>setEmailIssues(p=>p.filter((_,j)=>j!==i))}>Remove issue / حذف العطل</button></div>
           </div>)}
         </div>
         <button type="button" disabled={busy||!emailIssues.length} onClick={createDetectedTickets} style={{...btn,background:'#0f766e',color:'#fff',marginTop:12}}>Create one combined ticket / إنشاء تذكرة موحّدة</button>

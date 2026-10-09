@@ -65,11 +65,11 @@ async function readPdf(req) {
 
 async function parsePdf(req) {
   const { buffer, filename } = await readPdf(req);
-  if (!/\\.pdf$/i.test(filename)) throw new Error("Only PDF files are supported");
+  if (!/\.pdf$/i.test(filename)) throw new Error("Only PDF files are supported");
   const parsed = await pdfParse(buffer);
   const text = parsed.text || "";
   const items = parseItems(text);
-  const subject = extractField(text, "Subject") || extractField(text, "Project") || filename.replace(/\\.pdf$/i, "");
+  const subject = extractField(text, "Subject") || extractField(text, "Project") || filename.replace(/\.pdf$/i, "");
   const site = extractField(text, "(?:Site|Location|Camp|Project Site)");
   const date = extractField(text, "(?:Date|Requested Date|Work Order Date)");
   const requestedBy = extractField(text, "Requested By");

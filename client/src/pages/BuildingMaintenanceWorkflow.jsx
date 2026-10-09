@@ -124,11 +124,12 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       setSites(s.data.sites || []);
       setRequests(r.data.requests || []);
       const savedContacts = c.data.contacts || [];
-      const hasEmail = x => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(String(x.email || '').trim());
-      const configuredEmployees = savedContacts.filter(x => x.active !== false && /Our Employee|Technician/i.test(x.contact_role || '') && hasEmail(x)).map(x => ({id:'directory-'+x.id, full_name:x.full_name, name:x.full_name, email:String(x.email).trim(), whatsapp:x.whatsapp || '', city:x.city || '', site:x.site || '', work_type:x.work_type || ''}));
-      const configuredContractors = savedContacts.filter(x => x.active !== false && /Contractor|Vendor/i.test(x.contact_role || '') && hasEmail(x)).map(x => ({id:'directory-'+x.id, full_name:x.full_name, name:x.full_name, email:String(x.email).trim(), whatsapp:x.whatsapp || '', city:x.city || '', site:x.site || '', work_type:x.work_type || ''}));
-      // Executor dropdowns must use only the contacts explicitly configured in this directory,
-      // not legacy ERP login/user records.
+      // Directory contacts are the source of truth. Any active contact with a valid email
+      // can be selected as an internal executor unless explicitly classified as Contractor/Vendor.
+      const hasEmail = x => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(x.email || '').trim());
+      const toExecutor = x => ({id:'directory-'+x.id, full_name:x.full_name, name:x.full_name, email:String(x.email).trim(), whatsapp:x.whatsapp || '', city:x.city || '', site:x.site || '', work_type:x.work_type || ''});
+      const configuredEmployees = savedContacts.filter(x => x.active !== false && !/Contractor|Vendor/i.test(x.contact_role || '') && hasEmail(x)).map(toExecutor);
+      const configuredContractors = savedContacts.filter(x => x.active !== false && /Contractor|Vendor/i.test(x.contact_role || '') && hasEmail(x)).map(toExecutor);
       setEmployees(configuredEmployees);
       setContractors(configuredContractors);
       setContacts(savedContacts);

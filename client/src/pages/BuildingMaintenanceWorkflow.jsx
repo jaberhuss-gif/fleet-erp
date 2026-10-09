@@ -119,12 +119,9 @@ function parseMaintenanceEmail(raw) {
   const priorityRank = {Low:1, Medium:2, High:3, Critical:4};
   const categories = [...new Set(unique.map(x => x.category || 'General Maintenance'))];
   const priority = unique.reduce((best, issue) => (priorityRank[issue.priority] || 2) > (priorityRank[best] || 2) ? issue.priority : best, 'Low');
-  const issues = unique.length ? [{
-    description: unique.map((x, i) => (i + 1) + '. [' + x.category + '] ' + x.description).join('\\n'),
-    category: categories.length === 1 ? categories[0] : 'General Maintenance',
-    priority,
-    site: ''
-  }] : [];
+  // Keep individual detected faults separate in the review UI. They are combined
+  // into ONE maintenance ticket only when the user confirms creation.
+  const issues = unique.map(x => ({...x, site:''}));
   return {text:body.slice(0,12000),issues};
 }
 const siteCity = (sites, siteName) => { const s=sites.find(x=>String(x.name)===String(siteName)); return s ? String(s.city||s.city_name||s.location_city||'') : ''; };
@@ -225,8 +222,8 @@ export default function BuildingMaintenanceWorkflow({ user }) {
         const categories = [...new Set(issues.map(x => x.category || 'General Maintenance'))];
         const priority = issues.reduce((best, issue) => (priorityRank[issue.priority] || 2) > (priorityRank[best] || 2) ? issue.priority : best, 'Low');
         const category = categories.length === 1 ? categories[0] : 'General Maintenance';
-        const details = issues.map((issue, index) => (index + 1) + '. [' + (issue.category || 'General Maintenance') + ' | ' + (issue.priority || 'Medium') + '] ' + String(issue.description || '').trim()).join('\\n');
-        const description = 'Multiple maintenance issues reported in one email (' + issues.length + ' issues):\\n\\n' + details + '\\n\\nSource email: ' + (emailFileName || 'uploaded email');
+        const details = issues.map((issue, index) => (index + 1) + '. [' + (issue.category || 'General Maintenance') + ' | ' + (issue.priority || 'Medium') + '] ' + String(issue.description || '').trim()).join('\n');
+        const description = 'Multiple maintenance issues reported in one email (' + issues.length + ' issues):\n\n' + details + '\n\nSource email: ' + (emailFileName || 'pasted email text');
         const res = await api.post('/maintenance-requests', {city:siteCity(sites,site),site,category,priority,description});
         created.push(res.data.request?.request_no || '');
       }

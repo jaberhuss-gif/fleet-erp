@@ -8,20 +8,20 @@ const control = { width:'100%', boxSizing:'border-box', padding:'10px', border:'
 const btn = { padding:'9px 13px', border:0, borderRadius:7, cursor:'pointer', fontWeight:700 };
 function parseMaintenanceEmail(raw) {
   let text = String(raw || '').replace(/=\r?\n/g, '').replace(/=3D/gi, '=').replace(/=20/gi, ' ');
-  const plainPart = text.match(/Content-Type:\s*text\/plain[^\\n]*[\\s\\S]*?\\r?\\n\\r?\\n([\\s\\S]*?)(?=\\r?\\n--[-_A-Za-z0-9]+|$)/i);
+  const plainPart = text.match(/Content-Type:\s*text\/plain[^\n]*[\s\S]*?\r?\n\r?\n([\s\S]*?)(?=\r?\n--[-_A-Za-z0-9]+|$)/i);
   if (plainPart) text = plainPart[1];
-  text = text.replace(/<style[\\s\\S]*?<\\/style>/gi,' ').replace(/<script[\\s\\S]*?<\\/script>/gi,' ').replace(/<[^>]+>/g,' ')
+  text = text.replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<[^>]+>/g,' ')
     .replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>')
     .replace(/^(From|To|Cc|Bcc|Subject|Date|Sent|Received|MIME-Version|Content-Type|Content-Transfer-Encoding):.*$/gim,' ')
-    .replace(/^[=\-_]{5,}.*$/gm,' ').replace(/\\r/g,'');
-  const parts = text.split(/\\n|(?=\\b\\d+\\s*[-.)])|(?<=[.!?؟])\\s+/).map(x=>x.replace(/^\\s*\\d+\\s*[-.)]\\s*/, '').replace(/^[-*•\\s]+/,'').trim()).filter(x=>x.length>8);
+    .replace(/^[=\-_]{5,}.*$/gm,' ').replace(/\r/g,'');
+  const parts = text.split(/\n|(?=\b\d+\s*[-.)])|(?<=[.!?؟])\s+/).map(x=>x.replace(/^\s*\d+\s*[-.)]\s*/, '').replace(/^[-*•\s]+/,'').trim()).filter(x=>x.length>8);
   const rules = [
-    {category:'Plumbing & Water',priority:'High',re:/\\b(water leak|leaking|leakage|pipe burst|drain|tap|faucet|toilet|water supply)\\b|تسرب|تسريب|ماسورة|أنبوب|مياه|ماء|صرف صحي/i},
-    {category:'A/C & HVAC',priority:'High',re:/\\b(a\\/?c|air.?condition|hvac|cooling|not cool|refrigerat|thermostat)\\b|تكييف|مكيف|تبريد/i},
-    {category:'Electrical',priority:'High',re:/\\b(electrical|electricity|power outage|wiring|socket|outlet|breaker|light not|lamp|short circuit)\\b|كهرباء|تماس|قاطع|إنارة|مصباح/i},
-    {category:'Doors, Locks & Windows',priority:'Medium',re:/\\b(door|lock|key|window|hinge)\\b|باب|قفل|نافذة|شباك/i},
-    {category:'Civil & Building',priority:'Medium',re:/\\b(ceiling|wall|roof|floor|crack|paint|tiles|plaster)\\b|سقف|جدار|حائط|أرضية|تشققات|دهان|بلاط/i},
-    {category:'Furniture & Facilities',priority:'Low',re:/\\b(furniture|chair|desk|bed|cabinet|curtain)\\b|أثاث|كرسي|مكتب|سرير|خزانة|ستارة/i}
+    {category:'Plumbing & Water',priority:'High',re:/\b(water leak|leaking|leakage|pipe burst|drain|tap|faucet|toilet|water supply)\b|تسرب|تسريب|ماسورة|أنبوب|مياه|ماء|صرف صحي/i},
+    {category:'A/C & HVAC',priority:'High',re:/\b(a\/?c|air.?condition|hvac|cooling|not cool|refrigerat|thermostat)\b|تكييف|مكيف|تبريد/i},
+    {category:'Electrical',priority:'High',re:/\b(electrical|electricity|power outage|wiring|socket|outlet|breaker|light not|lamp|short circuit)\b|كهرباء|تماس|قاطع|إنارة|مصباح/i},
+    {category:'Doors, Locks & Windows',priority:'Medium',re:/\b(door|lock|key|window|hinge)\b|باب|قفل|نافذة|شباك/i},
+    {category:'Civil & Building',priority:'Medium',re:/\b(ceiling|wall|roof|floor|crack|paint|tiles|plaster)\b|سقف|جدار|حائط|أرضية|تشققات|دهان|بلاط/i},
+    {category:'Furniture & Facilities',priority:'Low',re:/\b(furniture|chair|desk|bed|cabinet|curtain)\b|أثاث|كرسي|مكتب|سرير|خزانة|ستارة/i}
   ];
   const candidates = parts.length ? parts : [text.trim()];
   const found = [];
@@ -39,7 +39,13 @@ export default function BuildingMaintenanceWorkflow({ user }) {
   const [sites,setSites] = useState([]);
   const [requests,setRequests] = useState([]);
   const [employees,setEmployees] = useState([]);
-  const [contractors,setContractors] = useState([]);\n  const [contacts,setContacts] = useState([]);\n  const [contactForm,setContactForm] = useState(blankContact);\n  const [editingContact,setEditingContact] = useState(null);\n  const [emailFileName,setEmailFileName] = useState('');\n  const [emailIssues,setEmailIssues] = useState([]);\n  const [emailText,setEmailText] = useState('');
+  const [contractors,setContractors] = useState([]);
+  const [contacts,setContacts] = useState([]);
+  const [contactForm,setContactForm] = useState(blankContact);
+  const [editingContact,setEditingContact] = useState(null);
+  const [emailFileName,setEmailFileName] = useState('');
+  const [emailIssues,setEmailIssues] = useState([]);
+  const [emailText,setEmailText] = useState('');
   const [assign,setAssign] = useState({});
   const [finance,setFinance] = useState({});
   const [audit,setAudit] = useState({});

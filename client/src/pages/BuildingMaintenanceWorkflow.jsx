@@ -143,14 +143,30 @@ export default function BuildingMaintenanceWorkflow({ user }) {
   },[requests,query]);
   const readEmailFile = async e => {
     const file=e.target.files?.[0]; if(!file) return;
+    const extension=String(file.name||'').split('.').pop().toLowerCase();
+    if(extension==='msg') {
+      setEmailFileName(''); setEmailText(''); setEmailIssues([]);
+      setError('Outlook .msg files are binary and cannot be read safely by this importer. In Outlook, open the email and use Save As → .eml, or copy only the email body into a .txt file. Upload photos/videos separately; do not upload the .msg file here. / ملفات Outlook بصيغة MSG ثنائية ولا يمكن قراءتها بأمان هنا. افتح الرسالة في Outlook واختر حفظ باسم بصيغة EML، أو انسخ نص الرسالة فقط إلى ملف TXT. ارفع الصور والفيديوهات بشكل منفصل، ولا ترفع ملف MSG هنا.');
+      e.target.value=''; return;
+    }
+    if(!['eml','txt','html','htm'].includes(extension)) {
+      setError('Unsupported file type. Please use .eml, .txt or .html. / نوع الملف غير مدعوم. استخدم EML أو TXT أو HTML.');
+      e.target.value=''; return;
+    }
     setError(''); setMessage(''); setBusy(true);
     try {
       const raw=await file.text();
+      const controlChars=(raw.match(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g)||[]).length;
+      if(raw.length && controlChars/raw.length > 0.01) {
+        setEmailFileName(''); setEmailText(''); setEmailIssues([]);
+        setError('This file contains binary or unreadable data. No tickets were created. Save the email body as .eml or plain .txt and try again. / يحتوي الملف على بيانات ثنائية أو غير مقروءة. لم يتم إنشاء أي تذاكر. احفظ نص الرسالة بصيغة EML أو TXT عادي ثم أعد المحاولة.');
+        return;
+      }
       const parsed=parseMaintenanceEmail(raw);
       setEmailFileName(file.name); setEmailText(parsed.text); setEmailIssues(parsed.issues.map(issue=>({...issue,site:''})));
-      if(!parsed.issues.length) setError('No maintenance issue was detected. Please check the email file.');
-      else setMessage('Email read. Review the detected issues below before creating tickets. / تمت قراءة البريد؛ راجع الأعطال المكتشفة قبل إنشاء التذاكر.');
-    } catch(err) { setError('Could not read this email file. Please use .eml, .txt or .html. / تعذرت قراءة الملف.'); }
+      if(!parsed.issues.length) setError('No reliable maintenance issue was detected. No tickets were created. Please check that the file contains the email body only. / لم يتم اكتشاف عطل صيانة واضح وموثوق. لم يتم إنشاء أي تذاكر. تأكد أن الملف يحتوي على نص الرسالة فقط.');
+      else setMessage('Email read. Review the detected issues below before creating tickets. / تمت قراءة البريد؛ راجع الأعطال المكتشفة أدناه قبل إنشاء التذاكر.');
+    } catch(err) { setError('Could not read this email file. Please use .eml, .txt or .html. / تعذرت قراءة الملف. استخدم EML أو TXT أو HTML.'); }
     finally { setBusy(false); e.target.value=''; }
   };
   const createDetectedTickets = async () => {

@@ -427,7 +427,27 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       <button disabled={busy} className="btn btn-primary" style={{...btn,marginTop:12,background:'#0f766e',color:'#fff'}}>{busy?'Please wait…':'Create request / إنشاء الطلب'}</button>
     </form>
     <section style={panel}>
-      <h3 style={{marginTop:0}}>📩 Upload maintenance email / رفع بريد الصيانة</h3>
+      <h3 style={{marginTop:0}}>📨 Paste or upload maintenance email / لصق أو رفع بريد الصيانة</h3>
+      <p style={{marginTop:0,fontSize:13,color:'#64748b'}}>Paste the email text directly below, then choose Read & Detect. You can still upload an .eml, .txt or .html file if preferred. / الصق نص البريد مباشرة أدناه ثم اضغط قراءة واكتشاف. ويمكنك الاستمرار برفع ملف EML أو TXT أو HTML إذا رغبت.</p>
+      <label style={field}>Email text / نص البريد الإلكتروني
+        <textarea style={{...control,minHeight:170,resize:'vertical',fontFamily:'inherit'}} value={emailText} onChange={e=>{setEmailText(e.target.value);setEmailIssues([]);setEmailFileName('');setError('');setMessage('');}} placeholder="Paste the complete email text here, including the reported issue and site if available…\nالصق نص البريد كاملًا هنا، بما في ذلك وصف العطل والموقع إن وُجد…"/>
+      </label>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:10}}>
+        <button type="button" disabled={busy||!emailText.trim()} onClick={()=>{
+          setBusy(true);setError('');setMessage('');
+          try {
+            const parsed=parseMaintenanceEmail(emailText);
+            setEmailText(parsed.text);
+            setEmailFileName('pasted email text');
+            setEmailIssues(parsed.issues.map(issue=>({...issue,site:''})));
+            if(!parsed.issues.length) setError('No reliable maintenance issue was detected. No tickets were created. Please paste the email body with the problem description. / لم يتم اكتشاف عطل صيانة واضح. لم تُنشأ أي تذاكر. الصق نص البريد الذي يحتوي على وصف المشكلة.');
+            else setMessage('Email text read. Review the detected issues below before creating tickets. / تمت قراءة نص البريد؛ راجع الأعطال المكتشفة أدناه قبل إنشاء التذاكر.');
+          } catch(err) { setError('Could not read the pasted email text. / تعذرت قراءة نص البريد الملصق.'); }
+          finally { setBusy(false); }
+        }} style={{...btn,background:'#0f766e',color:'#fff'}}>Read & detect issues / قراءة واكتشاف الأعطال</button>
+      </div>
+      <div style={{borderTop:'1px solid #e2e8f0',margin:'16px 0'}}/>
+      <h4 style={{margin:'0 0 8px'}}>Or upload an email file / أو ارفع ملف البريد</h4>
       <p style={{marginTop:0,fontSize:13,color:'#64748b'}}>Upload an Outlook email saved as .eml, or a .txt/.html email file. Review detected faults; the system creates one combined ticket per site, with all faults listed inside it. / راجع الأعطال؛ ينشئ النظام تذكرة واحدة لكل موقع وتُدرج جميع أعطاله داخلها.</p>
       <input type="file" accept=".eml,.txt,.html,.htm,text/plain,text/html,message/rfc822" onChange={readEmailFile} disabled={busy} style={{maxWidth:'100%'}}/>
       {(emailFileName || emailText || emailIssues.length > 0) && <button type="button" disabled={busy} onClick={() => { setEmailFileName(''); setEmailText(''); setEmailIssues([]); setError(''); setMessage('Detected issues cleared. No tickets were created by clearing this preview. / تم مسح الأعطال المكتشفة من المعاينة. مسح المعاينة لا ينشئ ولا يحذف تذاكر.'); }} style={{...btn, marginTop:10, background:'#fee2e2', color:'#991b1b'}}>Clear all detected issues / مسح جميع الأعطال المكتشفة</button>}

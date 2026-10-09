@@ -75,7 +75,8 @@ function parseItems(text) {
           unit: tail[1],
           quantity: num(tail[2]),
           price: num(tail[3]),
-          cost: num(tail[4]),
+          cost: 0,
+          quotation_cost: num(tail[4]),
           net_amount: num(tail[4]),
           total_with_vat: 0,
           discount_percent: 0,
@@ -216,6 +217,7 @@ export function mountPdfProjectImport(app) {
           ALTER TABLE project_items ADD COLUMN IF NOT EXISTS location TEXT DEFAULT '';
           ALTER TABLE project_items ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0;
           ALTER TABLE project_items ADD COLUMN IF NOT EXISTS tax_percent NUMERIC DEFAULT 0;
+          ALTER TABLE project_items ADD COLUMN IF NOT EXISTS quotation_cost NUMERIC DEFAULT 0;
           ALTER TABLE project_items ADD COLUMN IF NOT EXISTS net_amount NUMERIC DEFAULT 0;
           ALTER TABLE project_items ADD COLUMN IF NOT EXISTS total_with_vat NUMERIC DEFAULT 0;
           ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS project_id INTEGER;
@@ -260,10 +262,10 @@ export function mountPdfProjectImport(app) {
         for (const x of r.items) {
           const pi = await client.query(`
             INSERT INTO project_items
-              (project_id,sr_no,item,unit,quantity,price,cost,section,status,actual_amount,notes,item_no,location,discount_percent,tax_percent,net_amount,total_with_vat)
-            VALUES ($1,$2,$3,$4,$5,$6,0,'PDF','Not Started',0,'',$7,$8,$9,$10,$11,$12)
+              (project_id,sr_no,item,unit,quantity,price,cost,section,status,actual_amount,notes,item_no,location,discount_percent,tax_percent,net_amount,total_with_vat,quotation_cost)
+            VALUES ($1,$2,$3,$4,$5,$6,0,'PDF','Not Started',0,'',$7,$8,$9,$10,$11,$12,$13)
             RETURNING *
-          `, [project.id, String(x.sr_no), x.item, x.unit, x.quantity, x.price, x.item_no || "", x.location || "", x.discount_percent || 0, x.tax_percent || 0, x.net_amount || 0, x.total_with_vat || 0]);
+          `, [project.id, String(x.sr_no), x.item, x.unit, x.quantity, x.price, x.item_no || "", x.location || "", x.discount_percent || 0, x.tax_percent || 0, x.net_amount || 0, x.total_with_vat || 0, x.quotation_cost || 0]);
           projectItems.push(pi.rows[0]);
 
           if (workOrder) {

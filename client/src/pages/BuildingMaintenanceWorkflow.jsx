@@ -204,8 +204,20 @@ export default function BuildingMaintenanceWorkflow({ user }) {
   const chooseExecutor = (id,name) => {
     const a=assign[id]||{}, list=a.type==='Contractor'?contractors:employees;
     const x=list.find(v=>(v.name||v.full_name)===name);
-    setAssign(p=>({...p,[id]:{...a,name,email:x?.email||''}}));
+    setAssign(p=>({...p,[id]:{...a,name,email:x?.email||'',whatsapp:x?.whatsapp||x?.phone||''}}));
   };
+  const openOutlookDraft = (to,subject,body,target='_blank') => {
+    const url='https://outlook.office.com/mail/deeplink/compose?to='+encodeURIComponent(to||'')+'&subject='+encodeURIComponent(subject||'')+'&body='+encodeURIComponent(body||'');
+    return window.open(url,target,'noopener,noreferrer');
+  };
+  const openWhatsAppDraft = (phone,body) => {
+    const digits=String(phone||'').replace(/[^0-9]/g,'');
+    if(!digits) { setError('WhatsApp number is missing for this contact / رقم واتساب جهة الاتصال غير مسجل.'); return; }
+    window.open('https://wa.me/'+digits+'?text='+encodeURIComponent(body||''),'_blank','noopener,noreferrer');
+  };
+  const campusForSite = site => contacts
+    .filter(x=>x.active!==false && /Campus Manager/i.test(x.contact_role||'') && (String(x.site||'').toLowerCase()===String(site||'').toLowerCase() || String(x.site||'').toLowerCase()==='all sites'))
+    .sort((a,b)=>(String(a.site||'').toLowerCase()===String(site||'').toLowerCase()?0:1)-(String(b.site||'').toLowerCase()===String(site||'').toLowerCase()?0:1))[0];
   const saveRequestEdit = async id => {
     const draft=editingRequest;
     if(!draft?.site || !String(draft.description||'').trim()) { setError('Select site and enter description / اختر الموقع واكتب وصف المشكلة.'); return; }
@@ -219,13 +231,52 @@ export default function BuildingMaintenanceWorkflow({ user }) {
   const assignRequest = async id => {
     const a=assign[id]||{};
     if(!a.type||!a.name) { setError('Select an executor / اختر المنفذ أولاً.'); return; }
+    if(!a.email) { setError('Executor email is required / البريد الإلكتروني للمنفذ مطلوب.'); return; }
+    // Open a blank tab synchronously from the user's click, then load the company Outlook draft.
+    const mailTab=window.open('about:blank','_blank');
     setBusy(true); setError(''); setMessage('');
     try {
-      const r=await api.post('/maintenance-requests/'+id+'/assign',{executorType:a.type,executorName:a.name,executorEmail:a.email});
-      const sent=!!r.data.email?.sent;
-      setMessage((r.data.request?.request_no||'Request')+' assigned / تم التعيين. '+(sent?'Email sent / تم إرسال البريد.':'Email NOT sent / البريد لم يُرسل: '+(r.data.email?.reason||'unknown error')));
+      const r=await api.post('/maintenance-requests/'+id+'/assign',{executorType:a.type,executorName:a.name,executorEmail:a.email,executorWhatsapp:a.whatsapp||''});
+      const ticket=r.data.request||{};
+      const base=window.location.origin;
+      const link1=base+'/api/maintenance-requests/public/'+ticket.acknowledgement_token+'/acknowledge';
+      const link2=base+'/api/maintenance-requests/public/'+ticket.completion_token+'/work-completed';
+      const subject='BUILDING MAINTENANCE / صيانة المباني — '+(ticket.request_no||'');
+      const body=[
+        'Dear '+(a.name||'Executor')+',',
+        'عزيزي '+(a.name||'المنفذ')+'،',
+        '',
+        'A maintenance request has been assigned to you.',
+        'تم تعيين طلب الصيانة هذا لكم.',
+        'Request: '+ticket.request_no+' | الطلب: '+ticket.request_no,
+        'Site: '+(ticket.site||'-')+' | الموقع: '+(ticket.site||'-'),
+        'Category: '+(ticket.category||'-')+' | نوع العمل: '+(ticket.category||'-'),
+        'Priority: '+(ticket.priority||'-')+' | الأولوية: '+(ticket.priority||'-'),
+        'Problem: '+(ticket.description||'-'),
+        'المشكلة: '+(ticket.description||'-'),
+        '',
+        'LINK 1 — ACKNOWLEDGE RECEIPT: '+link1,
+        'الرابط 1 — تأكيد استلام المهمة: '+link1,
+        'Please open Link 1 to acknowledge the assignment.',
+        'يرجى فتح الرابط 1 لتأكيد استلام المهمة.',
+        '',
+        'LINK 2 — WORK COMPLETED: '+link2,
+        'الرابط 2 — تأكيد إتمام التصليح: '+link2,
+        'After the repair is finished, open Link 2 and confirm completion.',
+        'بعد الانتهاء من التصليح، افتح الرابط 2 وأكّد إتمام العمل.',
+        '',
+        'After your completion confirmation, the campus contact will be asked to confirm the work.',
+        'بعد تأكيدك إتمام العمل، سيُطلب من مسؤول الكامب تأكيد التنفيذ.',
+        '',
+        'Regards, Fleet / Building Maintenance',
+        'مع التحية، إدارة الأسطول / صيانة المباني'
+      ].join('\n');
+      const outlookUrl='https://outlook.office.com/mail/deeplink/compose?to='+encodeURIComponent(a.email)+'&subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
+      if(mailTab) mailTab.location.href=outlookUrl;
+      else openOutlookDraft(a.email,subject,body);
+      setMessage((ticket.request_no||'Request')+' assigned. Company Outlook draft opened — review and press Send. / تم التعيين وفتح مسودة بريد الشركة؛ راجعها واضغط إرسال.');
       await load();
-    } catch(e) { setError(e.response?.data?.error||e.message); }
+    } catch(e) { if(mailTab) mailTab.close(); setError(e.response?.data?.error||e.message); }
     finally { setBusy(false); }
   };
   const resend = async id => {
@@ -381,11 +432,13 @@ export default function BuildingMaintenanceWorkflow({ user }) {
               </div>
             </div>}
             {r.status==='Closed'&&<div style={{marginTop:10,color:'#166534',fontWeight:700}}>CLOSED / مغلقة · Final cost / التكلفة: SAR {Number(r.final_amount||0).toFixed(2)}</div>}
+            {r.work_order_id && r.executor_whatsapp && !r.acknowledged_at && <div style={{marginTop:10}}><button type="button" style={{...btn,background:'#dcfce7',color:'#166534'}} onClick={()=>openWhatsAppDraft(r.executor_whatsapp,'BUILDING MAINTENANCE / صيانة المباني\nRequest / الطلب: '+r.request_no+'\nSite / الموقع: '+(r.site||'-')+'\nProblem / المشكلة: '+(r.description||'-')+'\n\nLINK 1 — ACKNOWLEDGE / الرابط 1 — تأكيد الاستلام: '+window.location.origin+'/api/maintenance-requests/public/'+r.acknowledgement_token+'/acknowledge\n\nLINK 2 — WORK COMPLETED / الرابط 2 — تأكيد إتمام التصليح: '+window.location.origin+'/api/maintenance-requests/public/'+r.completion_token+'/work-completed\n\nPlease open Link 1 first, then Link 2 after repair.\nيرجى فتح الرابط 1 أولاً، ثم الرابط 2 بعد انتهاء التصليح.')}>Prepare executor WhatsApp / تجهيز واتساب للمنفذ</button><span style={{fontSize:12,color:'#64748b',marginInlineStart:8}}>Draft only — press Send in WhatsApp / مسودة فقط — اضغط إرسال في واتساب</span></div>}
+            {r.status==='Awaiting Confirmation' && !r.requester_confirmation && (()=>{const campus=campusForSite(r.site);const phone=campus?.whatsapp||campus?.phone||'';const link=window.location.origin+'/api/maintenance-requests/public/'+r.confirmation_token+'/confirm';const body='BUILDING MAINTENANCE — WORK COMPLETED / صيانة المباني — تم تنفيذ العمل\nRequest / الطلب: '+r.request_no+'\nSite / الموقع: '+(r.site||'-')+'\nProblem / المشكلة: '+(r.description||'-')+'\n\nPlease open the link and choose YES if the repair is accepted, or NO if the problem remains.\nيرجى فتح الرابط واختيار نعم إذا تم استلام العمل، أو لا إذا ما زالت المشكلة قائمة.\n'+link;return <div style={{marginTop:10,padding:10,background:'#eff6ff',borderRadius:8}}><b>Campus confirmation / تأكيد الكامب</b><div style={{fontSize:13,margin:'5px 0 9px'}}>Campus contact / مسؤول الموقع: {campus?.full_name||'Not configured / غير محدد'}</div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button type="button" style={btn} disabled={!phone} onClick={()=>openWhatsAppDraft(phone,body)}>Prepare campus WhatsApp / تجهيز واتساب للكامب</button><button type="button" style={btn} disabled={!campus?.email} onClick={()=>openOutlookDraft(campus.email,'Maintenance '+r.request_no+' — Campus confirmation / تأكيد الكامب',body)}>Prepare campus email / تجهيز بريد الكامب</button></div><div style={{fontSize:12,color:'#64748b',marginTop:6}}>Messages are drafts until you press Send / الرسائل مسودات حتى تضغط إرسال.</div></div>})()}
             <div style={{display:'flex',gap:8,marginTop:10,flexWrap:'wrap'}}>
               <button style={btn} onClick={()=>showAudit(r.id)}>View audit trail / سجل الإجراءات</button>
               {r.status==='New'&&!r.work_order_id&&canWork&&<button style={btn} onClick={()=>setEditingRequest({id:r.id,site:r.site||'',category:r.category||'General Maintenance',priority:r.priority||'Medium',description:r.description||''})}>Edit request / تعديل الطلب</button>}
               <button style={btn} onClick={()=>window.open('https://wa.me/?text='+encodeURIComponent('Maintenance '+r.request_no+' | Site: '+(r.site||'-')+' | '+r.category+' | Priority: '+r.priority+'\\n'+r.description+'\\nPlease review this maintenance request. / يرجى مراجعة طلب الصيانة.'),'_blank','noopener,noreferrer')}>Prepare WhatsApp / تجهيز واتساب</button>
-              <button style={btn} onClick={()=>window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent([r.requester_email,r.executor_email].filter(Boolean).join(','))+'&su='+encodeURIComponent('Maintenance '+r.request_no)+'&body='+encodeURIComponent('Maintenance request: '+r.request_no+'\nSite: '+(r.site||'-')+'\nCategory: '+(r.category||'-')+'\nPriority: '+(r.priority||'-')+'\n\n'+(r.description||'')+'\n\nPlease review and update the request status. / يرجى مراجعة طلب الصيانة وتحديث الحالة.'),'_blank','noopener,noreferrer')}>Prepare email / تجهيز البريد</button>
+              <button style={btn} onClick={()=>openOutlookDraft([r.requester_email,r.executor_email].filter(Boolean).join(','),'Maintenance '+r.request_no+' / صيانة '+r.request_no,'Maintenance request: '+r.request_no+'\nطلب الصيانة: '+r.request_no+'\nSite: '+(r.site||'-')+'\nالموقع: '+(r.site||'-')+'\nCategory: '+(r.category||'-')+'\nالتصنيف: '+(r.category||'-')+'\n\n'+(r.description||'')+'\n\nPlease review and update the request status.\nيرجى مراجعة طلب الصيانة وتحديث الحالة.')}>Prepare company email / تجهيز بريد الشركة</button>
             </div>
             {audit[r.id]&&<div style={{marginTop:10,padding:10,background:'#f8fafc',borderRadius:8}}><b>Audit trail / سجل الإجراءات</b>{!audit[r.id].length?<div>No events / لا توجد أحداث مسجلة.</div>:audit[r.id].map(ev=><div key={ev.id} style={{padding:'7px 0',borderBottom:'1px solid #e2e8f0',fontSize:13}}><b>{ev.action}</b> · {ev.actor_name||ev.actor_type} · {new Date(ev.created_at).toLocaleString()}</div>)}</div>}
           </article>;

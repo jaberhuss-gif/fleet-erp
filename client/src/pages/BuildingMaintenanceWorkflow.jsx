@@ -113,7 +113,8 @@ export default function BuildingMaintenanceWorkflow({ user }) {
   const [loading,setLoading] = useState(true);
   const [message,setMessage] = useState('');
   const [error,setError] = useState('');
-  const canWork = user?.role === 'Owner' || user?.role === 'Manager' || user?.role === 'Admin' || !!user?.access?.building?.can_work;
+  const roleKey = String(user?.role || '').trim().toLowerCase().replace(/[_-]+/g, ' ');
+  const canWork = ['owner', 'system owner', 'manager', 'admin'].includes(roleKey) || !!user?.access?.building?.can_work;
 
   const load = async () => {
     setError('');

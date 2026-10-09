@@ -1,11 +1,37 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../api/client';
 
-const initial = { site:'', category:'General Maintenance', priority:'Medium', description:'' };
+const initial = { city:'', site:'', category:'General Maintenance', priority:'Medium', description:'' };
 const blankContact = { contact_role:'Campus Manager', full_name:'', city:'', site:'', work_type:'', email:'', phone:'', whatsapp:'', notes:'', active:true };
 const field = { display:'flex', flexDirection:'column', gap:5, minWidth:0 };
 const control = { width:'100%', boxSizing:'border-box', padding:'10px', border:'1px solid #cbd5e1', borderRadius:7, background:'#fff' };
 const btn = { padding:'9px 13px', border:0, borderRadius:7, cursor:'pointer', fontWeight:700 };
+function parseMaintenanceEmail(raw) {
+  let text = String(raw || '').replace(/=\r?\n/g, '').replace(/=3D/gi, '=').replace(/=20/gi, ' ');
+  const plainPart = text.match(/Content-Type:\s*text\/plain[^\\n]*[\\s\\S]*?\\r?\\n\\r?\\n([\\s\\S]*?)(?=\\r?\\n--[-_A-Za-z0-9]+|$)/i);
+  if (plainPart) text = plainPart[1];
+  text = text.replace(/<style[\\s\\S]*?<\\/style>/gi,' ').replace(/<script[\\s\\S]*?<\\/script>/gi,' ').replace(/<[^>]+>/g,' ')
+    .replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>')
+    .replace(/^(From|To|Cc|Bcc|Subject|Date|Sent|Received|MIME-Version|Content-Type|Content-Transfer-Encoding):.*$/gim,' ')
+    .replace(/^[=\-_]{5,}.*$/gm,' ').replace(/\\r/g,'');
+  const parts = text.split(/\\n|(?=\\b\\d+\\s*[-.)])|(?<=[.!?؟])\\s+/).map(x=>x.replace(/^\\s*\\d+\\s*[-.)]\\s*/, '').replace(/^[-*•\\s]+/,'').trim()).filter(x=>x.length>8);
+  const rules = [
+    {category:'Plumbing & Water',priority:'High',re:/\\b(water leak|leaking|leakage|pipe burst|drain|tap|faucet|toilet|water supply)\\b|تسرب|تسريب|ماسورة|أنبوب|مياه|ماء|صرف صحي/i},
+    {category:'A/C & HVAC',priority:'High',re:/\\b(a\\/?c|air.?condition|hvac|cooling|not cool|refrigerat|thermostat)\\b|تكييف|مكيف|تبريد/i},
+    {category:'Electrical',priority:'High',re:/\\b(electrical|electricity|power outage|wiring|socket|outlet|breaker|light not|lamp|short circuit)\\b|كهرباء|تماس|قاطع|إنارة|مصباح/i},
+    {category:'Doors, Locks & Windows',priority:'Medium',re:/\\b(door|lock|key|window|hinge)\\b|باب|قفل|نافذة|شباك/i},
+    {category:'Civil & Building',priority:'Medium',re:/\\b(ceiling|wall|roof|floor|crack|paint|tiles|plaster)\\b|سقف|جدار|حائط|أرضية|تشققات|دهان|بلاط/i},
+    {category:'Furniture & Facilities',priority:'Low',re:/\\b(furniture|chair|desk|bed|cabinet|curtain)\\b|أثاث|كرسي|مكتب|سرير|خزانة|ستارة/i}
+  ];
+  const candidates = parts.length ? parts : [text.trim()];
+  const found = [];
+  for (const part of candidates) {
+    const rule = rules.find(x=>x.re.test(part));
+    if (rule && !found.some(x=>x.description.toLowerCase()===part.toLowerCase())) found.push({description:part,category:rule.category,priority:rule.priority});
+  }
+  if (!found.length && text.trim()) found.push({description:text.trim().slice(0,4000),category:'General Maintenance',priority:'Medium'});
+  return {text:text.trim(),issues:found};
+}
 const statusColor = s => s==='Closed' || s==='Operationally Completed' ? '#dcfce7' : s==='Reopened' ? '#fee2e2' : '#fef3c7';
 
 export default function BuildingMaintenanceWorkflow({ user }) {
@@ -13,7 +39,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
   const [sites,setSites] = useState([]);
   const [requests,setRequests] = useState([]);
   const [employees,setEmployees] = useState([]);
-  const [contractors,setContractors] = useState([]);
+  const [contractors,setContractors] = useState([]);\n  const [contacts,setContacts] = useState([]);\n  const [contactForm,setContactForm] = useState(blankContact);\n  const [editingContact,setEditingContact] = useState(null);\n  const [emailFileName,setEmailFileName] = useState('');\n  const [emailIssues,setEmailIssues] = useState([]);\n  const [emailText,setEmailText] = useState('');
   const [assign,setAssign] = useState({});
   const [finance,setFinance] = useState({});
   const [audit,setAudit] = useState({});
@@ -46,6 +72,35 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     const q=query.trim().toLowerCase();
     return requests.filter(r => !q || [r.request_no,r.site,r.category,r.requester_name,r.executor_name,r.status,r.description].some(v=>String(v||'').toLowerCase().includes(q)));
   },[requests,query]);
+  const readEmailFile = async e => {
+    const file=e.target.files?.[0]; if(!file) return;
+    setError(''); setMessage(''); setBusy(true);
+    try {
+      const raw=await file.text();
+      const parsed=parseMaintenanceEmail(raw);
+      setEmailFileName(file.name); setEmailText(parsed.text); setEmailIssues(parsed.issues);
+      if(!parsed.issues.length) setError('No maintenance issue was detected. Please check the email file.');
+      else setMessage('Email read. Review the detected issues below before creating tickets. / تمت قراءة البريد؛ راجع الأعطال المكتشفة قبل إنشاء التذاكر.');
+    } catch(err) { setError('Could not read this email file. Please use .eml, .txt or .html. / تعذرت قراءة الملف.'); }
+    finally { setBusy(false); e.target.value=''; }
+  };
+  const createDetectedTickets = async () => {
+    if(!emailIssues.length) return;
+    if(!form.site) { setError('Select the site / اختر الموقع أولاً.'); return; }
+    setBusy(true); setError(''); setMessage('');
+    const created=[];
+    try {
+      for(const issue of emailIssues) {
+        const res=await api.post('/maintenance-requests',{city:form.city,site:form.site,category:issue.category,priority:issue.priority,description:issue.description+'\\n\\nSource email: '+emailFileName});
+        created.push(res.data.request?.request_no||'');
+      }
+      setMessage('Created '+created.length+' tickets: '+created.filter(Boolean).join(', ')+'. / تم إنشاء '+created.length+' تذاكر من البريد.');
+      setEmailIssues([]); setEmailText(''); setEmailFileName(''); await load();
+    } catch(err) {
+      setError('Some tickets may have been created: '+created.filter(Boolean).join(', ')+'. '+(err.response?.data?.error||err.message));
+      await load();
+    } finally { setBusy(false); }
+  };
   const submit = async e => {
     e.preventDefault(); setBusy(true); setError(''); setMessage('');
     try {
@@ -177,6 +232,29 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       <div style={{marginTop:12,fontSize:13,color:'#64748b'}}>Requester is recorded from the signed-in ERP account. / يتم تسجيل مقدم الطلب من حساب النظام الحالي.</div>
       <button disabled={busy} className="btn btn-primary" style={{...btn,marginTop:12,background:'#0f766e',color:'#fff'}}>{busy?'Please wait…':'Create request / إنشاء الطلب'}</button>
     </form>
+    <section style={panel}>
+      <h3 style={{marginTop:0}}>📩 Upload maintenance email / رفع بريد الصيانة</h3>
+      <p style={{marginTop:0,fontSize:13,color:'#64748b'}}>Upload an Outlook email saved as .eml, or a .txt/.html email file. The page detects likely faults and proposes a separate ticket for each one. Review the results before creating tickets. / ارفع البريد بصيغة EML أو TXT أو HTML؛ يحاول النظام تحديد كل عطل وإنشاء تذكرة مستقلة له بعد مراجعتك.</p>
+      <input type="file" accept=".eml,.txt,.html,.htm,text/plain,text/html,message/rfc822" onChange={readEmailFile} disabled={busy} style={{maxWidth:'100%'}}/>
+      {emailFileName&&<div style={{marginTop:8,fontSize:13}}>Selected file / الملف: <b>{emailFileName}</b></div>}
+      {emailIssues.length>0&&<>
+        <div style={{marginTop:12,padding:10,background:'#f8fafc',borderRadius:8,fontSize:13}}>First choose the City and Site in the request form below. These values will apply to all tickets created from this email. / اختر المدينة والموقع في نموذج الطلب أدناه قبل إنشاء التذاكر.</div>
+        <h4>Detected issues / الأعطال المكتشفة ({emailIssues.length})</h4>
+        <div style={{display:'grid',gap:10}}>
+          {emailIssues.map((issue,i)=><div key={i} style={{border:'1px solid #cbd5e1',borderRadius:8,padding:10,display:'grid',gap:8}}>
+            <b>Issue {i+1} / العطل {i+1}</b>
+            <label style={field}>Description / وصف العطل<textarea style={{...control,minHeight:65}} value={issue.description} onChange={e=>setEmailIssues(p=>p.map((x,j)=>j===i?{...x,description:e.target.value}:x))}/></label>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:8}}>
+              <label style={field}>Category / التصنيف<select style={control} value={issue.category} onChange={e=>setEmailIssues(p=>p.map((x,j)=>j===i?{...x,category:e.target.value}:x))}>{['General Maintenance','Electrical','Plumbing & Water','A/C & HVAC','Doors, Locks & Windows','Civil & Building','Furniture & Facilities','Other'].map(x=><option key={x}>{x}</option>)}</select></label>
+              <label style={field}>Priority / الأولوية<select style={control} value={issue.priority} onChange={e=>setEmailIssues(p=>p.map((x,j)=>j===i?{...x,priority:e.target.value}:x))}>{['Low','Medium','High','Critical'].map(x=><option key={x}>{x}</option>)}</select></label>
+              <div style={{display:'flex',alignItems:'end'}}><button type="button" style={{...btn,background:'#fee2e2',color:'#991b1b'}} onClick={()=>setEmailIssues(p=>p.filter((_,j)=>j!==i))}>Remove issue / حذف العطل</button></div>
+            </div>
+          </div>)}
+        </div>
+        <button type="button" disabled={busy||!emailIssues.length} onClick={createDetectedTickets} style={{...btn,background:'#0f766e',color:'#fff',marginTop:12}}>Create {emailIssues.length} tickets / إنشاء التذاكر</button>
+      </>}
+      {emailText&&<details style={{marginTop:12}}><summary>View extracted email text / عرض نص البريد المستخرج</summary><pre style={{whiteSpace:'pre-wrap',fontSize:12,maxHeight:260,overflow:'auto'}}>{emailText}</pre></details>}
+    </section>
     <section style={panel}>
       <div style={{display:'flex',justifyContent:'space-between',gap:12,alignItems:'center',flexWrap:'wrap'}}>
         <div><h3 style={{margin:'0 0 4px'}}>📋 Maintenance Register / سجل طلبات الصيانة</h3><div style={{fontSize:13,color:'#64748b'}}>Search tickets, assign executor, check history and follow closure.</div></div>

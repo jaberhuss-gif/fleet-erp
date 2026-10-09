@@ -441,8 +441,8 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     <div style={{...panel,background:'linear-gradient(120deg,#0f766e,#12304a)',color:'#fff'}}>
       <div style={{fontSize:12,letterSpacing:1,opacity:.85}}>BUILDING MAINTENANCE • INTAKE & DISPATCH</div>
       <h2 style={{margin:'5px 0 8px'}}>📨 Maintenance Intake & Dispatch</h2>
-      <div>Receive → Assign → Acknowledge → Repair → Requester confirmation → Final closure</div>
-      <div dir="rtl" style={{marginTop:5}}>استقبال الطلب ← تعيين المنفذ ← تأكيد الاستلام ← الإصلاح ← تأكيد مقدم الطلب ← الإغلاق النهائي</div>
+      <div>Receive → Assign → Repair → Campus confirmation → Final closure</div>
+      <div dir="rtl" style={{marginTop:5}}>استقبال الطلب ← تعيين المنفذ ← الإصلاح ← تأكيد الكامب ← الإغلاق النهائي</div>
     </div>
     <nav aria-label="Building maintenance pages" style={{...panel,display:'flex',gap:8,flexWrap:'wrap',padding:10}}>
       <button type="button" onClick={()=>setSubPage('workflow')} style={{...btn,background:subPage==='workflow'?'#0f766e':'#f1f5f9',color:subPage==='workflow'?'#fff':'#0f172a'}}>📨 Maintenance Intake & Dispatch / استقبال وتوزيع الصيانة</button>
@@ -584,7 +584,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
             {r.work_order_id&&<div style={{marginTop:12,padding:10,background:'#f8fafc',borderRadius:8}}>
               <b>Workflow / مراحل الطلب</b>
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:6,marginTop:8}}>
-                {[['1. Report / الطلب',true],['2. Assigned / التعيين',!!r.work_order_id],['3. Acknowledged / الاستلام',!!r.acknowledged_at],['4. Completed / الإصلاح',!!r.completed_at],['5. Requester confirmed / تأكيد الكامب',!!r.requester_confirmed_at]].map(([t,ok])=><div key={t} style={{padding:8,borderRadius:7,textAlign:'center',fontSize:12,background:ok?'#dcfce7':'#f1f5f9',color:ok?'#166534':'#475569'}}>{ok?'✓':'○'} {t}</div>)}
+                {[['1. Report / الطلب',true],['2. Assigned / التعيين',!!r.work_order_id],['3. Completed / الإصلاح',!!r.completed_at],['4. Campus confirmed / تأكيد الكامب',!!r.requester_confirmed_at]].map(([t,ok])=><div key={t} style={{padding:8,borderRadius:7,textAlign:'center',fontSize:12,background:ok?'#dcfce7':'#f1f5f9',color:ok?'#166534':'#475569'}}>{ok?'✓':'○'} {t}</div>)}
               </div>
               <div style={{fontSize:13,marginTop:8}}>Executor / المنفذ: <b>{r.executor_name||'-'}</b> · Work Order: #{r.work_order_id}</div>
               {r.status==='Assigned'&&!r.acknowledged_at&&<button style={{...btn,marginTop:8}} onClick={()=>resend(r.id)}>Prepare assignment email / تجهيز بريد التعيين</button>}

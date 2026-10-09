@@ -8,31 +8,25 @@ const num = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const UNIT = "(?:L\\.m|L\\.s|m2|m3|Pcs|Pc|Kg|Set|Nos?|m)";
-const ITEM_RE = new RegExp(
-  "(?:^|\\s)(\\d+)\\s+(.+?)\\s+" + UNIT +
-  "\\s+([0-9][0-9,]*(?:\\.[0-9]+)?)\\s+([0-9][0-9,]*(?:\\.[0-9]+)?)\\s+([0-9][0-9,]*(?:\\.[0-9]+)?)(?=\\s+\\d+\\s+|$)",
-  "gi"
-);
-
 function parseItems(text) {
-  const flat = clean(text).replace(/\\u00a0/g, " ");
+  const flat = String(text || "").replace(/\\u00a0/g, " ").replace(/\\s+/g, " ").trim();
   const items = [];
+  // Table layout: total incl. VAT, net after discount, discount %, unit price,
+  // quantity, location, item name, item number, row number.
+  const row = /([0-9][0-9,]*\\.[0-9]{2})\\s+([0-9][0-9,]*\\.[0-9]{2})\\s+([0-9][0-9,]*\\.[0-9]{2})\\s+([0-9][0-9,]*\\.[0-9]{2})\\s+(\\d+)\\s+([A-Za-z][A-Za-z0-9_-]*)\\s+(.+?)\\s+(\\d+)\\s+(\\d+)(?=\\s+[0-9][0-9,]*\\.[0-9]{2}\\s+[0-9][0-9,]*\\.[0-9]{2}\\s+[0-9][0-9,]*\\.[0-9]{2}\\s+[0-9][0-9,]*\\.[0-9]{2}\\s+\\d+\\s+[A-Za-z]|$)/g;
   let m;
-  while ((m = ITEM_RE.exec(flat))) {
-    const full = m[0].trim();
-    const parts = full.match(new RegExp(
-      "^\\d+\\s+(.+?)\\s+(" + UNIT + ")\\s+([0-9][0-9,]*(?:\\.[0-9]+)?)\\s+([0-9][0-9,]*(?:\\.[0-9]+)?)\\s+([0-9][0-9,]*(?:\\.[0-9]+)?)$",
-      "i"
-    ));
-    if (!parts) continue;
+  while ((m = row.exec(flat))) {
     items.push({
-      sr_no: Number(m[1]),
-      item: clean(parts[1]),
-      unit: clean(parts[2]),
-      quantity: num(parts[3]),
-      price: num(parts[4]),
-      pdf_cost: num(parts[5])
+      total_with_vat: num(m[1]),
+      net_amount: num(m[2]),
+      discount_percent: num(m[3]),
+      price: num(m[4]),
+      quantity: num(m[5]),
+      location: clean(m[6]),
+      item: clean(m[7]),
+      item_no: clean(m[8]),
+      sr_no: Number(m[9]),
+      unit: ""
     });
   }
   return items;
@@ -124,6 +118,16 @@ export function mountPdfProjectImport(app) {
         await client.query(`
           ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS price NUMERIC DEFAULT 0;
           ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS cost NUMERIC DEFAULT 0;
+          ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS item_no TEXT DEFAULT '';
+          ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS location TEXT DEFAULT '';
+          ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0;
+          ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS net_amount NUMERIC DEFAULT 0;
+          ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS total_with_vat NUMERIC DEFAULT 0;
+          ALTER TABLE project_items ADD COLUMN IF NOT EXISTS item_no TEXT DEFAULT '';
+          ALTER TABLE project_items ADD COLUMN IF NOT EXISTS location TEXT DEFAULT '';
+          ALTER TABLE project_items ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0;
+          ALTER TABLE project_items ADD COLUMN IF NOT EXISTS net_amount NUMERIC DEFAULT 0;
+          ALTER TABLE project_items ADD COLUMN IF NOT EXISTS total_with_vat NUMERIC DEFAULT 0;
           ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS project_id INTEGER;
         `);
 
@@ -163,18 +167,18 @@ export function mountPdfProjectImport(app) {
         for (const x of r.items) {
           const pi = await client.query(`
             INSERT INTO project_items
-              (project_id,sr_no,item,unit,quantity,price,cost,section,status,actual_amount,notes)
-            VALUES ($1,$2,$3,$4,$5,$6,0,'PDF','Not Started',0,'')
+              (project_id,sr_no,item,unit,quantity,price,cost,section,status,actual_amount,notes,item_no,location,discount_percent,net_amount,total_with_vat)
+            VALUES ($1,$2,$3,$4,$5,$6,0,'PDF','Not Started',0,'',$7,$8,$9,$10,$11)
             RETURNING *
-          `, [project.id, String(x.sr_no), x.item, x.unit, x.quantity, x.price]);
+          `, [project.id, String(x.sr_no), x.item, x.unit, x.quantity, x.price, x.item_no || "", x.location || "", x.discount_percent || 0, x.net_amount || 0, x.total_with_vat || 0]);
           projectItems.push(pi.rows[0]);
 
           const wi = await client.query(`
             INSERT INTO work_order_items
-              (work_order_id,sr_no,item,unit,quantity,price,cost)
-            VALUES ($1,$2,$3,$4,$5,$6,0)
+              (work_order_id,sr_no,item,unit,quantity,price,cost,item_no,location,discount_percent,net_amount,total_with_vat)
+            VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,$10,$11)
             RETURNING *
-          `, [workOrder.id, String(x.sr_no), x.item, x.unit, x.quantity, x.price]);
+          `, [workOrder.id, String(x.sr_no), x.item, x.unit, x.quantity, x.price, x.item_no || "", x.location || "", x.discount_percent || 0, x.net_amount || 0, x.total_with_vat || 0]);
           workOrderItems.push(wi.rows[0]);
         }
 

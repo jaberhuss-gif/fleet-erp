@@ -599,7 +599,7 @@ if (action === "close" && amount !== null && (!Number.isFinite(amount) || amount
       if(!row || row.completion_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid completion link</h2>");
       res.set("Cache-Control","no-store, no-cache, must-revalidate, private");
       if(!row.work_order_id) return res.status(400).send("<h2>Work Order is not assigned yet.</h2>");
-      if(row.status !== "Acknowledged" || !row.acknowledged_at) return res.status(409).send("<h2>Work must be acknowledged before it can be completed.</h2>");
+      if(!["Assigned","Acknowledged"].includes(row.status)) return res.status(409).send("<h2>This request is not available for completion.</h2>");
       if(row.completed_at || row.status==="Awaiting Confirmation" || row.status==="Operationally Completed") {
         return res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>✅ Work Already Reported Completed</h2><p><b>Request:</b> ${row.request_no}</p><p>This work has already been reported as completed.</p></body></html>`);
       }
@@ -613,7 +613,7 @@ if (action === "close" && amount !== null && (!Number.isFinite(amount) || amount
       const row=await getRequestByToken(req.params.token);
       if(!row || row.completion_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid completion link</h2>");
       if(!row.work_order_id) return res.status(400).send("<h2>Work Order is not assigned yet.</h2>");
-      if(row.status !== "Acknowledged" || !row.acknowledged_at) return res.status(409).send("<h2>Work must be acknowledged before it can be completed.</h2>");
+      if(!["Assigned","Acknowledged"].includes(row.status)) return res.status(409).send("<h2>This request is not available for completion.</h2>");
       if(row.completed_at || row.status==="Awaiting Confirmation" || row.status==="Operationally Completed") {
         return res.send("<html><body style='font-family:Arial;padding:40px'><h2>✅ Work Already Reported Completed</h2><p>This work has already been reported as completed.</p></body></html>");
       }

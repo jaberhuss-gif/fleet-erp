@@ -178,10 +178,7 @@ export default function WorkOrders({ user, access = {} }) {
             {showForm ? 'Cancel' : '+ New Work Order'}
           </button>
           <ExcelImportButton endpoint="/work-orders" kind="home-maintenance" onImported={load} label="Import Excel" />
-          <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" style={{ display: 'none' }} onChange={handlePdfSelected} />
-          <button className="btn btn-warning" disabled={pdfLoading} onClick={() => pdfInputRef.current?.click()}>
-            {pdfLoading ? 'Reading PDF...' : 'Import PDF'}
-          </button>
+          <ExcelImportButton kind="home-maintenance" onImported={load} label="Import CSV" accept=".csv,text/csv" />
         </>}
       </div>
 

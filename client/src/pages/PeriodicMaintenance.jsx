@@ -946,6 +946,48 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
     return <span className="status-badge status-warning">Pending</span>;
   };
 
+  const printCompletedAnnualPdf = () => {
+    const esc = (value) => String(value ?? '-')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    const completedRows = records
+      .filter(r => r.type === 'inspection' && r.status === 'Completed' && r.completed_date)
+      .sort((a, b) => {
+        const da = new Date(a.completed_date).getTime();
+        const db = new Date(b.completed_date).getTime();
+        return db - da || Number(b.id || 0) - Number(a.id || 0);
+      });
+    const rows = completedRows.map(rec => {
+      const v = vehicleById[String(rec.vehicle_id)] || {};
+      const plate = rec.vehicle_plate || v.plate || v.plate_number || '-';
+      const due = getNextAnnualDueDate(rec);
+      return '<tr><td>' + esc(plate) + '</td><td>' + esc(rec.vehicle_location || v.location || '-') +
+        '</td><td>' + esc(rec.driver_name || v.driver || '-') +
+        '</td><td>' + esc(String(rec.completed_date).slice(0, 10)) +
+        '</td><td>' + esc(due || '—') + '</td><td>' + esc(rec.technician || '-') +
+        '</td><td>' + esc(rec.notes || '-') + '</td></tr>';
+    }).join('');
+    const w = window.open('', '_blank', 'width=1200,height=800');
+    if (!w) { setError('Please allow pop-ups to print the completed annual inspections PDF.'); return; }
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Completed Annual Inspections</title><style>' +
+      '@page{size:A4 landscape;margin:12mm}body{font-family:Arial,sans-serif;color:#172033;font-size:9pt}' +
+      '.brand{display:flex;align-items:center;gap:14px;border-bottom:2px solid #1e3a8a;padding-bottom:10px;margin-bottom:14px}' +
+      '.brand img{max-height:58px;max-width:150px;object-fit:contain}h1{font-size:18pt;margin:0 0 5px}' +
+      '.sub{color:#475569;font-size:9pt}.meta{margin:10px 0 14px;color:#475569}' +
+      'table{width:100%;border-collapse:collapse;table-layout:fixed}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}' +
+      'th,td{border:1px solid #94a3b8;padding:6px;text-align:left;vertical-align:top;overflow-wrap:anywhere;line-height:1.25}' +
+      'th{background:#e9eef5;font-weight:700}footer{margin-top:20px;border-top:1px solid #cbd5e1;padding-top:8px;color:#475569}' +
+      '</style></head><body><div class="brand"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Company logo"><div><h1>Completed Annual Inspections</h1>' +
+      '<div class="sub">Maaden Ivanhoe Electric Exploration and Development Limited Company</div></div></div>' +
+      '<div class="meta">Generated: ' + esc(new Date().toLocaleString()) + ' · Total completed inspections: ' + completedRows.length + '</div>' +
+      '<table><thead><tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Completed Date</th><th>Next Due Date</th><th>Technician</th><th>Notes</th></tr></thead><tbody>' +
+      (rows || '<tr><td colspan="7">No completed annual inspections recorded.</td></tr>') +
+      '</tbody></table><footer>Fleet Manager / General Maintenance Supervisor — Hussein Anwar</footer></body></html>');
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 300);
+  };
+
   const reopenInspection = async (rec) => {
     if (!canWork || !rec?.id) return;
     if (!confirm('Reopen this annual inspection and return it to Not Inspected?')) return;
@@ -1060,7 +1102,10 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
                 <h2 style={{margin:0}}>✓ Completed Annual Inspections ({completedRows.length})</h2>
                 <div style={{marginTop:5,color:'#64748b'}}>Completed inspections stay in the system. The completion date and next due date are shown here. Reopen returns the record to Not Inspected.</div>
               </div>
-              <button className="btn" onClick={load}>↻ Refresh</button>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                <button className="btn btn-primary" onClick={printCompletedAnnualPdf}>📄 PDF</button>
+                <button className="btn" onClick={load}>↻ Refresh</button>
+              </div>
             </div>
             <table className="periodic-maintenance-screen-table">
               <thead>

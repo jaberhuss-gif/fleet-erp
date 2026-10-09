@@ -194,7 +194,7 @@ export default function TireManagement({ user, driverMode=false }) {
           {!driverMode && user?.role==='Owner' && <option value="__ALL_VEHICLES__">📚 All Vehicles — Open All Submitted Surveys PDF</option>}
           {vehicles.map(v=><option key={v.id} value={v.id}>{vehicleLabel(v)}</option>)}
         </select>
-        {!driverMode && user?.role==='Owner' && }
+        {!driverMode && user?.role==='Owner' && <button className="btn btn-primary" onClick={openAllSurveyPdf}>📚 All Submitted Surveys PDF</button>}
       </div>
       {vehicle && data?.survey && <div style={{marginTop:10}}>
         <strong>Initial Survey:</strong> <Badge status={['APPROVED','LOCKED'].includes(String(data.survey.status||'').toUpperCase())?'green':'yellow'} />

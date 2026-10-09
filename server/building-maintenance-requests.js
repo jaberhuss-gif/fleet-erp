@@ -227,6 +227,73 @@ async function notifyRequesterReady(reqRow) {
 export function contractorOptions() { return CONTRACTORS; }
 
 export function mountBuildingMaintenanceRequestRoutes(app) {
+  app.get("/api/maintenance-requests/config/contacts", async (req,res) => {
+    try {
+      await ensureSchema();
+      await query(`
+        CREATE TABLE IF NOT EXISTS maintenance_workflow_contacts (
+          id BIGSERIAL PRIMARY KEY,
+          contact_role TEXT NOT NULL,
+          full_name TEXT NOT NULL,
+          city TEXT,
+          site TEXT,
+          work_type TEXT,
+          email TEXT,
+          phone TEXT,
+          whatsapp TEXT,
+          notes TEXT,
+          active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      const r=await query("SELECT * FROM maintenance_workflow_contacts ORDER BY active DESC, contact_role, full_name");
+      res.json({success:true,contacts:r.rows});
+    } catch(e){res.status(500).json({success:false,error:e.message});}
+  });
+
+  app.post("/api/maintenance-requests/config/contacts", async (req,res) => {
+    try {
+      await ensureSchema();
+      await query(`
+        CREATE TABLE IF NOT EXISTS maintenance_workflow_contacts (
+          id BIGSERIAL PRIMARY KEY,
+          contact_role TEXT NOT NULL,
+          full_name TEXT NOT NULL,
+          city TEXT,
+          site TEXT,
+          work_type TEXT,
+          email TEXT,
+          phone TEXT,
+          whatsapp TEXT,
+          notes TEXT,
+          active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      const d=req.body||{};
+      const role=clean(d.contact_role), name=clean(d.full_name);
+      if(!role||!name) return res.status(400).json({success:false,error:"Role and full name are required / المسمى والاسم مطلوبان"});
+      const values=[role,name,clean(d.city),clean(d.site),clean(d.work_type),clean(d.email),clean(d.phone),clean(d.whatsapp),clean(d.notes),d.active!==false];
+      let r;
+      if(d.id) {
+        r=await query(`UPDATE maintenance_workflow_contacts SET contact_role=$1,full_name=$2,city=$3,site=$4,work_type=$5,email=$6,phone=$7,whatsapp=$8,notes=$9,active=$10,updated_at=CURRENT_TIMESTAMP WHERE id=$11 RETURNING *`,[...values,d.id]);
+      } else {
+        r=await query(`INSERT INTO maintenance_workflow_contacts(contact_role,full_name,city,site,work_type,email,phone,whatsapp,notes,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,values);
+      }
+      res.status(d.id?200:201).json({success:true,contact:r.rows[0]});
+    } catch(e){res.status(400).json({success:false,error:e.message});}
+  });
+
+  app.delete("/api/maintenance-requests/config/contacts/:id", async (req,res) => {
+    try {
+      await ensureSchema();
+      await query("DELETE FROM maintenance_workflow_contacts WHERE id=$1",[req.params.id]);
+      res.json({success:true});
+    } catch(e){res.status(400).json({success:false,error:e.message});}
+  });
+
   app.post("/api/maintenance-requests", async (req, res) => {
     try {
       await ensureSchema();

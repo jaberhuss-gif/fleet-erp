@@ -177,11 +177,25 @@ export default function TireManagement({ user, driverMode=false }) {
     </div>
 
     <div className="panel" style={{marginBottom:16}}>
-      <label>Vehicle</label>
-      <select value={vehicleId} onChange={e=>setVehicleId(e.target.value)} style={{maxWidth:500}}>
-        <option value="">-- Select vehicle --</option>
-        {vehicles.map(v=><option key={v.id} value={v.id}>{vehicleLabel(v)}</option>)}
-      </select>
+      <label>Vehicle / Report Mode</label>
+      <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+        <select value={vehicleId} onChange={e=>{
+          const selected=e.target.value;
+          if(selected==='__ALL_VEHICLES__'){
+            setVehicleId('');
+            setData(null);
+            if(user?.role==='Owner' && !driverMode) openAllSurveyPdf();
+            else setError('All Vehicles report is available to Owner only.');
+            return;
+          }
+          setVehicleId(selected);
+        }} style={{maxWidth:500}}>
+          <option value="">-- Select vehicle --</option>
+          {!driverMode && user?.role==='Owner' && <option value="__ALL_VEHICLES__">📚 All Vehicles — Open All Submitted Surveys PDF</option>}
+          {vehicles.map(v=><option key={v.id} value={v.id}>{vehicleLabel(v)}</option>)}
+        </select>
+        {!driverMode && user?.role==='Owner' && }
+      </div>
       {vehicle && data?.survey && <div style={{marginTop:10}}>
         <strong>Initial Survey:</strong> <Badge status={['APPROVED','LOCKED'].includes(String(data.survey.status||'').toUpperCase())?'green':'yellow'} />
         {data.survey.submitted_at && <span style={{marginLeft:8,color:'#64748b'}}>Submitted {new Date(data.survey.submitted_at).toLocaleString()}</span>}

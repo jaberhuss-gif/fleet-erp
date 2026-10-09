@@ -886,6 +886,8 @@ const openInspectionEmail = (group) => {
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
+    const brandHtml = '<div class="brand"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Maaden Ivanhoe Electric JV logo"><div><div style="font-size:12pt;font-weight:700">Maaden Ivanhoe Electric Exploration and Development Limited Company</div><div style="font-size:9pt;margin-top:3px">Exploration Phase — Arabian Shield</div><div style="font-size:10pt;font-weight:700;margin-top:5px">Hussein Anwar</div><div style="font-size:8.5pt">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div></div>';
+
     const inspectionMode = ['partial', 'none', 'fully'].includes(subTab);
     let title = 'Vehicle Maintenance';
     let headers = [];

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../api/client';
-import MaintenanceRequest from './MaintenanceRequest';
+import BuildingMaintenanceWorkflow from './BuildingMaintenanceWorkflow';
 
 const monthKey = (value) => {
   if (!value) return '';
@@ -170,7 +170,7 @@ export default function BuildingMaintenance({ user, access = {} }) {
           </div>
           <button className="btn btn-warning" onClick={()=>{setSection(null);resetEntry();setClosing(null);}}>← Back to Building Maintenance</button>
         </div>
-        <MaintenanceRequest user={user} access={access} />
+        <BuildingMaintenanceWorkflow user={user} />
       </div>
     );
   }

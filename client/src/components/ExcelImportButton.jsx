@@ -266,9 +266,13 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
     excelRow:r.excelRow,
     data:Object.fromEntries(fields.map(f => [
       f.key,
-      ['quantity','price','cost','year','currentKm','lastOilKm','oilChangeInterval'].includes(f.key)
-        ? num(r.row[mapping[f.key]])
-        : clean(r.row[mapping[f.key]])
+      // Building Maintenance imports descriptions and quantities only.
+      // Unit price and total cost are entered manually after import; tax is never imported.
+      kind === 'home-maintenance' && ['price','cost'].includes(f.key)
+        ? 0
+        : ['quantity','price','cost','year','currentKm','lastOilKm','oilChangeInterval'].includes(f.key)
+          ? num(r.row[mapping[f.key]])
+          : clean(r.row[mapping[f.key]])
     ]))
   }));
 
@@ -403,7 +407,7 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
           </div>)}
         </div>
         {!isVehicle && <div style={{fontSize:12,color:'#64748b'}}>
-          Price, Cost and Section are read from Excel when present. Status is controlled per item after import; closing adds the actual amount and notes.
+          Only item description, unit and quantity are imported. Enter unit price and total cost manually after import. Tax and discounts are not imported.
         </div>}
         {isVehicle && <div style={{fontSize:12,color:'#64748b'}}>
           Vehicle Location is taken only from the selected Master Site. It is never read from free-text Excel location data.
@@ -418,7 +422,7 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
           <thead><tr>
             {isVehicle
               ? <><th>Plate</th><th>Make</th><th>Model</th><th>Driver</th><th>Current KM</th><th>Site</th><th>Status</th></>
-              : <><th>Sr.</th><th>Item</th><th>Unit</th><th>Quantity</th><th>Price</th><th>Cost</th><th>Section</th><th>Status</th></>}
+              : <><th>Sr.</th><th>Item</th><th>Unit</th><th>Quantity</th><th>Price (manual)</th><th>Total (manual)</th><th>Section</th><th>Status</th></>}
           </tr></thead>
           <tbody>
             {mappedRows.slice(0,100).map(r => <tr key={r.excelRow}>

@@ -127,7 +127,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       // Directory contacts are the source of truth. Any active contact with a valid email
       // can be selected as an internal executor unless explicitly classified as Contractor/Vendor.
       const hasEmail = x => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(x.email || '').trim());
-      const toExecutor = x => ({id:'directory-'+x.id, full_name:x.full_name, name:x.full_name, email:String(x.email).trim(), whatsapp:x.whatsapp || '', city:x.city || '', site:x.site || '', work_type:x.work_type || ''});
+      const toExecutor = x => ({id:'directory-'+x.id, full_name:x.full_name, name:x.full_name, email:String(x.email).trim(), whatsapp:x.whatsapp || x.phone || '', phone:x.phone || '', city:x.city || '', site:x.site || '', work_type:x.work_type || ''});
       const configuredEmployees = savedContacts.filter(x => x.active !== false && !/Contractor|Vendor/i.test(x.contact_role || '') && hasEmail(x)).map(toExecutor);
       const configuredContractors = savedContacts.filter(x => x.active !== false && /Contractor|Vendor/i.test(x.contact_role || '') && hasEmail(x)).map(toExecutor);
       setEmployees(configuredEmployees);

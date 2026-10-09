@@ -285,8 +285,8 @@ export default function BuildingMaintenance({ user, access = {} }) {
               {pdfPreview.valid === false && <div className="alert alert-error">The PDF needs review before importing. {(pdfPreview.warnings||[]).join(' ')}</div>}
               {(pdfPreview.items || []).length > 0 ? <div style={{overflowX:'auto'}}>
                 <table className="data-table" style={{width:'100%'}}>
-                  <thead><tr><th>Sr.</th><th>Item / Description</th><th>Unit</th><th>Qty</th><th>Reference Price</th><th>Final Cost</th><th>Status</th></tr></thead>
-                  <tbody>{pdfPreview.items.map((item,i)=><tr key={item.sr_no||i}><td>{item.sr_no||i+1}</td><td>{item.item||item.description||''}</td><td>{item.unit||''}</td><td>{item.quantity??''}</td><td>{item.price??''}</td><td>0</td><td>Open</td></tr>)}</tbody>
+                  <thead><tr><th>#</th><th>Item No.</th><th>Item Name</th><th>Location</th><th>Qty</th><th>Unit Price</th><th>Discount %</th><th>Net After Discount</th><th>Total incl. VAT</th><th>Actual Cost</th><th>Status</th></tr></thead>
+                  <tbody>{pdfPreview.items.map((item,i)=><tr key={item.sr_no||i}><td>{item.sr_no||i+1}</td><td>{item.item_no||''}</td><td>{item.item||item.description||''}</td><td>{item.location||''}</td><td>{item.quantity??''}</td><td>{item.price??''}</td><td>{item.discount_percent??0}</td><td>{item.net_amount??''}</td><td>{item.total_with_vat??''}</td><td>0</td><td>Open</td></tr>)}</tbody>
                 </table>
               </div> : <div className="alert alert-error">No line items were detected. Do not confirm this import.</div>}
               <div className="btn-row" style={{marginTop:16}}>

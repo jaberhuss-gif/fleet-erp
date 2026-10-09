@@ -66,7 +66,7 @@ const writeLog = (user, action, entityType, entityId, details) => {
 export default function App() {
   const [user, setUser] = useState(null);
   const [access, setAccess] = useState(null);
-  const [tab, setTab] = useState('gm');
+  const [tab, setTab] = useState('fleet');
   const [fleetGroup, setFleetGroup] = useState('add');
   const [viewingVehicleId, setViewingVehicleId] = useState(null);
   const [ready, setReady] = useState(false);
@@ -166,7 +166,7 @@ export default function App() {
 
   const handleLogin = async (u) => {
     setUser(u);
-    setTab('gm');
+    setTab('fleet');
     setAccess(null);
     await loadAccess(u);
     writeLog(u, 'LOGIN', 'User', u.id, 'Signed in as ' + u.role);
@@ -178,7 +178,7 @@ export default function App() {
     localStorage.removeItem('user');
     setUser(null);
     setAccess(null);
-    setTab('gm');
+    setTab('fleet');
     setViewingVehicleId(null);
   };
 

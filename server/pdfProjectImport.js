@@ -78,8 +78,8 @@ function parseItems(text) {
   // Format A2 — compact JODOUD invoice text where PDF extraction removes
   // spaces between row fields. Require four decimal amount fields plus
   // quantity and location anchors to avoid treating arbitrary text as rows.
-  const compact = source.replace(/[\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/g, "").replace(/\\s+/g, " ");
-  const compactRe = /(?:^|\\s)(\\d{1,3})(\\d{1,4})([A-Za-z][A-Za-z &().,/'-]*?)(\\d{1,4})(auto|[A-Za-z][A-Za-z-]*)\\s*([\\d,]+\\.\\d{2})([\\d,]+\\.\\d{2})([\\d,]+\\.\\d{2})([\\d,]+\\.\\d{2})(?=\\s*\\d{1,3}\\d{1,4}[A-Za-z]|$)/gi;
+  const compact = source.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "").replace(/\s+/g, " ");
+  const compactRe = /(?:^|\s)(\d{1,3})(\d{1,4})([A-Za-z][A-Za-z &().,/'-]*?)(\d{1,4})(auto|[A-Za-z][A-Za-z-]*)\s*([\d,]+\.\d{2})([\d,]+\.\d{2})([\d,]+\.\d{2})([\d,]+\.\d{2})(?=\s*\d{1,3}\d{1,4}[A-Za-z]|$)/gi;
   const compactRows = [];
   let cm;
   while ((cm = compactRe.exec(compact))) {

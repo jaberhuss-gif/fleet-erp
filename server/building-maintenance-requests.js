@@ -289,10 +289,14 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       const confirmationToken = randomUUID();
       const acknowledgementToken = randomUUID();
       const result = await query(`
+        WITH next_request AS (
+          SELECT nextval('maintenance_requests_id_seq') AS id
+        )
         INSERT INTO maintenance_requests
-          (request_no, site, city, category, priority, description, requester_user_id, requester_name, requester_email, status, completion_token, confirmation_token, acknowledgement_token)
-        VALUES
-          ('MR-' || LPAD(nextval('maintenance_requests_id_seq')::text, 5, '0'), $1,$2,$3,$4,$5,$6,$7,$8,'New',$9,$10,$11)
+          (id, request_no, site, city, category, priority, description, requester_user_id, requester_name, requester_email, status, completion_token, confirmation_token, acknowledgement_token)
+        SELECT
+          id, 'MR-' || LPAD(id::text, 5, '0'), $1,$2,$3,$4,$5,$6,$7,$8,'New',$9,$10,$11
+        FROM next_request
         RETURNING *
       `, [clean(site), clean(city), clean(category) || "General Maintenance", clean(priority) || "Medium", clean(description), req.user?.id || null, requesterName, requesterEmail, token, confirmationToken, acknowledgementToken]);
       const row = result.rows[0];

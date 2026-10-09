@@ -1275,6 +1275,7 @@ function tireSurveyReportHtml(records, title) {
   '.notes{font-size:7px;margin-top:4px}' +
   '.report-footer{flex:0 0 auto;margin-top:4mm;padding-top:2mm;border-top:1px solid #ccc;text-align:right;font-size:6.5px;line-height:1.35;color:#555}' +
   '</style></head><body>' +
+  '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:3px solid #1e3a8a;padding:0 0 12px;margin:0 0 16px;page-break-inside:avoid"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Ivanhoe Electric and Maaden" style="width:175px;max-height:78px;object-fit:contain"><div style="flex:1;text-align:right;font-family:Arial,sans-serif"><div style="font-size:15px;font-weight:700;color:#1e3a8a">Maaden Ivanhoe Electric Exploration and Development Limited Company</div><div style="font-size:10px;color:#475569;margin-top:3px">Exploration Phase — Arabian Shield</div><div style="font-size:12px;font-weight:700;margin-top:7px;color:#111827">Hussein Anwar</div><div style="font-size:10px;color:#475569;margin-top:2px">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div></div>' +
   '<div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div>' +
   pages +
   '<script>window.addEventListener("load",()=>setTimeout(()=>window.print(),500));</script>' +

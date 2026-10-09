@@ -354,6 +354,9 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       if(!site || !description) return res.status(400).json({success:false,error:"Site and description are required."});
       const before={site:row.site,city:row.city,category:row.category,priority:row.priority,description:row.description};
       const updated=await query(`UPDATE maintenance_requests SET site=$1,city=$2,category=$3,priority=$4,description=$5,updated_at=CURRENT_TIMESTAMP WHERE id=$6 RETURNING *`,[site,city,category,priority,description,row.id]);
+      if(row.work_order_id) {
+        await query(`UPDATE work_orders SET site=$1,category=$2,priority=$3,description=$4 WHERE id=$5`,[site,category,priority,description,row.work_order_id]);
+      }
       const actor=clean(req.user?.full_name||req.user?.username||"Fleet / Building Maintenance");
       await auditEvent(row.id,"REQUEST_EDITED", "Fleet / Building Maintenance", actor, {before,after:{site,city,category,priority,description},status_at_edit:row.status,work_order_id:row.work_order_id});
       res.json({success:true,request:updated.rows[0]});

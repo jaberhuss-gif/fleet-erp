@@ -348,12 +348,17 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       await ensureSchema();
       const row=await getRequest(req.params.id);
       if(!row) return res.status(404).json({success:false,error:"Request not found"});
-      if(row.status!=="New" || row.work_order_id || row.closed_at) return res.status(409).json({success:false,error:"Only new, unassigned requests can be edited."});
+      if(row.archived_at) return res.status(409).json({success:false,error:"Archived requests cannot be edited."});
       const site=clean(req.body?.site), city=clean(req.body?.city), category=clean(req.body?.category)||"General Maintenance";
       const priority=clean(req.body?.priority)||"Medium", description=clean(req.body?.description);
       if(!site || !description) return res.status(400).json({success:false,error:"Site and description are required."});
+      const before={site:row.site,city:row.city,category:row.category,priority:row.priority,description:row.description};
       const updated=await query(`UPDATE maintenance_requests SET site=$1,city=$2,category=$3,priority=$4,description=$5,updated_at=CURRENT_TIMESTAMP WHERE id=$6 RETURNING *`,[site,city,category,priority,description,row.id]);
-      await auditEvent(row.id,"REQUEST_EDITED", "Fleet / Building Maintenance", clean(req.user?.full_name||req.user?.username||"Fleet / Building Maintenance"), {site,category,priority});
+      if(row.work_order_id) {
+        await query(`UPDATE work_orders SET site=$1,category=$2,priority=$3,description=$4 WHERE id=$5`,[site,category,priority,description,row.work_order_id]);
+      }
+      const actor=clean(req.user?.full_name||req.user?.username||"Fleet / Building Maintenance");
+      await auditEvent(row.id,"REQUEST_EDITED", "Fleet / Building Maintenance", actor, {before,after:{site,city,category,priority,description},status_at_edit:row.status,work_order_id:row.work_order_id});
       res.json({success:true,request:updated.rows[0]});
     } catch(e) { res.status(400).json({success:false,error:e.message}); }
   });
@@ -594,7 +599,7 @@ if (action === "close" && amount !== null && (!Number.isFinite(amount) || amount
       if(!row || row.completion_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid completion link</h2>");
       res.set("Cache-Control","no-store, no-cache, must-revalidate, private");
       if(!row.work_order_id) return res.status(400).send("<h2>Work Order is not assigned yet.</h2>");
-      if(row.status !== "Acknowledged" || !row.acknowledged_at) return res.status(409).send("<h2>Work must be acknowledged before it can be completed.</h2>");
+      if(!["Assigned","Acknowledged"].includes(row.status)) return res.status(409).send("<h2>This request is not available for completion.</h2>");
       if(row.completed_at || row.status==="Awaiting Confirmation" || row.status==="Operationally Completed") {
         return res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>✅ Work Already Reported Completed</h2><p><b>Request:</b> ${row.request_no}</p><p>This work has already been reported as completed.</p></body></html>`);
       }
@@ -608,14 +613,14 @@ if (action === "close" && amount !== null && (!Number.isFinite(amount) || amount
       const row=await getRequestByToken(req.params.token);
       if(!row || row.completion_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid completion link</h2>");
       if(!row.work_order_id) return res.status(400).send("<h2>Work Order is not assigned yet.</h2>");
-      if(row.status !== "Acknowledged" || !row.acknowledged_at) return res.status(409).send("<h2>Work must be acknowledged before it can be completed.</h2>");
+      if(!["Assigned","Acknowledged"].includes(row.status)) return res.status(409).send("<h2>This request is not available for completion.</h2>");
       if(row.completed_at || row.status==="Awaiting Confirmation" || row.status==="Operationally Completed") {
         return res.send("<html><body style='font-family:Arial;padding:40px'><h2>✅ Work Already Reported Completed</h2><p>This work has already been reported as completed.</p></body></html>");
       }
       await updateWorkOrder(row.work_order_id,{status:"Awaiting Confirmation",completedDate:new Date()});
       const updated=await query(`UPDATE maintenance_requests SET status='Awaiting Confirmation', completed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING *`,[row.id]);
       await auditEvent(row.id, "WORK_COMPLETED", row.executor_type || "Contractor", row.executor_name, {work_order_id: row.work_order_id});
-      await notifyRequesterReady(updated.rows[0]).catch(()=>{});
+      // Campus notification is prepared manually by Fleet; no automatic email/WhatsApp is sent here.
       res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>✅ Work Completed</h2><p><b>Request:</b> ${row.request_no}</p><p>The requester has been asked to confirm that everything is OK.</p><p>تم تسجيل إكمال العمل وإرسال طلب التأكيد إلى مقدم الطلب.</p></body></html>`);
     } catch(e){res.status(500).send("<h2>Error processing completion</h2>");}
   });
@@ -630,26 +635,44 @@ if (action === "close" && amount !== null && (!Number.isFinite(amount) || amount
       if(row.requester_confirmation) {
         return res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>Maintenance Confirmation Already Recorded</h2><p><b>Request:</b> ${row.request_no}</p><p><b>Answer:</b> ${row.requester_confirmation==="yes" ? "YES — Everything is OK" : "NO — Problem Not Fixed"}</p></body></html>`);
       }
-      res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>🛠️ Building Maintenance — Final Confirmation</h2><p><b>Request:</b> ${row.request_no}</p><p><b>Site:</b> ${row.site || "-"}</p><p><b>Problem:</b><br>${String(row.description || "").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>")}</p><h3>Is the maintenance work satisfactory?</h3><p>هل تم إصلاح المشكلة بشكل كامل؟</p><div style="display:flex;gap:12px;flex-wrap:wrap"><form method="POST" action="/api/maintenance-requests/public/${clean(req.params.token)}/confirm?answer=yes"><input type="hidden" name="answer" value="yes"><button type="submit" style="padding:12px 20px;background:#15803d;color:#fff;border:0;border-radius:7px;font-weight:700">✅ YES — Everything is OK</button></form><form method="POST" action="/api/maintenance-requests/public/${clean(req.params.token)}/confirm?answer=no"><input type="hidden" name="answer" value="no"><button type="submit" style="padding:12px 20px;background:#b91c1c;color:#fff;border:0;border-radius:7px;font-weight:700">❌ NO — Problem Not Fixed</button></form></div></body></html>`);
+      res.send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Campus Maintenance Confirmation</title></head><body style="font-family:Arial,sans-serif;background:#f3f6fa;padding:24px;color:#1f2937"><main style="max-width:680px;margin:auto;background:#fff;padding:28px;border-radius:14px;box-shadow:0 4px 18px #0001"><h2 style="color:#17365d">🏢 Campus Manager — Maintenance Confirmation / تأكيد الكامبوس</h2><p><b>Request / رقم الطلب:</b> ${row.request_no}</p><p><b>Site / الموقع:</b> ${String(row.site||"-").replace(/</g,"&lt;")}</p><p><b>Problem / المشكلة:</b><br>${String(row.description||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>")}</p><hr><p>Please confirm the result of the repair. / يرجى تأكيد نتيجة الصيانة.</p><div style="display:flex;gap:12px;flex-wrap:wrap"><button id="yes" style="padding:13px 18px;background:#15803d;color:#fff;border:0;border-radius:8px;font-weight:700">✅ YES — Fixed / نعم، تم الإصلاح</button><button id="no" style="padding:13px 18px;background:#b91c1c;color:#fff;border:0;border-radius:8px;font-weight:700">❌ NO — Still faulty / لا، المشكلة مستمرة</button></div><p id="result" role="status" style="margin-top:18px"></p><script>
+(function(){
+ const token=${JSON.stringify(clean(req.params.token))};
+ const yes=document.getElementById('yes'), no=document.getElementById('no'), result=document.getElementById('result');
+ function submit(answer){
+   yes.disabled=true; no.disabled=true; result.textContent='Submitting… / جارٍ الحفظ…';
+   // Submit as a normal browser POST so the confirmation page navigates to the
+   // server's final receipt page instead of remaining on the original form.
+   const form=document.createElement('form');
+   form.method='POST';
+   form.action='/api/maintenance-requests/public/'+encodeURIComponent(token)+'/confirm?answer='+answer;
+   const input=document.createElement('input');
+   input.type='hidden'; input.name='answer'; input.value=answer;
+   form.appendChild(input); document.body.appendChild(form); form.submit();
+ }
+ yes.addEventListener('click',()=>submit('yes')); no.addEventListener('click',()=>submit('no'));
+})();
+</script></main></body></html>`);
     } catch(e){res.status(500).send("<h2>Error loading confirmation page</h2>");}
   });
 
   app.post("/api/maintenance-requests/public/:token/confirm", async (req,res) => {
     try {
       await ensureSchema();
+      // The unguessable, per-request confirmation token authorizes this one-time campus response.
       const row=await getRequestByToken(req.params.token);
       const answer=clean(req.body?.answer || req.query?.answer).toLowerCase();
       if(!row || row.confirmation_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid confirmation link</h2>");
       if (row.status !== "Awaiting Confirmation" || !row.completed_at) return res.status(409).send("<h2>This request is not awaiting final confirmation.</h2>");
       if(!["yes","no"].includes(answer)) return res.status(400).send("<h2>Invalid answer</h2>");
-      if(row.requester_confirmation) return res.send("<html><body style='font-family:Arial;padding:40px'><h2>Maintenance Confirmation Already Recorded</h2></body></html>");
+      if(row.requester_confirmation) return res.status(409).json({success:false,error:"Campus confirmation has already been recorded."});
       const status=answer==="yes" ? "Operationally Completed" : "Reopened";
       await query(`UPDATE maintenance_requests SET status=$1, requester_confirmed_at=CURRENT_TIMESTAMP, requester_confirmation=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3`,[status,answer,row.id]);
       if(row.work_order_id){
         await updateWorkOrder(row.work_order_id,{status: answer==="yes" ? "Operationally Completed" : "In Progress"});
         await query(`UPDATE work_orders SET operational_status=$1 WHERE id=$2`,[answer==="yes" ? "Completed" : "In Progress",row.work_order_id]);
       }
-      if(answer==="no") await sendEmail({to:[OWNER_EMAIL],subject:`BUILDING MAINTENANCE — ${row.request_no} NOT FIXED`,html:`<h2>❌ Maintenance needs more work</h2><p><b>${row.request_no}</b> was not confirmed by the requester.</p><p>${row.description}</p>`}).catch(()=>{});
+      await auditEvent(row.id, answer==="yes" ? "CAMPUS_CONFIRMED" : "CAMPUS_REJECTED", "Campus link", "Campus Manager", {answer});
       res.send(answer==="yes"
         ? "<html><body style='font-family:Arial;padding:40px;max-width:720px;margin:auto'><h2>✅ Confirmation Submitted</h2><p>تم تأكيد أن أعمال الصيانة تمت بنجاح.</p><p>You can close this window.</p><p>يمكنك إغلاق هذه الصفحة الآن.</p></body></html>"
         : "<html><body style='font-family:Arial;padding:40px;max-width:720px;margin:auto'><h2>❌ Not Fixed</h2><p>تم إبلاغ إدارة الصيانة بضرورة متابعة العمل.</p><p>You can close this window.</p><p>يمكنك إغلاق هذه الصفحة الآن.</p></body></html>");

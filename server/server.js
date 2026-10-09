@@ -265,7 +265,7 @@ app.use("/api", async (req, res, next) => {
   const requestPath = req.originalUrl.split("?")[0];
   // Tokenized Building Maintenance workflow pages are intentionally public.
   // The token in the URL is the authorization for the specific action.
-  if (requestPath.startsWith("/api/maintenance-requests/public/")) return next();
+  if (requestPath.startsWith("/api/maintenance-requests/public/") && (!requestPath.endsWith("/confirm") || req.method === "GET" || (req.method === "POST" && /^\/api\/maintenance-requests\/public\/[^/]+\/confirm$/.test(requestPath)))) return next();
   if (publicApiPaths.has(requestPath)) return next();
   return requireAuth(req, res, (err) => {
     if (err) return next(err);

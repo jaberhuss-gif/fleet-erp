@@ -38,7 +38,7 @@ const VEHICLE_FIELDS = [
   { key:'oilChangeInterval', label:'Oil Interval', aliases:['oilchangeinterval','interval','oilinterval','فترة الزيت','فاصل الزيت'] }
 ];
 
-export default function ExcelImportButton({ kind, onImported, label='Import Excel' }) {
+export default function ExcelImportButton({ kind, onImported, label='Import Excel', accept={accept} }) {
   const inputRef = useRef(null);
   const isProject = kind === 'projects';
   const isVehicle = kind === 'vehicles';

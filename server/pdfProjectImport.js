@@ -75,6 +75,25 @@ function parseItems(text) {
   }
   if (items.length) return items;
 
+  // Format A2 — compact JODOUD invoice text where PDF extraction removes
+  // spaces between row fields. Require four decimal amount fields plus
+  // quantity and location anchors to avoid treating arbitrary text as rows.
+  const compact = source.replace(/[\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/g, "").replace(/\\s+/g, " ");
+  const compactRe = /(?:^|\\s)(\\d{1,3})(\\d{1,4})([A-Za-z][A-Za-z &().,/'-]*?)(\\d{1,4})(auto|[A-Za-z][A-Za-z-]*)\\s*([\\d,]+\\.\\d{2})([\\d,]+\\.\\d{2})([\\d,]+\\.\\d{2})([\\d,]+\\.\\d{2})(?=\\s*\\d{1,3}\\d{1,4}[A-Za-z]|$)/gi;
+  const compactRows = [];
+  let cm;
+  while ((cm = compactRe.exec(compact))) {
+    const description = clean(cm[3]);
+    if (!description || /^(?:subtotal|total|tax|vat|discount|quantity|item|unit)$/i.test(description)) continue;
+    compactRows.push({
+      sr_no: Number(cm[1]), item_no: clean(cm[2]), item: description, unit: "",
+      quantity: num(cm[4]), price: num(cm[6]), cost: 0, quotation_cost: 0,
+      discount_percent: num(cm[7]), net_amount: num(cm[8]), total_with_vat: num(cm[9]),
+      tax_percent: 15, location: clean(cm[5])
+    });
+  }
+  if (compactRows.length >= 3) return compactRows;
+
   // Format B — Raghad Al-Ofuq:
   // total, discount %, tax %, unit price, quantity, Arabic/English item name, row number.
   // Keep the extracted values as-is for review; do not guess/correct reversed RTL digits.

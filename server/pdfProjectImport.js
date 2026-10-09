@@ -143,7 +143,12 @@ async function parsePdf(req) {
   const parsed = await pdfParse(buffer);
   const text = parsed.text || "";
   const items = parseItems(text);
-  const subject = extractField(text, "Subject") || extractField(text, "Project") || filename.replace(/\.pdf$/i, "");
+  const projectField = extractField(text, "Project");
+  const subjectField = extractField(text, "Subject");
+  const isQuotation = /quotation|offer\s+sr|construction\s+item|electrical\s+item|mechanical\s+item/i.test(text);
+  const subject = isQuotation
+    ? [projectField, subjectField].filter(Boolean).join(" - ") || filename.replace(/\.pdf$/i, "")
+    : subjectField || projectField || filename.replace(/\.pdf$/i, "");
   const site = extractField(text, "(?:Site|Location|Camp|Project Site)");
   const date = extractField(text, "(?:Date|Requested Date|Work Order Date)");
   const requestedBy = extractField(text, "Requested By");
@@ -154,6 +159,7 @@ async function parsePdf(req) {
     site,
     date,
     requestedBy,
+    isQuotation,
     items
   };
 }
@@ -171,6 +177,8 @@ export function mountPdfProjectImport(app) {
         site:r.site,
         date:r.date,
         requestedBy:r.requestedBy,
+        isQuotation:r.isQuotation,
+        warnings:r.isQuotation ? ["Quotation values are estimates. Actual project cost remains 0 until you close the project."] : [],
         items:r.items.map(x => ({...x, cost:0, actual_amount:0, status:"Not Started"}))
       });
     } catch (e) {
@@ -229,20 +237,23 @@ export function mountPdfProjectImport(app) {
         `, [projectName, description, site, safeDate, description]);
         const project = projectResult.rows[0];
 
-        const woResult = await client.query(`
-          INSERT INTO work_orders
-            (wo_no,site,area,category,priority,description,assigned_to,is_contractor,contractor_name,
-             performed_by,status,reported_date,completed_date,final_cost,contractor_cost,labor_cost,
-             parts_cost,closing_notes,parts_used,month,year,project_id)
-          VALUES
-            ('WO-PDF-' || LPAD(nextval('work_orders_id_seq')::text,6,'0'),
-             $1,'','Project','Medium',$2,$3,0,'','',$4,$5::date,NULL,0,0,0,0,'',$6,
-             CASE WHEN $5::date IS NULL THEN NULL ELSE to_char($5::date,'YYYY-MM') END,
-             CASE WHEN $5::date IS NULL THEN NULL ELSE to_char($5::date,'YYYY') END,
-             $7)
-          RETURNING *
-        `, [site, description, r.requestedBy || "", "Open", safeDate, description, project.id]);
-        const workOrder = woResult.rows[0];
+        let workOrder = null;
+        if (!r.isQuotation) {
+          const woResult = await client.query(`
+            INSERT INTO work_orders
+              (wo_no,site,area,category,priority,description,assigned_to,is_contractor,contractor_name,
+               performed_by,status,reported_date,completed_date,final_cost,contractor_cost,labor_cost,
+               parts_cost,closing_notes,parts_used,month,year,project_id)
+            VALUES
+              ('WO-PDF-' || LPAD(nextval('work_orders_id_seq')::text,6,'0'),
+               $1,'','Project','Medium',$2,$3,0,'','',$4,$5::date,NULL,0,0,0,0,'',$6,
+               CASE WHEN $5::date IS NULL THEN NULL ELSE to_char($5::date,'YYYY-MM') END,
+               CASE WHEN $5::date IS NULL THEN NULL ELSE to_char($5::date,'YYYY') END,
+               $7)
+            RETURNING *
+          `, [site, description, r.requestedBy || "", "Open", safeDate, description, project.id]);
+          workOrder = woResult.rows[0];
+        }
 
         const projectItems = [];
         const workOrderItems = [];
@@ -255,13 +266,15 @@ export function mountPdfProjectImport(app) {
           `, [project.id, String(x.sr_no), x.item, x.unit, x.quantity, x.price, x.item_no || "", x.location || "", x.discount_percent || 0, x.tax_percent || 0, x.net_amount || 0, x.total_with_vat || 0]);
           projectItems.push(pi.rows[0]);
 
-          const wi = await client.query(`
-            INSERT INTO work_order_items
-              (work_order_id,sr_no,item,unit,quantity,price,cost,item_no,location,discount_percent,tax_percent,net_amount,total_with_vat)
-            VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,$10,$11,$12)
-            RETURNING *
-          `, [workOrder.id, String(x.sr_no), x.item, x.unit, x.quantity, x.price, x.item_no || "", x.location || "", x.discount_percent || 0, x.tax_percent || 0, x.net_amount || 0, x.total_with_vat || 0]);
-          workOrderItems.push(wi.rows[0]);
+          if (workOrder) {
+            const wi = await client.query(`
+              INSERT INTO work_order_items
+                (work_order_id,sr_no,item,unit,quantity,price,cost,item_no,location,discount_percent,tax_percent,net_amount,total_with_vat)
+              VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,$10,$11,$12)
+              RETURNING *
+            `, [workOrder.id, String(x.sr_no), x.item, x.unit, x.quantity, x.price, x.item_no || "", x.location || "", x.discount_percent || 0, x.tax_percent || 0, x.net_amount || 0, x.total_with_vat || 0]);
+            workOrderItems.push(wi.rows[0]);
+          }
         }
 
         return { project, workOrder, projectItems, workOrderItems };
@@ -269,7 +282,7 @@ export function mountPdfProjectImport(app) {
 
       res.status(201).json({
         success:true,
-        message:"PDF imported. Project and Work Order were created OPEN; no final costs were added.",
+        message:r.isQuotation ? "Quotation imported into Project only; actual project cost remains open for manual closing." : "PDF imported. Project and Work Order were created OPEN; no final costs were added.",
         project:result.project,
         workOrder:result.workOrder,
         projectItems:result.projectItems,

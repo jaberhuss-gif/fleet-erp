@@ -1246,16 +1246,21 @@ function tireSurveyReportHtml(records, title, compactAllVehicles = false) {
     '</section>';
   };
 
-  // The fleet-wide report uses one full A4 page per vehicle so all six tire
-  // photos, tire details, notes, and signatures remain together and readable.
-  // The single-vehicle report continues using this same full-page layout.
-  const pages = records
-    .map(r => '<div class="page">' + card(r) + '</div>')
-    .join("");
+  // Fleet-wide report: compact landscape cards, three vehicles per page.
+  // Each card is kept intact; the single-vehicle report retains its full-page layout.
+  const pages = compactAllVehicles
+    ? Array.from({ length: Math.ceil(records.length / 3) }, (_, pageIndex) =>
+        '<div class="all-surveys-page">' +
+        records.slice(pageIndex * 3, pageIndex * 3 + 3)
+          .map(r => '<div class="vehicle-slot">' + card(r) + '</div>')
+          .join("") +
+        '</div>'
+      ).join("")
+    : records.map(r => '<div class="page">' + card(r) + '</div>').join("");
 
   return '<!doctype html><html><head><meta charset="utf-8"><title>' + escapeHtml(title) + '</title>' +
   '<style>' +
-  '@page{size:A4;margin:10mm}' +
+  '@page{size:A4 '+(compactAllVehicles?'landscape':'portrait')+';margin:7mm}' +
   '*{box-sizing:border-box}' +
   'html,body{margin:0;padding:0}' +
   'body{font-family:Arial,sans-serif;color:#111}' +
@@ -1280,7 +1285,7 @@ function tireSurveyReportHtml(records, title, compactAllVehicles = false) {
   '.notes{font-size:7px;margin-top:4px}' +
   '.report-footer{flex:0 0 auto;margin-top:4mm;padding-top:2mm;border-top:1px solid #ccc;text-align:right;font-size:6.5px;line-height:1.35;color:#555}' +
   (compactAllVehicles ? '.all-surveys-report>div:first-child{display:none}' +
-    '.all-surveys-page{display:grid;grid-template-rows:repeat(3,minmax(0,1fr));gap:2mm;height:277mm;width:190mm;page-break-after:always;break-after:page;overflow:hidden}' +
+    '.all-surveys-page{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2mm;height:196mm;width:283mm;page-break-after:always;break-after:page;overflow:hidden}' +
     '.all-surveys-page:last-of-type{page-break-after:auto;break-after:auto}' +
     '.vehicle-slot{min-height:0;overflow:hidden;break-inside:avoid;page-break-inside:avoid}' +
     '.all-surveys-page .vehicle{height:100%;padding:2mm;border-radius:3px;break-inside:avoid;page-break-inside:avoid}' +
@@ -1293,7 +1298,7 @@ function tireSurveyReportHtml(records, title, compactAllVehicles = false) {
     '.all-surveys-page .tires{grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;margin-top:2px}' +
     '.all-surveys-page .tire{font-size:5.5px;line-height:1.15;padding:2px;min-height:0;overflow-wrap:anywhere}' +
     '.all-surveys-page .photos{grid-template-columns:repeat(6,minmax(0,1fr));gap:2px;margin-top:2px}' +
-    '.all-surveys-page .photos img{height:30px}' +
+    '.all-surveys-page .photos img{height:34px}' +
     '.all-surveys-page .photo-label{font-size:5px}' +
     '.all-surveys-page .notes{font-size:5.5px;margin-top:2px;max-height:14px;overflow:hidden}' +
     '.all-surveys-page .report-footer{margin-top:1mm;padding-top:1mm;font-size:5px;line-height:1.2}' : '') + 

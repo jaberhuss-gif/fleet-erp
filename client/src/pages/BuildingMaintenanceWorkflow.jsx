@@ -270,9 +270,19 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     const x=list.find(v=>(v.name||v.full_name)===name);
     setAssign(p=>({...p,[id]:{...a,name,email:x?.email||'',whatsapp:x?.whatsapp||x?.phone||''}}));
   };
-  // Keep email composition inside the ERP. This prepares an editable draft; sending still requires the company's approved mail system.
+  // Open a prefilled email in the device's configured email app.
+  // The user reviews the message and presses Send in that email app.
   const openOutlookDraft = (to,subject,body) => {
-    setMailDraft({to:String(to||''),subject:String(subject||''),body:String(body||'')});
+    const recipient = String(to || '').trim();
+    if (!recipient) {
+      setError('Recipient email is missing / البريد الإلكتروني للمستلم غير مسجل.');
+      return false;
+    }
+    const mailto = 'mailto:' + encodeURIComponent(recipient)
+      + '?subject=' + encodeURIComponent(String(subject || ''))
+      + '&body=' + encodeURIComponent(String(body || ''));
+    setMailDraft(null);
+    window.location.href = mailto;
     return true;
   };
   const copyMailDraft = async () => {

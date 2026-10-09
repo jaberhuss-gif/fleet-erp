@@ -27,7 +27,9 @@ export default function Login({ onLogin }) {
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <div style={{ background: 'white', borderRadius: '16px', padding: '40px', maxWidth: '420px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-          <h1 style={{ fontSize: '32px', color: '#1e3a8a', margin: 0, fontWeight: '800' }}>Fleet ERP</h1>
+          <img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Maaden and Ivanhoe Electric joint venture logo" style={{ display: 'block', width: '100%', maxWidth: '260px', maxHeight: '105px', objectFit: 'contain', margin: '0 auto 16px' }} />
+          <h1 style={{ fontSize: '30px', color: '#1e3a8a', margin: 0, fontWeight: '800' }}>Fleet ERP</h1>
+          <p style={{ color: '#334155', marginTop: '8px', fontSize: '12px', fontWeight: 700, lineHeight: 1.5 }}>Maaden Ivanhoe Electric Exploration and Development Limited Company</p>
           <p style={{ color: '#64748b', marginTop: '8px', fontSize: '14px' }}>Enterprise Resource Planning System</p>
         </div>
 

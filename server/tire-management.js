@@ -1285,25 +1285,25 @@ function tireSurveyReportHtml(records, title, compactAllVehicles = false) {
   '.notes{font-size:7px;margin-top:4px}' +
   '.report-footer{flex:0 0 auto;margin-top:4mm;padding-top:2mm;border-top:1px solid #ccc;text-align:right;font-size:6.5px;line-height:1.35;color:#555}' +
   (compactAllVehicles ? '@media print{.bulk-report-heading,.toolbar{display:none!important}}' : '') +
-  '.all-surveys-page{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(3,minmax(0,1fr));gap:2mm;height:283mm;width:196mm;page-break-after:always;break-after:page;overflow:hidden;break-inside:avoid;page-break-inside:avoid}'
-  '.all-surveys-page:last-of-type{page-break-after:auto;break-after:auto}'
-  '.vehicle-slot{height:100%;min-height:0;overflow:hidden;break-inside:avoid;page-break-inside:avoid}'
-  '.all-surveys-page .vehicle{height:100%;padding:2mm 3mm;border-radius:3px;break-inside:avoid;page-break-inside:avoid;display:flex;flex-direction:column}'
-  '.all-surveys-page .report-header{gap:2.5mm;padding-bottom:1mm}'
-  '.all-surveys-page .company-logo{width:20mm;height:10mm}'
-  '.all-surveys-page .company-name{font-size:8px;line-height:1.1}'
-  '.all-surveys-page .report-title{font-size:6px;margin-top:0}'
-  '.all-surveys-page .report-body{display:flex;flex-direction:column;min-height:0;overflow:hidden;flex:1}'
-  '.all-surveys-page .vehicle h2{font-size:10px;margin:.8mm 0}'
-  '.all-surveys-page .meta{font-size:6px;line-height:1.15}'
-  '.all-surveys-page .survey-content{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:2mm;min-height:0;flex:1;margin-top:2mm;align-items:start}'
-  '.all-surveys-page .photos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;margin:0;align-content:start}'
-  '.all-surveys-page .photos img{height:48px;object-fit:cover}'
-  '.all-surveys-page .photo-label{font-size:5px;margin-bottom:1px}'
-  '.all-surveys-page .tire-details{display:grid;grid-template-columns:1fr;gap:2px;min-width:0}'
-  '.all-surveys-page .tire{font-size:5.8px;line-height:1.1;padding:2px;min-height:0;overflow-wrap:anywhere}'
-  '.all-surveys-page .notes{font-size:6px;line-height:1.1;margin-top:1.5px;max-height:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}'
-  '.all-surveys-page .report-footer{margin-top:auto;padding-top:1mm;font-size:5.5px;line-height:1.1}' : '') +  +
+  '.all-surveys-page{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(3,minmax(0,1fr));gap:2mm;height:283mm;width:196mm;page-break-after:always;break-after:page;overflow:hidden;break-inside:avoid;page-break-inside:avoid}' +
+  '.all-surveys-page:last-of-type{page-break-after:auto;break-after:auto}' +
+  '.vehicle-slot{height:100%;min-height:0;overflow:hidden;break-inside:avoid;page-break-inside:avoid}' +
+  '.all-surveys-page .vehicle{height:100%;padding:2mm 3mm;border-radius:3px;break-inside:avoid;page-break-inside:avoid;display:flex;flex-direction:column}' +
+  '.all-surveys-page .report-header{gap:2.5mm;padding-bottom:1mm}' +
+  '.all-surveys-page .company-logo{width:20mm;height:10mm}' +
+  '.all-surveys-page .company-name{font-size:8px;line-height:1.1}' +
+  '.all-surveys-page .report-title{font-size:6px;margin-top:0}' +
+  '.all-surveys-page .report-body{display:flex;flex-direction:column;min-height:0;overflow:hidden;flex:1}' +
+  '.all-surveys-page .vehicle h2{font-size:10px;margin:.8mm 0}' +
+  '.all-surveys-page .meta{font-size:6px;line-height:1.15}' +
+  '.all-surveys-page .survey-content{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:2mm;min-height:0;flex:1;margin-top:2mm;align-items:start}' +
+  '.all-surveys-page .photos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;margin:0;align-content:start}' +
+  '.all-surveys-page .photos img{height:48px;object-fit:cover}' +
+  '.all-surveys-page .photo-label{font-size:5px;margin-bottom:1px}' +
+  '.all-surveys-page .tire-details{display:grid;grid-template-columns:1fr;gap:2px;min-width:0}' +
+  '.all-surveys-page .tire{font-size:5.8px;line-height:1.1;padding:2px;min-height:0;overflow-wrap:anywhere}' +
+  '.all-surveys-page .notes{font-size:6px;line-height:1.1;margin-top:1.5px;max-height:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}' +
+  '.all-surveys-page .report-footer{margin-top:auto;padding-top:1mm;font-size:5.5px;line-height:1.1}' +
   '</style></head><body' + (compactAllVehicles ? ' class="all-surveys-report"' : '') + '>' +
   (compactAllVehicles ? '' : '<div class="bulk-report-heading" style="display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:3px solid #1e3a8a;padding:0 0 12px;margin:0 0 16px;page-break-inside:avoid"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Ivanhoe Electric and Maaden" style="width:175px;max-height:78px;object-fit:contain"><div style="flex:1;text-align:right;font-family:Arial,sans-serif"><div style="font-size:15px;font-weight:700;color:#1e3a8a">Maaden Ivanhoe Electric Exploration and Development Limited Company</div><div style="font-size:10px;color:#475569;margin-top:3px">Exploration Phase — Arabian Shield</div><div style="font-size:12px;font-weight:700;margin-top:7px;color:#111827">Hussein Anwar</div><div style="font-size:10px;color:#475569;margin-top:2px">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div></div>' +
   (compactAllVehicles ? '' : '<div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div>') +

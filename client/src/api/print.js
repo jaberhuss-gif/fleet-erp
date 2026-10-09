@@ -24,6 +24,13 @@ export function printContent(title, subtitle) {
         justify-content: space-between;
         align-items: flex-end;
       }
+      .company-brand { display:flex; align-items:center; justify-content:space-between; gap:18px; margin-bottom:16px; padding-bottom:14px; border-bottom:3px solid #1e3a8a; }
+      .company-brand img { width:190px; max-height:85px; object-fit:contain; }
+      .company-brand-copy { flex:1; text-align:right; }
+      .company-brand-copy .company-name { font-size:17px; font-weight:700; color:#1e3a8a; }
+      .company-brand-copy .project-name { font-size:11px; color:#475569; margin-top:4px; }
+      .company-brand-copy .report-owner { font-size:12px; font-weight:700; margin-top:8px; color:#111827; }
+      .company-brand-copy .report-role { font-size:11px; color:#475569; margin-top:2px; }
       .print-header h1 {
         color: #1e3a8a;
         font-size: 26px;
@@ -134,6 +141,15 @@ export function printContent(title, subtitle) {
       ${styles}
     </head>
     <body>
+      <div class="company-brand">
+        <img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Ivanhoe Electric and Maaden logo" />
+        <div class="company-brand-copy">
+          <div class="company-name">Maaden Ivanhoe Electric Exploration and Development Limited Company</div>
+          <div class="project-name">Exploration Phase — Arabian Shield</div>
+          <div class="report-owner">Hussein Anwar</div>
+          <div class="report-role">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div>
+        </div>
+      </div>
       <div class="print-header">
         <div>
           <h1>Fleet &amp; Camp Maintenance ERP</h1>

@@ -9,23 +9,46 @@ const num = (v) => {
 };
 
 function parseItems(text) {
-  const flat = String(text || "").replace(/\\u00a0/g, " ").replace(/\\s+/g, " ").trim();
+  const source = String(text || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[\u200e\u200f\u202a-\u202e]/g, "");
   const items = [];
-  // Table layout: total incl. VAT, net after discount, discount %, unit price,
-  // quantity, location, item name, item number, row number.
-  const row = /([0-9][0-9,]*\\.[0-9]{2})\\s+([0-9][0-9,]*\\.[0-9]{2})\\s+([0-9][0-9,]*\\.[0-9]{2})\\s+([0-9][0-9,]*\\.[0-9]{2})\\s+(\\d+)\\s+([A-Za-z][A-Za-z0-9_-]*)\\s+(.+?)\\s+(\\d+)\\s+(\\d+)(?=\\s+[0-9][0-9,]*\\.[0-9]{2}\\s+[0-9][0-9,]*\\.[0-9]{2}\\s+[0-9][0-9,]*\\.[0-9]{2}\\s+[0-9][0-9,]*\\.[0-9]{2}\\s+\\d+\\s+[A-Za-z]|$)/g;
+
+  // Format A — Jadoud Al-Khaleej:
+  // total incl. VAT, net after discount, discount %, unit price, quantity,
+  // location, item name, item number, row number.
+  const flat = source.replace(/\s+/g, " ").trim();
+  const formatA = /([0-9][0-9,]*\.[0-9]{2})\s+([0-9][0-9,]*\.[0-9]{2})\s+([0-9][0-9,]*\.[0-9]{2})\s+([0-9][0-9,]*\.[0-9]{2})\s+(\d+)\s+([A-Za-z][A-Za-z0-9_-]*)\s+(.+?)\s+(\d+)\s+(\d+)(?=\s+[0-9][0-9,]*\.[0-9]{2}\s+[0-9][0-9,]*\.[0-9]{2}\s+[0-9][0-9,]*\.[0-9]{2}\s+[0-9][0-9,]*\.[0-9]{2}\s+\d+\s+[A-Za-z]|$)/g;
   let m;
-  while ((m = row.exec(flat))) {
+  while ((m = formatA.exec(flat))) {
     items.push({
-      total_with_vat: num(m[1]),
-      net_amount: num(m[2]),
-      discount_percent: num(m[3]),
-      price: num(m[4]),
-      quantity: num(m[5]),
-      location: clean(m[6]),
-      item: clean(m[7]),
-      item_no: clean(m[8]),
-      sr_no: Number(m[9]),
+      total_with_vat: num(m[1]), net_amount: num(m[2]),
+      discount_percent: num(m[3]), tax_percent: 15,
+      price: num(m[4]), quantity: num(m[5]), location: clean(m[6]),
+      item: clean(m[7]), item_no: clean(m[8]), sr_no: Number(m[9]), unit: ""
+    });
+  }
+  if (items.length) return items;
+
+  // Format B — Raghad Al-Ofuq:
+  // total, discount %, tax %, unit price, quantity, Arabic/English item name, row number.
+  // Keep the extracted values as-is for review; do not guess/correct reversed RTL digits.
+  const lines = source.split(/\r?\n/).map(clean).filter(Boolean);
+  const formatB = /^([0-9][0-9,]*\.[0-9]{2})\s+([0-9]+(?:\.[0-9]+)?)\s*%\s+([0-9]+(?:\.[0-9]+)?)\s*%\s+([0-9][0-9,]*\.[0-9]{2})\s+(\d+)\s+(.+?)\s+(\d{1,4})\s*$/;
+  for (const line of lines) {
+    const row = line.match(formatB);
+    if (!row) continue;
+    items.push({
+      total_with_vat: num(row[1]),
+      net_amount: 0,
+      discount_percent: num(row[2]),
+      tax_percent: num(row[3]),
+      price: num(row[4]),
+      quantity: num(row[5]),
+      location: "",
+      item: clean(row[6]),
+      item_no: clean(row[7]),
+      sr_no: items.length + 1,
       unit: ""
     });
   }
@@ -121,11 +144,13 @@ export function mountPdfProjectImport(app) {
           ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS item_no TEXT DEFAULT '';
           ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS location TEXT DEFAULT '';
           ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0;
+          ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS tax_percent NUMERIC DEFAULT 0;
           ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS net_amount NUMERIC DEFAULT 0;
           ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS total_with_vat NUMERIC DEFAULT 0;
           ALTER TABLE project_items ADD COLUMN IF NOT EXISTS item_no TEXT DEFAULT '';
           ALTER TABLE project_items ADD COLUMN IF NOT EXISTS location TEXT DEFAULT '';
           ALTER TABLE project_items ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0;
+          ALTER TABLE project_items ADD COLUMN IF NOT EXISTS tax_percent NUMERIC DEFAULT 0;
           ALTER TABLE project_items ADD COLUMN IF NOT EXISTS net_amount NUMERIC DEFAULT 0;
           ALTER TABLE project_items ADD COLUMN IF NOT EXISTS total_with_vat NUMERIC DEFAULT 0;
           ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS project_id INTEGER;
@@ -167,16 +192,16 @@ export function mountPdfProjectImport(app) {
         for (const x of r.items) {
           const pi = await client.query(`
             INSERT INTO project_items
-              (project_id,sr_no,item,unit,quantity,price,cost,section,status,actual_amount,notes,item_no,location,discount_percent,net_amount,total_with_vat)
-            VALUES ($1,$2,$3,$4,$5,$6,0,'PDF','Not Started',0,'',$7,$8,$9,$10,$11)
+              (project_id,sr_no,item,unit,quantity,price,cost,section,status,actual_amount,notes,item_no,location,discount_percent,tax_percent,net_amount,total_with_vat)
+            VALUES ($1,$2,$3,$4,$5,$6,0,'PDF','Not Started',0,'',$7,$8,$9,$10,$11,$12)
             RETURNING *
-          `, [project.id, String(x.sr_no), x.item, x.unit, x.quantity, x.price, x.item_no || "", x.location || "", x.discount_percent || 0, x.net_amount || 0, x.total_with_vat || 0]);
+          `, [project.id, String(x.sr_no), x.item, x.unit, x.quantity, x.price, x.item_no || "", x.location || "", x.discount_percent || 0, x.tax_percent || 0, x.net_amount || 0, x.total_with_vat || 0]);
           projectItems.push(pi.rows[0]);
 
           const wi = await client.query(`
             INSERT INTO work_order_items
-              (work_order_id,sr_no,item,unit,quantity,price,cost,item_no,location,discount_percent,net_amount,total_with_vat)
-            VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,$10,$11)
+              (work_order_id,sr_no,item,unit,quantity,price,cost,item_no,location,discount_percent,tax_percent,net_amount,total_with_vat)
+            VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,$10,$11,$12)
             RETURNING *
           `, [workOrder.id, String(x.sr_no), x.item, x.unit, x.quantity, x.price, x.item_no || "", x.location || "", x.discount_percent || 0, x.net_amount || 0, x.total_with_vat || 0]);
           workOrderItems.push(wi.rows[0]);

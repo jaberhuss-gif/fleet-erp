@@ -333,36 +333,17 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       const link2=base+'/api/maintenance-requests/public/'+ticket.completion_token+'/work-completed';
       const subject='BUILDING MAINTENANCE / صيانة المباني — '+(ticket.request_no||'');
       const body=[
-        'Dear '+(a.name||'Executor')+',',
-        'عزيزي '+(a.name||'المنفذ')+'،',
+        'Maintenance request assigned / تم تعيين طلب صيانة',
+        'Request number / رقم الطلب: '+(ticket.request_no||'-'),
         '',
-        'A maintenance request has been assigned to you.',
-        'تم تعيين طلب الصيانة هذا لكم.',
-        'Request: '+ticket.request_no+' | الطلب: '+ticket.request_no,
-        'Site: '+(ticket.site||'-')+' | الموقع: '+(ticket.site||'-'),
-        'Category: '+(ticket.category||'-')+' | نوع العمل: '+(ticket.category||'-'),
-        'Priority: '+(ticket.priority||'-')+' | الأولوية: '+(ticket.priority||'-'),
-        'Problem: '+(ticket.description||'-'),
-        'المشكلة: '+(ticket.description||'-'),
+        'Please check WhatsApp for the task link. After finishing the repair, open the WhatsApp link and press YES / DONE.',
+        'يرجى مراجعة رسالة الواتساب التي تحتوي على رابط المهمة. بعد الانتهاء من التصليح، افتح الرابط واضغط نعم / تم.',
         '',
-        'LINK 1 — ACKNOWLEDGE RECEIPT: '+link1,
-        'الرابط 1 — تأكيد استلام المهمة: '+link1,
-        'Please open Link 1 to acknowledge the assignment.',
-        'يرجى فتح الرابط 1 لتأكيد استلام المهمة.',
-        '',
-        'LINK 2 — WORK COMPLETED: '+link2,
-        'الرابط 2 — تأكيد إتمام التصليح: '+link2,
-        'After the repair is finished, open Link 2 and confirm completion.',
-        'بعد الانتهاء من التصليح، افتح الرابط 2 وأكّد إتمام العمل.',
-        '',
-        'After your completion confirmation, the campus contact will be asked to confirm the work.',
-        'بعد تأكيدك إتمام العمل، سيُطلب من مسؤول الكامب تأكيد التنفيذ.',
-        '',
-        'Regards, Fleet / Building Maintenance',
-        'مع التحية، إدارة الأسطول / صيانة المباني'
-      ].join('\n');
+        'The campus manager will then receive a confirmation link. Once the campus confirms the repair, the request will return to the maintenance manager for final closure and cost entry (enter 0 if there is no cost).',
+        'بعدها سيصل لمسؤول الكامب رابط لتأكيد الإصلاح. وبعد تأكيد الكامب، يعود الطلب لمدير الصيانة للإغلاق النهائي وإدخال التكلفة (أدخل 0 إذا لم توجد تكلفة).'
+      ].join('\\n');
       openOutlookDraft(a.email,subject,body);
-      setMessage((ticket.request_no||'Request')+' assigned. Email draft opened inside the ERP. Copy it into the company email system to send. / تم التعيين وفتحت مسودة البريد داخل النظام؛ انسخها إلى بريد الشركة لإرسالها.');
+      setMessage((ticket.request_no||'Request')+' assigned. A prefilled email was opened in your email app; press Send there. / تم التعيين وفتحت رسالة جاهزة في تطبيق البريد؛ اضغط إرسال هناك.');
       await load();
     } catch(e) { setError(e.response?.data?.error||e.message); }
     finally { setBusy(false); }
@@ -379,34 +360,15 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     const link2 = base + '/api/maintenance-requests/public/' + (ticket.completion_token || '') + '/work-completed';
     const subject = 'BUILDING MAINTENANCE / صيانة المباني — ' + (ticket.request_no || '');
     const body = [
-      'Dear ' + (ticket.executor_name || 'Executor') + ',',
-      'عزيزي ' + (ticket.executor_name || 'المنفذ') + '،',
+      'Maintenance request assigned / تم تعيين طلب صيانة',
+      'Request number / رقم الطلب: ' + (ticket.request_no || '-'),
       '',
-      'A maintenance request has been assigned to you.',
-      'تم تعيين طلب الصيانة هذا لكم.',
-      'Request: ' + (ticket.request_no || '-') + ' | الطلب: ' + (ticket.request_no || '-'),
-      'Site: ' + (ticket.site || '-') + ' | الموقع: ' + (ticket.site || '-'),
-      'Category: ' + (ticket.category || '-') + ' | نوع العمل: ' + (ticket.category || '-'),
-      'Priority: ' + (ticket.priority || '-') + ' | الأولوية: ' + (ticket.priority || '-'),
-      'Problem: ' + (ticket.description || '-'),
-      'المشكلة: ' + (ticket.description || '-'),
+      'Please check WhatsApp for the task link. After finishing the repair, open the WhatsApp link and press YES / DONE.',
+      'يرجى مراجعة رسالة الواتساب التي تحتوي على رابط المهمة. بعد الانتهاء من التصليح، افتح الرابط واضغط نعم / تم.',
       '',
-      'LINK 1 — ACKNOWLEDGE RECEIPT: ' + link1,
-      'الرابط 1 — تأكيد استلام المهمة: ' + link1,
-      'Please open Link 1 to acknowledge the assignment.',
-      'يرجى فتح الرابط 1 لتأكيد استلام المهمة.',
-      '',
-      'LINK 2 — WORK COMPLETED: ' + link2,
-      'الرابط 2 — تأكيد إتمام التصليح: ' + link2,
-      'After the repair is finished, open Link 2 and confirm completion.',
-      'بعد الانتهاء من التصليح، افتح الرابط 2 وأكّد إتمام العمل.',
-      '',
-      'After your completion confirmation, the campus contact will be asked to confirm the work.',
-      'بعد تأكيدك إتمام العمل، سيُطلب من مسؤول الكامب تأكيد التنفيذ.',
-      '',
-      'Regards, Fleet / Building Maintenance',
-      'مع التحية، إدارة الأسطول / صيانة المباني'
-    ].join('\n');
+      'The campus manager will then receive a confirmation link. Once the campus confirms the repair, the request will return to the maintenance manager for final closure and cost entry (enter 0 if there is no cost).',
+      'بعدها سيصل لمسؤول الكامب رابط لتأكيد الإصلاح. وبعد تأكيد الكامب، يعود الطلب لمدير الصيانة للإغلاق النهائي وإدخال التكلفة (أدخل 0 إذا لم توجد تكلفة).'
+    ].join('\\n');
     openOutlookDraft(to, subject, body);
     setMessage((ticket.request_no || 'Request') + ' email draft opened inside the ERP. Copy it into the company email system to send. / تم فتح مسودة البريد داخل النظام؛ انسخها إلى بريد الشركة لإرسالها.');
   };

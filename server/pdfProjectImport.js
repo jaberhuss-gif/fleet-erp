@@ -113,7 +113,11 @@ export function mountPdfProjectImport(app) {
       const site = clean(req.headers["x-pdf-site"]) || r.site || "Unassigned";
       const projectName = clean(req.headers["x-pdf-project-name"]) || r.subject || r.filename;
       const requestedDate = clean(req.headers["x-pdf-date"]) || r.date || "";
-      const safeDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(requestedDate) ? requestedDate : null;
+      const selectedMonth = clean(req.headers["x-pdf-month"]);
+      const safeMonth = /^\d{4}-\d{2}$/.test(selectedMonth) ? selectedMonth : "";
+      const isoDateMatch = requestedDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      // The selected report month takes precedence so the imported file is grouped into the month chosen by the user.
+      const safeDate = safeMonth ? safeMonth + "-01" : (isoDateMatch ? requestedDate : null);
       const description = "Imported from PDF: " + r.filename;
 
       const result = await transaction(async client => {

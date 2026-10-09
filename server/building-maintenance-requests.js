@@ -72,6 +72,10 @@ async function ensureSchema() {
   await query(`ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS maintenance_request_id BIGINT`);
   await query(`ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS operational_status TEXT DEFAULT 'Open'`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS city TEXT`);
+  await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);
+  // Hide only the four explicitly identified demonstration tickets from this intake register.
+  // Their linked work orders and all other modules/data remain untouched.
+  await query(`UPDATE maintenance_requests SET archived_at=CURRENT_TIMESTAMP WHERE request_no IN ('MR-00008','MR-00006','MR-00004','MR-00002') AND archived_at IS NULL`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_status TEXT NOT NULL DEFAULT 'Not Sent'`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMPTZ`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_error TEXT`);
@@ -341,7 +345,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
           AND requester_confirmation IS NULL
           AND status NOT IN ('Awaiting Confirmation','Operationally Completed','Reopened','Open','Closed')
       `);
-      const r = await query(`SELECT * FROM maintenance_requests ORDER BY created_at DESC, id DESC`);
+      const r = await query(`SELECT * FROM maintenance_requests WHERE archived_at IS NULL ORDER BY created_at DESC, id DESC`);
       res.json({success:true, requests:r.rows, contractors:CONTRACTORS});
     } catch(e) { res.status(500).json({success:false,error:e.message}); }
   });

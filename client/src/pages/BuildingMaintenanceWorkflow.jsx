@@ -399,7 +399,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       '',
       'Regards, Fleet / Building Maintenance',
       'مع التحية، إدارة الأسطول / صيانة المباني'
-    ].join('\\n');
+    ].join('\n');
     openOutlookDraft(to, subject, body);
     setMessage((ticket.request_no || 'Request') + ' email draft opened inside the ERP. Copy it into the company email system to send. / تم فتح مسودة البريد داخل النظام؛ انسخها إلى بريد الشركة لإرسالها.');
   };

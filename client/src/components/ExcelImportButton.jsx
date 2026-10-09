@@ -38,11 +38,11 @@ const VEHICLE_FIELDS = [
   { key:'oilChangeInterval', label:'Oil Interval', aliases:['oilchangeinterval','interval','oilinterval','فترة الزيت','فاصل الزيت'] }
 ];
 
-export default function ExcelImportButton({ kind, onImported, label='Import Excel' }) {
+export default function ExcelImportButton({ kind, onImported, label='Import Excel', accept='.xlsx,.xls' }) {
   const inputRef = useRef(null);
   const isProject = kind === 'projects';
   const isVehicle = kind === 'vehicles';
-  const fields = isVehicle ? VEHICLE_FIELDS : PROJECT_FIELDS;
+  const fields = isVehicle ? VEHICLE_FIELDS : kind === 'home-maintenance' ? PROJECT_FIELDS.filter(f => ['item','unit','quantity'].includes(f.key)) : PROJECT_FIELDS;
 
   const [records,setRecords] = useState([]);
   const [headers,setHeaders] = useState([]);
@@ -360,7 +360,7 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
     <input
       ref={inputRef}
       type='file'
-      accept='.xlsx,.xls'
+      accept={accept}
       style={{display:'none'}}
       onChange={e => e.target.files?.[0] && readFile(e.target.files[0])}
     />
@@ -403,7 +403,7 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
           </div>)}
         </div>
         {!isVehicle && <div style={{fontSize:12,color:'#64748b'}}>
-          Price, Cost and Section are read from Excel when present. Status is controlled per item after import; closing adds the actual amount and notes.
+          Only item description, unit and quantity are imported. Enter unit price and total cost manually after import. Tax and discounts are ignored.
         </div>}
         {isVehicle && <div style={{fontSize:12,color:'#64748b'}}>
           Vehicle Location is taken only from the selected Master Site. It is never read from free-text Excel location data.
@@ -424,7 +424,7 @@ export default function ExcelImportButton({ kind, onImported, label='Import Exce
             {mappedRows.slice(0,100).map(r => <tr key={r.excelRow}>
               {isVehicle
                 ? <><td>{r.data.plate || '-'}</td><td>{r.data.make || '-'}</td><td>{r.data.model || '-'}</td><td>{r.data.driver || '-'}</td><td>{r.data.currentKm}</td><td>{selectedSiteName || '-'}</td><td style={{color:r.data.plate ? '#16a34a':'#dc2626'}}>{r.data.plate ? 'Valid':'Missing Plate'}</td></>
-                : <><td>{r.data.srNo || '-'}</td><td>{r.data.item || '-'}</td><td>{r.data.unit || '-'}</td><td>{r.data.quantity}</td><td>{r.data.price || 0}</td><td>{r.data.cost || 0}</td><td>{r.data.section || '-'}</td><td style={{color:r.data.item ? '#16a34a':'#dc2626'}}>{r.data.item ? 'Ready':'Missing Item'}</td></>}
+                : kind === 'home-maintenance' ? <><td>{r.data.item || '-'}</td><td>{r.data.unit || '-'}</td><td>{r.data.quantity}</td><td style={{color:r.data.item ? '#16a34a':'#dc2626'}}>{r.data.item ? 'Ready':'Missing Item'}</td></> : <><td>{r.data.srNo || '-'}</td><td>{r.data.item || '-'}</td><td>{r.data.unit || '-'}</td><td>{r.data.quantity}</td><td>{r.data.price || 0}</td><td>{r.data.cost || 0}</td><td>{r.data.section || '-'}</td><td style={{color:r.data.item ? '#16a34a':'#dc2626'}}>{r.data.item ? 'Ready':'Missing Item'}</td></>}
             </tr>)}
           </tbody>
         </table>

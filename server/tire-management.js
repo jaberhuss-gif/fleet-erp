@@ -1284,7 +1284,7 @@ function tireSurveyReportHtml(records, title, compactAllVehicles = false) {
   '.report-footer{flex:0 0 auto;margin-top:4mm;padding-top:2mm;border-top:1px solid #ccc;text-align:right;font-size:6.5px;line-height:1.35;color:#555}' +
   (compactAllVehicles ? '.all-surveys-report>div:first-child{display:none}' +
     '.all-surveys-page{display:grid;grid-template-rows:repeat(3,minmax(0,1fr));gap:2mm;height:277mm;width:190mm;page-break-after:always;break-after:page;overflow:hidden}' +
-    '.all-surveys-page:last-child{page-break-after:auto;break-after:auto}' +
+    '.all-surveys-page:last-of-type{page-break-after:auto;break-after:auto}' +
     '.vehicle-slot{min-height:0;overflow:hidden;break-inside:avoid;page-break-inside:avoid}' +
     '.all-surveys-page .vehicle{height:100%;padding:2mm;border-radius:3px;break-inside:avoid;page-break-inside:avoid}' +
     '.all-surveys-page .report-header{gap:3mm;padding-bottom:1mm}' +

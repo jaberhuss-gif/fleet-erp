@@ -19,6 +19,7 @@ import BuildingMaintenancePage from './pages/BuildingMaintenance';
 import WarehouseHub from './pages/WarehouseHub';
 import api from './api/client';
 import DailyKmGate from './components/DailyKmGate';
+import PowerAutomateIntegration from './pages/PowerAutomateIntegration';
 
 const OWNER_ONLY_TABS = new Set(['drivers', 'users', 'audit', 'backup']);
 
@@ -49,7 +50,8 @@ const TAB_LABELS = {
   drivers: '👨‍🔧 Driver',
   users: 'Users',
   audit: 'Audit Log',
-  backup: 'Backup'
+  backup: 'Backup',
+  'power-automate': '⚡ Power Automate Integration'
 };
 
 const writeLog = (user, action, entityType, entityId, details) => {
@@ -151,7 +153,7 @@ export default function App() {
     const allTabs = ['gm', 'support-service', 'operations', 'warehouse', 'fleet', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
     const visible = allTabs.filter(canViewTab);
     if (user?.role === 'Owner') {
-      return [...visible, 'drivers', 'users', 'audit', 'backup'];
+      return [...visible, 'drivers', 'users', 'audit', 'backup', 'power-automate'];
     }
     return visible;
   }, [user, access]);
@@ -283,7 +285,7 @@ export default function App() {
           {user.role === 'Owner' && (
             <div className="erp-nav-group">
               <div className="erp-nav-heading">Administration</div>
-              {['drivers','users','audit','backup'].map(t => (
+              {['drivers','users','audit','backup','power-automate'].map(t => (
                 <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
                   {TAB_LABELS[t]}
                 </button>
@@ -320,6 +322,7 @@ export default function App() {
           {tab === 'users' && user.role === 'Owner' && <Users />}
           {tab === 'audit' && user.role === 'Owner' && <AuditLog />}
           {tab === 'backup' && user.role === 'Owner' && <Backup />}
+          {tab === 'power-automate' && user.role === 'Owner' && <PowerAutomateIntegration user={user} />}
         </main>
       </div>
     </div>

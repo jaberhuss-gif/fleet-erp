@@ -19,6 +19,7 @@ import { mountTireRoutes } from "./tire-management.js";
 import { toWaMeNumber, toWaMeInternational } from "./phone.js";
 import { syncBuildingFromVelaOnce } from "./vela-project-sync.mjs";
 import { mountBuildingMaintenanceRequestRoutes } from "./building-maintenance-requests.js";
+import { mountIntegrationRoutes } from "./power-automate-integration.js";
 
 const ANNUAL_INSPECTION_EMAIL_FROM = 'Hussein.Anwar@iemaadex.com';
 const ANNUAL_INSPECTION_CC_EMAILS = 'Mohamed.Hassan@iemaadex.com, Mohammed.Al-Marhabi@iemaadex.com';
@@ -280,6 +281,7 @@ app.get("/api/health", async (req, res) => res.json({ status: "ok", time: new Da
 
 // Building maintenance request routes must be mounted after JSON parsing and API authentication.
 mountBuildingMaintenanceRequestRoutes(app);
+mountIntegrationRoutes(app);
 
 // ===== TEMPORARY VEHICLE MIGRATION FEED (OLD ERP -> VELA) =====
 // Protected by a Render environment secret. This is intentionally limited to

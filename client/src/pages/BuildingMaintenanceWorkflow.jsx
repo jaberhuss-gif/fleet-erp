@@ -334,7 +334,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       const subject='BUILDING MAINTENANCE / صيانة المباني — '+(ticket.request_no||'');
       const sourceTicket = requests.find(x => String(x.id) === String(id)) || {};
       const descriptionText = String(ticket.description || ticket.problem_description || ticket.details || ticket.request_description || ticket.issue_description || sourceTicket.description || sourceTicket.problem_description || sourceTicket.details || sourceTicket.request_description || sourceTicket.issue_description || '').replace(/\\n/g, '\n');
-      const issueLines = descriptionText.split(/\r?\n/).map(line => line.trim()).filter(line => line && !/^(Multiple maintenance issues reported|Source email:)/i.test(line)).map(line => line.replace(/^\d+\.\s*/, '').replace(/^\[[^\]]+\]\s*/, '').trim()).filter(line => line && !/^(?:\*{3,}|[-_=]{3,})$/.test(line)).slice(0,4);
+      const issueLines = descriptionText.split(/\r?\n/).map(line => line.trim()).filter(line => line && !/^(Multiple maintenance issues reported|Source email:)/i.test(line)).map(line => line.replace(/^(?:(?:\d+)[.)]\s*)+/, '').replace(/^\[[^\]]+\]\s*/, '').replace(/^[*•-]\s*/, '').trim()).filter(line => line && !/^(?:\*{3,}|[-_=]{3,})$/.test(line)).slice(0,4);
       const body=[
         'Maintenance request assigned / تم تعيين طلب صيانة',
         '',
@@ -370,7 +370,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     const link2 = base + '/api/maintenance-requests/public/' + (ticket.completion_token || '') + '/work-completed';
     const subject = 'BUILDING MAINTENANCE / صيانة المباني — ' + (ticket.request_no || '');
     const descriptionText = String(ticket.description || ticket.problem_description || ticket.details || ticket.request_description || ticket.issue_description || '').replace(/\\n/g, '\n');
-    const issueLines = descriptionText.split(/\r?\n/).map(line => line.trim()).filter(line => line && !/^(Multiple maintenance issues reported|Source email:)/i.test(line)).map(line => line.replace(/^\d+\.\s*/, '').replace(/^\[[^\]]+\]\s*/, '').trim()).filter(line => line && !/^(?:\*{3,}|[-_=]{3,})$/.test(line)).slice(0,4);
+    const issueLines = descriptionText.split(/\r?\n/).map(line => line.trim()).filter(line => line && !/^(Multiple maintenance issues reported|Source email:)/i.test(line)).map(line => line.replace(/^(?:(?:\d+)[.)]\s*)+/, '').replace(/^\[[^\]]+\]\s*/, '').replace(/^[*•-]\s*/, '').trim()).filter(line => line && !/^(?:\*{3,}|[-_=]{3,})$/.test(line)).slice(0,4);
     const body = [
       'Maintenance request assigned / تم تعيين طلب صيانة',
       '',

@@ -1194,7 +1194,7 @@ function escapeHtml(value) {
   }[ch]));
 }
 
-function tireSurveyReportHtml(records, title) {
+function tireSurveyReportHtml(records, title, compactAllVehicles = false) {
   const JV_LOGO_URL = "https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png";
   const COMPANY_NAME = "Maaden Ivanhoe Electric Exploration and Development Limited Company";
   const FOOTER_ROLE = "Fleet Manager / General Maintenance Supervisor";
@@ -1246,7 +1246,15 @@ function tireSurveyReportHtml(records, title) {
     '</section>';
   };
 
-  const pages = records.map(r => '<div class="page">' + card(r) + '</div>').join("");
+  const pages = compactAllVehicles
+    ? Array.from({ length: Math.ceil(records.length / 3) }, (_, pageIndex) =>
+        '<div class="page all-surveys-page">' +
+        records.slice(pageIndex * 3, pageIndex * 3 + 3)
+          .map(r => '<div class="vehicle-slot">' + card(r) + '</div>')
+          .join('') +
+        '</div>'
+      ).join('')
+    : records.map(r => '<div class="page">' + card(r) + '</div>').join("");
 
   return '<!doctype html><html><head><meta charset="utf-8"><title>' + escapeHtml(title) + '</title>' +
   '<style>' +
@@ -1274,7 +1282,25 @@ function tireSurveyReportHtml(records, title) {
   '.photo-label{font-size:6px;font-weight:bold;margin-bottom:2px}' +
   '.notes{font-size:7px;margin-top:4px}' +
   '.report-footer{flex:0 0 auto;margin-top:4mm;padding-top:2mm;border-top:1px solid #ccc;text-align:right;font-size:6.5px;line-height:1.35;color:#555}' +
-  '</style></head><body>' +
+  (compactAllVehicles ? '.all-surveys-report>div:first-child{display:none}' +
+    '.all-surveys-page{display:grid;grid-template-rows:repeat(3,minmax(0,1fr));gap:2mm;height:277mm;width:190mm;page-break-after:always;break-after:page;overflow:hidden}' +
+    '.all-surveys-page:last-of-type{page-break-after:auto;break-after:auto}' +
+    '.vehicle-slot{min-height:0;overflow:hidden;break-inside:avoid;page-break-inside:avoid}' +
+    '.all-surveys-page .vehicle{height:100%;padding:2mm;border-radius:3px;break-inside:avoid;page-break-inside:avoid}' +
+    '.all-surveys-page .report-header{gap:3mm;padding-bottom:1mm}' +
+    '.all-surveys-page .company-logo{width:20mm;height:10mm}' +
+    '.all-surveys-page .company-name{font-size:8px}' +
+    '.all-surveys-page .report-title{font-size:6px}' +
+    '.all-surveys-page .vehicle h2{font-size:10px;margin:1mm 0}' +
+    '.all-surveys-page .meta{font-size:6px}' +
+    '.all-surveys-page .tires{grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;margin-top:2px}' +
+    '.all-surveys-page .tire{font-size:5.5px;line-height:1.15;padding:2px;min-height:0;overflow-wrap:anywhere}' +
+    '.all-surveys-page .photos{grid-template-columns:repeat(6,minmax(0,1fr));gap:2px;margin-top:2px}' +
+    '.all-surveys-page .photos img{height:30px}' +
+    '.all-surveys-page .photo-label{font-size:5px}' +
+    '.all-surveys-page .notes{font-size:5.5px;margin-top:2px;max-height:14px;overflow:hidden}' +
+    '.all-surveys-page .report-footer{margin-top:1mm;padding-top:1mm;font-size:5px;line-height:1.2}' : '') + 
+  '</style></head><body' + (compactAllVehicles ? ' class="all-surveys-report"' : '') + '>' +
   '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:3px solid #1e3a8a;padding:0 0 12px;margin:0 0 16px;page-break-inside:avoid"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Ivanhoe Electric and Maaden" style="width:175px;max-height:78px;object-fit:contain"><div style="flex:1;text-align:right;font-family:Arial,sans-serif"><div style="font-size:15px;font-weight:700;color:#1e3a8a">Maaden Ivanhoe Electric Exploration and Development Limited Company</div><div style="font-size:10px;color:#475569;margin-top:3px">Exploration Phase — Arabian Shield</div><div style="font-size:12px;font-weight:700;margin-top:7px;color:#111827">Hussein Anwar</div><div style="font-size:10px;color:#475569;margin-top:2px">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div></div>' +
   '<div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div>' +
   pages +
@@ -1307,7 +1333,7 @@ export async function mountTireRoutes(app) {
       }
       if (!records.length) return res.status(404).send("No submitted tire surveys could be loaded");
       res.set("Cache-Control", "no-store");
-      res.type("html").send(tireSurveyReportHtml(records, "Initial Tire Survey — All Submitted Vehicles"));
+      res.type("html").send(tireSurveyReportHtml(records, "Initial Tire Survey — All Submitted Vehicles", true));
     } catch (e) {
       console.error("[TireSurveyAllPDF]", e);
       res.status(500).send(e.message || "Unable to create all-vehicle tire survey report");

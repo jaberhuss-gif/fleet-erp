@@ -348,12 +348,14 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       await ensureSchema();
       const row=await getRequest(req.params.id);
       if(!row) return res.status(404).json({success:false,error:"Request not found"});
-      if(row.status!=="New" || row.work_order_id || row.closed_at) return res.status(409).json({success:false,error:"Only new, unassigned requests can be edited."});
+      if(row.archived_at) return res.status(409).json({success:false,error:"Archived requests cannot be edited."});
       const site=clean(req.body?.site), city=clean(req.body?.city), category=clean(req.body?.category)||"General Maintenance";
       const priority=clean(req.body?.priority)||"Medium", description=clean(req.body?.description);
       if(!site || !description) return res.status(400).json({success:false,error:"Site and description are required."});
+      const before={site:row.site,city:row.city,category:row.category,priority:row.priority,description:row.description};
       const updated=await query(`UPDATE maintenance_requests SET site=$1,city=$2,category=$3,priority=$4,description=$5,updated_at=CURRENT_TIMESTAMP WHERE id=$6 RETURNING *`,[site,city,category,priority,description,row.id]);
-      await auditEvent(row.id,"REQUEST_EDITED", "Fleet / Building Maintenance", clean(req.user?.full_name||req.user?.username||"Fleet / Building Maintenance"), {site,category,priority});
+      const actor=clean(req.user?.full_name||req.user?.username||"Fleet / Building Maintenance");
+      await auditEvent(row.id,"REQUEST_EDITED", "Fleet / Building Maintenance", actor, {before,after:{site,city,category,priority,description},status_at_edit:row.status,work_order_id:row.work_order_id});
       res.json({success:true,request:updated.rows[0]});
     } catch(e) { res.status(400).json({success:false,error:e.message}); }
   });

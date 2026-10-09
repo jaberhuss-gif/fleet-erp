@@ -112,7 +112,20 @@ function parseMaintenanceEmail(raw) {
     if (rule && !found.some(x => x.description.toLowerCase() === part.toLowerCase())) found.push({description:part.slice(0,1200),category:rule.category,priority:rule.priority});
   }
   const looksLikeGarbage = !body || /--_[A-Za-z0-9_-]{12,}/.test(body) || /Content-(?:Type|Transfer-Encoding):/i.test(body) || /^[A-Za-z0-9+/=\s]{80,}$/.test(body);
-  return {text:body.slice(0,12000),issues:looksLikeGarbage ? [] : found};
+  // Urgency/action-only phrases are not separate maintenance faults.
+  const urgencyOnly = /^(?:please\s+)?(?:please\s+)?(?:repair|fix|resolve|attend\s+to|do\s+the\s+needful|urgent(?:ly)?\s+(?:repair|fix)|needs?\s+to\s+be\s+(?:repaired|fixed)|must\s+be\s+(?:repaired|fixed)|ضروري(?:\s+جداً)?|يرجى\s+(?:الإصلاح|التصليح)|لازم\s+(?:يتصلح|ينصلح|إصلاحه)|يحتاج\s+إلى\s+(?:إصلاح|تصليح)|بأسرع\s+وقت)(?:[.!؟\s]*)$/i;
+  const actual = (looksLikeGarbage ? [] : found).filter(x => !urgencyOnly.test(String(x.description || '').trim()));
+  const unique = actual.filter((x, i) => actual.findIndex(y => y.description.toLowerCase() === x.description.toLowerCase()) === i);
+  const priorityRank = {Low:1, Medium:2, High:3, Critical:4};
+  const categories = [...new Set(unique.map(x => x.category || 'General Maintenance'))];
+  const priority = unique.reduce((best, issue) => (priorityRank[issue.priority] || 2) > (priorityRank[best] || 2) ? issue.priority : best, 'Low');
+  const issues = unique.length ? [{
+    description: unique.map((x, i) => (i + 1) + '. [' + x.category + '] ' + x.description).join('\\n'),
+    category: categories.length === 1 ? categories[0] : 'General Maintenance',
+    priority,
+    site: ''
+  }] : [];
+  return {text:body.slice(0,12000),issues};
 }
 const siteCity = (sites, siteName) => { const s=sites.find(x=>String(x.name)===String(siteName)); return s ? String(s.city||s.city_name||s.location_city||'') : ''; };
 const statusColor = s => s==='Closed' || s==='Operationally Completed' ? '#dcfce7' : s==='Reopened' ? '#fee2e2' : '#fef3c7';
@@ -198,13 +211,10 @@ export default function BuildingMaintenanceWorkflow({ user }) {
   const createDetectedTickets = async () => {
     if(!emailIssues.length) return;
     if(emailIssues.some(issue=>!issue.site)) { setError('Select a site for every detected issue / اختر الموقع لكل عطل مكتشف.'); return; }
-    // Combine all faults from this email into one ticket per selected site.
-    const grouped = emailIssues.reduce((acc, issue) => {
-      const key = String(issue.site || '').trim();
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(issue);
-      return acc;
-    }, {});
+    // One source email always creates one ticket. The reviewed issue list is combined into its description.
+    const selectedSites = [...new Set(emailIssues.map(issue => String(issue.site || '').trim()).filter(Boolean))];
+    if (selectedSites.length > 1) { setError('One email must use one site. Select the same site for the combined ticket. / يجب أن يكون للبريد الواحد موقع واحد؛ اختر الموقع نفسه للتذكرة الموحّدة.'); return; }
+    const grouped = {[selectedSites[0] || String(emailIssues[0]?.site || '').trim()]: emailIssues};
     const priorityRank = {Low:1, Medium:2, High:3, Critical:4};
     const groups = Object.entries(grouped);
     setBusy(true); setError(''); setMessage('');
@@ -479,12 +489,12 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       </div>
       <div style={{borderTop:'1px solid #e2e8f0',margin:'16px 0'}}/>
       <h4 style={{margin:'0 0 8px'}}>Or upload an email file / أو ارفع ملف البريد</h4>
-      <p style={{marginTop:0,fontSize:13,color:'#64748b'}}>Upload an Outlook email saved as .eml, or a .txt/.html email file. Review detected faults; the system creates one combined ticket per site, with all faults listed inside it. / راجع الأعطال؛ ينشئ النظام تذكرة واحدة لكل موقع وتُدرج جميع أعطاله داخلها.</p>
+      <p style={{marginTop:0,fontSize:13,color:'#64748b'}}>Upload an Outlook email saved as .eml, or a .txt/.html email file. Review detected faults; the system creates one combined ticket per email, with all faults listed inside it. / راجع الأعطال؛ ينشئ النظام تذكرة واحدة لكل بريد وتُدرج جميع أعطاله داخلها.</p>
       <input type="file" accept=".eml,.txt,.html,.htm,text/plain,text/html,message/rfc822" onChange={readEmailFile} disabled={busy} style={{maxWidth:'100%'}}/>
       {(emailFileName || emailText || emailIssues.length > 0) && <button type="button" disabled={busy} onClick={() => { setEmailFileName(''); setEmailText(''); setEmailIssues([]); setError(''); setMessage('Detected issues cleared. No tickets were created by clearing this preview. / تم مسح الأعطال المكتشفة من المعاينة. مسح المعاينة لا ينشئ ولا يحذف تذاكر.'); }} style={{...btn, marginTop:10, background:'#fee2e2', color:'#991b1b'}}>Clear all detected issues / مسح جميع الأعطال المكتشفة</button>}
       {emailFileName&&<div style={{marginTop:8,fontSize:13}}>Selected file / الملف: <b>{emailFileName}</b></div>}
       {emailIssues.length>0&&<>
-        <div style={{marginTop:12,padding:10,background:'#f8fafc',borderRadius:8,fontSize:13}}>Choose the site for each detected issue. Issues assigned to the same site will be combined into one ticket. / اختر الموقع لكل عطل؛ ستُجمع الأعطال التي لها الموقع نفسه في تذكرة واحدة.</div>
+        <div style={{marginTop:12,padding:10,background:'#f8fafc',borderRadius:8,fontSize:13}}>One email creates one ticket. All detected faults are listed inside it; choose one site for the whole ticket. / البريد الواحد ينشئ تذكرة واحدة، وتُجمع الأعطال داخلها؛ اختر موقعًا واحدًا للتذكرة.</div>
         <h4>Detected issues / الأعطال المكتشفة ({emailIssues.length})</h4>
         <div style={{display:'grid',gap:10}}>
           {emailIssues.map((issue,i)=><div key={i} style={{border:'1px solid #cbd5e1',borderRadius:8,padding:10,display:'grid',gap:8}}>
@@ -498,7 +508,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
             </div>
           </div>)}
         </div>
-        <button type="button" disabled={busy||!emailIssues.length} onClick={createDetectedTickets} style={{...btn,background:'#0f766e',color:'#fff',marginTop:12}}>Create ticket(s) for {new Set(emailIssues.map(x=>x.site).filter(Boolean)).size} site(s) / إنشاء تذاكر حسب المواقع</button>
+        <button type="button" disabled={busy||!emailIssues.length} onClick={createDetectedTickets} style={{...btn,background:'#0f766e',color:'#fff',marginTop:12}}>Create one combined ticket / إنشاء تذكرة موحّدة</button>
       </>}
       {emailText&&<details style={{marginTop:12}}><summary>View extracted email text / عرض نص البريد المستخرج</summary><pre style={{whiteSpace:'pre-wrap',fontSize:12,maxHeight:260,overflow:'auto'}}>{emailText}</pre></details>}
     </section>

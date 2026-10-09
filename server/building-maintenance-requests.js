@@ -38,6 +38,7 @@ async function ensureSchema() {
       id BIGSERIAL PRIMARY KEY,
       request_no TEXT UNIQUE,
       site TEXT,
+      city TEXT,
       category TEXT,
       priority TEXT,
       description TEXT NOT NULL,
@@ -70,6 +71,7 @@ async function ensureSchema() {
   `);
   await query(`ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS maintenance_request_id BIGINT`);
   await query(`ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS operational_status TEXT DEFAULT 'Open'`);
+  await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS city TEXT`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_status TEXT NOT NULL DEFAULT 'Not Sent'`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMPTZ`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_error TEXT`);
@@ -228,7 +230,7 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
   app.post("/api/maintenance-requests", async (req, res) => {
     try {
       await ensureSchema();
-      const { site, category, description, priority } = req.body || {};
+      const { site, city, category, description, priority } = req.body || {};
       if (!clean(description)) return res.status(400).json({ success:false, error:"Maintenance description is required" });
       const requesterName = clean(req.user?.full_name || req.user?.username || "Employee");
       const requesterEmail = clean(req.user?.email);
@@ -237,11 +239,11 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
       const acknowledgementToken = randomUUID();
       const result = await query(`
         INSERT INTO maintenance_requests
-          (request_no, site, category, priority, description, requester_user_id, requester_name, requester_email, status, completion_token, confirmation_token, acknowledgement_token)
+          (request_no, site, city, category, priority, description, requester_user_id, requester_name, requester_email, status, completion_token, confirmation_token, acknowledgement_token)
         VALUES
-          ('MR-' || LPAD(nextval('maintenance_requests_id_seq')::text, 5, '0'), $1,$2,$3,$4,$5,$6,$7,'New',$8,$9,$10)
+          ('MR-' || LPAD(nextval('maintenance_requests_id_seq')::text, 5, '0'), $1,$2,$3,$4,$5,$6,$7,$8,'New',$9,$10,$11)
         RETURNING *
-      `, [clean(site), clean(category) || "General Maintenance", clean(priority) || "Medium", clean(description), req.user?.id || null, requesterName, requesterEmail, token, confirmationToken, acknowledgementToken]);
+      `, [clean(site), clean(city), clean(category) || "General Maintenance", clean(priority) || "Medium", clean(description), req.user?.id || null, requesterName, requesterEmail, token, confirmationToken, acknowledgementToken]);
       const row = result.rows[0];
       await auditEvent(row.id, "REQUEST_CREATED", "Requester", requesterName, {site: row.site, category: row.category, priority: row.priority});
       const email = await notifyNewRequest(row).catch(e => ({sent:false, reason:e.message}));

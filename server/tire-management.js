@@ -1246,15 +1246,12 @@ function tireSurveyReportHtml(records, title, compactAllVehicles = false) {
     '</section>';
   };
 
-  const pages = compactAllVehicles
-    ? Array.from({ length: Math.ceil(records.length / 3) }, (_, pageIndex) =>
-        '<div class="page all-surveys-page">' +
-        records.slice(pageIndex * 3, pageIndex * 3 + 3)
-          .map(r => '<div class="vehicle-slot">' + card(r) + '</div>')
-          .join('') +
-        '</div>'
-      ).join('')
-    : records.map(r => '<div class="page">' + card(r) + '</div>').join("");
+  // The fleet-wide report uses one full A4 page per vehicle so all six tire
+  // photos, tire details, notes, and signatures remain together and readable.
+  // The single-vehicle report continues using this same full-page layout.
+  const pages = records
+    .map(r => '<div class="page">' + card(r) + '</div>')
+    .join("");
 
   return '<!doctype html><html><head><meta charset="utf-8"><title>' + escapeHtml(title) + '</title>' +
   '<style>' +

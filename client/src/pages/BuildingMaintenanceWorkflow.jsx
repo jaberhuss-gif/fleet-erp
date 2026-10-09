@@ -32,6 +32,7 @@ function parseMaintenanceEmail(raw) {
   if (!found.length && text.trim()) found.push({description:text.trim().slice(0,4000),category:'General Maintenance',priority:'Medium'});
   return {text:text.trim(),issues:found};
 }
+const siteCity = (sites, siteName) => { const s=sites.find(x=>String(x.name)===String(siteName)); return s ? String(s.city||s.city_name||s.location_city||'') : ''; };
 const statusColor = s => s==='Closed' || s==='Operationally Completed' ? '#dcfce7' : s==='Reopened' ? '#fee2e2' : '#fef3c7';
 
 export default function BuildingMaintenanceWorkflow({ user }) {
@@ -50,6 +51,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
   const [finance,setFinance] = useState({});
   const [audit,setAudit] = useState({});
   const [query,setQuery] = useState('');
+  const [editingRequest,setEditingRequest] = useState(null);
   const [busy,setBusy] = useState(false);
   const [loading,setLoading] = useState(true);
   const [message,setMessage] = useState('');
@@ -84,7 +86,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     try {
       const raw=await file.text();
       const parsed=parseMaintenanceEmail(raw);
-      setEmailFileName(file.name); setEmailText(parsed.text); setEmailIssues(parsed.issues);
+      setEmailFileName(file.name); setEmailText(parsed.text); setEmailIssues(parsed.issues.map(issue=>({...issue,site:''})));
       if(!parsed.issues.length) setError('No maintenance issue was detected. Please check the email file.');
       else setMessage('Email read. Review the detected issues below before creating tickets. / تمت قراءة البريد؛ راجع الأعطال المكتشفة قبل إنشاء التذاكر.');
     } catch(err) { setError('Could not read this email file. Please use .eml, .txt or .html. / تعذرت قراءة الملف.'); }
@@ -92,12 +94,12 @@ export default function BuildingMaintenanceWorkflow({ user }) {
   };
   const createDetectedTickets = async () => {
     if(!emailIssues.length) return;
-    if(!form.city || !form.site) { setError('Select the city and site / اختر المدينة والموقع أولاً.'); return; }
+    if(emailIssues.some(issue=>!issue.site)) { setError('Select a site for every detected issue / اختر الموقع لكل عطل مكتشف.'); return; }
     setBusy(true); setError(''); setMessage('');
     const created=[];
     try {
       for(const issue of emailIssues) {
-        const res=await api.post('/maintenance-requests',{city:form.city,site:form.site,category:issue.category,priority:issue.priority,description:issue.description+'\n\nSource email: '+emailFileName});
+        const res=await api.post('/maintenance-requests',{city:siteCity(sites,issue.site),site:issue.site,category:issue.category,priority:issue.priority,description:issue.description+'\n\nSource email: '+emailFileName});
         created.push(res.data.request?.request_no||'');
       }
       setMessage('Created '+created.length+' tickets: '+created.filter(Boolean).join(', ')+'. / تم إنشاء '+created.length+' تذاكر من البريد.');
@@ -142,6 +144,16 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     const a=assign[id]||{}, list=a.type==='Contractor'?contractors:employees;
     const x=list.find(v=>(v.name||v.full_name)===name);
     setAssign(p=>({...p,[id]:{...a,name,email:x?.email||''}}));
+  };
+  const saveRequestEdit = async id => {
+    const draft=editingRequest;
+    if(!draft?.site || !String(draft.description||'').trim()) { setError('Select site and enter description / اختر الموقع واكتب وصف المشكلة.'); return; }
+    setBusy(true); setError(''); setMessage('');
+    try {
+      await api.put('/maintenance-requests/'+id,{site:draft.site,city:siteCity(sites,draft.site),category:draft.category,priority:draft.priority,description:draft.description});
+      setEditingRequest(null); setMessage('Request updated / تم تعديل الطلب.'); await load();
+    } catch(e) { setError(e.response?.data?.error||e.message); }
+    finally { setBusy(false); }
   };
   const assignRequest = async id => {
     const a=assign[id]||{};
@@ -196,7 +208,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
           </label>
           <label style={field}>Full name / الاسم الكامل<input required style={control} value={contactForm.full_name} onChange={e=>setContactForm(p=>({...p,full_name:e.target.value}))} placeholder="Name / الاسم"/></label>
           <label style={field}>City / المدينة<input style={control} value={contactForm.city} onChange={e=>setContactForm(p=>({...p,city:e.target.value}))}/></label>
-          <label style={field}>Camp / Site / الموقع<input style={control} value={contactForm.site} onChange={e=>setContactForm(p=>({...p,site:e.target.value}))} placeholder="Site or All sites / الموقع أو جميع المواقع"/></label>
+          <label style={field}>Camp / Site / الموقع<select style={control} value={contactForm.site} onChange={e=>{const site=e.target.value;setContactForm(p=>({...p,site,city:siteCity(sites,site)||p.city}));}}><option value="">Select site / اختر الموقع</option><option value="All sites">All sites / جميع المواقع</option>{sites.map(s=><option key={s.id||s.name} value={s.name}>{s.name}</option>)}</select></label>
           <label style={field}>Work type / تخصص العمل<input style={control} value={contactForm.work_type} onChange={e=>setContactForm(p=>({...p,work_type:e.target.value}))} placeholder="Electrical, AC, plumbing…"/></label>
           <label style={field}>Email / البريد الإلكتروني<input type="email" style={control} value={contactForm.email} onChange={e=>setContactForm(p=>({...p,email:e.target.value}))}/></label>
           <label style={field}>Phone / رقم الهاتف<input style={control} value={contactForm.phone} onChange={e=>setContactForm(p=>({...p,phone:e.target.value}))}/></label>
@@ -219,11 +231,8 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     <form onSubmit={submit} style={panel}>
       <h3 style={{marginTop:0}}>📝 New maintenance request / طلب صيانة جديد</h3>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:12}}>
-        <label style={field}>City / المدينة
-          <input required style={control} value={form.city||''} onChange={e=>setForm(p=>({...p,city:e.target.value}))} placeholder="Enter city / أدخل المدينة"/>
-        </label>
         <label style={field}>Camp / Site / الكامب أو الموقع
-          <select style={control} required value={form.site} onChange={e=>setForm(p=>({...p,site:e.target.value}))}><option value="">Select site / اختر الموقع</option>{sites.map(s=><option key={s.id||s.name} value={s.name}>{s.name}</option>)}</select>
+          <select style={control} required value={form.site} onChange={e=>{const site=e.target.value;setForm(p=>({...p,site,city:siteCity(sites,site)}));}}><option value="">Select site / اختر الموقع</option>{sites.map(s=><option key={s.id||s.name} value={s.name}>{s.name}</option>)}</select>
         </label>
         <label style={field}>Work type / نوع العمل
           <select style={control} value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value}))}><option>General Maintenance</option><option>Electrical</option><option>Plumbing & Water</option><option>A/C & HVAC</option><option>Doors, Locks & Windows</option><option>Civil & Building</option><option>Furniture & Facilities</option><option>Vehicle Maintenance</option><option>Other</option></select>
@@ -244,13 +253,14 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       <input type="file" accept=".eml,.txt,.html,.htm,text/plain,text/html,message/rfc822" onChange={readEmailFile} disabled={busy} style={{maxWidth:'100%'}}/>
       {emailFileName&&<div style={{marginTop:8,fontSize:13}}>Selected file / الملف: <b>{emailFileName}</b></div>}
       {emailIssues.length>0&&<>
-        <div style={{marginTop:12,padding:10,background:'#f8fafc',borderRadius:8,fontSize:13}}>First choose the City and Site in the request form below. These values will apply to all tickets created from this email. / اختر المدينة والموقع في نموذج الطلب أدناه قبل إنشاء التذاكر.</div>
+        <div style={{marginTop:12,padding:10,background:'#f8fafc',borderRadius:8,fontSize:13}}>Choose the site for each detected issue below. Each ticket will use its own selected site. / اختر الموقع لكل عطل أدناه؛ ستأخذ كل تذكرة الموقع المحدد لها.</div>
         <h4>Detected issues / الأعطال المكتشفة ({emailIssues.length})</h4>
         <div style={{display:'grid',gap:10}}>
           {emailIssues.map((issue,i)=><div key={i} style={{border:'1px solid #cbd5e1',borderRadius:8,padding:10,display:'grid',gap:8}}>
             <b>Issue {i+1} / العطل {i+1}</b>
             <label style={field}>Description / وصف العطل<textarea style={{...control,minHeight:65}} value={issue.description} onChange={e=>setEmailIssues(p=>p.map((x,j)=>j===i?{...x,description:e.target.value}:x))}/></label>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:8}}>
+              <label style={field}>Site / الموقع<select required style={control} value={issue.site||''} onChange={e=>setEmailIssues(p=>p.map((x,j)=>j===i?{...x,site:e.target.value}:x))}><option value="">Select site / اختر الموقع</option>{sites.map(s=><option key={s.id||s.name} value={s.name}>{s.name}</option>)}</select></label>
               <label style={field}>Category / التصنيف<select style={control} value={issue.category} onChange={e=>setEmailIssues(p=>p.map((x,j)=>j===i?{...x,category:e.target.value}:x))}>{['General Maintenance','Electrical','Plumbing & Water','A/C & HVAC','Doors, Locks & Windows','Civil & Building','Furniture & Facilities','Other'].map(x=><option key={x}>{x}</option>)}</select></label>
               <label style={field}>Priority / الأولوية<select style={control} value={issue.priority} onChange={e=>setEmailIssues(p=>p.map((x,j)=>j===i?{...x,priority:e.target.value}:x))}>{['Low','Medium','High','Critical'].map(x=><option key={x}>{x}</option>)}</select></label>
               <div style={{display:'flex',alignItems:'end'}}><button type="button" style={{...btn,background:'#fee2e2',color:'#991b1b'}} onClick={()=>setEmailIssues(p=>p.filter((_,j)=>j!==i))}>Remove issue / حذف العطل</button></div>
@@ -278,6 +288,16 @@ export default function BuildingMaintenanceWorkflow({ user }) {
               <div><strong style={{fontSize:16}}>{r.request_no}</strong><div style={{marginTop:5}}><b>{[r.city,r.site].filter(Boolean).join(' · ')||'Site pending'}</b> · {r.category} · {r.priority}</div><div style={{marginTop:8,whiteSpace:'pre-wrap'}}>{r.description}</div><div style={{fontSize:12,color:'#64748b',marginTop:7}}>Requester / مقدم الطلب: {r.requester_name||'-'} {r.requester_email?'· '+r.requester_email:''}</div></div>
               <div style={{alignSelf:'flex-start',background:statusColor(r.status),borderRadius:20,padding:'6px 10px',fontWeight:700,fontSize:12}}>{r.status}</div>
             </div>
+            {editingRequest?.id===r.id&&<div style={{display:'grid',gap:10,marginTop:12,padding:12,background:'#fffbeb',borderRadius:8}}>
+              <b>Edit maintenance request / تعديل طلب الصيانة</b>
+              <label style={field}>Site / الموقع<select style={control} value={editingRequest.site||''} onChange={e=>setEditingRequest(p=>({...p,site:e.target.value}))}><option value="">Select site / اختر الموقع</option>{sites.map(s=><option key={s.id||s.name} value={s.name}>{s.name}</option>)}</select></label>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:8}}>
+                <label style={field}>Category / التصنيف<select style={control} value={editingRequest.category||'General Maintenance'} onChange={e=>setEditingRequest(p=>({...p,category:e.target.value}))}>{['General Maintenance','Electrical','Plumbing & Water','A/C & HVAC','Doors, Locks & Windows','Civil & Building','Furniture & Facilities','Vehicle Maintenance','Other'].map(x=><option key={x}>{x}</option>)}</select></label>
+                <label style={field}>Priority / الأولوية<select style={control} value={editingRequest.priority||'Medium'} onChange={e=>setEditingRequest(p=>({...p,priority:e.target.value}))}>{['Low','Medium','High','Critical'].map(x=><option key={x}>{x}</option>)}</select></label>
+              </div>
+              <label style={field}>Description / وصف المشكلة<textarea style={{...control,minHeight:75}} value={editingRequest.description||''} onChange={e=>setEditingRequest(p=>({...p,description:e.target.value}))}/></label>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button type="button" disabled={busy} style={{...btn,background:'#0f766e',color:'#fff'}} onClick={()=>saveRequestEdit(r.id)}>Save changes / حفظ التعديلات</button><button type="button" style={btn} onClick={()=>setEditingRequest(null)}>Cancel / إلغاء</button></div>
+            </div>}
             {assignable&&canWork&&<div style={{display:'grid',gridTemplateColumns:'minmax(150px,190px) minmax(200px,1fr) auto',gap:8,alignItems:'end',marginTop:12}}>
               <label style={field}>Executor type / نوع المنفذ<select style={control} value={a.type||''} onChange={e=>chooseType(r.id,e.target.value)}><option value="">Select / اختر</option><option>Our Employee</option><option>Contractor</option></select></label>
               <label style={field}>Executor / اسم المنفذ<select style={control} value={a.name||''} disabled={!a.type} onChange={e=>chooseExecutor(r.id,e.target.value)}><option value="">Select executor / اختر المنفذ</option>{list.map(x=><option key={x.id||x.email} value={x.name||x.full_name}>{x.name||x.full_name}{x.email?' — '+x.email:''}</option>)}</select></label>
@@ -302,8 +322,9 @@ export default function BuildingMaintenanceWorkflow({ user }) {
             {r.status==='Closed'&&<div style={{marginTop:10,color:'#166534',fontWeight:700}}>CLOSED / مغلقة · Final cost / التكلفة: SAR {Number(r.final_amount||0).toFixed(2)}</div>}
             <div style={{display:'flex',gap:8,marginTop:10,flexWrap:'wrap'}}>
               <button style={btn} onClick={()=>showAudit(r.id)}>View audit trail / سجل الإجراءات</button>
-              {r.executor_email&&<button style={btn} onClick={()=>window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent([r.requester_email,r.executor_email].filter(Boolean).join(','))+'&su='+encodeURIComponent('Maintenance '+r.request_no),'_blank','noopener,noreferrer')}>Prepare email / تجهيز البريد</button>}
-              {r.requester_email&&<button style={btn} onClick={()=>window.open('https://wa.me/?text='+encodeURIComponent('Maintenance '+r.request_no+': repair completion needs confirmation. / طلب الصيانة '+r.request_no+': يرجى تأكيد اكتمال الإصلاح.'),'_blank','noopener,noreferrer')}>Prepare WhatsApp / تجهيز واتساب</button>}
+              {r.status==='New'&&!r.work_order_id&&canWork&&<button style={btn} onClick={()=>setEditingRequest({id:r.id,site:r.site||'',category:r.category||'General Maintenance',priority:r.priority||'Medium',description:r.description||''})}>Edit request / تعديل الطلب</button>}
+              <button style={btn} onClick={()=>window.open('https://wa.me/?text='+encodeURIComponent('Maintenance '+r.request_no+' | Site: '+(r.site||'-')+' | '+r.category+' | Priority: '+r.priority+'\\n'+r.description+'\\nPlease review this maintenance request. / يرجى مراجعة طلب الصيانة.'),'_blank','noopener,noreferrer')}>Prepare WhatsApp / تجهيز واتساب</button>
+              {(r.executor_email||r.requester_email)&&<button style={btn} onClick={()=>window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent([r.requester_email,r.executor_email].filter(Boolean).join(','))+'&su='+encodeURIComponent('Maintenance '+r.request_no),'_blank','noopener,noreferrer')}>Prepare email / تجهيز البريد</button>}
             </div>
             {audit[r.id]&&<div style={{marginTop:10,padding:10,background:'#f8fafc',borderRadius:8}}><b>Audit trail / سجل الإجراءات</b>{!audit[r.id].length?<div>No events / لا توجد أحداث مسجلة.</div>:audit[r.id].map(ev=><div key={ev.id} style={{padding:'7px 0',borderBottom:'1px solid #e2e8f0',fontSize:13}}><b>{ev.action}</b> · {ev.actor_name||ev.actor_type} · {new Date(ev.created_at).toLocaleString()}</div>)}</div>}
           </article>;

@@ -379,6 +379,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       <h3 style={{marginTop:0}}>📩 Upload maintenance email / رفع بريد الصيانة</h3>
       <p style={{marginTop:0,fontSize:13,color:'#64748b'}}>Upload an Outlook email saved as .eml, or a .txt/.html email file. The page detects likely faults and proposes a separate ticket for each one. Review the results before creating tickets. / ارفع البريد بصيغة EML أو TXT أو HTML؛ يحاول النظام تحديد كل عطل وإنشاء تذكرة مستقلة له بعد مراجعتك.</p>
       <input type="file" accept=".eml,.txt,.html,.htm,text/plain,text/html,message/rfc822" onChange={readEmailFile} disabled={busy} style={{maxWidth:'100%'}}/>
+      {(emailFileName || emailText || emailIssues.length > 0) && <button type="button" disabled={busy} onClick={() => { setEmailFileName(''); setEmailText(''); setEmailIssues([]); setError(''); setMessage('Detected issues cleared. No tickets were created by clearing this preview. / تم مسح الأعطال المكتشفة من المعاينة. مسح المعاينة لا ينشئ ولا يحذف تذاكر.'); }} style={{...btn, marginTop:10, background:'#fee2e2', color:'#991b1b'}}>Clear all detected issues / مسح جميع الأعطال المكتشفة</button>}
       {emailFileName&&<div style={{marginTop:8,fontSize:13}}>Selected file / الملف: <b>{emailFileName}</b></div>}
       {emailIssues.length>0&&<>
         <div style={{marginTop:12,padding:10,background:'#f8fafc',borderRadius:8,fontSize:13}}>Choose the site for each detected issue below. Each ticket will use its own selected site. / اختر الموقع لكل عطل أدناه؛ ستأخذ كل تذكرة الموقع المحدد لها.</div>

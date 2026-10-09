@@ -133,7 +133,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
           const awaitingFinal=r.requester_confirmation==='yes'&&['Operationally Completed','Open'].includes(r.status);
           return <article key={r.id} style={{border:'1px solid #cbd5e1',borderRadius:10,padding:14}}>
             <div style={{display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
-              <div><strong style={{fontSize:16}}>{r.request_no}</strong><div style={{marginTop:5}}><b>{r.site||'Site pending'}</b> · {r.category} · {r.priority}</div><div style={{marginTop:8,whiteSpace:'pre-wrap'}}>{r.description}</div><div style={{fontSize:12,color:'#64748b',marginTop:7}}>Requester / مقدم الطلب: {r.requester_name||'-'} {r.requester_email?'· '+r.requester_email:''}</div></div>
+              <div><strong style={{fontSize:16}}>{r.request_no}</strong><div style={{marginTop:5}}><b>{[r.city,r.site].filter(Boolean).join(' · ')||'Site pending'}</b> · {r.category} · {r.priority}</div><div style={{marginTop:8,whiteSpace:'pre-wrap'}}>{r.description}</div><div style={{fontSize:12,color:'#64748b',marginTop:7}}>Requester / مقدم الطلب: {r.requester_name||'-'} {r.requester_email?'· '+r.requester_email:''}</div></div>
               <div style={{alignSelf:'flex-start',background:statusColor(r.status),borderRadius:20,padding:'6px 10px',fontWeight:700,fontSize:12}}>{r.status}</div>
             </div>
             {assignable&&canWork&&<div style={{display:'grid',gridTemplateColumns:'minmax(150px,190px) minmax(200px,1fr) auto',gap:8,alignItems:'end',marginTop:12}}>
@@ -160,8 +160,8 @@ export default function BuildingMaintenanceWorkflow({ user }) {
             {r.status==='Closed'&&<div style={{marginTop:10,color:'#166534',fontWeight:700}}>CLOSED / مغلقة · Final cost / التكلفة: SAR {Number(r.final_amount||0).toFixed(2)}</div>}
             <div style={{display:'flex',gap:8,marginTop:10,flexWrap:'wrap'}}>
               <button style={btn} onClick={()=>showAudit(r.id)}>View audit trail / سجل الإجراءات</button>
-              {r.executor_email&&<button style={btn} onClick={()=>GenUI.openUrl('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent([r.requester_email,r.executor_email].filter(Boolean).join(','))+'&su='+encodeURIComponent('Maintenance '+r.request_no))}>Prepare email / تجهيز البريد</button>}
-              {r.requester_email&&<button style={btn} onClick={()=>GenUI.openUrl('https://wa.me/?text='+encodeURIComponent('Maintenance '+r.request_no+': repair completion needs confirmation. / طلب الصيانة '+r.request_no+': يرجى تأكيد اكتمال الإصلاح.'))}>Prepare WhatsApp / تجهيز واتساب</button>}
+              {r.executor_email&&<button style={btn} onClick={()=>window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent([r.requester_email,r.executor_email].filter(Boolean).join(','))+'&su='+encodeURIComponent('Maintenance '+r.request_no),'_blank','noopener,noreferrer')}>Prepare email / تجهيز البريد</button>}
+              {r.requester_email&&<button style={btn} onClick={()=>window.open('https://wa.me/?text='+encodeURIComponent('Maintenance '+r.request_no+': repair completion needs confirmation. / طلب الصيانة '+r.request_no+': يرجى تأكيد اكتمال الإصلاح.'),'_blank','noopener,noreferrer')}>Prepare WhatsApp / تجهيز واتساب</button>}
             </div>
             {audit[r.id]&&<div style={{marginTop:10,padding:10,background:'#f8fafc',borderRadius:8}}><b>Audit trail / سجل الإجراءات</b>{!audit[r.id].length?<div>No events / لا توجد أحداث مسجلة.</div>:audit[r.id].map(ev=><div key={ev.id} style={{padding:'7px 0',borderBottom:'1px solid #e2e8f0',fontSize:13}}><b>{ev.action}</b> · {ev.actor_name||ev.actor_type} · {new Date(ev.created_at).toLocaleString()}</div>)}</div>}
           </article>;

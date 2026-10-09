@@ -27,6 +27,7 @@ export default function WorkOrders({ user, access = {}, entryOnly = false }) {
   const [pdfPreview, setPdfPreview] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfSite, setPdfSite] = useState('');
+  const [pdfMonth, setPdfMonth] = useState(() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); });
   const pdfInputRef = useRef(null);
 
   useEffect(() => { load(); }, []);
@@ -135,7 +136,8 @@ export default function WorkOrders({ user, access = {}, entryOnly = false }) {
           'Content-Type': 'multipart/form-data',
           'X-PDF-Site': pdfSite,
           'X-PDF-Project-Name': pdfPreview.projectName || pdfPreview.filename || 'PDF Project',
-          'X-PDF-Date': pdfPreview.date || ''
+          'X-PDF-Date': pdfPreview.date || '',
+          'X-PDF-Month': pdfMonth
         },
         timeout: 120000
       });
@@ -231,6 +233,7 @@ export default function WorkOrders({ user, access = {}, entryOnly = false }) {
                 )}
                 <div style={{ overflowX: 'auto' }}>
                   <div className="form-group" style={{marginBottom:12}}><label>Site *</label><select value={pdfSite} onChange={e=>setPdfSite(e.target.value)}><option value="">-- Select Site --</option>{sites.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}</select></div>
+                  <div className="form-group" style={{marginBottom:12}}><label>Report Month *</label><input type="month" value={pdfMonth} onChange={e=>setPdfMonth(e.target.value)} required /></div>
                   <table>
                     <thead><tr><th>Sr.</th><th>Item</th><th>Unit</th><th>Qty</th><th>Unit Price (reference)</th><th>Final Cost</th><th>Status</th></tr></thead>
                     <tbody>{(pdfPreview.items || []).map((r, i) => (

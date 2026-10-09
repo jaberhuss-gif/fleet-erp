@@ -7,75 +7,100 @@ const field = { display:'flex', flexDirection:'column', gap:5, minWidth:0 };
 const control = { width:'100%', boxSizing:'border-box', padding:'10px', border:'1px solid #cbd5e1', borderRadius:7, background:'#fff' };
 const btn = { padding:'9px 13px', border:0, borderRadius:7, cursor:'pointer', fontWeight:700 };
 function parseMaintenanceEmail(raw) {
-  const original = String(raw || '').replace(/^\uFEFF/, '');
+  const original = String(raw || '').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const decodeBytes = bytes => new TextDecoder('utf-8', { fatal: false }).decode(new Uint8Array(bytes));
   const decodeBase64 = value => {
     try {
       const compact = String(value || '').replace(/\s/g, '');
       if (!compact || !/^[A-Za-z0-9+/]*={0,2}$/.test(compact)) return value;
       const binary = atob(compact);
-      const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
-      return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+      return decodeBytes(Array.from(binary, ch => ch.charCodeAt(0)));
     } catch { return value; }
   };
-  const decodeQP = value => String(value || '').replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
-  let source = original;
-  const boundaryMatch = original.match(/boundary="?([^"\r\n;]+)"?/i);
-  if (boundaryMatch) {
-    const boundary = boundaryMatch[1];
-    const parts = original.split('--' + boundary);
-    const decodedParts = parts.map(part => {
-      const splitAt = part.search(/\r?\n\r?\n/);
-      if (splitAt < 0) return '';
-      const headers = part.slice(0, splitAt);
-      let body = part.slice(splitAt).replace(/^\r?\n\r?\n/, '').trim();
-      if (/Content-Type:\s*text\/plain/i.test(headers)) {
-        if (/Content-Transfer-Encoding:\s*base64/i.test(headers)) body = decodeBase64(body);
-        else if (/Content-Transfer-Encoding:\s*quoted-printable/i.test(headers)) body = decodeQP(body);
-        return body;
-      }
-      if (/Content-Type:\s*text\/html/i.test(headers)) {
-        if (/Content-Transfer-Encoding:\s*base64/i.test(headers)) body = decodeBase64(body);
-        else if (/Content-Transfer-Encoding:\s*quoted-printable/i.test(headers)) body = decodeQP(body);
-        return body.replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ');
-      }
-      return '';
-    }).filter(Boolean);
-    if (decodedParts.length) source = decodedParts[0];
-  } else {
-    const plainMatch = original.match(/Content-Type:\s*text\/plain[^\r\n]*(?:\r?\n[ \t].*)*\r?\n([\s\S]*?)(?=\r?\n--[-_A-Za-z0-9]+(?:--)?\s*(?:\r?\n|$)|$)/i);
-    if (plainMatch) {
-      let body = plainMatch[1].replace(/^\r?\n/, '').trim();
-      const headerStart = original.lastIndexOf('Content-Type:', plainMatch.index);
-      const headers = original.slice(headerStart, original.indexOf(body, headerStart));
-      if (/Content-Transfer-Encoding:\s*base64/i.test(headers)) body = decodeBase64(body);
-      else if (/Content-Transfer-Encoding:\s*quoted-printable/i.test(headers)) body = decodeQP(body);
-      source = body;
-    } else {
-      const compact = original.trim().replace(/\s/g, '');
-      if (compact.length > 80 && /^[A-Za-z0-9+/]+={0,2}$/.test(compact)) {
-        const decoded = decodeBase64(compact);
-        if (decoded !== compact && /(?:Hi|Hello|Subject:|freon|compressor|air.?condition|fan)/i.test(decoded)) source = decoded;
+  const decodeQP = value => {
+    const input = String(value || '').replace(/=\n/g, '');
+    const bytes = [];
+    for (let i = 0; i < input.length; i++) {
+      if (input[i] === '=' && /^[0-9a-f]{2}$/i.test(input.slice(i + 1, i + 3))) {
+        bytes.push(parseInt(input.slice(i + 1, i + 3), 16)); i += 2;
+      } else {
+        const code = input.charCodeAt(i);
+        if (code <= 255) bytes.push(code);
+        else bytes.push(...new TextEncoder().encode(input[i]));
       }
     }
+    return decodeBytes(bytes);
+  };
+  const splitHeaders = entity => {
+    const at = entity.search(/\n\n/);
+    if (at < 0) return { headers: '', body: entity };
+    return { headers: entity.slice(0, at), body: entity.slice(at + 2) };
+  };
+  const headerValue = (headers, name) => {
+    const unfolded = String(headers || '').replace(/\n[ \t]+/g, ' ');
+    const line = unfolded.split('\n').find(item => item.toLowerCase().startsWith(name.toLowerCase() + ':'));
+    return line ? line.slice(name.length + 1).trim() : '';
+  };
+  const parseEntity = entity => {
+    const { headers, body } = splitHeaders(String(entity || ''));
+    const contentType = headerValue(headers, 'Content-Type') || 'text/plain';
+    const transfer = headerValue(headers, 'Content-Transfer-Encoding').toLowerCase();
+    const boundaryMatch = contentType.match(/boundary\s*=\s*(?:"([^"]+)"|'([^']+)'|([^;\s]+))/i);
+    if (/multipart\//i.test(contentType) && boundaryMatch) {
+      const boundary = boundaryMatch[1] || boundaryMatch[2] || boundaryMatch[3];
+      const pieces = body.split('--' + boundary);
+      const results = [];
+      for (const piece of pieces) {
+        const trimmed = piece.replace(/^\n+|\n+$/g, '');
+        if (!trimmed || trimmed === '--' || trimmed.startsWith('--')) continue;
+        const parsed = parseEntity(trimmed);
+        if (parsed.plain.trim() || parsed.html.trim()) results.push(parsed);
+      }
+      return {
+        plain: results.map(x => x.plain).filter(Boolean).join('\n\n'),
+        html: results.map(x => x.html).filter(Boolean).join('\n\n')
+      };
+    }
+    let decoded = body.replace(/\n+$/, '');
+    if (transfer === 'base64') decoded = decodeBase64(decoded);
+    else if (transfer === 'quoted-printable') decoded = decodeQP(decoded);
+    if (/text\/html/i.test(contentType)) return { plain: '', html: decoded };
+    if (/text\/plain/i.test(contentType) || !/application\/|image\/|video\//i.test(contentType)) return { plain: decoded, html: '' };
+    return { plain: '', html: '' };
+  };
+  const htmlToText = html => String(html || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<(?:br|\/p|\/div|\/li|\/tr|\/h[1-6])\b[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;|&#160;/gi, ' ')
+    .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)));
+  let source = original;
+  const looksLikeEml = /(?:^|\n)(?:MIME-Version|Content-Type|From|Subject):/im.test(original);
+  if (looksLikeEml) {
+    const parsed = parseEntity(original);
+    source = parsed.plain.trim() ? parsed.plain : htmlToText(parsed.html);
+  } else if (/<(?:html|body|div|p|br)\b/i.test(original)) {
+    source = htmlToText(original);
   }
   let text = String(source || '')
     .replace(/=3D/gi, '=').replace(/=20/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
     .replace(/^[ \t]*(From|To|Cc|Bcc|Subject|Date|Sent|Received|MIME-Version|Content-Type|Content-Transfer-Encoding):.*$/gim, ' ')
     .replace(/^[ \t]*--[-_A-Za-z0-9]+(?:--)?[ \t]*$/gm, ' ')
     .replace(/^[=_-]{5,}.*$/gm, ' ')
-    .replace(/\r/g, '').replace(/\u00a0/g, ' ');
+    .replace(/\u00a0/g, ' ').replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n').trim();
   text = text.split(/\n\s*(?:From:\s.+\nSent:|On .{3,160}wrote:|_{5,}|This message contains confidential information|This email and any attachments|Regards,|Best regards,|Kind regards,|Thanks,|Thank you,)\s*/i)[0];
   text = text.replace(/^\s*>.*$/gm, '').replace(/^\s*(?:Mobile|Phone|Email|Web|www\.).*$/gim, '').replace(/\n{3,}/g, '\n\n').trim();
   const rules = [
-    {category:'A/C & HVAC',priority:'Medium',re:/\b(a\/?c|air.?condition(?:er|ing)?|hvac|cooling|not cool|refrigerat|thermostat|freon|compressor|fan)\b|تكييف|مكيف|تبريد|فريون|كمبروسر/i},
-    {category:'Plumbing & Water',priority:'High',re:/\b(water leak|leaking|leakage|pipe burst|drain|tap|faucet|toilet|water supply)\b|تسرب|تسريب|ماسورة|أنبوب|مياه|ماء|صرف صحي/i},
-    {category:'Electrical',priority:'High',re:/\b(electrical|electricity|power outage|wiring|socket|outlet|breaker|light not|lamp|short circuit)\b|كهرباء|تماس|قاطع|إنارة|مصباح/i},
+    {category:'A/C & HVAC',priority:'Medium',re:/\b(a\/c|air.?condition(?:er|ing)?|hvac|cooling|not cool|refrigerat|thermostat|freon|compressor|fan)\b|تكييف|مكيف|تبريد|فريون|كمبروسر/i},
+    {category:'Plumbing & Water',priority:'High',re:/\b(water leak|leaking|leakage|pipe burst|drain|tap|faucet|toilet|water supply)\b|تسرب|تسريب|ماسورة|أنبوب|مياه|ماء|صرف صحي|restroom|bathroom/i},
+    {category:'Electrical',priority:'High',re:/\b(electrical|electricity|power outage|wiring|socket|outlet|breaker|lights?\b.{0,60}\b(?:not working|not working properly|out)|lamp|short circuit)\b|تلف|كهرباء|تماس|قاطع|إنارة|مصباح/i},
     {category:'Doors, Locks & Windows',priority:'Medium',re:/\b(door|lock|key|window|hinge)\b|باب|قفل|نافذة|شباك/i},
-    {category:'Civil & Building',priority:'Medium',re:/\b(ceiling|wall|roof|floor|crack|paint|tiles|plaster)\b|سقف|جدار|حائط|أرضية|تشققات|دهان|بلاط/i},
+    {category:'Civil & Building',priority:'Medium',re:/\b(ceiling|wall|roof|floor(?:ing)?|crack(?:ed)?|paint|tiles|plaster)\b|سقف|جدار|حائط|أرضية|تشققات|دهان|بلاط/i},
     {category:'Furniture & Facilities',priority:'Low',re:/\b(furniture|chair|desk|bed|cabinet|curtain)\b|أثاث|كرسي|مكتب|سرير|خزانة|ستارة/i}
   ];
   const body = text.split(/\n\s*(?:From:\s.+|Sent:\s.+|To:\s.+|Subject:\s.+|Mobile:|Email:|Ma.?aden Ivanhoe|This message contains confidential information)/i)[0].trim();

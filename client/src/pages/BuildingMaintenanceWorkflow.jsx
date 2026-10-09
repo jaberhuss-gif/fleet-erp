@@ -364,12 +364,34 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     try { const r=await api.get('/maintenance-requests/'+id+'/audit'); setAudit(p=>({...p,[id]:r.data.events||[]})); return r.data.events||[]; }
     catch(e) { setError(e.response?.data?.error||e.message); return []; }
   };
+  const printRegisterPdf = async () => {
+    const win=window.open('','_blank');
+    if(!win) { setError('Allow pop-ups to print the PDF report / اسمح بالنوافذ المنبثقة لطباعة تقرير PDF.'); return; }
+    setBusy(true); setError('');
+    try {
+      const esc = value => String(value ?? '-').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      const reports=[];
+      for(const ticket of visible) {
+        const response=await api.get('/maintenance-requests/'+ticket.id+'/audit');
+        reports.push({ticket,events:response.data.events||[]});
+      }
+      const pages=reports.map(({ticket,events})=>{
+        const rows=events.map(ev=>'<tr><td>'+esc(new Date(ev.created_at).toLocaleString())+'</td><td>'+esc(ev.action)+'</td><td>'+esc(ev.actor_name||ev.actor_type)+'</td><td>'+esc(typeof ev.details==='string'?ev.details:JSON.stringify(ev.details||{}))+'</td></tr>').join('');
+        const fields=[['Status / الحالة',ticket.status],['City / المدينة',ticket.city],['Category / التصنيف',ticket.category],['Priority / الأولوية',ticket.priority],['Requester / مقدم الطلب',ticket.requester_name],['Executor / المنفذ',ticket.executor_name],['Final cost (SAR) / التكلفة',ticket.final_amount==null?'Not recorded / غير مسجلة':Number(ticket.final_amount).toFixed(2)],['Created / تاريخ الإنشاء',ticket.created_at?new Date(ticket.created_at).toLocaleString():'-'],['Closed / تاريخ الإغلاق',ticket.closed_at?new Date(ticket.closed_at).toLocaleString():'Not closed / غير مغلقة']];
+        return '<section class="ticket"><h1>Building Maintenance — Complete Ticket Record / سجل تذكرة الصيانة الكامل</h1><h2>'+esc(ticket.request_no)+' — '+esc(ticket.site)+'</h2><div class="meta">'+fields.map(([k,v])=>'<div class="field"><b>'+esc(k)+'</b><div>'+esc(v)+'</div></div>').join('')+'</div><h3>Description / وصف العطل</h3><div class="field">'+esc(ticket.description)+'</div><h3>Closure notes / ملاحظات الإغلاق</h3><div class="field">'+esc(ticket.closing_notes||'-')+'</div><h3>Audit trail / سجل الإجراءات ('+events.length+')</h3><table><thead><tr><th>Date / التاريخ</th><th>Action / الإجراء</th><th>Actor / المنفذ</th><th>Details / التفاصيل</th></tr></thead><tbody>'+rows+'</tbody></table></section>';
+      }).join('');
+      win.document.open();
+      win.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Building Maintenance Register</title><style>body{font-family:Arial,sans-serif;color:#172033;margin:24px}.ticket{page-break-after:always;break-after:page}h1{font-size:20px}h2{font-size:16px}h3{font-size:14px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:6px}.field{border:1px solid #cbd5e1;padding:7px;white-space:pre-wrap;overflow-wrap:anywhere}.field b{font-size:10px;color:#475569}table{border-collapse:collapse;width:100%;font-size:10px}th,td{border:1px solid #cbd5e1;padding:6px;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#e2e8f0}@media print{body{margin:10mm}.ticket:last-child{page-break-after:auto;break-after:auto}}</style></head><body><p>Tickets included / عدد التذاكر: '+reports.length+'</p>'+pages+'<script>window.onload=()=>window.print()</script></body></html>');
+      win.document.close();
+    } catch(e) { win.close(); setError(e.response?.data?.error||e.message); }
+    finally { setBusy(false); }
+  };
   const printTicketPdf = async ticket => {
     const events = await showAudit(ticket.id);
     const esc = value => String(value ?? '-').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const eventRows = events.map(ev => '<tr><td>'+esc(new Date(ev.created_at).toLocaleString())+'</td><td>'+esc(ev.action)+'</td><td>'+esc(ev.actor_name||ev.actor_type)+'</td><td>'+esc(typeof ev.details==='string'?ev.details:JSON.stringify(ev.details||{}))+'</td></tr>').join('');
     const html = '<!doctype html><html><head><meta charset="utf-8"><title>'+esc(ticket.request_no)+' maintenance report</title><style>body{font-family:Arial,sans-serif;color:#172033;margin:28px}h1{font-size:22px}h2{font-size:16px;margin-top:24px}table{border-collapse:collapse;width:100%;font-size:11px}th,td{border:1px solid #cbd5e1;padding:7px;text-align:left;vertical-align:top;white-space:pre-wrap;overflow-wrap:anywhere}th{background:#e2e8f0}.meta{display:grid;grid-template-columns:1fr 1fr;gap:8px}.field{border:1px solid #cbd5e1;padding:8px;border-radius:5px}.label{font-size:10px;color:#475569;text-transform:uppercase}.value{font-size:13px;margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere}@media print{button{display:none}body{margin:12mm}}</style></head><body><h1>Building Maintenance — Complete Ticket Record / سجل تذكرة الصيانة الكامل</h1><h2>'+esc(ticket.request_no)+'</h2><div class="meta">'+[['Status / الحالة',ticket.status],['Site / الموقع',ticket.site],['City / المدينة',ticket.city],['Category / التصنيف',ticket.category],['Priority / الأولوية',ticket.priority],['Requester / مقدم الطلب',ticket.requester_name],['Executor / المنفذ',ticket.executor_name],['Final cost (SAR) / التكلفة',ticket.final_amount==null?'Not recorded / غير مسجلة':Number(ticket.final_amount).toFixed(2)],['Created / تاريخ الإنشاء',ticket.created_at?new Date(ticket.created_at).toLocaleString():'-'],['Closed / تاريخ الإغلاق',ticket.closed_at?new Date(ticket.closed_at).toLocaleString():'Not closed / غير مغلقة']].map(([k,v])=>'<div class="field"><div class="label">'+esc(k)+'</div><div class="value">'+esc(v)+'</div></div>').join('')+'</div><h2>Description / وصف العطل</h2><div class="field value">'+esc(ticket.description)+'</div><h2>Closure notes / ملاحظات الإغلاق</h2><div class="field value">'+esc(ticket.closing_notes||'-')+'</div><h2>Audit trail / سجل الإجراءات ('+events.length+')</h2><table><thead><tr><th>Date / التاريخ</th><th>Action / الإجراء</th><th>Actor / المنفذ</th><th>Details / التفاصيل</th></tr></thead><tbody>'+eventRows+'</tbody></table><p style="margin-top:22px;font-size:10px;color:#64748b">Generated from Fleet ERP / تم إنشاء التقرير من نظام إدارة الأسطول والصيانة</p><script>window.onload=()=>window.print()</script></body></html>';
-    const win=window.open('','_blank','noopener,noreferrer');
+    const win=window.open('','_blank');
     if(!win) { setError('Allow pop-ups to print the PDF report / اسمح بالنوافذ المنبثقة لطباعة تقرير PDF.'); return; }
     win.document.open(); win.document.write(html); win.document.close();
   };
@@ -486,6 +508,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
         <button type="button" style={btn} onClick={load}>↻ Refresh / تحديث</button>
       </div>
       <input style={{...control,marginTop:12,maxWidth:460}} value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search ticket, site, requester, executor… / بحث"/>
+      {canWork&&<button type="button" disabled={busy||!visible.length} style={{...btn,marginTop:8,background:'#1d4ed8',color:'#fff'}} onClick={printRegisterPdf}>Full Register PDF / PDF السجل الكامل</button>}
       <div style={{display:'grid',gap:12,marginTop:14}}>
         {!visible.length&&<div style={{padding:18,background:'#f8fafc',borderRadius:8}}>No requests found / لا توجد طلبات.</div>}
         {visible.map(r=>{

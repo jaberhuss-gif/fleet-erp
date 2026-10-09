@@ -333,14 +333,14 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       const link2=base+'/api/maintenance-requests/public/'+ticket.completion_token+'/work-completed';
       const subject='BUILDING MAINTENANCE / صيانة المباني — '+(ticket.request_no||'');
       const sourceTicket = requests.find(x => String(x.id) === String(id)) || {};
-      const descriptionText = String(ticket.description || ticket.problem_description || ticket.details || sourceTicket.description || sourceTicket.problem_description || sourceTicket.details || '');
+      const descriptionText = String(ticket.description || ticket.problem_description || ticket.details || ticket.request_description || ticket.issue_description || sourceTicket.description || sourceTicket.problem_description || sourceTicket.details || sourceTicket.request_description || sourceTicket.issue_description || '').replace(/\\n/g, '\n');
       const issueLines = descriptionText.split(/\r?\n/).map(line => line.trim()).filter(line => line && !/^(Multiple maintenance issues reported|Source email:)/i.test(line)).map(line => line.replace(/^\d+\.\s*/, '').replace(/^\[[^\]]+\]\s*/, '').trim()).filter(line => line && !/^(?:\*{3,}|[-_=]{3,})$/.test(line)).slice(0,4);
       const body=[
         'Maintenance request assigned / تم تعيين طلب صيانة',
         '',
         'Request number / رقم الطلب: '+(ticket.request_no||'-'),
         '',
-        ...[0,1,2,3].map(i => (i+1)+'. '+(issueLines[i]||'*****')),
+        ...[0,1,2,3].map(i => (i+1)+'. '+(issueLines[i] || (i === 0 ? 'Fault details are recorded in the maintenance request. / تفاصيل الأعطال مسجلة في طلب الصيانة.' : ''))),
         '',
         'Please check WhatsApp for the task link. After finishing the repair, open the WhatsApp link and press YES / DONE.',
         '',
@@ -369,14 +369,14 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     const link1 = base + '/api/maintenance-requests/public/' + (ticket.acknowledgement_token || '') + '/acknowledge';
     const link2 = base + '/api/maintenance-requests/public/' + (ticket.completion_token || '') + '/work-completed';
     const subject = 'BUILDING MAINTENANCE / صيانة المباني — ' + (ticket.request_no || '');
-    const descriptionText = String(ticket.description || ticket.problem_description || ticket.details || '');
+    const descriptionText = String(ticket.description || ticket.problem_description || ticket.details || ticket.request_description || ticket.issue_description || '').replace(/\\n/g, '\n');
     const issueLines = descriptionText.split(/\r?\n/).map(line => line.trim()).filter(line => line && !/^(Multiple maintenance issues reported|Source email:)/i.test(line)).map(line => line.replace(/^\d+\.\s*/, '').replace(/^\[[^\]]+\]\s*/, '').trim()).filter(line => line && !/^(?:\*{3,}|[-_=]{3,})$/.test(line)).slice(0,4);
     const body = [
       'Maintenance request assigned / تم تعيين طلب صيانة',
       '',
       'Request number / رقم الطلب: ' + (ticket.request_no || '-'),
       '',
-      ...[0,1,2,3].map(i => (i+1)+'. '+(issueLines[i]||'*****')),
+      ...[0,1,2,3].map(i => (i+1)+'. '+(issueLines[i] || (i === 0 ? 'Fault details are recorded in the maintenance request. / تفاصيل الأعطال مسجلة في طلب الصيانة.' : ''))),
       '',
       'Please check WhatsApp for the task link. After finishing the repair, open the WhatsApp link and press YES / DONE.',
       '',

@@ -7,7 +7,7 @@ const field = { display:'flex', flexDirection:'column', gap:5, minWidth:0 };
 const control = { width:'100%', boxSizing:'border-box', padding:'10px', border:'1px solid #cbd5e1', borderRadius:7, background:'#fff' };
 const btn = { padding:'9px 13px', border:0, borderRadius:7, cursor:'pointer', fontWeight:700 };
 function parseMaintenanceEmail(raw) {
-  let source = String(raw || '').replace(/^\uFEFF/, '').replace(/=\r?\n/g, '').replace(/=3D/gi, '=').replace(/=20/gi, ' ');
+  let source = String(raw || '').replace(/^\uFEFF/, '');
   const decodeBase64 = value => {
     try {
       const compact = String(value || '').replace(/\s/g, '');
@@ -17,52 +17,57 @@ function parseMaintenanceEmail(raw) {
       return new TextDecoder('utf-8').decode(bytes);
     } catch { return value; }
   };
-  // Decode MIME text/plain base64 payloads before trying to identify faults.
-  const plainMatch = source.match(/Content-Type:\s*text\/plain[^\r\n]*([\s\S]*?)(?:\r?\n\r?\n)([\s\S]*?)(?=\r?\n--[-_A-Za-z0-9]+|$)/i);
-  if (plainMatch) {
-    const headers = plainMatch[1] || '';
-    let body = plainMatch[2] || '';
+  const decodeQuotedPrintable = value => String(value || '')
+    .replace(/=\r?\n/g, '')
+    .replace(/=([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex,16)));
+  // Outlook .eml may wrap base64 lines and put MIME headers directly before the body.
+  const mimeBody = source.match(/Content-Type:\s*text\/plain[^\r\n]*(?:\r?\n(?!\r?$)[^\r\n]*)*\r?\n\r?\n([\s\S]*?)(?=\r?\n--[-_A-Za-z0-9]+(?:--)?\s*(?:\r?\n|$)|$)/i);
+  if (mimeBody) {
+    const headerStart = source.lastIndexOf('Content-Type:', mimeBody.index);
+    const headers = source.slice(headerStart, source.indexOf(mimeBody[1], headerStart));
+    let body = mimeBody[1].trim();
     if (/Content-Transfer-Encoding:\s*base64/i.test(headers)) body = decodeBase64(body);
-    else if (/Content-Transfer-Encoding:\s*quoted-printable/i.test(headers)) body = body.replace(/=([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex,16)));
+    else if (/Content-Transfer-Encoding:\s*quoted-printable/i.test(headers)) body = decodeQuotedPrintable(body);
     source = body;
   } else {
-    source = source.replace(/Content-Transfer-Encoding:\s*base64[^\r\n]*\r?\n\r?\n([\s\S]*?)(?=\r?\n--[-_A-Za-z0-9]+|$)/gi, (_, body) => decodeBase64(body));
+    source = source.replace(/Content-Transfer-Encoding:\s*base64[^\r\n]*\r?\n\r?\n([\s\S]*?)(?=\r?\n--[-_A-Za-z0-9]+(?:--)?\s*(?:\r?\n|$)|$)/gi, (_, body) => decodeBase64(body));
+  }
+  // The pasted/imported content may itself be only a Base64 body without MIME headers.
+  const compactSource = source.replace(/\s/g,'');
+  if (compactSource.length > 80 && /^[A-Za-z0-9+/]+={0,2}$/.test(compactSource)) {
+    const decoded = decodeBase64(compactSource);
+    if (decoded !== compactSource && /(?:\b(?:Hi|Yes|Each|A\/C|From:|Subject:|freon|compressor|fan)\b)/i.test(decoded)) source = decoded;
   }
   let text = source
+    .replace(/=3D/gi,'=').replace(/=20/gi,' ')
     .replace(/<style[\s\S]*?<\/style>/gi,' ')
     .replace(/<script[\s\S]*?<\/script>/gi,' ')
     .replace(/<[^>]+>/g,' ')
     .replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>')
     .replace(/^[ \t]*(From|To|Cc|Bcc|Subject|Date|Sent|Received|MIME-Version|Content-Type|Content-Transfer-Encoding):.*$/gim,' ')
     .replace(/^[=_-]{5,}.*$/gm,' ')
-    .replace(/\r/g,'')
-    .replace(/\u00a0/g,' ');
-  // Remove quoted replies and common signature/disclaimer sections.
+    .replace(/\r/g,'').replace(/\u00a0/g,' ');
   text = text.split(/\n\s*(?:From:\s.+\nSent:|On .{3,120}wrote:|_{5,}|This message contains confidential information|This email and any attachments)/i)[0];
   text = text.replace(/^\s*>.*$/gm,'').replace(/\n{3,}/g,'\n\n').trim();
-  const parts = text.split(/\n|(?=\b\d+\s*[-.)])|(?<=[.!?؟])\s+/)
-    .map(x=>x.replace(/^\s*\d+\s*[-.)]\s*/, '').replace(/^[-*•\s]+/,'').trim())
-    .filter(x=>x.length>8);
   const rules = [
+    {category:'A/C & HVAC',priority:'Medium',re:/\b(a\/?c|air.?condition|hvac|cooling|not cool|refrigerat|thermostat|freon|compressor|fan)\b|تكييف|مكيف|تبريد|فريون|كمبروسر/i},
     {category:'Plumbing & Water',priority:'High',re:/\b(water leak|leaking|leakage|pipe burst|drain|tap|faucet|toilet|water supply)\b|تسرب|تسريب|ماسورة|أنبوب|مياه|ماء|صرف صحي/i},
-    {category:'A/C & HVAC',priority:'High',re:/\b(a\/?c|air.?condition|hvac|cooling|not cool|refrigerat|thermostat|freon|compressor|fan)\b|تكييف|مكيف|تبريد|فريون|كمبروسر/i},
     {category:'Electrical',priority:'High',re:/\b(electrical|electricity|power outage|wiring|socket|outlet|breaker|light not|lamp|short circuit)\b|كهرباء|تماس|قاطع|إنارة|مصباح/i},
     {category:'Doors, Locks & Windows',priority:'Medium',re:/\b(door|lock|key|window|hinge)\b|باب|قفل|نافذة|شباك/i},
     {category:'Civil & Building',priority:'Medium',re:/\b(ceiling|wall|roof|floor|crack|paint|tiles|plaster)\b|سقف|جدار|حائط|أرضية|تشققات|دهان|بلاط/i},
     {category:'Furniture & Facilities',priority:'Low',re:/\b(furniture|chair|desk|bed|cabinet|curtain)\b|أثاث|كرسي|مكتب|سرير|خزانة|ستارة/i}
   ];
-  const candidates = parts.length ? parts : (text ? [text] : []);
+  const body = text.split(/\n\s*(?:From:\s.+|Sent:\s.+|To:\s.+|Subject:\s.+|Mobile:|Email:|Ma.?aden Ivanhoe|This message contains confidential information)/i)[0].trim();
+  const meaningful = body.split(/\n|(?<=[.!?؟])\s+/).map(x=>x.trim()).filter(x=>x.length>8);
   const found = [];
-  for (const part of candidates) {
+  for (const part of meaningful) {
     const rule = rules.find(x=>x.re.test(part));
     if (rule && !found.some(x=>x.description.toLowerCase()===part.toLowerCase())) {
       found.push({description:part.slice(0,1200),category:rule.category,priority:rule.priority});
     }
   }
-  if (!found.length && text) {
-    found.push({description:text.slice(0,1200),category:'General Maintenance',priority:'Medium'});
-  }
-  return {text:text.slice(0,12000),issues:found};
+  if (!found.length && body) found.push({description:body.slice(0,1200),category:'General Maintenance',priority:'Medium'});
+  return {text:body.slice(0,12000),issues:found};
 }
 const siteCity = (sites, siteName) => { const s=sites.find(x=>String(x.name)===String(siteName)); return s ? String(s.city||s.city_name||s.location_city||'') : ''; };
 const statusColor = s => s==='Closed' || s==='Operationally Completed' ? '#dcfce7' : s==='Reopened' ? '#fee2e2' : '#fef3c7';

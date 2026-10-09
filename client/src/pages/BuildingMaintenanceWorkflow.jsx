@@ -360,11 +360,48 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     } catch(e) { setError(e.response?.data?.error||e.message); }
     finally { setBusy(false); }
   };
-  const resend = async id => {
-    setBusy(true); setError(''); setMessage('');
-    try { const r=await api.post('/maintenance-requests/'+id+'/resend-email'); setMessage(r.data.email?.sent?'Email sent / تم إرسال البريد.':'Email not sent / لم يُرسل: '+(r.data.email?.reason||'unknown error')); await load(); }
-    catch(e) { setError(e.response?.data?.error||e.message); }
-    finally { setBusy(false); }
+  const resend = id => {
+    // Preparing a draft is a client-side action; it must not call the server's resend endpoint.
+    // This avoids 502 errors and does not claim that an email was sent.
+    const ticket = requests.find(x => String(x.id) === String(id));
+    if (!ticket) { setError('Ticket not found in the current register. Refresh and try again. / لم يتم العثور على التذكرة؛ حدّث السجل وحاول مجددًا.'); return; }
+    const to = String(ticket.executor_email || '').trim();
+    if (!to) { setError('Executor email is missing for this ticket. Edit the contact details first. / بريد المنفذ غير مسجل لهذه التذكرة؛ حدّث بيانات الاتصال أولاً.'); return; }
+    const base = window.location.origin;
+    const link1 = base + '/api/maintenance-requests/public/' + (ticket.acknowledgement_token || '') + '/acknowledge';
+    const link2 = base + '/api/maintenance-requests/public/' + (ticket.completion_token || '') + '/work-completed';
+    const subject = 'BUILDING MAINTENANCE / صيانة المباني — ' + (ticket.request_no || '');
+    const body = [
+      'Dear ' + (ticket.executor_name || 'Executor') + ',',
+      'عزيزي ' + (ticket.executor_name || 'المنفذ') + '،',
+      '',
+      'A maintenance request has been assigned to you.',
+      'تم تعيين طلب الصيانة هذا لكم.',
+      'Request: ' + (ticket.request_no || '-') + ' | الطلب: ' + (ticket.request_no || '-'),
+      'Site: ' + (ticket.site || '-') + ' | الموقع: ' + (ticket.site || '-'),
+      'Category: ' + (ticket.category || '-') + ' | نوع العمل: ' + (ticket.category || '-'),
+      'Priority: ' + (ticket.priority || '-') + ' | الأولوية: ' + (ticket.priority || '-'),
+      'Problem: ' + (ticket.description || '-'),
+      'المشكلة: ' + (ticket.description || '-'),
+      '',
+      'LINK 1 — ACKNOWLEDGE RECEIPT: ' + link1,
+      'الرابط 1 — تأكيد استلام المهمة: ' + link1,
+      'Please open Link 1 to acknowledge the assignment.',
+      'يرجى فتح الرابط 1 لتأكيد استلام المهمة.',
+      '',
+      'LINK 2 — WORK COMPLETED: ' + link2,
+      'الرابط 2 — تأكيد إتمام التصليح: ' + link2,
+      'After the repair is finished, open Link 2 and confirm completion.',
+      'بعد الانتهاء من التصليح، افتح الرابط 2 وأكّد إتمام العمل.',
+      '',
+      'After your completion confirmation, the campus contact will be asked to confirm the work.',
+      'بعد تأكيدك إتمام العمل، سيُطلب من مسؤول الكامب تأكيد التنفيذ.',
+      '',
+      'Regards, Fleet / Building Maintenance',
+      'مع التحية، إدارة الأسطول / صيانة المباني'
+    ].join('\\n');
+    openOutlookDraft(to, subject, body);
+    setMessage((ticket.request_no || 'Request') + ' email draft opened inside the ERP. Copy it into the company email system to send. / تم فتح مسودة البريد داخل النظام؛ انسخها إلى بريد الشركة لإرسالها.');
   };
   const close = async r => {
     const f=finance[r.id]||{};
@@ -555,7 +592,7 @@ export default function BuildingMaintenanceWorkflow({ user }) {
                 {[['1. Report / الطلب',true],['2. Assigned / التعيين',!!r.work_order_id],['3. Acknowledged / الاستلام',!!r.acknowledged_at],['4. Completed / الإصلاح',!!r.completed_at],['5. Requester confirmed / تأكيد الكامب',!!r.requester_confirmed_at]].map(([t,ok])=><div key={t} style={{padding:8,borderRadius:7,textAlign:'center',fontSize:12,background:ok?'#dcfce7':'#f1f5f9',color:ok?'#166534':'#475569'}}>{ok?'✓':'○'} {t}</div>)}
               </div>
               <div style={{fontSize:13,marginTop:8}}>Executor / المنفذ: <b>{r.executor_name||'-'}</b> · Work Order: #{r.work_order_id}</div>
-              {r.status==='Assigned'&&!r.acknowledged_at&&<button style={{...btn,marginTop:8}} onClick={()=>resend(r.id)}>Resend assignment email / إعادة إرسال البريد</button>}
+              {r.status==='Assigned'&&!r.acknowledged_at&&<button style={{...btn,marginTop:8}} onClick={()=>resend(r.id)}>Prepare assignment email / تجهيز بريد التعيين</button>}
             </div>}
             {awaitingFinal&&canWork&&<div style={{marginTop:12,padding:12,background:'#ecfdf5',borderRadius:8}}>
               <b>Final cost & closure / التكلفة والإغلاق</b>

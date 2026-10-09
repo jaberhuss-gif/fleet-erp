@@ -199,7 +199,7 @@ export default function MaintenanceRequests() {
             <td>{t.priority || 'Medium'}</td>
             <td>{t.status || '—'}</td>
             <td>{t.opened_at ? String(t.opened_at).slice(0,10) : '—'}</td>
-            <td>{t.status !== 'Completed' ? <button type="button" className="btn" style={{whiteSpace:'nowrap'}} onClick={()=>sendWhatsApp(t)}>📱 WhatsApp</button> : <span>✓ Confirmed</span>}</td>
+            <td>{['completed','closed','confirmed'].includes(String(t.status || '').trim().toLowerCase()) ? <span style={{whiteSpace:'nowrap'}}>✓ Confirmed</span> : <button type="button" className="btn" style={{whiteSpace:'nowrap'}} onClick={()=>sendWhatsApp(t)}>📱 WhatsApp</button>}</td>
           </tr>)}</tbody>
         </table>
        </div>}

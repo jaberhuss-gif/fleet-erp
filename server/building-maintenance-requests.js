@@ -358,6 +358,27 @@ export function mountBuildingMaintenanceRequestRoutes(app) {
     } catch(e) { res.status(400).json({success:false,error:e.message}); }
   });
 
+  app.post("/api/maintenance-requests/:id/archive", async (req,res) => {
+    try {
+      await ensureSchema();
+      const row = await getRequest(req.params.id);
+      if (!row || row.archived_at) return res.status(404).json({success:false,error:"Request not found or already removed."});
+      if (row.status !== "New" || row.work_order_id || row.closed_at) {
+        return res.status(409).json({success:false,error:"Only new, unassigned maintenance requests can be removed. / يمكن شطب الطلبات الجديدة غير المعينة فقط."});
+      }
+      const actor = clean(req.user?.full_name || req.user?.username || "Fleet / Building Maintenance");
+      const updated = await query(
+        `UPDATE maintenance_requests SET archived_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND archived_at IS NULL RETURNING id, request_no`,
+        [row.id]
+      );
+      if (!updated.rows[0]) return res.status(404).json({success:false,error:"Request not found or already removed."});
+      await auditEvent(row.id, "REQUEST_ARCHIVED", "Fleet / Building Maintenance", actor, {request_no: row.request_no, reason:"Removed from maintenance register by user"});
+      res.json({success:true,request_no:row.request_no,message:"Request removed from the register. Audit history is retained."});
+    } catch(e) {
+      res.status(400).json({success:false,error:e.message});
+    }
+  });
+
   app.post("/api/maintenance-requests/:id/assign", async (req,res) => {
     try {
       await ensureSchema();

@@ -52,6 +52,63 @@ function parseItems(text) {
       unit: ""
     });
   }
+  if (items.length) return items;
+
+  // Format C — JODOUD project quotation (Sr. / Item / Unit / Quantities / Price / Cost).
+  // Keep wrapped descriptions together; only accept rows whose unit and three numeric
+  // columns are recognizable. Quotation amounts are estimates, not actual closing cost.
+  const quoteLines = source.split(/\r?\n/).map(line => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const rowEnd = /\s+(L\.m|m2|Pcs|L\.s|day)\s+([\d,]+(?:\.\d+)?)\s+([\d,]+(?:\.\d+)?)\s+([\d,]+(?:\.\d+)?)\s*$/i;
+  const ignored = /^(?:quotation|date\s*:|offer\s+sr|project\s*:|subject\s*:|company\s+info|vat\s+#|cr\s+no|construction\s+item|electrical\s+item|mechanical\s+item|sr\.|item\b|unit\b|quantities\b|price\b|cost\b|jodoud|trading\s+co|total\s+without|vat\s+value|total\s+with|payments\s+conditions)/i;
+  let current = null;
+  const quoteItems = [];
+  const flushQuote = () => {
+    if (!current) return;
+    const tail = current.text.match(rowEnd);
+    if (tail) {
+      const desc = clean(current.text.slice(0, tail.index));
+      if (desc && !ignored.test(desc)) {
+        quoteItems.push({
+          sr_no: current.sr,
+          item_no: "",
+          item: desc,
+          unit: tail[1],
+          quantity: num(tail[2]),
+          price: num(tail[3]),
+          cost: num(tail[4]),
+          net_amount: num(tail[4]),
+          total_with_vat: 0,
+          discount_percent: 0,
+          tax_percent: 0,
+          location: ""
+        });
+      }
+    }
+    current = null;
+  };
+  for (const line of quoteLines) {
+    if (ignored.test(line)) continue;
+    const beginsRow = line.match(/^(\d{1,3})\s+(.+)$/);
+    if (beginsRow && rowEnd.test(line)) {
+      flushQuote();
+      current = { sr: Number(beginsRow[1]), text: beginsRow[2] };
+      flushQuote();
+      continue;
+    }
+    if (beginsRow && !current) {
+      current = { sr: Number(beginsRow[1]), text: beginsRow[2] };
+      continue;
+    }
+    if (beginsRow && current && rowEnd.test(current.text)) {
+      flushQuote();
+      current = { sr: Number(beginsRow[1]), text: beginsRow[2] };
+      continue;
+    }
+    if (current) current.text += " " + line;
+  }
+  flushQuote();
+  if (quoteItems.length >= 3) return quoteItems;
+
   return items;
 }
 

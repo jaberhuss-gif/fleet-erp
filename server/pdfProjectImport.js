@@ -174,6 +174,34 @@ function parseItems(text) {
   flushQuote();
   if (quoteItems.length >= 3) return quoteItems;
 
+  // Format D — flattened contractor invoices where spaces between cells disappear.
+  // Match each four-money-value tail first, then parse the text immediately before it.
+  // This is intentionally a fallback after the stricter layouts above.
+  const money = String.raw`[\\d,]+\\.\\d{2}`;
+  const tailRe = new RegExp(String.raw`(${money})(${money})(${money})(${money})(?=\\s*(?:\\d{1,3}\\d{1,4}[A-Za-z]|$))`, "g");
+  const flattenedRows = [];
+  const tails = [];
+  let tm;
+  while ((tm = tailRe.exec(compact))) tails.push({ index: tm.index, end: tailRe.lastIndex, values: tm.slice(1, 5) });
+  for (let i = 0; i < tails.length; i++) {
+    const t = tails[i];
+    const prevEnd = i ? tails[i - 1].end : 0;
+    const segment = compact.slice(prevEnd, t.index).trim();
+    // Expected prefix: serial + item code + description + quantity + unit/location.
+    // Work backwards from the final quantity and unit to preserve multi-word descriptions.
+    const prefix = segment.match(/(?:^|\\s)(\\d{1,3})(\\d{1,4})([A-Za-z][A-Za-z0-9 &().,/'-]*?)(\\d{1,4})(auto|[A-Za-z][A-Za-z-]*)\\s*$/i);
+    if (!prefix) continue;
+    const description = clean(prefix[3]);
+    if (!description || /^(?:subtotal|total|tax|vat|discount|quantity|item|unit)$/i.test(description)) continue;
+    flattenedRows.push({
+      sr_no: Number(prefix[1]), item_no: clean(prefix[2]), item: description, unit: "",
+      quantity: num(prefix[4]), price: num(t.values[0]), cost: 0, quotation_cost: 0,
+      discount_percent: num(t.values[1]), net_amount: num(t.values[2]), total_with_vat: num(t.values[3]),
+      tax_percent: 15, location: clean(prefix[5])
+    });
+  }
+  if (flattenedRows.length >= 3) return flattenedRows;
+
   return items;
 }
 

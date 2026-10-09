@@ -32,9 +32,12 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       ]);
       setSites(s.data.sites || []);
       setRequests(r.data.requests || []);
-      setEmployees(e.data.employees || []);
-      setContractors(e.data.contractors || []);
-      setContacts(c.data.contacts || []);
+      const savedContacts = c.data.contacts || [];
+      const configuredEmployees = savedContacts.filter(x => x.active !== false && /Our Employee|Technician/i.test(x.contact_role)).map(x => ({id:'directory-'+x.id, full_name:x.full_name, name:x.full_name, email:x.email || '', whatsapp:x.whatsapp || '', city:x.city || '', site:x.site || '', work_type:x.work_type || ''}));
+      const configuredContractors = savedContacts.filter(x => x.active !== false && /Contractor|Vendor/i.test(x.contact_role)).map(x => ({id:'directory-'+x.id, full_name:x.full_name, name:x.full_name, email:x.email || '', whatsapp:x.whatsapp || '', city:x.city || '', site:x.site || '', work_type:x.work_type || ''}));
+      setEmployees([...(e.data.employees || []), ...configuredEmployees]);
+      setContractors([...(e.data.contractors || []), ...configuredContractors]);
+      setContacts(savedContacts);
     } catch (e) { setError(e.response?.data?.error || e.message); }
     finally { setLoading(false); }
   };

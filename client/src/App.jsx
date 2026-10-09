@@ -227,9 +227,9 @@ export default function App() {
 
       <div className="erp-shell">
         <aside className="erp-sidebar">
-          <div className="erp-sidebar-title">Navigation</div>
           <div className="erp-sidebar-brand">
             <img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Maaden and Ivanhoe Electric joint venture logo" />
+            <div className="erp-sidebar-title">Navigation</div>
           </div>
 
           <div className="erp-nav-group">

@@ -635,13 +635,39 @@ if (action === "close" && amount !== null && (!Number.isFinite(amount) || amount
       if(row.requester_confirmation) {
         return res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>Maintenance Confirmation Already Recorded</h2><p><b>Request:</b> ${row.request_no}</p><p><b>Answer:</b> ${row.requester_confirmation==="yes" ? "YES — Everything is OK" : "NO — Problem Not Fixed"}</p></body></html>`);
       }
-      res.send(`<html><body style="font-family:Arial;padding:40px;max-width:720px;margin:auto"><h2>🛠️ Building Maintenance — Final Confirmation</h2><p><b>Request:</b> ${row.request_no}</p><p><b>Site:</b> ${row.site || "-"}</p><p><b>Problem:</b><br>${String(row.description || "").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>")}</p><h3>Is the maintenance work satisfactory?</h3><p>هل تم إصلاح المشكلة بشكل كامل؟</p><div style="display:flex;gap:12px;flex-wrap:wrap"><form method="POST" action="/api/maintenance-requests/public/${clean(req.params.token)}/confirm?answer=yes"><input type="hidden" name="answer" value="yes"><button type="submit" style="padding:12px 20px;background:#15803d;color:#fff;border:0;border-radius:7px;font-weight:700">✅ YES — Everything is OK</button></form><form method="POST" action="/api/maintenance-requests/public/${clean(req.params.token)}/confirm?answer=no"><input type="hidden" name="answer" value="no"><button type="submit" style="padding:12px 20px;background:#b91c1c;color:#fff;border:0;border-radius:7px;font-weight:700">❌ NO — Problem Not Fixed</button></form></div></body></html>`);
+      res.send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Campus Maintenance Confirmation</title></head><body style="font-family:Arial,sans-serif;background:#f3f6fa;padding:24px;color:#1f2937"><main style="max-width:680px;margin:auto;background:#fff;padding:28px;border-radius:14px;box-shadow:0 4px 18px #0001"><h2 style="color:#17365d">🏢 Campus Manager — Final Confirmation</h2><p><b>Request / رقم الطلب:</b> ${row.request_no}</p><p><b>Site / الموقع:</b> ${String(row.site||"-").replace(/</g,"&lt;")}</p><p><b>Problem / المشكلة:</b><br>${String(row.description||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>")}</p><hr><p><b>Only an authorized Campus Manager or Fleet administrator can submit this confirmation.</b></p><p>هذه الخطوة لمسؤول الكامب المخوّل فقط. يجب تسجيل الدخول إلى النظام أولاً.</p><div id="auth-message" style="padding:12px;background:#fff7ed;border-radius:8px;margin:16px 0">Checking ERP login… / جارٍ التحقق من تسجيل الدخول…</div><div style="display:flex;gap:12px;flex-wrap:wrap"><button id="yes" disabled style="padding:13px 18px;background:#15803d;color:#fff;border:0;border-radius:8px;font-weight:700">✅ YES — Fixed / نعم، تم الإصلاح</button><button id="no" disabled style="padding:13px 18px;background:#b91c1c;color:#fff;border:0;border-radius:8px;font-weight:700">❌ NO — Still faulty / لا، المشكلة مستمرة</button></div><p id="result" role="status"></p><script>
+(function(){
+ const token=${JSON.stringify(clean(req.params.token))};
+ const msg=document.getElementById('auth-message'), yes=document.getElementById('yes'), no=document.getElementById('no'), result=document.getElementById('result');
+ let auth='', role='';
+ try { auth=localStorage.getItem('token')||''; const u=JSON.parse(localStorage.getItem('user')||'{}'); role=String(u.role||''); } catch(e){}
+ const allowed=/^(owner|fleetsupervisor|campus manager|camp manager|campusmanager|campmanager|camp supervisor|campussupervisor|site manager|sitemanager)$/i.test(role.replace(/[_-]/g,' ').trim()) || /camp|campus/i.test(role);
+ if(!auth){msg.textContent='Please sign in to Fleet ERP, then reopen this link. / سجّل الدخول إلى النظام ثم افتح الرابط مرة أخرى.';return;}
+ if(!allowed){msg.textContent='Access denied: this account is not authorized for campus confirmation. / هذا الحساب غير مخوّل لتأكيد الكامب.';return;}
+ msg.textContent='Signed in as an authorized user. / تم التحقق من الحساب المخوّل.'; yes.disabled=false; no.disabled=false;
+ async function submit(answer){
+   yes.disabled=true; no.disabled=true; result.textContent='Submitting… / جارٍ الإرسال…';
+   try{
+    const response=await fetch('/api/maintenance-requests/public/'+encodeURIComponent(token)+'/confirm?answer='+answer,{method:'POST',headers:{'Authorization':'Bearer '+auth,'Content-Type':'application/json'},body:JSON.stringify({answer})});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.message||data.error||'Request failed ('+response.status+')');
+    msg.textContent=answer==='yes'?'Campus confirmation recorded. / تم تأكيد التصليح.':'Request reopened for further repair. / تمت إعادة الطلب لمتابعة التصليح.';
+    result.textContent='Saved successfully / تم الحفظ بنجاح';
+   }catch(e){result.textContent=e.message;yes.disabled=false;no.disabled=false;}
+ }
+ yes.addEventListener('click',()=>submit('yes')); no.addEventListener('click',()=>submit('no'));
+})();
+</script></main></body></html>`);
     } catch(e){res.status(500).send("<h2>Error loading confirmation page</h2>");}
   });
 
   app.post("/api/maintenance-requests/public/:token/confirm", async (req,res) => {
     try {
       await ensureSchema();
+      const role=String(req.user?.role||"").trim();
+      const normalizedRole=role.toLowerCase().replace(/[_-]/g," ");
+      const campusAuthorized=/camp|campus/i.test(normalizedRole) || ["owner","fleetsupervisor","fleet supervisor"].includes(normalizedRole);
+      if(!req.user || !campusAuthorized) return res.status(403).json({success:false,error:"Only an authorized Campus Manager or Fleet administrator can confirm this work."});
       const row=await getRequestByToken(req.params.token);
       const answer=clean(req.body?.answer || req.query?.answer).toLowerCase();
       if(!row || row.confirmation_token !== clean(req.params.token)) return res.status(403).send("<h2>Invalid confirmation link</h2>");

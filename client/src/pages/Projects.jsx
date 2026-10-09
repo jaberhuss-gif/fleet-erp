@@ -22,6 +22,7 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
   const [pdfFile, setPdfFile] = useState(null);
   const [pdfPreview, setPdfPreview] = useState(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfMonth, setPdfMonth] = useState(() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); });
   const [form, setForm] = useState({
     name: '', description: '', site: '', projectType: 'Development', status: 'Not Started',
     budget: 0, spent: 0, startDate: '', endDate: '', manager: '', contractor: '', notes: ''
@@ -163,7 +164,8 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
         headers: {
           'X-PDF-Site': pdfPreview.site,
           'X-PDF-Project-Name': pdfPreview.projectName || pdfFile.name,
-          'X-PDF-Date': pdfPreview.date || ''
+          'X-PDF-Date': pdfPreview.date || '',
+          'X-PDF-Month': pdfMonth
         }
       });
       setMessage('PDF imported: Project + Work Order created OPEN. Final item amounts were left at 0 for you to close.');
@@ -226,6 +228,7 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
               <div className="form-group"><label>Project Name</label><input value={pdfPreview.projectName || ''} onChange={e=>setPdfPreview({...pdfPreview,projectName:e.target.value})}/></div>
               <div className="form-group"><label>Site *</label><select value={pdfPreview.site || ''} onChange={e=>setPdfPreview({...pdfPreview,site:e.target.value})} required><option value="">-- Select Site --</option>{sites.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}</select></div>
               <div className="form-group"><label>Date (optional)</label><input type="date" value={pdfPreview.date || ''} onChange={e=>setPdfPreview({...pdfPreview,date:e.target.value})}/></div>
+              <div className="form-group"><label>Report Month *</label><input type="month" value={pdfMonth} onChange={e=>setPdfMonth(e.target.value)} required /></div>
             </div>
             <div style={{margin:'10px 0',fontWeight:700}}>{pdfPreview.items.length} line items detected. PDF cost is NOT imported as final cost.</div>
             <div style={{overflowX:'auto'}}>

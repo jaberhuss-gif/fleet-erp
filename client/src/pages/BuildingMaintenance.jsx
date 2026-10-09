@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../api/client';
+import MaintenanceRequest from './MaintenanceRequest';
 
 const monthKey = (value) => {
   if (!value) return '';
@@ -158,16 +159,45 @@ export default function BuildingMaintenance({ user, access = {} }) {
 
   const entryForm = section==='work-orders' ? wo : section==='projects' ? project : purchase;
 
+  if (section === 'maintenance-workflow') {
+    return (
+      <div className="panel">
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap',marginBottom:14}}>
+          <div>
+            <div style={{fontSize:12,letterSpacing:1,color:'#64748b'}}>OPERATIONS / BUILDING MAINTENANCE</div>
+            <h2 style={{margin:'4px 0'}}>📨 Maintenance Intake & Dispatch</h2>
+            <div style={{color:'#64748b',fontSize:13}}>Separate workflow workspace. Existing Work Orders, Projects and Purchases remain unchanged.</div>
+          </div>
+          <button className="btn btn-warning" onClick={()=>{setSection(null);resetEntry();setClosing(null);}}>← Back to Building Maintenance</button>
+        </div>
+        <MaintenanceRequest user={user} access={access} />
+      </div>
+    );
+  }
+
   return (
     <div className="panel">
       <h2 style={{marginBottom:6}}>Building Maintenance</h2>
       {!section ? (
         <>
           <div style={{color:'#64748b',marginBottom:20}}>Monthly building maintenance workspace</div>
-          <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
-            <button className="btn btn-primary" onClick={()=>setSection('work-orders')}>Work Orders</button>
-            <button className="btn btn-primary" onClick={()=>setSection('projects')}>Projects</button>
-            <button className="btn btn-primary" onClick={()=>setSection('purchases')}>Purchases</button>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:14}}>
+            <button className="btn btn-primary" style={{minHeight:88,textAlign:'left'}} onClick={()=>setSection('maintenance-workflow')}>
+              <div style={{fontSize:18,fontWeight:800}}>📨 Maintenance Intake & Dispatch</div>
+              <div style={{fontSize:12,fontWeight:400,marginTop:6}}>Receive a request, select the requester and executor, and follow up the maintenance workflow.</div>
+            </button>
+            <button className="btn btn-primary" style={{minHeight:88,textAlign:'left'}} onClick={()=>setSection('work-orders')}>
+              <div style={{fontSize:18,fontWeight:800}}>🛠️ Work Orders</div>
+              <div style={{fontSize:12,fontWeight:400,marginTop:6}}>Existing monthly work order records.</div>
+            </button>
+            <button className="btn btn-primary" style={{minHeight:88,textAlign:'left'}} onClick={()=>setSection('projects')}>
+              <div style={{fontSize:18,fontWeight:800}}>🏗️ Projects</div>
+              <div style={{fontSize:12,fontWeight:400,marginTop:6}}>Existing project records.</div>
+            </button>
+            <button className="btn btn-primary" style={{minHeight:88,textAlign:'left'}} onClick={()=>setSection('purchases')}>
+              <div style={{fontSize:18,fontWeight:800}}>🧾 Purchases</div>
+              <div style={{fontSize:12,fontWeight:400,marginTop:6}}>Existing purchase records.</div>
+            </button>
           </div>
         </>
       ) : (

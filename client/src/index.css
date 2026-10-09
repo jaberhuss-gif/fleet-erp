@@ -1430,18 +1430,20 @@ tr:hover td { background:rgba(20,184,166,.045) !important; }
   position:sticky; top:70px; height:calc(100vh - 70px); overflow-y:auto;
   box-shadow:2px 0 10px rgba(15,23,42,.05);
 }
-.erp-sidebar-title {
-  font-size:12px; text-transform:uppercase; letter-spacing:.08em;
-  color:var(--text-muted); font-weight:700; padding:0 10px 14px;
-}
 .erp-sidebar-brand {
-  display:flex; justify-content:center; align-items:center;
-  padding:2px 8px 18px; margin:0 4px 16px;
+  display:flex; flex-direction:column; justify-content:center; align-items:center;
+  gap:9px; padding:8px 10px 18px; margin:0 4px 18px;
   border-bottom:1px solid var(--border-color);
+  text-align:center;
 }
 .erp-sidebar-brand img {
   display:block; width:100%; max-width:190px; max-height:78px;
   object-fit:contain;
+}
+.erp-sidebar-title {
+  display:block; width:100%; text-align:center;
+  font-size:12px; text-transform:uppercase; letter-spacing:.14em;
+  color:var(--text-muted); font-weight:800; padding:0;
 }
 
 .erp-nav-group { margin-bottom:20px; }
@@ -1462,15 +1464,15 @@ tr:hover td { background:rgba(20,184,166,.045) !important; }
 .erp-shell > .main { flex:1; min-width:0; max-width:none; }
 @media (max-width:900px) {
   .erp-shell { display:block; }
-  .erp-sidebar-brand { flex:0 0 150px; padding:0 8px; margin:0; border:0; }
+  .erp-sidebar-brand { flex:0 0 150px; padding:4px 8px 8px; margin:0; border:0; gap:5px; }
   .erp-sidebar-brand img { max-width:145px; max-height:54px; }
+  .erp-sidebar-title { display:block; font-size:10px; letter-spacing:.12em; padding:0; }
 
   .erp-sidebar {
     width:100%; height:auto; position:relative; top:auto;
     border-right:0; border-bottom:1px solid var(--border-color);
     display:flex; gap:12px; overflow-x:auto; padding:10px;
   }
-  .erp-sidebar-title { display:none; }
   .erp-nav-group { flex:0 0 auto; margin:0; min-width:170px; }
   .erp-nav-heading { padding:5px 8px; }
   .erp-nav-btn { white-space:nowrap; }

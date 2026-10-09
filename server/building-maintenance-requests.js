@@ -74,9 +74,9 @@ async function ensureSchema() {
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS city TEXT`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS executor_whatsapp TEXT`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);
-  // Hide only the four explicitly identified demonstration tickets from this intake register.
-  // Their linked work orders and all other modules/data remain untouched.
-  await query(`UPDATE maintenance_requests SET archived_at=CURRENT_TIMESTAMP WHERE request_no IN ('MR-00008','MR-00006','MR-00004','MR-00002','MR-00010','MR-00012','MR-00014') AND archived_at IS NULL`);
+  // Archive only the explicitly identified test tickets requested by the owner.
+  // Preserve audit history and linked work orders; hide these demo tickets from the register.
+  await query(`UPDATE maintenance_requests SET archived_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE request_no IN ('MR-00028','MR-00026','MR-00024','MR-00022','MR-00020','MR-00018') AND archived_at IS NULL`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_status TEXT NOT NULL DEFAULT 'Not Sent'`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMPTZ`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_error TEXT`);

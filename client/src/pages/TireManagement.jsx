@@ -158,8 +158,12 @@ export default function TireManagement({ user, driverMode=false }) {
       win.location.href = url;
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) {
-      win.close();
-      setError('Could not create the all-vehicle PDF report.');
+      win?.close();
+      const responseBody = e.response?.data instanceof Blob
+        ? await e.response.data.text().catch(() => '')
+        : '';
+      const detail = responseBody.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      setError(detail || e.response?.data?.error || e.message || 'Could not create the all-vehicle PDF report.');
     }
   };
 

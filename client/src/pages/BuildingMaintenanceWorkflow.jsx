@@ -7,50 +7,71 @@ const field = { display:'flex', flexDirection:'column', gap:5, minWidth:0 };
 const control = { width:'100%', boxSizing:'border-box', padding:'10px', border:'1px solid #cbd5e1', borderRadius:7, background:'#fff' };
 const btn = { padding:'9px 13px', border:0, borderRadius:7, cursor:'pointer', fontWeight:700 };
 function parseMaintenanceEmail(raw) {
-  let source = String(raw || '').replace(/^\uFEFF/, '');
+  const original = String(raw || '').replace(/^\uFEFF/, '');
   const decodeBase64 = value => {
     try {
       const compact = String(value || '').replace(/\s/g, '');
       if (!compact || !/^[A-Za-z0-9+/]*={0,2}$/.test(compact)) return value;
       const binary = atob(compact);
       const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
-      return new TextDecoder('utf-8').decode(bytes);
+      return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
     } catch { return value; }
   };
-  const decodeQuotedPrintable = value => String(value || '')
-    .replace(/=\r?\n/g, '')
-    .replace(/=([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex,16)));
-  // Outlook .eml may wrap base64 lines and put MIME headers directly before the body.
-  const mimeBody = source.match(/Content-Type:\s*text\/plain[^\r\n]*(?:\r?\n(?!\r?$)[^\r\n]*)*\r?\n\r?\n([\s\S]*?)(?=\r?\n--[-_A-Za-z0-9]+(?:--)?\s*(?:\r?\n|$)|$)/i);
-  if (mimeBody) {
-    const headerStart = source.lastIndexOf('Content-Type:', mimeBody.index);
-    const headers = source.slice(headerStart, source.indexOf(mimeBody[1], headerStart));
-    let body = mimeBody[1].trim();
-    if (/Content-Transfer-Encoding:\s*base64/i.test(headers)) body = decodeBase64(body);
-    else if (/Content-Transfer-Encoding:\s*quoted-printable/i.test(headers)) body = decodeQuotedPrintable(body);
-    source = body;
+  const decodeQP = value => String(value || '').replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  let source = original;
+  const boundaryMatch = original.match(/boundary="?([^"\r\n;]+)"?/i);
+  if (boundaryMatch) {
+    const boundary = boundaryMatch[1];
+    const parts = original.split('--' + boundary);
+    const decodedParts = parts.map(part => {
+      const splitAt = part.search(/\r?\n\r?\n/);
+      if (splitAt < 0) return '';
+      const headers = part.slice(0, splitAt);
+      let body = part.slice(splitAt).replace(/^\r?\n\r?\n/, '').trim();
+      if (/Content-Type:\s*text\/plain/i.test(headers)) {
+        if (/Content-Transfer-Encoding:\s*base64/i.test(headers)) body = decodeBase64(body);
+        else if (/Content-Transfer-Encoding:\s*quoted-printable/i.test(headers)) body = decodeQP(body);
+        return body;
+      }
+      if (/Content-Type:\s*text\/html/i.test(headers)) {
+        if (/Content-Transfer-Encoding:\s*base64/i.test(headers)) body = decodeBase64(body);
+        else if (/Content-Transfer-Encoding:\s*quoted-printable/i.test(headers)) body = decodeQP(body);
+        return body.replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ');
+      }
+      return '';
+    }).filter(Boolean);
+    if (decodedParts.length) source = decodedParts[0];
   } else {
-    source = source.replace(/Content-Transfer-Encoding:\s*base64[^\r\n]*\r?\n\r?\n([\s\S]*?)(?=\r?\n--[-_A-Za-z0-9]+(?:--)?\s*(?:\r?\n|$)|$)/gi, (_, body) => decodeBase64(body));
+    const plainMatch = original.match(/Content-Type:\s*text\/plain[^\r\n]*(?:\r?\n[ \t].*)*\r?\n([\s\S]*?)(?=\r?\n--[-_A-Za-z0-9]+(?:--)?\s*(?:\r?\n|$)|$)/i);
+    if (plainMatch) {
+      let body = plainMatch[1].replace(/^\r?\n/, '').trim();
+      const headerStart = original.lastIndexOf('Content-Type:', plainMatch.index);
+      const headers = original.slice(headerStart, original.indexOf(body, headerStart));
+      if (/Content-Transfer-Encoding:\s*base64/i.test(headers)) body = decodeBase64(body);
+      else if (/Content-Transfer-Encoding:\s*quoted-printable/i.test(headers)) body = decodeQP(body);
+      source = body;
+    } else {
+      const compact = original.trim().replace(/\s/g, '');
+      if (compact.length > 80 && /^[A-Za-z0-9+/]+={0,2}$/.test(compact)) {
+        const decoded = decodeBase64(compact);
+        if (decoded !== compact && /(?:Hi|Hello|Subject:|freon|compressor|air.?condition|fan)/i.test(decoded)) source = decoded;
+      }
+    }
   }
-  // The pasted/imported content may itself be only a Base64 body without MIME headers.
-  const compactSource = source.replace(/\s/g,'');
-  if (compactSource.length > 80 && /^[A-Za-z0-9+/]+={0,2}$/.test(compactSource)) {
-    const decoded = decodeBase64(compactSource);
-    if (decoded !== compactSource && /(?:\b(?:Hi|Yes|Each|A\/C|From:|Subject:|freon|compressor|fan)\b)/i.test(decoded)) source = decoded;
-  }
-  let text = source
-    .replace(/=3D/gi,'=').replace(/=20/gi,' ')
-    .replace(/<style[\s\S]*?<\/style>/gi,' ')
-    .replace(/<script[\s\S]*?<\/script>/gi,' ')
-    .replace(/<[^>]+>/g,' ')
-    .replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>')
-    .replace(/^[ \t]*(From|To|Cc|Bcc|Subject|Date|Sent|Received|MIME-Version|Content-Type|Content-Transfer-Encoding):.*$/gim,' ')
-    .replace(/^[=_-]{5,}.*$/gm,' ')
-    .replace(/\r/g,'').replace(/\u00a0/g,' ');
-  text = text.split(/\n\s*(?:From:\s.+\nSent:|On .{3,120}wrote:|_{5,}|This message contains confidential information|This email and any attachments)/i)[0];
-  text = text.replace(/^\s*>.*$/gm,'').replace(/\n{3,}/g,'\n\n').trim();
+  let text = String(source || '')
+    .replace(/=3D/gi, '=').replace(/=20/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/^[ \t]*(From|To|Cc|Bcc|Subject|Date|Sent|Received|MIME-Version|Content-Type|Content-Transfer-Encoding):.*$/gim, ' ')
+    .replace(/^[ \t]*--[-_A-Za-z0-9]+(?:--)?[ \t]*$/gm, ' ')
+    .replace(/^[=_-]{5,}.*$/gm, ' ')
+    .replace(/\r/g, '').replace(/\u00a0/g, ' ');
+  text = text.split(/\n\s*(?:From:\s.+\nSent:|On .{3,160}wrote:|_{5,}|This message contains confidential information|This email and any attachments|Regards,|Best regards,|Kind regards,|Thanks,|Thank you,)\s*/i)[0];
+  text = text.replace(/^\s*>.*$/gm, '').replace(/^\s*(?:Mobile|Phone|Email|Web|www\.).*$/gim, '').replace(/\n{3,}/g, '\n\n').trim();
   const rules = [
-    {category:'A/C & HVAC',priority:'Medium',re:/\b(a\/?c|air.?condition|hvac|cooling|not cool|refrigerat|thermostat|freon|compressor|fan)\b|تكييف|مكيف|تبريد|فريون|كمبروسر/i},
+    {category:'A/C & HVAC',priority:'Medium',re:/\b(a\/?c|air.?condition(?:er|ing)?|hvac|cooling|not cool|refrigerat|thermostat|freon|compressor|fan)\b|تكييف|مكيف|تبريد|فريون|كمبروسر/i},
     {category:'Plumbing & Water',priority:'High',re:/\b(water leak|leaking|leakage|pipe burst|drain|tap|faucet|toilet|water supply)\b|تسرب|تسريب|ماسورة|أنبوب|مياه|ماء|صرف صحي/i},
     {category:'Electrical',priority:'High',re:/\b(electrical|electricity|power outage|wiring|socket|outlet|breaker|light not|lamp|short circuit)\b|كهرباء|تماس|قاطع|إنارة|مصباح/i},
     {category:'Doors, Locks & Windows',priority:'Medium',re:/\b(door|lock|key|window|hinge)\b|باب|قفل|نافذة|شباك/i},
@@ -58,16 +79,15 @@ function parseMaintenanceEmail(raw) {
     {category:'Furniture & Facilities',priority:'Low',re:/\b(furniture|chair|desk|bed|cabinet|curtain)\b|أثاث|كرسي|مكتب|سرير|خزانة|ستارة/i}
   ];
   const body = text.split(/\n\s*(?:From:\s.+|Sent:\s.+|To:\s.+|Subject:\s.+|Mobile:|Email:|Ma.?aden Ivanhoe|This message contains confidential information)/i)[0].trim();
-  const meaningful = body.split(/\n|(?<=[.!?؟])\s+/).map(x=>x.trim()).filter(x=>x.length>8);
+  const meaningful = body.split(/\n|(?<=[.!?؟])\s+/).map(x => x.trim()).filter(x => x.length > 8);
   const found = [];
   for (const part of meaningful) {
-    const rule = rules.find(x=>x.re.test(part));
-    if (rule && !found.some(x=>x.description.toLowerCase()===part.toLowerCase())) {
-      found.push({description:part.slice(0,1200),category:rule.category,priority:rule.priority});
-    }
+    if (/^--[_A-Za-z0-9-]+--?$/.test(part) || /^[A-Za-z0-9+/]{50,}={0,2}$/.test(part)) continue;
+    const rule = rules.find(x => x.re.test(part));
+    if (rule && !found.some(x => x.description.toLowerCase() === part.toLowerCase())) found.push({description:part.slice(0,1200),category:rule.category,priority:rule.priority});
   }
-  if (!found.length && body) found.push({description:body.slice(0,1200),category:'General Maintenance',priority:'Medium'});
-  return {text:body.slice(0,12000),issues:found};
+  const looksLikeGarbage = !body || /--_[A-Za-z0-9_-]{12,}/.test(body) || /Content-(?:Type|Transfer-Encoding):/i.test(body) || /^[A-Za-z0-9+/=\s]{80,}$/.test(body);
+  return {text:body.slice(0,12000),issues:looksLikeGarbage ? [] : found};
 }
 const siteCity = (sites, siteName) => { const s=sites.find(x=>String(x.name)===String(siteName)); return s ? String(s.city||s.city_name||s.location_city||'') : ''; };
 const statusColor = s => s==='Closed' || s==='Operationally Completed' ? '#dcfce7' : s==='Reopened' ? '#fee2e2' : '#fef3c7';

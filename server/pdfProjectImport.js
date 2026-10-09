@@ -14,19 +14,19 @@ function parseItems(text) {
     .replace(/[\u200e\u200f\u202a-\u202e]/g, "");
   const items = [];
   const normalizedSource = source.replace(/[\u2066-\u2069]/g, "");
-  const lines = normalizedSource.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const pdfLines = normalizedSource.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
 
   // Robust line-based extraction for text PDFs whose table columns are not kept in a single row.
   // Jadoud invoice: amounts, quantity, location, description, item code, serial.
   const jadoudRows = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].replace(/\s+/g, " ");
+  for (let i = 0; i < pdfLines.length; i++) {
+    const line = pdfLines[i].replace(/\s+/g, " ");
     const row = line.match(/^([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+(\d+)\s+([A-Za-z][\w-]*)\s*(.*?)\s+(\d{1,4})\s+(\d{1,4})\s*$/);
     if (!row || !/^(?:auto|[A-Za-z][\w-]*)$/i.test(row[6])) continue;
     let description = clean(row[7]);
     if (!description) {
-      const before = i > 0 ? clean(lines[i - 1]) : "";
-      const after = i + 1 < lines.length ? clean(lines[i + 1]) : "";
+      const before = i > 0 ? clean(pdfLines[i - 1]) : "";
+      const after = i + 1 < pdfLines.length ? clean(pdfLines[i + 1]) : "";
       const isHeader = v => /^(?:quotation|date|project|subject|company|vat|cr|#|item|unit|price|cost|sr\.|jodoud|branch|mobile|electrical|mechanical|construction)/i.test(v);
       description = [before, after].filter(v => v && !isHeader(v) && !/^[\d\s.,%]+$/.test(v)).join(" ");
     }
@@ -42,7 +42,7 @@ function parseItems(text) {
 
   // Raghad invoice: bidi/RTL extraction may place the percent sign before the digits.
   const raghadRows = [];
-  for (const line0 of lines) {
+  for (const line0 of pdfLines) {
     const line = line0.replace(/\s+/g, " ");
     if (!line.includes("%")) continue;
     const row = line.match(/^\s*([\d,]+(?:\.\d+)?)\s+(%?\s*[\d,]+(?:\.\d+)?%?)\s+(%?\s*[\d,]+(?:\.\d+)?%?)\s+([\d,]+(?:\.\d+)?)\s+([\d,]+(?:\.\d+)?)\s+(.+?)\s+(\d{1,4})\s*$/);

@@ -332,15 +332,23 @@ export default function BuildingMaintenanceWorkflow({ user }) {
       const link1=base+'/api/maintenance-requests/public/'+ticket.acknowledgement_token+'/acknowledge';
       const link2=base+'/api/maintenance-requests/public/'+ticket.completion_token+'/work-completed';
       const subject='BUILDING MAINTENANCE / صيانة المباني — '+(ticket.request_no||'');
+      const issueLines = String(ticket.description || '').split(/\\r?\\n/).map(line => line.trim()).filter(line => line && !/^(Multiple maintenance issues reported|Source email:)/i.test(line)).map(line => line.replace(/^\\d+\\.\\s*/, '').replace(/^\\[[^\\]]+\\]\\s*/, '')).slice(0,4);
       const body=[
         'Maintenance request assigned / تم تعيين طلب صيانة',
+        '',
         'Request number / رقم الطلب: '+(ticket.request_no||'-'),
         '',
+        ...[0,1,2,3].map(i => (i+1)+'. '+(issueLines[i]||'*****')),
+        '',
         'Please check WhatsApp for the task link. After finishing the repair, open the WhatsApp link and press YES / DONE.',
+        '',
         'يرجى مراجعة رسالة الواتساب التي تحتوي على رابط المهمة. بعد الانتهاء من التصليح، افتح الرابط واضغط نعم / تم.',
         '',
-        'The campus manager will then receive a confirmation link. Once the campus confirms the repair, the request will return to the maintenance manager for final closure and cost entry (enter 0 if there is no cost).',
-        'بعدها سيصل لمسؤول الكامب رابط لتأكيد الإصلاح. وبعد تأكيد الكامب، يعود الطلب لمدير الصيانة للإغلاق النهائي وإدخال التكلفة (أدخل 0 إذا لم توجد تكلفة).'
+        'The campus manager will then receive a confirmation link. Once the campus confirms the repair, the request will return to the maintenance manager for final closure',
+        '',
+        'بعدها سيصل لمسؤول الكامب رابط لتأكيد الإصلاح.',
+        '',
+        'وبعد تأكيد الكامب، يعود الطلب لمدير الصيانة للإغلاق النهائي.'
       ].join('\\n');
       openOutlookDraft(a.email,subject,body);
       setMessage((ticket.request_no||'Request')+' assigned. A prefilled email was opened in your email app; press Send there. / تم التعيين وفتحت رسالة جاهزة في تطبيق البريد؛ اضغط إرسال هناك.');
@@ -359,15 +367,23 @@ export default function BuildingMaintenanceWorkflow({ user }) {
     const link1 = base + '/api/maintenance-requests/public/' + (ticket.acknowledgement_token || '') + '/acknowledge';
     const link2 = base + '/api/maintenance-requests/public/' + (ticket.completion_token || '') + '/work-completed';
     const subject = 'BUILDING MAINTENANCE / صيانة المباني — ' + (ticket.request_no || '');
+    const issueLines = String(ticket.description || '').split(/\\r?\\n/).map(line => line.trim()).filter(line => line && !/^(Multiple maintenance issues reported|Source email:)/i.test(line)).map(line => line.replace(/^\\d+\\.\\s*/, '').replace(/^\\[[^\\]]+\\]\\s*/, '')).slice(0,4);
     const body = [
       'Maintenance request assigned / تم تعيين طلب صيانة',
+      '',
       'Request number / رقم الطلب: ' + (ticket.request_no || '-'),
       '',
+      ...[0,1,2,3].map(i => (i+1)+'. '+(issueLines[i]||'*****')),
+      '',
       'Please check WhatsApp for the task link. After finishing the repair, open the WhatsApp link and press YES / DONE.',
+      '',
       'يرجى مراجعة رسالة الواتساب التي تحتوي على رابط المهمة. بعد الانتهاء من التصليح، افتح الرابط واضغط نعم / تم.',
       '',
-      'The campus manager will then receive a confirmation link. Once the campus confirms the repair, the request will return to the maintenance manager for final closure and cost entry (enter 0 if there is no cost).',
-      'بعدها سيصل لمسؤول الكامب رابط لتأكيد الإصلاح. وبعد تأكيد الكامب، يعود الطلب لمدير الصيانة للإغلاق النهائي وإدخال التكلفة (أدخل 0 إذا لم توجد تكلفة).'
+      'The campus manager will then receive a confirmation link. Once the campus confirms the repair, the request will return to the maintenance manager for final closure',
+      '',
+      'بعدها سيصل لمسؤول الكامب رابط لتأكيد الإصلاح.',
+      '',
+      'وبعد تأكيد الكامب، يعود الطلب لمدير الصيانة للإغلاق النهائي.'
     ].join('\\n');
     openOutlookDraft(to, subject, body);
     setMessage((ticket.request_no || 'Request') + ' email draft opened inside the ERP. Copy it into the company email system to send. / تم فتح مسودة البريد داخل النظام؛ انسخها إلى بريد الشركة لإرسالها.');

@@ -639,14 +639,16 @@ if (action === "close" && amount !== null && (!Number.isFinite(amount) || amount
 (function(){
  const token=${JSON.stringify(clean(req.params.token))};
  const yes=document.getElementById('yes'), no=document.getElementById('no'), result=document.getElementById('result');
- async function submit(answer){
+ function submit(answer){
    yes.disabled=true; no.disabled=true; result.textContent='Submitting… / جارٍ الحفظ…';
-   try {
-     const response=await fetch('/api/maintenance-requests/public/'+encodeURIComponent(token)+'/confirm?answer='+answer,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answer})});
-     const data=await response.json().catch(()=>({}));
-     if(!response.ok) throw new Error(data.error||'Request failed ('+response.status+')');
-     result.textContent=answer==='yes'?'✅ Confirmation saved. / تم حفظ التأكيد.':'❌ Rejected; request returned for follow-up. / تم الرفض وإرجاع الطلب للمتابعة.';
-   } catch(e) { result.textContent='Could not save: '+e.message; yes.disabled=false; no.disabled=false; }
+   // Submit as a normal browser POST so the confirmation page navigates to the
+   // server's final receipt page instead of remaining on the original form.
+   const form=document.createElement('form');
+   form.method='POST';
+   form.action='/api/maintenance-requests/public/'+encodeURIComponent(token)+'/confirm?answer='+answer;
+   const input=document.createElement('input');
+   input.type='hidden'; input.name='answer'; input.value=answer;
+   form.appendChild(input); document.body.appendChild(form); form.submit();
  }
  yes.addEventListener('click',()=>submit('yes')); no.addEventListener('click',()=>submit('no'));
 })();

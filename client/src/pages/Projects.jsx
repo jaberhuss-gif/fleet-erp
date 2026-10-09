@@ -19,10 +19,6 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
   const [openProjectId, setOpenProjectId] = useState(null);
   const [items, setItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(false);
-  const [pdfFile, setPdfFile] = useState(null);
-  const [pdfPreview, setPdfPreview] = useState(null);
-  const [pdfBusy, setPdfBusy] = useState(false);
-  const [pdfMonth, setPdfMonth] = useState(() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); });
   const [form, setForm] = useState({
     name: '', description: '', site: '', projectType: 'Development', status: 'Not Started',
     budget: 0, spent: 0, startDate: '', endDate: '', manager: '', contractor: '', notes: ''
@@ -132,50 +128,6 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
     win.document.close();
   };
 
-  const previewPdf = async (file) => {
-    if (!file) return;
-    setPdfFile(file); setPdfPreview(null); setError(''); setMessage('');
-    try {
-      setPdfBusy(true);
-      const fd = new FormData();
-      fd.append('file', file);
-      const r = await api.post('/building-maintenance/import-pdf/preview', fd, { timeout: 120000 });
-      const d = r.data;
-      setPdfPreview({
-        ...d,
-        projectName: d.projectName || file.name.replace(/\\.pdf$/i, ''),
-        site: d.site || '',
-        date: d.date || ''
-      });
-    } catch (e) {
-      setError(e.response?.data?.error || e.message);
-    } finally { setPdfBusy(false); }
-  };
-
-  const importPdf = async () => {
-    if (!pdfFile || !pdfPreview?.items?.length) return;
-    if (!pdfPreview.site) return setError('Select the Site before importing this PDF.');
-    try {
-      setPdfBusy(true); setError(''); setMessage('');
-      const fd = new FormData();
-      fd.append('file', pdfFile);
-      await api.post('/building-maintenance/import-pdf', fd, {
-        timeout: 120000,
-        headers: {
-          'X-PDF-Site': pdfPreview.site,
-          'X-PDF-Project-Name': pdfPreview.projectName || pdfFile.name,
-          'X-PDF-Date': pdfPreview.date || '',
-          'X-PDF-Month': pdfMonth
-        }
-      });
-      setMessage('PDF imported: Project + Work Order created OPEN. Final item amounts were left at 0 for you to close.');
-      setPdfFile(null); setPdfPreview(null);
-      await load();
-    } catch (e) {
-      setError(e.response?.data?.error || e.message);
-    } finally { setPdfBusy(false); }
-  };
-
   const handleDelete = async (id) => {
     if (!confirm('Delete this project?')) return;
     try {
@@ -204,44 +156,24 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
   return (
     <div className={entryOnly ? "panel building-entry-only" : "panel"}>
       <style>{`
-         .building-entry-only > *:not(.building-entry-form):not(.building-monthly-table):not(.building-pdf-import-toolbar) { display: none !important; }
+         .building-entry-only > *:not(.building-entry-form):not(.building-monthly-table):not(.building-import-toolbar) { display: none !important; }
         .building-entry-only > .building-entry-form,
-         .building-entry-only > .building-monthly-table, .building-entry-only > .building-pdf-import-toolbar { display: block !important; }
+         .building-entry-only > .building-monthly-table, .building-entry-only > .building-import-toolbar { display: block !important; }
       `}</style>
       <div style={{ background: 'linear-gradient(135deg, #7c3aed, #a78bfa)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
           <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Projects</h2>
         </div>
-        <div className="building-pdf-import-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px', padding:'10px 0' }}>
-        
-        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "projects", [{key:"project_no",label:"Project #"},{key:"name",label:"Name"},{key:"site",label:"Site"},{key:"project_type",label:"Type"},{key:"manager",label:"Manager"},{key:"budget",label:"Budget"},{key:"spent",label:"Spent"},{key:"status",label:"Status"}])}>Export CSV</button>{canWork && <><button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
-          {showForm ? 'Cancel' : '+ New Project'}
-        </button><ExcelImportButton endpoint="/projects" kind="projects" onImported={load} label="Import Excel" /><label className="btn btn-warning" style={{cursor:"pointer",margin:0}}>{pdfBusy ? "Reading PDF..." : "Import PDF → Project + WO"}<input type="file" accept=".pdf,application/pdf" style={{display:"none"}} disabled={pdfBusy} onChange={e => previewPdf(e.target.files?.[0])} /></label></>}
+        <div className="building-import-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px', padding:'10px 0' }}>
+        <button className="btn btn-success" style={{ marginRight: "8px" }} onClick={() => exportToCSV(filtered, "projects", [{key:"project_no",label:"Project #"},{key:"name",label:"Name"},{key:"site",label:"Site"},{key:"project_type",label:"Type"},{key:"manager",label:"Manager"},{key:"budget",label:"Budget"},{key:"spent",label:"Spent"},{key:"status",label:"Status"}])}>Export CSV</button>{canWork && <>
+          <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(!showForm); }}>
+            {showForm ? 'Cancel' : '+ New Project'}
+          </button>
+          <ExcelImportButton endpoint="/projects" kind="projects" onImported={load} label="Import Excel" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" />
+          <ExcelImportButton endpoint="/projects" kind="projects" onImported={load} label="Import CSV" accept=".csv,text/csv" />
+        </>}
       </div>
 
-      {message && <div className="alert alert-success">{message}</div>}
-
-      {pdfPreview && canWork && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-          <div style={{background:'#fff',borderRadius:12,padding:20,maxWidth:1100,width:'100%',maxHeight:'90vh',overflow:'auto'}}>
-            <h3 style={{marginTop:0}}>PDF Import — Project + Work Order</h3>
-            <div className="cards-grid" style={{gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))'}}>
-              <div className="form-group"><label>Project Name</label><input value={pdfPreview.projectName || ''} onChange={e=>setPdfPreview({...pdfPreview,projectName:e.target.value})}/></div>
-              <div className="form-group"><label>Site *</label><select value={pdfPreview.site || ''} onChange={e=>setPdfPreview({...pdfPreview,site:e.target.value})} required><option value="">-- Select Site --</option>{sites.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}</select></div>
-              <div className="form-group"><label>Date (optional)</label><input type="date" value={pdfPreview.date || ''} onChange={e=>setPdfPreview({...pdfPreview,date:e.target.value})}/></div>
-              <div className="form-group"><label>Report Month *</label><input type="month" value={pdfMonth} onChange={e=>setPdfMonth(e.target.value)} required /></div>
-            </div>
-            <div style={{margin:'10px 0',fontWeight:700}}>{pdfPreview.items.length} line items detected. PDF cost is NOT imported as final cost.</div>
-            <div style={{overflowX:'auto'}}>
-              <table><thead><tr><th>Sr.</th><th>Item</th><th>Unit</th><th>Qty</th><th>Unit Price (reference)</th><th>Final Cost</th><th>Status</th></tr></thead>
-              <tbody>{pdfPreview.items.map(x=><tr key={x.sr_no}><td>{x.sr_no}</td><td>{x.item}</td><td>{x.unit}</td><td>{x.quantity}</td><td>{x.price}</td><td>0</td><td>Not Started</td></tr>)}</tbody></table>
-            </div>
-            <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
-              <button className="btn btn-warning" onClick={()=>{setPdfPreview(null);setPdfFile(null);}}>Cancel</button>
-              <button className="btn btn-success" disabled={pdfBusy || !pdfPreview.site} onClick={importPdf}>{pdfBusy ? 'Importing...' : 'Import Project + Work Order'}</button>
-            </div>
-          </div>
-        </div>
-      )}
+            {message && <div className="alert alert-success">{message}</div>}
 
       {error && <div className="alert alert-error">{error}</div>}
 

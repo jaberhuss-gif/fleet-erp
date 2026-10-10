@@ -196,9 +196,14 @@ export default function TireManagement({ user, driverMode=false }) {
         </select>
         {!driverMode && user?.role==='Owner' && <button className="btn btn-primary" onClick={openAllSurveyPdf}>📚 All Submitted Surveys PDF</button>}
       </div>
-      {vehicle && data?.survey && <div style={{marginTop:10}}>
-        <strong>Initial Survey:</strong> <Badge status={['APPROVED','LOCKED'].includes(String(data.survey.status||'').toUpperCase())?'green':'yellow'} />
-        {data.survey.submitted_at && <span style={{marginLeft:8,color:'#64748b'}}>Submitted {new Date(data.survey.submitted_at).toLocaleString()}</span>}
+      {vehicle && <div style={{marginTop:10,padding:12,border:'1px solid #e2e8f0',borderRadius:8,background:'#f8fafc'}}>
+        <strong>Assigned Vehicle / السيارة المعيّنة:</strong> {vehicleLabel(vehicle)}
+        {vehicle.driver && <span> — Driver: {vehicle.driver}</span>}
+        {vehicle.location && <span> — Site: {vehicle.location}</span>}
+        {data?.survey && <div style={{marginTop:6}}>
+          <strong>Initial Survey:</strong> <Badge status={['APPROVED','LOCKED'].includes(String(data.survey.status||'').toUpperCase())?'green':'yellow'} />
+          {data.survey.submitted_at && <span style={{marginLeft:8,color:'#64748b'}}>Submitted {new Date(data.survey.submitted_at).toLocaleString()}</span>}
+        </div>}
       </div>}
     </div>
 

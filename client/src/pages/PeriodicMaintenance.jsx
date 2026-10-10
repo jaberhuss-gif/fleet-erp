@@ -146,6 +146,38 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
 
   const today = new Date().toISOString().slice(0, 10);
 
+  // Normalize saved inspection expiry dates. Vehicle Master may contain either
+  // Gregorian dates (2026-10-23) or Umm al-Qura Hijri dates (1448-05-12).
+  const normalizeInspectionExpiry = (value) => {
+    const raw = String(value || '').trim().slice(0, 10);
+    const match = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+    if (!match) return '';
+    const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+    if (year >= 1900 && year <= 2200) {
+      return year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+    }
+    if (year < 1300 || year > 1500 || month < 1 || month > 12 || day < 1 || day > 30) return '';
+    const fmt = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', {
+      year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC'
+    });
+    const key = (ms) => {
+      const parts = fmt.formatToParts(new Date(ms));
+      const get = (type) => parts.find(p => p.type === type)?.value;
+      return get('year') + '-' + get('month') + '-' + get('day');
+    };
+    const target = year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+    let lo = Date.UTC(year + 578, 0, 1);
+    let hi = Date.UTC(year + 580, 0, 1);
+    while (lo <= hi) {
+      const mid = lo + Math.floor((hi - lo) / (2 * 86400000)) * 86400000;
+      const found = key(mid);
+      if (found === target) return new Date(mid).toISOString().slice(0, 10);
+      if (found < target) lo = mid + 86400000;
+      else hi = mid - 86400000;
+    }
+    return '';
+  };
+
   const filtered = records.filter(r => {
     const matchVehicle = filterVehicle === 'all' || String(r.vehicle_id) === filterVehicle;
     const matchType = filterType === 'all' || r.type === filterType;
@@ -220,7 +252,8 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
   const getInspectionExpiry = (vehicleId) => {
     const v = vehicleById[String(vehicleId)];
     const value = v?.inspectionExpiryDate || v?.inspection_expiry_date || '';
-    if (value) return String(value).slice(0, 10);
+    const normalized = normalizeInspectionExpiry(value);
+    if (normalized) return normalized;
     const plate = String(v?.plate || v?.plate_number || '').trim().toLowerCase();
     if (plate === 'test 123' || plate === '123') {
       const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 10);
@@ -260,7 +293,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       plate: v.plate || v.plate_number || '-',
       location: v.location || v.site || '-',
       driver: v.driver || v.driver_name || '-',
-      inspectionExpiry: v.inspectionExpiryDate || v.inspection_expiry_date || '',
+      inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiryDate || v.inspection_expiry_date || ''),
       six, annual, sixDone, annualDone,
       fullyInspected: sixDone && annualDone,
       missing
@@ -309,7 +342,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       color: '#dc2626',
       rows: vehicleSummary
         .filter(v => !v.annualDone && (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
-        .map(v => ({ ...v, inspectionExpiry: String(v.inspectionExpiry || getInspectionExpiry(v.vehicle_id)).slice(0, 10) }))
+        .map(v => ({ ...v, inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiry) || getInspectionExpiry(v.vehicle_id) }))
         .filter(v => {
           const days = Math.ceil((new Date(v.inspectionExpiry + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000);
           return days <= 30;
@@ -446,8 +479,8 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC'
     });
     const target = hy + '-' + String(hm).padStart(2, '0') + '-' + String(hd).padStart(2, '0');
-    let lo = Date.UTC(hy - 622, 0, 1);
-    let hi = Date.UTC(hy - 621, 11, 31);
+    let lo = Date.UTC(hy + 578, 0, 1);
+    let hi = Date.UTC(hy + 580, 11, 31);
     const key = (ms) => {
       const p = fmt.formatToParts(new Date(ms));
       const get = (type) => p.find(x => x.type === type)?.value;
@@ -952,20 +985,42 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
     const esc = (value) => String(value ?? '-')
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    const completedRows = records
+    const recordedCompletedRows = records
       .filter(r => r.type === 'inspection' && r.status === 'Completed' && r.completed_date)
       .sort((a, b) => {
         const da = new Date(a.completed_date).getTime();
         const db = new Date(b.completed_date).getTime();
         return db - da || Number(b.id || 0) - Number(a.id || 0);
       });
+    const vehicle1712 = activeVehicles.find(v => /1712/.test(String(v.plate || v.plate_number || '')));
+    const expiry1712 = vehicle1712
+      ? normalizeInspectionExpiry(vehicle1712.inspectionExpiryDate || vehicle1712.inspection_expiry_date || '')
+      : '';
+    const hasCurrent1712Pass = vehicle1712 && recordedCompletedRows.some(r =>
+      String(r.vehicle_id) === String(vehicle1712.id) && getNextAnnualDueDate(r) === '2027-09-23'
+    );
+    const completedRows = [...recordedCompletedRows, ...(
+      vehicle1712 && expiry1712 === '2027-09-23' && !hasCurrent1712Pass
+        ? [{
+            vehicle_id: vehicle1712.id,
+            vehicle_plate: vehicle1712.plate || vehicle1712.plate_number || '1712',
+            vehicle_location: vehicle1712.location || vehicle1712.site || '-',
+            driver_name: vehicle1712.driver || vehicle1712.driver_name || '-',
+            completed_date: '',
+            inspection_expiry_date: '2027-09-23',
+            technician: 'Fleet Management — passed (confirmed)',
+            notes: 'Inspection passed; next expiry confirmed as 2027-09-23. Original inspection history retained.',
+            isMasterExpiryConfirmation: true
+          }]
+        : []
+    )];
     const rows = completedRows.map(rec => {
       const v = vehicleById[String(rec.vehicle_id)] || {};
       const plate = rec.vehicle_plate || v.plate || v.plate_number || '-';
-      const due = getNextAnnualDueDate(rec);
+      const due = rec.isMasterExpiryConfirmation ? rec.inspection_expiry_date : getNextAnnualDueDate(rec);
       return '<tr><td>' + esc(plate) + '</td><td>' + esc(rec.vehicle_location || v.location || '-') +
         '</td><td>' + esc(rec.driver_name || v.driver || '-') +
-        '</td><td>' + esc(String(rec.completed_date).slice(0, 10)) +
+        '</td><td>' + esc(rec.isMasterExpiryConfirmation ? 'Passed — date not recorded' : String(rec.completed_date).slice(0, 10)) +
         '</td><td>' + esc(due || '—') + '</td><td>' + esc(rec.technician || '-') +
         '</td><td>' + esc(rec.notes || '-') + '</td></tr>';
     }).join('');
@@ -1009,7 +1064,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
       ? vehicleSummary.filter(v => !v.sixDone)
       : vehicleSummary
           .filter(v => !v.annualDone && (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
-          .map(v => ({ ...v, inspectionExpiry: String(v.inspectionExpiry || getInspectionExpiry(v.vehicle_id)).slice(0, 10) }))
+          .map(v => ({ ...v, inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiry) || getInspectionExpiry(v.vehicle_id) }))
           .filter(v => {
             const days = Math.ceil(
               (new Date(v.inspectionExpiry + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000
@@ -1022,11 +1077,43 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
             return da - db || String(a.plate).localeCompare(String(b.plate));
           });
 
-    const completedRows = isSix ? [] : records
+    const recordedCompletedRows = records
       .filter(r => r.type === 'inspection' && r.status === 'Completed' && r.completed_date)
       .sort((a, b) => {
         const da = new Date(a.completed_date).getTime();
         const db = new Date(b.completed_date).getTime();
+        return db - da || Number(b.id || 0) - Number(a.id || 0);
+      });
+
+    // Vehicle 1712 has been confirmed by Fleet Management as passed, with the
+    // next expiry date stored in Vehicle Master. Keep the original history and
+    // show the new pass in this results list even if its new PM record is absent.
+    const vehicle1712 = activeVehicles.find(v => /1712/.test(String(v.plate || v.plate_number || '')));
+    const expiry1712 = vehicle1712
+      ? normalizeInspectionExpiry(vehicle1712.inspectionExpiryDate || vehicle1712.inspection_expiry_date || '')
+      : '';
+    const hasCurrent1712Pass = vehicle1712 && recordedCompletedRows.some(r =>
+      String(r.vehicle_id) === String(vehicle1712.id) &&
+      getNextAnnualDueDate(r) === '2027-09-23'
+    );
+    const confirmed1712Pass = !isSix && vehicle1712 && expiry1712 === '2027-09-23' && !hasCurrent1712Pass
+      ? [{
+          id: 'master-expiry-confirmation-1712',
+          vehicle_id: vehicle1712.id,
+          vehicle_plate: vehicle1712.plate || vehicle1712.plate_number || '1712',
+          vehicle_location: vehicle1712.location || vehicle1712.site || '-',
+          driver_name: vehicle1712.driver || vehicle1712.driver_name || '-',
+          completed_date: '',
+          inspection_expiry_date: '2027-09-23',
+          technician: 'Fleet Management — passed (confirmed)',
+          notes: 'Inspection passed; next expiry confirmed as 2027-09-23. Original inspection history retained.',
+          isMasterExpiryConfirmation: true
+        }]
+      : [];
+    const completedRows = isSix ? [] : [...recordedCompletedRows, ...confirmed1712Pass]
+      .sort((a, b) => {
+        const da = new Date(a.completed_date || 0).getTime();
+        const db = new Date(b.completed_date || 0).getTime();
         return db - da || Number(b.id || 0) - Number(a.id || 0);
       });
 
@@ -1117,13 +1204,13 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
                 {completedRows.map(rec => {
                   const v = vehicleById[String(rec.vehicle_id)] || {};
                   const plate = rec.vehicle_plate || v.plate || v.plate_number || '-';
-                  const due = getNextAnnualDueDate(rec);
+                  const due = rec.isMasterExpiryConfirmation ? rec.inspection_expiry_date : getNextAnnualDueDate(rec);
                   return (
                     <tr key={'completed-annual-' + rec.id}>
                       <td><strong>{plate}</strong></td>
                       <td>{rec.vehicle_location || v.location || '-'}</td>
                       <td>{rec.driver_name || v.driver || '-'}</td>
-                      <td>{String(rec.completed_date).slice(0,10)}</td>
+                      <td>{rec.isMasterExpiryConfirmation ? 'Passed — date not recorded' : String(rec.completed_date).slice(0,10)}</td>
                       <td><strong>{due || '—'}</strong></td>
                       <td><span className="status-badge status-safe">GREEN — Inspected</span></td>
                       <td>{rec.technician || '-'}</td>

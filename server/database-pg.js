@@ -720,6 +720,175 @@ export async function deleteAllVehicles() {
 }
 
 
+
+// ============================================================
+// DRIVER HANDOVERS (التسليم والاستلام)
+// ============================================================
+
+export async function ensureDriverHandoverSchema() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS driver_handovers (
+      id BIGSERIAL PRIMARY KEY,
+      vehicle_id BIGINT NOT NULL,
+      vehicle_plate TEXT,
+
+      previous_driver_id BIGINT,
+      previous_driver_name TEXT,
+      previous_driver_phone TEXT,
+
+      new_driver_id BIGINT,
+      new_driver_name TEXT,
+      new_driver_phone TEXT,
+
+      handover_date DATE NOT NULL DEFAULT CURRENT_DATE,
+
+      km_at_handover INTEGER,
+      last_oil_km INTEGER,
+      last_oil_date DATE,
+
+      open_issues JSONB DEFAULT '[]'::jsonb,
+      notes TEXT,
+
+      pdf_url TEXT,
+      whatsapp_sent_at TIMESTAMPTZ,
+      email_sent_at TIMESTAMPTZ,
+
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_driver_handovers_vehicle ON driver_handovers(vehicle_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_driver_handovers_date ON driver_handovers(handover_date DESC)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_driver_handovers_new_driver ON driver_handovers(new_driver_id)`);
+}
+
+export async function createDriverHandover(data = {}) {
+  await ensureDriverHandoverSchema();
+
+  // اجمع حالة السيارة تلقائيًا
+  const vehicleResult = await query(
+    `SELECT * FROM vehicles WHERE id = $1 LIMIT 1`,
+    [data.vehicleId]
+  );
+  const vehicle = vehicleResult.rows[0];
+  if (!vehicle) throw new Error('Vehicle not found');
+
+  // اجمع الأعطال المفتوحة (tickets)
+  const openTickets = await query(`
+    SELECT id, title, category, priority, status, opened_at, description
+    FROM tickets
+    WHERE vehicle_id = $1
+      AND status <> 'Closed'
+    ORDER BY opened_at DESC
+    LIMIT 50
+  `, [data.vehicleId]);
+
+  const openIssues = openTickets.rows.map(t => ({
+    id: t.id,
+    title: t.title,
+    category: t.category,
+    priority: t.priority,
+    status: t.status,
+    opened_at: t.opened_at,
+    description: String(t.description || '').slice(0, 500)
+  }));
+
+  const result = await query(`
+    INSERT INTO driver_handovers
+      (vehicle_id, vehicle_plate,
+       previous_driver_id, previous_driver_name, previous_driver_phone,
+       new_driver_id, new_driver_name, new_driver_phone,
+       handover_date,
+       km_at_handover, last_oil_km, last_oil_date,
+       open_issues, notes)
+    VALUES
+      ($1, $2,
+       $3, $4, $5,
+       $6, $7, $8,
+       COALESCE($9::date, CURRENT_DATE),
+       $10, $11, $12,
+       $13::jsonb, $14)
+    RETURNING *
+  `, [
+    data.vehicleId,
+    [vehicle.plate_number, vehicle.plate_code].filter(Boolean).join(' ').trim(),
+    data.previousDriverId || null,
+    data.previousDriverName || '',
+    data.previousDriverPhone || '',
+    data.newDriverId || null,
+    data.newDriverName || '',
+    data.newDriverPhone || '',
+    data.handoverDate || null,
+    Number(vehicle.current_km || 0),
+    Number(vehicle.last_oil_km || 0),
+    vehicle.last_oil_change_date || null,
+    JSON.stringify(openIssues),
+    data.notes || ''
+  ]);
+
+  return result.rows[0];
+}
+
+export async function listDriverHandovers(filters = {}) {
+  await ensureDriverHandoverSchema();
+
+  let sql = `
+    SELECT h.*,
+           v.plate_number,
+           v.plate_code,
+           v.make,
+           v.model
+    FROM driver_handovers h
+    LEFT JOIN vehicles v ON v.id = h.vehicle_id
+    WHERE 1=1
+  `;
+  const params = [];
+
+  if (filters.vehicleId) {
+    params.push(filters.vehicleId);
+    sql += ` AND h.vehicle_id = $${params.length}`;
+  }
+
+  if (filters.newDriverId) {
+    params.push(filters.newDriverId);
+    sql += ` AND h.new_driver_id = $${params.length}`;
+  }
+
+  sql += ` ORDER BY h.handover_date DESC, h.id DESC LIMIT 200`;
+
+  const result = await query(sql, params);
+  return result.rows;
+}
+
+export async function getDriverHandover(id) {
+  await ensureDriverHandoverSchema();
+
+  const result = await query(`
+    SELECT h.*,
+           v.plate_number,
+           v.plate_code,
+           v.make,
+           v.model,
+           v.location
+    FROM driver_handovers h
+    LEFT JOIN vehicles v ON v.id = h.vehicle_id
+    WHERE h.id = $1
+    LIMIT 1
+  `, [id]);
+
+  return result.rows[0] || null;
+}
+
+export async function markHandoverWhatsAppSent(id) {
+  const result = await query(`
+    UPDATE driver_handovers
+    SET whatsapp_sent_at = CURRENT_TIMESTAMP
+    WHERE id = $1
+    RETURNING *
+  `, [id]);
+
+  return result.rows[0] || null;
+}
+
 export async function addReading(vehicleId, data = {}) {
   const vehicleResult = await query(
     `SELECT * FROM vehicles WHERE id = $1 LIMIT 1`,
@@ -1646,7 +1815,14 @@ export default {
   startTicketWork,
   closeTicketWithNotes,
   listTicketsByReporter,
-  getReporterStats
+  getReporterStats,
+
+  // Driver Handovers
+  ensureDriverHandoverSchema,
+  createDriverHandover,
+  listDriverHandovers,
+  getDriverHandover,
+  markHandoverWhatsAppSent
 };
 // ============================================================
 // SITES / CAMPS - POSTGRESQL

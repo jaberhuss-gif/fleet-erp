@@ -19,6 +19,7 @@ import { mountTireRoutes } from "./tire-management.js";
 import { toWaMeNumber, toWaMeInternational } from "./phone.js";
 import { syncBuildingFromVelaOnce } from "./vela-project-sync.mjs";
 import { mountBuildingMaintenanceRequestRoutes } from "./building-maintenance-requests.js";
+import { handoverReportHtml } from "./handover-report.js";
 
 const ANNUAL_INSPECTION_EMAIL_FROM = 'Hussein.Anwar@iemaadex.com';
 const ANNUAL_INSPECTION_CC_EMAILS = 'Mohamed.Hassan@iemaadex.com, Mohammed.Al-Marhabi@iemaadex.com';
@@ -434,6 +435,96 @@ app.post("/api/vehicles/:id/oil-change", async (req, res) => {
 app.get("/api/vehicles/:id/oil-changes", async (req, res) => {
   try { res.json({ success: true, oilChanges: await listOilChangesPG(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+
+
+// ============================================================
+// DRIVER HANDOVERS (التسليم والاستلام)
+// ============================================================
+
+app.post("/api/vehicles/:id/handover", async (req, res) => {
+  try {
+    const vehicleId = Number(req.params.id);
+    if (!Number.isFinite(vehicleId)) {
+      return res.status(400).json({ success: false, error: "Invalid vehicle ID" });
+    }
+
+    const body = req.body || {};
+    const handover = await db.createDriverHandover({
+      vehicleId,
+      previousDriverId: body.previousDriverId || null,
+      previousDriverName: body.previousDriverName || "",
+      previousDriverPhone: body.previousDriverPhone || "",
+      newDriverId: body.newDriverId || null,
+      newDriverName: body.newDriverName || "",
+      newDriverPhone: body.newDriverPhone || "",
+      handoverDate: body.handoverDate || null,
+      notes: body.notes || ""
+    });
+
+    res.json({ success: true, handover });
+  } catch (e) {
+    console.error("[HandoverCreate]", e);
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+app.get("/api/driver-handovers", async (req, res) => {
+  try {
+    const filters = {
+      vehicleId: req.query.vehicleId ? Number(req.query.vehicleId) : null,
+      newDriverId: req.query.newDriverId ? Number(req.query.newDriverId) : null
+    };
+    const handovers = await db.listDriverHandovers(filters);
+    res.json({ success: true, handovers });
+  } catch (e) {
+    console.error("[HandoverList]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get("/api/driver-handovers/:id", async (req, res) => {
+  try {
+    const handover = await db.getDriverHandover(req.params.id);
+    if (!handover) {
+      return res.status(404).json({ success: false, error: "Handover not found" });
+    }
+    res.json({ success: true, handover });
+  } catch (e) {
+    console.error("[HandoverGet]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+
+app.get("/api/driver-handovers/:id/pdf", async (req, res) => {
+  try {
+    const handover = await db.getDriverHandover(req.params.id);
+    if (!handover) {
+      return res.status(404).send("Handover not found");
+    }
+    res.set("Cache-Control", "no-store");
+    res.type("html").send(handoverReportHtml(handover));
+  } catch (e) {
+    console.error("[HandoverPDF]", e);
+    res.status(500).send(e.message || "Unable to generate PDF");
+  }
+});
+
+
+
+app.post("/api/driver-handovers/:id/whatsapp-sent", async (req, res) => {
+  try {
+    const handover = await db.markHandoverWhatsAppSent(req.params.id);
+    if (!handover) {
+      return res.status(404).json({ success: false, error: "Handover not found" });
+    }
+    res.json({ success: true, handover });
+  } catch (e) {
+    console.error("[HandoverWhatsApp]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 // ===== ALERTS =====

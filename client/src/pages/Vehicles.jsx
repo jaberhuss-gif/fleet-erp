@@ -69,24 +69,57 @@ export default function Vehicles({ onViewVehicle, canWork = false, initialAction
     setShowForm(false);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setMessage(''); setError('');
-    try {
-      if (editing) {
-        await api.put('/vehicles/' + editing.id, { ...form, driverId: form.driverId ? Number(form.driverId) : null, driverName: form.driver || '', lastOilChangeDate: form.lastOilChangeDate || null, inspectionExpiryDate: form.inspectionExpiryDate || null });
-        setMessage('Vehicle updated');
-        window.dispatchEvent(new CustomEvent('fleet-vehicles-updated', { detail: { vehicleId: editing.id } }));
-        localStorage.setItem('fleet-vehicles-updated-at', String(Date.now()));
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setMessage(''); setError('');
+  try {
+    let updatedVehicle = null;
+    if (editing) {
+      const previousDriverId = editing.driverId || editing.driver_id || null;
+      const previousDriverName = editing.driver || '';
+      const previousDriverPhone = editing.phone || '';
+
+      await api.put('/vehicles/' + editing.id, { ...form, driverId: form.driverId ? Number(form.driverId) : null, driverName: form.driver || '', lastOilChangeDate: form.lastOilChangeDate || null, inspectionExpiryDate: form.inspectionExpiryDate || null });
+
+      const newDriverId = form.driverId ? Number(form.driverId) : null;
+      const driverChanged = String(previousDriverId || '') !== String(newDriverId || '');
+
+      if (driverChanged) {
+        const wantsHandover = window.confirm('Driver changed. Create a handover report?');
+        if (wantsHandover) {
+          try {
+            const res = await api.post('/vehicles/' + editing.id + '/handover', {
+              previousDriverId,
+              previousDriverName,
+              previousDriverPhone,
+              newDriverId,
+              newDriverName: form.driver || '',
+              newDriverPhone: form.phone || ''
+            });
+            const handover = res.data.handover;
+            setMessage('Vehicle updated + handover report #' + handover.id + ' created');
+            window.open('/api/driver-handovers/' + handover.id + '/pdf', '_blank');
+          } catch (hErr) {
+            setError('Vehicle updated, but handover failed: ' + (hErr.response?.data?.error || hErr.message));
+          }
+        } else {
+          setMessage('Vehicle updated');
+        }
       } else {
-        await api.post('/vehicles', { ...form, driverId: form.driverId ? Number(form.driverId) : null, driverName: form.driver || '', lastOilChangeDate: form.lastOilChangeDate || null, inspectionExpiryDate: form.inspectionExpiryDate || null });
-        setMessage('Vehicle added');
-        window.dispatchEvent(new CustomEvent('fleet-vehicles-updated'));
+        setMessage('Vehicle updated');
       }
-      resetForm();
-      load();
-    } catch (e) { setError(e.response?.data?.error || e.message); }
-  };
+
+      window.dispatchEvent(new CustomEvent('fleet-vehicles-updated', { detail: { vehicleId: editing.id } }));
+      localStorage.setItem('fleet-vehicles-updated-at', String(Date.now()));
+    } else {
+      await api.post('/vehicles', { ...form, driverId: form.driverId ? Number(form.driverId) : null, driverName: form.driver || '', lastOilChangeDate: form.lastOilChangeDate || null, inspectionExpiryDate: form.inspectionExpiryDate || null });
+      setMessage('Vehicle added');
+      window.dispatchEvent(new CustomEvent('fleet-vehicles-updated'));
+    }
+    resetForm();
+    load();
+  } catch (e) { setError(e.response?.data?.error || e.message); }
+};
 
   const handleEdit = (v) => {
     // Vehicle Master API may return snake_case fields from the PostgreSQL layer.

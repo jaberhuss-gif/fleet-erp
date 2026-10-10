@@ -96,11 +96,49 @@ const handleSubmit = async (e) => {
               newDriverName: form.driver || '',
               newDriverPhone: form.phone || ''
             });
-            const handover = res.data.handover;
+                       const handover = res.data.handover;
             setMessage('Vehicle updated + handover report #' + handover.id + ' created');
             window.open('/api/driver-handovers/' + handover.id + '/pdf', '_blank');
-          } catch (hErr) {
-            setError('Vehicle updated, but handover failed: ' + (hErr.response?.data?.error || hErr.message));
+
+            // Prepare WhatsApp draft
+            const newDriverPhone = String(form.phone || '').replace(/\D/g, '');
+            if (newDriverPhone) {
+              const waPhone = newDriverPhone.startsWith('966')
+                ? newDriverPhone
+                : newDriverPhone.startsWith('0')
+                  ? '966' + newDriverPhone.slice(1)
+                  : '966' + newDriverPhone;
+
+              const waMessage = [
+                'Hello ' + (form.driver || 'Driver') + ',',
+                '',
+                'You have received vehicle ' + (handover.vehicle_plate || '') + '.',
+                '',
+                'Vehicle Handover Summary:',
+                '• Date: ' + (handover.handover_date ? String(handover.handover_date).slice(0, 10) : 'today'),
+                '• Current KM: ' + Number(handover.km_at_handover || 0).toLocaleString() + ' km',
+                '• Last Oil Change KM: ' + Number(handover.last_oil_km || 0).toLocaleString() + ' km',
+                '• Open Issues: ' + (Array.isArray(handover.open_issues) ? handover.open_issues.length : 0),
+                '',
+                'Please review the attached handover report.',
+                '',
+                'Regards,',
+                'Fleet Management'
+              ].join('\n');
+
+              const openWhatsApp = window.confirm(
+                'Handover created.\n\nDo you want to send a WhatsApp message to the new driver (' + (form.driver || '') + ')?'
+              );
+
+              if (openWhatsApp) {
+                window.open(
+                  'https://wa.me/' + waPhone + '?text=' + encodeURIComponent(waMessage),
+                  '_blank'
+                );
+              }
+            }
+          } catch (hErr) {  
+          setError('Vehicle updated, but handover failed: ' + (hErr.response?.data?.error || hErr.message));
           }
         } else {
           setMessage('Vehicle updated');

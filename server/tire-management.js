@@ -1426,8 +1426,26 @@ export async function mountTireRoutes(app) {
         [names, phones]
       );
 
+      // SHARED ACCOUNT FALLBACK:
+      // The Driver role uses a single shared login with no phone/name that matches
+      // a specific driver record. In that case the scoped lookup above returns an
+      // empty list and the whole Fleet tab becomes unusable. When no rows were
+      // matched, return every operational vehicle so the driver can pick theirs
+      // manually. This is intentional for the shared-account design.
+      let vehicles = r.rows;
+      if (vehicles.length === 0) {
+        const fallback = await query(
+          `SELECT DISTINCT
+              v.id, v.plate, v.plate_number, v.plate_code, v.driver, v.location
+           FROM vehicles v
+           WHERE LOWER(TRIM(COALESCE(v.plate, ''))) <> 'test 123'
+           ORDER BY v.plate_number, v.plate_code, v.id`
+        );
+        vehicles = fallback.rows;
+      }
+
       res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-      res.json({ success: true, vehicles: r.rows });
+      res.json({ success: true, vehicles });
     } catch (e) {
       console.error("[TireDriverVehicles]", e);
       res.status(500).json({ success: false, error: e.message });

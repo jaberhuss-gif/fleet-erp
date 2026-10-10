@@ -150,7 +150,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
   // Gregorian dates (2026-10-23) or Umm al-Qura Hijri dates (1448-05-12).
   const normalizeInspectionExpiry = (value) => {
     const raw = String(value || '').trim().slice(0, 10);
-    const match = raw.match(/^(\\d{4})[-/](\\d{1,2})[-/](\\d{1,2})$/);
+    const match = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
     if (!match) return '';
     const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
     if (year >= 1900 && year <= 2200) {
@@ -341,7 +341,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       title: 'Annual Inspection — Due Within 30 Days',
       color: '#dc2626',
       rows: vehicleSummary
-        .filter(v => (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
+        .filter(v => !v.annualDone && (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
         .map(v => ({ ...v, inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiry) || getInspectionExpiry(v.vehicle_id) }))
         .filter(v => {
           const days = Math.ceil((new Date(v.inspectionExpiry + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000);
@@ -1041,7 +1041,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
     const pendingRows = isSix
       ? vehicleSummary.filter(v => !v.sixDone)
       : vehicleSummary
-          .filter(v => (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
+          .filter(v => !v.annualDone && (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
           .map(v => ({ ...v, inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiry) || getInspectionExpiry(v.vehicle_id) }))
           .filter(v => {
             const days = Math.ceil(

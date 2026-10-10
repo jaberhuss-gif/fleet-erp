@@ -564,29 +564,7 @@ function BuildingMaintenanceReport() {
         </div>
       </div>
 
-      <div className="panel" style={{ marginBottom: '20px' }}>
-          <div style={{ background: '#f1f5f9', padding: '12px 16px', borderRadius: '8px 8px 0 0', fontWeight: 700 }}>
-            Google Sheet — MonthlySavings (Temporary Source)
-          </div>
-          <div style={{ padding: '8px 12px', color: '#64748b', fontSize: 12 }}>
-            This temporary view reads the MonthlySavings tab directly from Google Sheets. Selected month: {selected.month}.
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr style={{ background: '#f8fafc' }}>
-                {sheetHeaders.map((h, i) => <th key={i} style={{ textAlign: 'left', padding: '10px 12px', whiteSpace: 'nowrap' }}>{h || ('Column ' + (i + 1))}</th>)}
-              </tr></thead>
-              <tbody>
-                {(selectedSheetRows.length ? selectedSheetRows : sheetRows).map((row, ri) => (
-                  <tr key={ri}>
-                    {sheetHeaders.map((_, i) => <td key={i} style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>{row[i] ?? ''}</td>)}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+ 
 
       <div className="panel" style={{ marginBottom: '20px' }}>
         <div style={{ background: '#f1f5f9', padding: '12px 16px', borderRadius: '8px 8px 0 0', fontWeight: 700 }}>

@@ -341,7 +341,7 @@ await mountTireRoutes(app);
 app.get("/api/vehicles", async (req, res) => {
   try {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    const vehicles = await listVehiclesPG();
+    const vehicles = await db.listVehicles();
     res.json({ success: true, vehicles });
   } catch (e) {
     console.error("Error fetching vehicles:", e);
@@ -352,7 +352,7 @@ app.get("/api/vehicles", async (req, res) => {
 app.get("/api/vehicles/list", async (req, res) => {
   try {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    const vehicles = await listVehiclesPG();
+    const vehicles = await db.listVehicles();
     res.json({
       success: true,
       vehicles: vehicles.map(v => ({
@@ -361,6 +361,9 @@ app.get("/api/vehicles/list", async (req, res) => {
         plate_number: v.plate_number || '',
         plate_code: v.plate_code || '',
         driver: v.driver || '',
+        driverId: v.driverId ?? null,
+        driver_id: v.driverId ?? null,
+        phone: v.phone || '',
         location: v.location || '',
         inspection_expiry_date: v.inspection_expiry_date || null,
         inspectionExpiryDate: v.inspection_expiry_date || null
@@ -380,12 +383,12 @@ app.get("/api/vehicles/:id/details", async (req, res) => {
 });
 
 app.post("/api/vehicles", async (req, res) => {
-  try { res.json({ success: true, vehicle: await createVehiclePG(req.body) }); }
+  try { res.json({ success: true, vehicle: await db.createVehicle(req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
 app.put("/api/vehicles/:id", async (req, res) => {
-  try { res.json({ success: true, vehicle: await updateVehiclePG(req.params.id, req.body) }); }
+  try { res.json({ success: true, vehicle: await db.updateVehicle(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 app.put("/api/vehicles/:id/last-oil-change", async (req, res) => {

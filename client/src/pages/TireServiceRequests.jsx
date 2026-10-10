@@ -95,9 +95,10 @@ export default function TireServiceRequests({ driverMode=false }) {
     {message&&<div className="alert alert-success">{message}</div>}{error&&<div className="alert alert-error">{error}</div>}
     <div className="panel">
       <label>Vehicle</label>
-      <select value={vehicleId} onChange={e=>setVehicleId(e.target.value)} style={{maxWidth:500}}>
-        <option value="">-- Select vehicle --</option>{vehicles.map(v=><option key={v.id} value={v.id}>{v.plate}</option>)}
+      <select value={vehicleId} onChange={e=>setVehicleId(e.target.value)} style={{maxWidth:500}} disabled={vehicles.length===0}>
+        <option value="">-- Select vehicle --</option>{vehicles.map(v=><option key={v.id} value={v.id}>{v.plate || [v.plate_number,v.plate_code].filter(Boolean).join(' ') || ('Vehicle ID '+v.id)}</option>)}
       </select>
+      {vehicles.length===0&&<div className="alert alert-warning" style={{marginTop:8}}>No vehicle is linked to this Driver account. Please check the driver's assignment in Vehicle Master.</div>}
       {selectedVehicle&&<div style={{marginTop:8,color:'#64748b',fontSize:13}}>Vehicle: <strong>{selectedVehicle.plate}</strong>{selectedVehicle.driver?' — '+selectedVehicle.driver:''}</div>}
       <div style={{marginTop:12}}>
         <label>Request Type</label>

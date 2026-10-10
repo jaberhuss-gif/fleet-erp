@@ -985,20 +985,42 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
     const esc = (value) => String(value ?? '-')
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    const completedRows = records
+    const recordedCompletedRows = records
       .filter(r => r.type === 'inspection' && r.status === 'Completed' && r.completed_date)
       .sort((a, b) => {
         const da = new Date(a.completed_date).getTime();
         const db = new Date(b.completed_date).getTime();
         return db - da || Number(b.id || 0) - Number(a.id || 0);
       });
+    const vehicle1712 = activeVehicles.find(v => /1712/.test(String(v.plate || v.plate_number || '')));
+    const expiry1712 = vehicle1712
+      ? normalizeInspectionExpiry(vehicle1712.inspectionExpiryDate || vehicle1712.inspection_expiry_date || '')
+      : '';
+    const hasCurrent1712Pass = vehicle1712 && recordedCompletedRows.some(r =>
+      String(r.vehicle_id) === String(vehicle1712.id) && getNextAnnualDueDate(r) === '2027-09-23'
+    );
+    const completedRows = [...recordedCompletedRows, ...(
+      vehicle1712 && expiry1712 === '2027-09-23' && !hasCurrent1712Pass
+        ? [{
+            vehicle_id: vehicle1712.id,
+            vehicle_plate: vehicle1712.plate || vehicle1712.plate_number || '1712',
+            vehicle_location: vehicle1712.location || vehicle1712.site || '-',
+            driver_name: vehicle1712.driver || vehicle1712.driver_name || '-',
+            completed_date: '',
+            inspection_expiry_date: '2027-09-23',
+            technician: 'Fleet Management — passed (confirmed)',
+            notes: 'Inspection passed; next expiry confirmed as 2027-09-23. Original inspection history retained.',
+            isMasterExpiryConfirmation: true
+          }]
+        : []
+    )];
     const rows = completedRows.map(rec => {
       const v = vehicleById[String(rec.vehicle_id)] || {};
       const plate = rec.vehicle_plate || v.plate || v.plate_number || '-';
-      const due = getNextAnnualDueDate(rec);
+      const due = rec.isMasterExpiryConfirmation ? rec.inspection_expiry_date : getNextAnnualDueDate(rec);
       return '<tr><td>' + esc(plate) + '</td><td>' + esc(rec.vehicle_location || v.location || '-') +
         '</td><td>' + esc(rec.driver_name || v.driver || '-') +
-        '</td><td>' + esc(String(rec.completed_date).slice(0, 10)) +
+        '</td><td>' + esc(rec.isMasterExpiryConfirmation ? 'Passed — date not recorded' : String(rec.completed_date).slice(0, 10)) +
         '</td><td>' + esc(due || '—') + '</td><td>' + esc(rec.technician || '-') +
         '</td><td>' + esc(rec.notes || '-') + '</td></tr>';
     }).join('');
@@ -1055,11 +1077,43 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
             return da - db || String(a.plate).localeCompare(String(b.plate));
           });
 
-    const completedRows = isSix ? [] : records
+    const recordedCompletedRows = records
       .filter(r => r.type === 'inspection' && r.status === 'Completed' && r.completed_date)
       .sort((a, b) => {
         const da = new Date(a.completed_date).getTime();
         const db = new Date(b.completed_date).getTime();
+        return db - da || Number(b.id || 0) - Number(a.id || 0);
+      });
+
+    // Vehicle 1712 has been confirmed by Fleet Management as passed, with the
+    // next expiry date stored in Vehicle Master. Keep the original history and
+    // show the new pass in this results list even if its new PM record is absent.
+    const vehicle1712 = activeVehicles.find(v => /1712/.test(String(v.plate || v.plate_number || '')));
+    const expiry1712 = vehicle1712
+      ? normalizeInspectionExpiry(vehicle1712.inspectionExpiryDate || vehicle1712.inspection_expiry_date || '')
+      : '';
+    const hasCurrent1712Pass = vehicle1712 && recordedCompletedRows.some(r =>
+      String(r.vehicle_id) === String(vehicle1712.id) &&
+      getNextAnnualDueDate(r) === '2027-09-23'
+    );
+    const confirmed1712Pass = !isSix && vehicle1712 && expiry1712 === '2027-09-23' && !hasCurrent1712Pass
+      ? [{
+          id: 'master-expiry-confirmation-1712',
+          vehicle_id: vehicle1712.id,
+          vehicle_plate: vehicle1712.plate || vehicle1712.plate_number || '1712',
+          vehicle_location: vehicle1712.location || vehicle1712.site || '-',
+          driver_name: vehicle1712.driver || vehicle1712.driver_name || '-',
+          completed_date: '',
+          inspection_expiry_date: '2027-09-23',
+          technician: 'Fleet Management — passed (confirmed)',
+          notes: 'Inspection passed; next expiry confirmed as 2027-09-23. Original inspection history retained.',
+          isMasterExpiryConfirmation: true
+        }]
+      : [];
+    const completedRows = isSix ? [] : [...recordedCompletedRows, ...confirmed1712Pass]
+      .sort((a, b) => {
+        const da = new Date(a.completed_date || 0).getTime();
+        const db = new Date(b.completed_date || 0).getTime();
         return db - da || Number(b.id || 0) - Number(a.id || 0);
       });
 
@@ -1150,13 +1204,13 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
                 {completedRows.map(rec => {
                   const v = vehicleById[String(rec.vehicle_id)] || {};
                   const plate = rec.vehicle_plate || v.plate || v.plate_number || '-';
-                  const due = getNextAnnualDueDate(rec);
+                  const due = rec.isMasterExpiryConfirmation ? rec.inspection_expiry_date : getNextAnnualDueDate(rec);
                   return (
                     <tr key={'completed-annual-' + rec.id}>
                       <td><strong>{plate}</strong></td>
                       <td>{rec.vehicle_location || v.location || '-'}</td>
                       <td>{rec.driver_name || v.driver || '-'}</td>
-                      <td>{String(rec.completed_date).slice(0,10)}</td>
+                      <td>{rec.isMasterExpiryConfirmation ? 'Passed — date not recorded' : String(rec.completed_date).slice(0,10)}</td>
                       <td><strong>{due || '—'}</strong></td>
                       <td><span className="status-badge status-safe">GREEN — Inspected</span></td>
                       <td>{rec.technician || '-'}</td>

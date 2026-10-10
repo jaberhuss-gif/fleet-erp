@@ -1372,7 +1372,8 @@ export async function mountTireRoutes(app) {
       const userResult = await query(
         `SELECT id, username, full_name, phone
          FROM users
-         WHERE id = $1 AND role = 'Driver'
+         WHERE id = $1
+           AND LOWER(TRIM(COALESCE(role, ''))) = 'driver'
          LIMIT 1`,
         [req.user?.id]
       );

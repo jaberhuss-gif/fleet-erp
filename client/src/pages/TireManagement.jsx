@@ -51,6 +51,8 @@ function Badge({status}) {
 
 export default function TireManagement({ user, driverMode=false }) {
   const [vehicles,setVehicles] = useState([]);
+  const [vehiclesLoading,setVehiclesLoading] = useState(true);
+  const [vehiclesLoadError,setVehiclesLoadError] = useState('');
   const [vehicleId,setVehicleId] = useState('');
   const [data,setData] = useState(null);
   const [tires,setTires] = useState(POSITIONS.map(emptyTire));
@@ -63,10 +65,20 @@ export default function TireManagement({ user, driverMode=false }) {
   const [error,setError] = useState('');
 
   const loadVehicles = async () => {
-    const r = await api.get(driverMode ? '/tire/driver/vehicles' : '/tire/control');
-    const list = r.data.vehicles || [];
-    setVehicles(list);
-    if (driverMode && list.length === 1) setVehicleId(String(list[0].id));
+    setVehiclesLoading(true);
+    setVehiclesLoadError('');
+    try {
+      const r = await api.get(driverMode ? '/tire/driver/vehicles' : '/tire/control');
+      const list = r.data.vehicles || [];
+      setVehicles(list);
+      if (driverMode && list.length === 1) setVehicleId(String(list[0].id));
+    } catch (e) {
+      const detail = e.response?.data?.error || e.message || 'Could not load vehicles.';
+      setVehiclesLoadError(detail);
+      throw e;
+    } finally {
+      setVehiclesLoading(false);
+    }
   };
   const load = async (id=vehicleId) => {
     if (!id) return;
@@ -139,11 +151,12 @@ export default function TireManagement({ user, driverMode=false }) {
 
   const openSurveyPdf = async (id) => {
     const win = window.open('', '_blank');
+    if (!win) { setError('Please allow pop-ups to open the survey report.'); return; }
     try {
       const r = await api.get('/tire/survey-report/' + id, { responseType: 'blob' });
       const url = URL.createObjectURL(r.data);
       win.location.href = url;
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
     } catch (e) {
       win.close();
       setError(e.response?.data?.error || 'Could not create the PDF report.');
@@ -153,6 +166,7 @@ export default function TireManagement({ user, driverMode=false }) {
   const openAllSurveyPdf = async () => {
     const win = window.open('', '_blank');
     try {
+      if (!win) { setError('Please allow pop-ups to open the survey report.'); return; }
       const r = await api.get('/tire/survey-report/all', { responseType: 'blob' });
       const url = URL.createObjectURL(r.data);
       win.location.href = url;
@@ -179,7 +193,7 @@ export default function TireManagement({ user, driverMode=false }) {
     <div className="panel" style={{marginBottom:16}}>
       <label>Vehicle / Report Mode</label>
       <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
-        <select value={vehicleId} onChange={e=>{
+        <select value={vehicleId} disabled={vehiclesLoading} onChange={e=>{
           const selected=e.target.value;
           if(selected==='__ALL_VEHICLES__'){
             setVehicleId('');
@@ -190,12 +204,15 @@ export default function TireManagement({ user, driverMode=false }) {
           }
           setVehicleId(selected);
         }} style={{maxWidth:500}}>
-          <option value="">-- Select vehicle --</option>
+          <option value="">{vehiclesLoading ? 'Loading vehicle numbers...' : '-- Select vehicle --'}</option>
           {!driverMode && user?.role==='Owner' && <option value="__ALL_VEHICLES__">📚 All Vehicles — Open All Submitted Surveys PDF</option>}
           {vehicles.map(v=><option key={v.id} value={v.id}>{vehicleLabel(v)}</option>)}
         </select>
         {!driverMode && user?.role==='Owner' && <button className="btn btn-primary" onClick={openAllSurveyPdf}>📚 All Submitted Surveys PDF</button>}
+        {vehiclesLoading && <span style={{color:'#64748b'}}>Loading vehicle numbers… / جارٍ تحميل أرقام السيارات…</span>}
       </div>
+      {!vehiclesLoading && vehiclesLoadError && <div className="alert alert-error" style={{marginTop:8}}>{vehiclesLoadError}</div>}
+      {!vehiclesLoading && !vehiclesLoadError && vehicles.length===0 && <div className="alert alert-warning" style={{marginTop:8}}>No vehicles were returned. / لم يتم العثور على سيارات.</div>}
       {vehicle && <div style={{marginTop:10,padding:12,border:'1px solid #e2e8f0',borderRadius:8,background:'#f8fafc'}}>
         <strong>Assigned Vehicle / السيارة المعيّنة:</strong> {vehicleLabel(vehicle)}
         {vehicle.driver && <span> — Driver: {vehicle.driver}</span>}

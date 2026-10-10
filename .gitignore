@@ -8,3 +8,16 @@ server/fleet.db-wal
 server/backups/
 
 server/*.backup-*
+
+# Backups (بدون شرطة)
+server/*.backup
+server/*.backup2
+backups-before-production-*/
+
+# Test & utility files (محلية فقط)
+server/test-*.mjs
+server/cleanup-*.mjs
+server/check-*.mjs
+server/verify-*.mjs
+server/restore-*.mjs
+server/patch-*.mjs

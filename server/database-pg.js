@@ -772,16 +772,25 @@ export async function addReading(vehicleId, data = {}) {
 
   const plate = `${v.plate_number || ""} ${v.plate_code || ""}`.trim();
 
+    // NEW: Capture the current driver at the moment of the reading.
+  // `v` was fetched at the top of this function, so it holds the vehicle's
+  // driver_id and driver as of this request. Historical records keep their
+  // own driver_id even if the vehicle is reassigned later.
+  const readingDriverId = v.driver_id ?? null;
+  const readingDriverName = stringValue(v.driver);
+
   await query(
     `INSERT INTO km_records
-      (vehicle_id, plate, reading_km, reading_date, notes)
-     VALUES ($1, $2, $3, $4, $5)`,
+      (vehicle_id, plate, reading_km, reading_date, notes, driver_id, driver_name)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [
       vehicleId,
       plate,
       km,
       readingDate,
-      stringValue(data.notes)
+      stringValue(data.notes),
+      readingDriverId,
+      readingDriverName
     ]
   );
 
@@ -905,16 +914,33 @@ export async function ensureVehicleRepairSchema() {
 }
 
 export async function createVehicleRepairOrder(data = {}) {
+  // NEW: Capture the vehicle's current driver at the moment of the repair order.
+  let repairDriverId = null;
+  let repairDriverName = null;
+  if (data.vehicleId) {
+    const vRow = (await query(
+      `SELECT driver_id, driver FROM vehicles WHERE id = $1 LIMIT 1`,
+      [data.vehicleId]
+    )).rows[0];
+    repairDriverId = vRow?.driver_id ?? null;
+    repairDriverName = stringValue(vRow?.driver);
+  }
+
   const result = await query(
     `INSERT INTO vehicle_repair_orders
-      (vehicle_id, reported_by, issue_description, status)
-     VALUES ($1,$2,$3,'Open')
+      (vehicle_id, reported_by, issue_description, status, driver_id, driver_name)
+     VALUES ($1,$2,$3,'Open',$4,$5)
      RETURNING *`,
-    [data.vehicleId, stringValue(data.reportedBy || data.repairedBy), stringValue(data.issueDescription || data.description)]
+    [
+      data.vehicleId,
+      stringValue(data.reportedBy || data.repairedBy),
+      stringValue(data.issueDescription || data.description),
+      repairDriverId,
+      repairDriverName
+    ]
   );
   return result.rows[0];
 }
-
 export async function listVehicleRepairOrders(filters = {}) {
   const params = [];
   let sql = `
@@ -1256,16 +1282,22 @@ export async function changeOil(vehicleId, data = {}) {
 
   const plate = `${v.plate_number || ""} ${v.plate_code || ""}`.trim();
 
+    // NEW: Capture the current driver at the moment of the oil change.
+  const oilDriverId = v.driver_id ?? null;
+  const oilDriverName = stringValue(v.driver);
+
   await query(
     `INSERT INTO oil_changes
-      (vehicle_id, oil_change_km, oil_change_date, changed_by, notes)
-     VALUES ($1, $2, $3, $4, $5)`,
+      (vehicle_id, oil_change_km, oil_change_date, changed_by, notes, driver_id, driver_name)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [
       vehicleId,
       currentKM,
       oilDate,
       changedBy,
-      notes
+      notes,
+      oilDriverId,
+      oilDriverName
     ]
   );
 
@@ -1289,16 +1321,20 @@ export async function changeOil(vehicleId, data = {}) {
     console.error("Failed to update periodic_maintenance after oil change:", err.message);
   }
 
+    // NEW: The KM record created by an oil change also captures the driver.
+  // Reuses oilDriverId / oilDriverName from the earlier block.
   await query(
     `INSERT INTO km_records
-      (vehicle_id, plate, reading_km, reading_date, is_oil_change, notes)
-     VALUES ($1, $2, $3, $4, 1, $5)`,
+      (vehicle_id, plate, reading_km, reading_date, is_oil_change, notes, driver_id, driver_name)
+     VALUES ($1, $2, $3, $4, 1, $5, $6, $7)`,
     [
       vehicleId,
       plate,
       currentKM,
       oilDate,
-      "Oil change"
+      "Oil change",
+      oilDriverId,
+      oilDriverName
     ]
   );
 
@@ -1332,13 +1368,29 @@ export async function createTicket(data = {}) {
   const owner = ownerResult.rows[0] || null;
   const department = stringValue(data.department) || (data.vehicleId ? "Fleet" : "Support");
 
+    // NEW: If the ticket is linked to a vehicle, capture the vehicle's current
+  // driver at the moment of ticket creation. This preserves who was driving
+  // when the issue was reported, even if the vehicle is later reassigned.
+  let ticketDriverId = null;
+  let ticketDriverName = null;
+  if (data.vehicleId) {
+    const vRow = (await query(
+      `SELECT driver_id, driver FROM vehicles WHERE id = $1 LIMIT 1`,
+      [data.vehicleId]
+    )).rows[0];
+    ticketDriverId = vRow?.driver_id ?? null;
+    ticketDriverName = stringValue(vRow?.driver);
+  }
+
   const result = await query(
     `INSERT INTO tickets
       (vehicle_id, title, location, category, priority, status,
        description, reported_by, opened_at, department,
-       assigned_to_user_id, assigned_to_name, assigned_at)
+       assigned_to_user_id, assigned_to_name, assigned_at,
+       driver_id, driver_name)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_TIMESTAMP,$9,$10,$11,
-             CASE WHEN $10::bigint IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END)
+             CASE WHEN $10::bigint IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END,
+             $12,$13)
      RETURNING *`,
     [
       data.vehicleId || null,
@@ -1351,7 +1403,9 @@ export async function createTicket(data = {}) {
       stringValue(data.reportedBy || data.reporter),
       department,
       owner?.id ?? null,
-      owner ? stringValue(owner.full_name || owner.username) : null
+      owner ? stringValue(owner.full_name || owner.username) : null,
+      ticketDriverId,
+      ticketDriverName
     ]
   );
 
@@ -3637,6 +3691,25 @@ export async function updatePeriodicMaintenance(id, data = {}) {
 }
 
 export async function completePeriodicMaintenance(id, data = {}) {
+   // NEW: Capture the vehicle's current driver at the moment of completion.
+  // Reads the current row first so the driver snapshot is taken before the
+  // vehicle could be reassigned in a concurrent request.
+  const currentPm = (await query(
+    `SELECT vehicle_id FROM periodic_maintenance WHERE id = $1 LIMIT 1`,
+    [id]
+  )).rows[0];
+
+  let pmDriverId = null;
+  let pmDriverName = null;
+  if (currentPm?.vehicle_id) {
+    const vRow = (await query(
+      `SELECT driver_id, driver FROM vehicles WHERE id = $1 LIMIT 1`,
+      [currentPm.vehicle_id]
+    )).rows[0];
+    pmDriverId = vRow?.driver_id ?? null;
+    pmDriverName = stringValue(vRow?.driver);
+  }
+
   const result = await query(`
     UPDATE periodic_maintenance
     SET
@@ -3644,14 +3717,18 @@ export async function completePeriodicMaintenance(id, data = {}) {
       completed_date = CURRENT_DATE,
       technician = $1,
       cost = $2,
-      notes = $3
+      notes = $3,
+      driver_id = $5,
+      driver_name = $6
     WHERE id = $4
     RETURNING *
   `, [
     pgStr(data.technician),
     pgNum(data.cost),
     pgStr(data.notes),
-    id
+    id,
+    pmDriverId,
+    pmDriverName
   ]);
 
   if (!result.rows[0]) {

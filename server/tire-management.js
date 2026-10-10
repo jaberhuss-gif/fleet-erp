@@ -1016,6 +1016,14 @@ export async function createTireEvent(vehicleId, body, user) {
   const outcome = clean(body.outcome).toLowerCase();
 
   const event = await transaction(async tx => {
+    // NEW: Capture the vehicle's current driver at the moment of the tire event.
+    const vehicleRow = (await tx.query(
+      `SELECT driver_id, driver FROM vehicles WHERE id = $1 LIMIT 1`,
+      [vehicleId]
+    )).rows[0];
+    const eventDriverId = vehicleRow?.driver_id ?? null;
+    const eventDriverName = clean(vehicleRow?.driver) || null;
+
     let oldAsset = null;
 
     if (body.tireAssetId) {
@@ -1158,8 +1166,8 @@ export async function createTireEvent(vehicleId, body, user) {
     const result = await tx.query(
       `INSERT INTO tire_events
         (vehicle_id,tire_asset_id,event_type,position,old_tire_id,new_tire_id,
-         manufacturer_serial,outcome,notes,created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         manufacturer_serial,outcome,notes,created_by,driver_id,driver_name)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
        RETURNING *`,
       [
         vehicleId,
@@ -1171,7 +1179,9 @@ export async function createTireEvent(vehicleId, body, user) {
         serial,
         outcome || null,
         clean(body.notes) || null,
-        user?.id || null
+        user?.id || null,
+        eventDriverId,
+        eventDriverName
       ]
     );
 

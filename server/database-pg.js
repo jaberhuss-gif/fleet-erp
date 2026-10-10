@@ -3743,7 +3743,8 @@ export async function completePeriodicMaintenance(id, data = {}) {
     await query(`
       UPDATE vehicles
       SET inspection_last_date = $1::date,
-          inspection_due_date = ($1::date + INTERVAL '365 days')::date
+          inspection_due_date = ($1::date + INTERVAL '365 days')::date,
+          inspection_expiry_date = ($1::date + INTERVAL '365 days')::date
       WHERE id = $2
     `, [completedDate, result.rows[0].vehicle_id]);
   }

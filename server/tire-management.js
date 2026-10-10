@@ -1381,7 +1381,8 @@ export async function mountTireRoutes(app) {
       // Repair missing relational links from the existing Vehicle Master driver
       // name/phone snapshot before resolving access. This does not alter tire survey
       // records, photos, service requests, or vehicle identity.
-      await repairVehicleDriverAssignmentsFromSnapshots();
+      // Avoid a fleet-wide assignment repair on every dropdown load; this was delaying both driver tire screens.
+      // Keep the existing read-only matching and shared-account fallback below.
 
       // Vehicle Master is the single source of truth for driver assignment.
       // Resolve the logged-in Driver account to the Driver Master record, then

@@ -919,7 +919,7 @@ const openInspectionEmail = (group) => {
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-    const brandHtml = '<div class="brand"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Maaden Ivanhoe Electric JV logo"><div><div style="font-size:12pt;font-weight:700">Maaden Ivanhoe Electric Exploration and Development Limited Company</div><div style="font-size:9pt;margin-top:3px">Exploration Phase — Arabian Shield</div><div style="font-size:10pt;font-weight:700;margin-top:5px">Hussein Anwar</div><div style="font-size:8.5pt">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div></div>';
+    const brandHtml = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5mm;padding-bottom:3mm;border-bottom:2px solid #1e3a8a"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Maaden Ivanhoe Electric JV logo" style="width:90px;height:50px;object-fit:contain"><div><div style="font-size:10pt;font-weight:700;line-height:1.2">Maaden Ivanhoe Electric Exploration and Development Limited Company</div><div style="font-size:8pt;color:#555;margin-top:2px">Exploration Phase — Arabian Shield</div><div style="font-size:9pt;font-weight:700;margin-top:3px">Hussein Anwar</div><div style="font-size:8pt;color:#555">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div></div>';
 
     const inspectionMode = ['partial', 'none', 'fully'].includes(subTab);
     let title = 'Vehicle Maintenance';
@@ -947,7 +947,7 @@ const openInspectionEmail = (group) => {
         const status = r.status === 'Completed' ? 'Completed' : (r.scheduled_date < today ? 'Overdue' : 'Pending');
         return '<tr><td>'+esc(r.vehicle_plate)+'</td><td>'+esc(r.vehicle_location)+
           '</td><td>'+esc(r.driver_name)+'</td><td>'+esc(TYPE_LABELS[r.type] || r.type)+
-          '</td><td>'+esc(r.scheduled_date)+'</td><td>'+esc(getInspectionExpiry(r.vehicle_id))+'</td><td>'+esc(r.completed_date)+
+                    '</td><td>'+esc(String(r.scheduled_date || '').slice(0,10))+'</td><td>'+esc(getInspectionExpiry(r.vehicle_id))+'</td><td>'+esc(String(r.completed_date || '').slice(0,10))+
           '</td><td>'+esc(status)+'</td><td>'+esc(r.technician)+'</td><td>'+esc(r.notes)+'</td></tr>';
       }).join('');
     }
@@ -957,7 +957,9 @@ const openInspectionEmail = (group) => {
     printWindow.document.open();
     printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
 <style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:8.5pt;color:#111}
-.title{font-size:18pt;font-weight:700;margin:0 0 3mm}.meta{font-size:8pt;color:#555;margin-bottom:4mm;padding-bottom:3mm;border-bottom:2px solid #1e3a8a}
+.title{font-size:16pt;font-weight:700;margin:0 0 3mm}.meta{font-size:8pt;color:#555;margin-bottom:4mm;padding-bottom:3mm;border-bottom:2px solid #1e3a8a}
+.brand{display:flex;align-items:center;gap:8px;margin-bottom:5mm}
+.brand img{width:90px;height:50px;object-fit:contain}
 table{width:100%;border-collapse:collapse;table-layout:fixed}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}
 th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:top;line-height:1.2;overflow-wrap:anywhere}th{background:#e9eef5;font-weight:700}</style>
 </head><body>${brandHtml}<div class="title">${esc(title)}</div><div class="meta">Generated: ${esc(new Date().toLocaleString())} · Records: ${inspectionMode ? (subTab === 'partial' ? partiallyInspectedVehicles.length : subTab === 'none' ? notInspectedVehicles.length : fullyInspectedVehicles.length) : currentList.length}</div>

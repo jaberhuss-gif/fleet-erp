@@ -558,7 +558,44 @@ export async function getDailyKmReport(requestedDate = null) {
 }
 
 export async function getDriverDailyKmStatus(userId) {
-    const vehicle =
+  const userResult = await query(`
+    SELECT id, role, phone, full_name, username
+    FROM users
+    WHERE id = $1::bigint
+    LIMIT 1
+  `, [userId]);
+
+  const user = userResult.rows[0];
+  if (!user || user.role !== 'Driver') {
+    return { required: false, reason: 'not_driver' };
+  }
+
+  const phone = phoneMatchKey(user.phone);
+  const name = String(user.full_name || user.username || '').trim();
+
+  // A vehicle may carry the driver's number in either format, so the comparison has to
+  // happen on normalised keys rather than raw digits.
+  const vehicleResult = await query(`
+    SELECT
+      v.id,
+      CONCAT(v.plate_number, ' ', COALESCE(v.plate_code, '')) AS plate,
+      v.current_km,
+      v.meter_updated_at,
+      v.driver AS driver_name,
+      v.phone AS driver_phone
+    FROM vehicles v
+    WHERE
+      (
+        ($1::text <> '' AND REGEXP_REPLACE(COALESCE(v.phone, ''), '[^0-9]', '', 'g') = $1::text)
+        OR
+        ($2::text <> '' AND LOWER(TRIM(COALESCE(v.driver, ''))) = LOWER(TRIM($2::text)))
+      )
+      AND COALESCE(LOWER(TRIM(v.status)), '') NOT IN ('inactive', 'sold', 'disposed', 'disabled')
+    ORDER BY v.id
+    LIMIT 50
+  `, [phone, name]);
+
+  const vehicle =
     vehicleResult.rows.find((r) => phoneMatchKey(r.driver_phone) === phone) ||
     vehicleResult.rows.find(
       (r) => name && String(r.driver_name || "").trim().toLowerCase() === name.toLowerCase()
@@ -600,5 +637,3 @@ export async function getDriverDailyKmStatus(userId) {
     reading: readingResult.rows[0] || null
   };
 }
-
-export { DAILY_KM_CUTOFF_HOUR, DAILY_KM_TZ };

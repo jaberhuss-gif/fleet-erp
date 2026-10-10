@@ -21,3 +21,4 @@ server/check-*.mjs
 server/verify-*.mjs
 server/restore-*.mjs
 server/patch-*.mjs
+server/production-check.mjs

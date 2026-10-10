@@ -1387,17 +1387,24 @@ export async function mountTireRoutes(app) {
         .filter(Boolean);
 
       const r = await query(
-        `SELECT DISTINCT
+        `WITH matched_drivers AS (
+           SELECT d.id, d.vehicle_id
+           FROM drivers d
+           WHERE LOWER(TRIM(COALESCE(d.name, ''))) = ANY($1::text[])
+              OR REGEXP_REPLACE(COALESCE(d.phone, ''), '[^0-9]', '', 'g') = ANY($2::text[])
+         )
+         SELECT DISTINCT
             v.id, v.plate, v.plate_number, v.plate_code, v.driver, v.location
          FROM vehicles v
-         LEFT JOIN drivers d ON d.id = v.driver_id
+         LEFT JOIN drivers assigned_driver ON assigned_driver.id = v.driver_id
          WHERE LOWER(TRIM(COALESCE(v.plate, ''))) <> 'test 123'
            AND (
-             LOWER(TRIM(COALESCE(d.name, ''))) = ANY($1::text[])
+             v.driver_id IN (SELECT id FROM matched_drivers)
+             OR v.id IN (SELECT vehicle_id FROM matched_drivers WHERE vehicle_id IS NOT NULL)
+             OR LOWER(TRIM(COALESCE(assigned_driver.name, ''))) = ANY($1::text[])
              OR LOWER(TRIM(COALESCE(v.driver, ''))) = ANY($1::text[])
-             OR REGEXP_REPLACE(COALESCE(d.phone, ''), '[^0-9]', '', 'g') = ANY($2::text[])
+             OR REGEXP_REPLACE(COALESCE(assigned_driver.phone, ''), '[^0-9]', '', 'g') = ANY($2::text[])
              OR REGEXP_REPLACE(COALESCE(v.phone, ''), '[^0-9]', '', 'g') = ANY($2::text[])
-             OR d.vehicle_id = v.id
            )
          ORDER BY v.plate_number, v.plate_code, v.id`,
         [names, phones]

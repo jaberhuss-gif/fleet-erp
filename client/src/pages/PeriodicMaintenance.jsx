@@ -146,6 +146,38 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
 
   const today = new Date().toISOString().slice(0, 10);
 
+  // Normalize saved inspection expiry dates. Vehicle Master may contain either
+  // Gregorian dates (2026-10-23) or Umm al-Qura Hijri dates (1448-05-12).
+  const normalizeInspectionExpiry = (value) => {
+    const raw = String(value || '').trim().slice(0, 10);
+    const match = raw.match(/^(\\d{4})[-/](\\d{1,2})[-/](\\d{1,2})$/);
+    if (!match) return '';
+    const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+    if (year >= 1900 && year <= 2200) {
+      return year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+    }
+    if (year < 1300 || year > 1500 || month < 1 || month > 12 || day < 1 || day > 30) return '';
+    const fmt = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', {
+      year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC'
+    });
+    const key = (ms) => {
+      const parts = fmt.formatToParts(new Date(ms));
+      const get = (type) => parts.find(p => p.type === type)?.value;
+      return get('year') + '-' + get('month') + '-' + get('day');
+    };
+    const target = year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+    let lo = Date.UTC(year + 621, 0, 1);
+    let hi = Date.UTC(year + 623, 0, 1);
+    while (lo <= hi) {
+      const mid = lo + Math.floor((hi - lo) / (2 * 86400000)) * 86400000;
+      const found = key(mid);
+      if (found === target) return new Date(mid).toISOString().slice(0, 10);
+      if (found < target) lo = mid + 86400000;
+      else hi = mid - 86400000;
+    }
+    return '';
+  };
+
   const filtered = records.filter(r => {
     const matchVehicle = filterVehicle === 'all' || String(r.vehicle_id) === filterVehicle;
     const matchType = filterType === 'all' || r.type === filterType;
@@ -220,7 +252,8 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
   const getInspectionExpiry = (vehicleId) => {
     const v = vehicleById[String(vehicleId)];
     const value = v?.inspectionExpiryDate || v?.inspection_expiry_date || '';
-    if (value) return String(value).slice(0, 10);
+    const normalized = normalizeInspectionExpiry(value);
+    if (normalized) return normalized;
     const plate = String(v?.plate || v?.plate_number || '').trim().toLowerCase();
     if (plate === 'test 123' || plate === '123') {
       const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 10);
@@ -260,7 +293,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       plate: v.plate || v.plate_number || '-',
       location: v.location || v.site || '-',
       driver: v.driver || v.driver_name || '-',
-      inspectionExpiry: v.inspectionExpiryDate || v.inspection_expiry_date || '',
+      inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiryDate || v.inspection_expiry_date || ''),
       six, annual, sixDone, annualDone,
       fullyInspected: sixDone && annualDone,
       missing
@@ -308,8 +341,8 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       title: 'Annual Inspection — Due Within 30 Days',
       color: '#dc2626',
       rows: vehicleSummary
-        .filter(v => !v.annualDone && (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
-        .map(v => ({ ...v, inspectionExpiry: String(v.inspectionExpiry || getInspectionExpiry(v.vehicle_id)).slice(0, 10) }))
+        .filter(v => (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
+        .map(v => ({ ...v, inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiry) || getInspectionExpiry(v.vehicle_id) }))
         .filter(v => {
           const days = Math.ceil((new Date(v.inspectionExpiry + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000);
           return days <= 30;
@@ -1008,8 +1041,8 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
     const pendingRows = isSix
       ? vehicleSummary.filter(v => !v.sixDone)
       : vehicleSummary
-          .filter(v => !v.annualDone && (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
-          .map(v => ({ ...v, inspectionExpiry: String(v.inspectionExpiry || getInspectionExpiry(v.vehicle_id)).slice(0, 10) }))
+          .filter(v => (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
+          .map(v => ({ ...v, inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiry) || getInspectionExpiry(v.vehicle_id) }))
           .filter(v => {
             const days = Math.ceil(
               (new Date(v.inspectionExpiry + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000

@@ -637,3 +637,4 @@ export async function getDriverDailyKmStatus(userId) {
     reading: readingResult.rows[0] || null
   };
 }
+

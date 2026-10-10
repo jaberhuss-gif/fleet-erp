@@ -668,16 +668,25 @@ export async function submitInitialSurvey(vehicleId, body, user) {
       );
     }
 
+    // NEW: Capture the vehicle's current driver at the moment of the survey.
+    const vRowSurvey = (await tx.query(
+      `SELECT driver_id, driver FROM vehicles WHERE id = $1 LIMIT 1`,
+      [vehicleId]
+    )).rows[0];
+    const surveyDriverId = vRowSurvey?.driver_id ?? null;
+    const surveyDriverName = clean(vRowSurvey?.driver) || null;
+
     const saved = await tx.query(
       `INSERT INTO tire_surveys
-       (vehicle_id,status,photos,notes,submitted_by,submitted_at,locked,updated_at)
-       VALUES ($1,'SUBMITTED',$2,$3,$4,CURRENT_TIMESTAMP,TRUE,CURRENT_TIMESTAMP)
+       (vehicle_id,status,photos,notes,submitted_by,submitted_at,locked,updated_at,driver_id,driver_name)
+       VALUES ($1,'SUBMITTED',$2,$3,$4,CURRENT_TIMESTAMP,TRUE,CURRENT_TIMESTAMP,$5,$6)
        ON CONFLICT(vehicle_id) DO UPDATE SET
          status='SUBMITTED', photos=EXCLUDED.photos, notes=EXCLUDED.notes,
          submitted_by=EXCLUDED.submitted_by, submitted_at=CURRENT_TIMESTAMP,
-         locked=TRUE, updated_at=CURRENT_TIMESTAMP
+         locked=TRUE, updated_at=CURRENT_TIMESTAMP,
+         driver_id=EXCLUDED.driver_id, driver_name=EXCLUDED.driver_name
        RETURNING *`,
-      [vehicleId, photosJson, clean(body.notes) || null, user?.id || null]
+      [vehicleId, photosJson, clean(body.notes) || null, user?.id || null, surveyDriverId, surveyDriverName]
     );
 
     return saved.rows[0];

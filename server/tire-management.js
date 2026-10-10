@@ -1378,80 +1378,24 @@ export async function mountTireRoutes(app) {
         return res.status(403).json({ success: false, error: "Driver only" });
       }
 
-      // Repair missing relational links from the existing Vehicle Master driver
-      // name/phone snapshot before resolving access. This does not alter tire survey
-      // records, photos, service requests, or vehicle identity.
-      await repairVehicleDriverAssignmentsFromSnapshots();
-
-      // Vehicle Master is the single source of truth for driver assignment.
-      // Resolve the logged-in Driver account to the Driver Master record, then
-      // return only vehicles linked through vehicles.driver_id / drivers.vehicle_id.
-      const userResult = await query(
-        `SELECT id, username, full_name, phone
-         FROM users
-         WHERE id = $1
-           AND LOWER(TRIM(COALESCE(role, ''))) = 'driver'
-         LIMIT 1`,
-        [req.user?.id]
-      );
-      const user = userResult.rows[0] || req.user || {};
-      const names = [user.full_name, user.username]
-        .filter(Boolean)
-        .map(v => String(v).trim().toLowerCase())
-        .filter(Boolean);
-      const phones = [user.phone]
-        .filter(Boolean)
-        .map(v => String(v).replace(/\D/g, ""))
-        .filter(Boolean);
-
+      // SHARED ACCOUNT: The Driver role uses a single shared login with no
+      // phone/name that matches a specific driver record. Return every
+      // operational vehicle so the driver can pick theirs manually.
       const r = await query(
-        `WITH matched_drivers AS (
-           SELECT d.id, d.vehicle_id
-           FROM drivers d
-           WHERE LOWER(TRIM(COALESCE(d.name, ''))) = ANY($1::text[])
-              OR REGEXP_REPLACE(COALESCE(d.phone, ''), '[^0-9]', '', 'g') = ANY($2::text[])
-         )
-         SELECT DISTINCT
-                        v.id,
+        `SELECT DISTINCT
+            v.id,
             CONCAT(v.plate_number, ' ', COALESCE(v.plate_code, '')) AS plate,
-            v.plate_number, v.plate_code, v.driver, v.location
+            v.plate_number,
+            v.plate_code,
+            v.driver,
+            v.location
          FROM vehicles v
-         LEFT JOIN drivers assigned_driver ON assigned_driver.id = v.driver_id
-         WHERE LOWER(TRIM(COALESCE(v.plate, ''))) <> 'test 123'
-           AND (
-             v.driver_id IN (SELECT id FROM matched_drivers)
-             OR v.id IN (SELECT vehicle_id FROM matched_drivers WHERE vehicle_id IS NOT NULL)
-             OR LOWER(TRIM(COALESCE(assigned_driver.name, ''))) = ANY($1::text[])
-             OR LOWER(TRIM(COALESCE(v.driver, ''))) = ANY($1::text[])
-             OR REGEXP_REPLACE(COALESCE(assigned_driver.phone, ''), '[^0-9]', '', 'g') = ANY($2::text[])
-             OR REGEXP_REPLACE(COALESCE(v.phone, ''), '[^0-9]', '', 'g') = ANY($2::text[])
-           )
-         ORDER BY v.plate_number, v.plate_code, v.id`,
-        [names, phones]
+         WHERE LOWER(TRIM(CONCAT(COALESCE(v.plate_number, ''), ' ', COALESCE(v.plate_code, '')))) <> 'test 123'
+         ORDER BY v.plate_number, v.plate_code, v.id`
       );
-
-      // SHARED ACCOUNT FALLBACK:
-      // The Driver role uses a single shared login with no phone/name that matches
-      // a specific driver record. In that case the scoped lookup above returns an
-      // empty list and the whole Fleet tab becomes unusable. When no rows were
-      // matched, return every operational vehicle so the driver can pick theirs
-      // manually. This is intentional for the shared-account design.
-      let vehicles = r.rows;
-      if (vehicles.length === 0) {
-        const fallback = await query(
-          `SELECT DISTINCT
-              v.id,
-              CONCAT(v.plate_number, ' ', COALESCE(v.plate_code, '')) AS plate,
-              v.plate_number, v.plate_code, v.driver, v.location
-           FROM vehicles v
-           WHERE LOWER(TRIM(CONCAT(COALESCE(v.plate_number, ''), ' ', COALESCE(v.plate_code, '')))) <> 'test 123'
-           ORDER BY v.plate_number, v.plate_code, v.id`
-        );
-        vehicles = fallback.rows;
-      }
 
       res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-      res.json({ success: true, vehicles });
+      res.json({ success: true, vehicles: r.rows });
     } catch (e) {
       console.error("[TireDriverVehicles]", e);
       res.status(500).json({ success: false, error: e.message });

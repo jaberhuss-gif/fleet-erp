@@ -98,7 +98,9 @@ export default function TireServiceRequests({ driverMode=false }) {
       <select value={vehicleId} onChange={e=>setVehicleId(e.target.value)} style={{maxWidth:500}} disabled={vehicles.length===0}>
         <option value="">-- Select vehicle --</option>{vehicles.map(v=><option key={v.id} value={v.id}>{v.plate || [v.plate_number,v.plate_code].filter(Boolean).join(' ') || ('Vehicle ID '+v.id)}</option>)}
       </select>
-      {vehicles.length===0&&<div className="alert alert-warning" style={{marginTop:8}}>No vehicle is linked to this Driver account. Please check the driver's assignment in Vehicle Master.</div>}
+           {loading&&vehicles.length===0&&<div className="alert alert-info" style={{marginTop:8}}>Loading vehicles...</div>}
+      {!loading&&error&&vehicles.length===0&&<div className="alert alert-error" style={{marginTop:8}}>Failed to load vehicles: {error}</div>}
+      {!loading&&!error&&vehicles.length===0&&<div className="alert alert-warning" style={{marginTop:8}}>No vehicles available. Please contact Fleet Management.</div>}
       {selectedVehicle&&<div style={{marginTop:8,padding:12,border:'1px solid #e2e8f0',borderRadius:8,background:'#f8fafc',fontSize:13}}>
         <strong>Assigned Vehicle / السيارة المعيّنة:</strong> {selectedVehicle.plate || [selectedVehicle.plate_number,selectedVehicle.plate_code].filter(Boolean).join(' ') || ('Vehicle ID '+selectedVehicle.id)}
         {selectedVehicle.driver?' — Driver: '+selectedVehicle.driver:''}

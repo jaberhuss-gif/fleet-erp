@@ -12,6 +12,8 @@ const STATUSES = ['PENDING','APPROVED','IN_PROGRESS','COMPLETED','REJECTED','CAN
 
 export default function TireServiceRequests({ driverMode=false }) {
   const [vehicles,setVehicles]=useState([]);
+  const [vehiclesLoading,setVehiclesLoading]=useState(true);
+  const [vehiclesLoadError,setVehiclesLoadError]=useState('');
   const [vehicleId,setVehicleId]=useState('');
   const [form,setForm]=useState({
     requestType:'TIRE_ROTATION',
@@ -32,7 +34,7 @@ export default function TireServiceRequests({ driverMode=false }) {
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
 
-  const loadVehicles=async()=>{try{const endpoint=driverMode?'/tire/driver/vehicles':'/vehicles/list';const r=await api.get(endpoint);setVehicles(r.data.vehicles||[]);}catch(e){setError(e.response?.data?.error||e.message);}};
+  const loadVehicles=async()=>{setVehiclesLoading(true);setVehiclesLoadError('');try{const endpoint=driverMode?'/tire/driver/vehicles':'/vehicles/list';const r=await api.get(endpoint);setVehicles(r.data.vehicles||[]);}catch(e){const detail=e.response?.data?.error||e.message||'Could not load vehicles.';setVehiclesLoadError(detail);setError(detail);}finally{setVehiclesLoading(false);}};
   const loadRequests=async()=>{try{
     const p=new URLSearchParams();
     if(search.trim())p.set('vehicle',search.trim());
@@ -95,10 +97,11 @@ export default function TireServiceRequests({ driverMode=false }) {
     {message&&<div className="alert alert-success">{message}</div>}{error&&<div className="alert alert-error">{error}</div>}
     <div className="panel">
       <label>Vehicle</label>
-      <select value={vehicleId} onChange={e=>setVehicleId(e.target.value)} style={{maxWidth:500}} disabled={vehicles.length===0}>
-        <option value="">-- Select vehicle --</option>{vehicles.map(v=><option key={v.id} value={v.id}>{v.plate || [v.plate_number,v.plate_code].filter(Boolean).join(' ') || ('Vehicle ID '+v.id)}</option>)}
+      <select value={vehicleId} onChange={e=>setVehicleId(e.target.value)} style={{maxWidth:500}} disabled={vehiclesLoading||vehicles.length===0}>
+        <option value="">{vehiclesLoading?'Loading vehicle numbers...':'-- Select vehicle --'}</option>{vehicles.map(v=><option key={v.id} value={v.id}>{v.plate || [v.plate_number,v.plate_code].filter(Boolean).join(' ') || ('Vehicle ID '+v.id)}</option>)}
       </select>
-      {vehicles.length===0&&<div className="alert alert-warning" style={{marginTop:8}}>No vehicle is linked to this Driver account. Please check the driver's assignment in Vehicle Master.</div>}
+      {vehiclesLoading&&<div style={{marginTop:8,color:'#64748b'}}>Loading vehicle numbers… / جارٍ تحميل أرقام السيارات…</div>}
+      {!vehiclesLoading&&!vehiclesLoadError&&vehicles.length===0&&<div className="alert alert-warning" style={{marginTop:8}}>No vehicles were returned for this Driver account. / لم يتم العثور على سيارات لهذا الحساب.</div>}
       {selectedVehicle&&<div style={{marginTop:8,padding:12,border:'1px solid #e2e8f0',borderRadius:8,background:'#f8fafc',fontSize:13}}>
         <strong>Assigned Vehicle / السيارة المعيّنة:</strong> {selectedVehicle.plate || [selectedVehicle.plate_number,selectedVehicle.plate_code].filter(Boolean).join(' ') || ('Vehicle ID '+selectedVehicle.id)}
         {selectedVehicle.driver?' — Driver: '+selectedVehicle.driver:''}

@@ -1417,7 +1417,7 @@ export async function mountTireRoutes(app) {
             v.plate_number, v.plate_code, v.driver, v.location
          FROM vehicles v
          LEFT JOIN drivers assigned_driver ON assigned_driver.id = v.driver_id
-         WHERE LOWER(TRIM(COALESCE(v.plate, ''))) <> 'test 123'
+         WHERE LOWER(TRIM(CONCAT(COALESCE(v.plate_number, ''), ' ', COALESCE(v.plate_code, '')))) <> 'test 123'
            AND (
              v.driver_id IN (SELECT id FROM matched_drivers)
              OR v.id IN (SELECT vehicle_id FROM matched_drivers WHERE vehicle_id IS NOT NULL)

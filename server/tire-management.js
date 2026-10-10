@@ -1,5 +1,5 @@
 import { query, transaction } from "./postgres.js";
-import { logAction } from "./database-pg.js";
+import { logAction, repairVehicleDriverAssignmentsFromSnapshots } from "./database-pg.js";
 
 const POSITIONS = [
   "Front Left",
@@ -1365,6 +1365,11 @@ export async function mountTireRoutes(app) {
       if (String(req.user?.role || "").trim().toLowerCase() !== "driver") {
         return res.status(403).json({ success: false, error: "Driver only" });
       }
+
+      // Repair missing relational links from the existing Vehicle Master driver
+      // name/phone snapshot before resolving access. This does not alter tire survey
+      // records, photos, service requests, or vehicle identity.
+      await repairVehicleDriverAssignmentsFromSnapshots();
 
       // Vehicle Master is the single source of truth for driver assignment.
       // Resolve the logged-in Driver account to the Driver Master record, then

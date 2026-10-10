@@ -166,8 +166,8 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       return get('year') + '-' + get('month') + '-' + get('day');
     };
     const target = year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
-    let lo = Date.UTC(year + 621, 0, 1);
-    let hi = Date.UTC(year + 623, 0, 1);
+    let lo = Date.UTC(year + 578, 0, 1);
+    let hi = Date.UTC(year + 580, 0, 1);
     while (lo <= hi) {
       const mid = lo + Math.floor((hi - lo) / (2 * 86400000)) * 86400000;
       const found = key(mid);
@@ -479,8 +479,8 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC'
     });
     const target = hy + '-' + String(hm).padStart(2, '0') + '-' + String(hd).padStart(2, '0');
-    let lo = Date.UTC(hy - 622, 0, 1);
-    let hi = Date.UTC(hy - 621, 11, 31);
+    let lo = Date.UTC(hy + 578, 0, 1);
+    let hi = Date.UTC(hy + 580, 11, 31);
     const key = (ms) => {
       const p = fmt.formatToParts(new Date(ms));
       const get = (type) => p.find(x => x.type === type)?.value;

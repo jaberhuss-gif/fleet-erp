@@ -3485,26 +3485,30 @@ export async function stockIn(data = {}) {
   const site = pgStr(data.site) || toLocation;
 
   return await transaction(async client => {
+    // 1) Update total inventory
     await client.query(`
       UPDATE inventory
-      SET
-        quantity = quantity + $1,
-        updated_at = CURRENT_TIMESTAMP
+      SET quantity = quantity + $1,
+          updated_at = CURRENT_TIMESTAMP
       WHERE id = $2
     `, [qty, item.id]);
 
+    // 2) Update warehouse_stock (per location)
+    await client.query(`
+      INSERT INTO warehouse_stock (item_code, location_code, quantity)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (item_code, location_code)
+      DO UPDATE SET quantity = warehouse_stock.quantity + EXCLUDED.quantity,
+                    updated_at = CURRENT_TIMESTAMP
+    `, [item.code, toLocation, qty]);
+
+    // 3) Record transaction
     await client.query(`
       INSERT INTO stock_transactions
       (
-        type,
-        item_code,
-        item_name,
-        quantity,
-        from_location,
-        to_location,
-        reference_no,
-        notes,
-        site
+        type, item_code, item_name, quantity,
+        from_location, to_location,
+        reference_no, notes, site
       )
       VALUES
       ('IN',$1,$2,$3,NULL,$4,$5,$6,$7)
@@ -3518,15 +3522,11 @@ export async function stockIn(data = {}) {
       site
     ]);
 
-    const result = await client.query(`
-      SELECT *
-      FROM inventory
-      WHERE id = $1
-    `, [item.id]);
-
+    const result = await client.query(`SELECT * FROM inventory WHERE id = $1`, [item.id]);
     return result.rows[0];
   });
 }
+
 export async function stockOut(data = {}) {
   await ensureWarehouseTables();
 
@@ -3544,10 +3544,6 @@ export async function stockOut(data = {}) {
     throw new Error("Quantity must be greater than zero");
   }
 
-  if (Number(item.quantity) < qty) {
-    throw new Error("Insufficient stock");
-  }
-
   const fromLocation = pgStr(data.fromLocation ?? data.from_location);
   if (!fromLocation) {
     throw new Error("Location is required for OUT. Please select a site.");
@@ -3559,29 +3555,42 @@ export async function stockOut(data = {}) {
   const site = pgStr(data.site) || fromLocation;
 
   return await transaction(async client => {
+    // 1) Check stock at that specific location
+    const stockCheck = await client.query(`
+      SELECT quantity FROM warehouse_stock
+      WHERE item_code = $1 AND location_code = $2
+      FOR UPDATE
+    `, [item.code, fromLocation]);
+
+    const stockAtLocation = stockCheck.rows[0]?.quantity ? Number(stockCheck.rows[0].quantity) : 0;
+    if (stockAtLocation < qty) {
+      throw new Error("Insufficient stock at " + fromLocation + " (Available: " + stockAtLocation + ")");
+    }
+
+    // 2) Deduct from warehouse_stock (per location)
+    await client.query(`
+      UPDATE warehouse_stock
+      SET quantity = quantity - $1,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE item_code = $2 AND location_code = $3
+    `, [qty, item.code, fromLocation]);
+
+    // 3) Deduct from total inventory
     await client.query(`
       UPDATE inventory
-      SET
-        quantity = quantity - $1,
-        updated_at = CURRENT_TIMESTAMP
+      SET quantity = quantity - $1,
+          updated_at = CURRENT_TIMESTAMP
       WHERE id = $2
     `, [qty, item.id]);
 
+    // 4) Record transaction
     await client.query(`
       INSERT INTO stock_transactions
       (
-        type,
-        item_code,
-        item_name,
-        quantity,
-        from_location,
-        to_location,
-        reference_no,
-        notes,
-        vehicle_id,
-        vehicle_plate,
-        driver_name,
-        site
+        type, item_code, item_name, quantity,
+        from_location, to_location,
+        reference_no, notes,
+        vehicle_id, vehicle_plate, driver_name, site
       )
       VALUES
       ('OUT',$1,$2,$3,$4,NULL,$5,$6,$7,$8,$9,$10)
@@ -3598,15 +3607,11 @@ export async function stockOut(data = {}) {
       site
     ]);
 
-    const result = await client.query(`
-      SELECT *
-      FROM inventory
-      WHERE id = $1
-    `, [item.id]);
-
+    const result = await client.query(`SELECT * FROM inventory WHERE id = $1`, [item.id]);
     return result.rows[0];
   });
 }
+
 export async function transferStock(data = {}) {
   await ensureWarehouseTables();
 
@@ -3619,54 +3624,66 @@ export async function transferStock(data = {}) {
   }
 
   const qty = pgNum(data.quantity);
-
   if (qty <= 0) {
     throw new Error("Quantity must be greater than zero");
   }
 
-  if (Number(item.quantity) < qty) {
-    throw new Error("Insufficient stock");
+  const fromLocation = pgStr(data.fromLocation ?? data.from_location);
+  if (!fromLocation) {
+    throw new Error("From location is required");
   }
 
-  const fromLocation =
-    pgStr(data.fromLocation ?? data.from_location) ||
-    item.location ||
-    "Main Warehouse";
-
-  const toLocation =
-    pgStr(data.toLocation ?? data.to_location);
-
+  const toLocation = pgStr(data.toLocation ?? data.to_location);
   if (!toLocation) {
-    throw new Error("Destination location is required");
+    throw new Error("To location is required");
   }
 
   if (fromLocation === toLocation) {
-    throw new Error("Source and destination cannot be the same");
+    throw new Error("From and To locations must be different");
   }
 
   return await transaction(async client => {
-    await client.query(`
-      UPDATE inventory
-      SET
-        quantity = quantity - $1,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-    `, [qty, item.id]);
+    // Check stock at from location
+    const stockCheck = await client.query(`
+      SELECT quantity FROM warehouse_stock
+      WHERE item_code = $1 AND location_code = $2
+      FOR UPDATE
+    `, [item.code, fromLocation]);
 
+    const stockAtLocation = stockCheck.rows[0]?.quantity ? Number(stockCheck.rows[0].quantity) : 0;
+    if (stockAtLocation < qty) {
+      throw new Error("Insufficient stock at " + fromLocation + " (Available: " + stockAtLocation + ")");
+    }
+
+    // Deduct from source
+    await client.query(`
+      UPDATE warehouse_stock
+      SET quantity = quantity - $1,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE item_code = $2 AND location_code = $3
+    `, [qty, item.code, fromLocation]);
+
+    // Add to destination
+    await client.query(`
+      INSERT INTO warehouse_stock (item_code, location_code, quantity)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (item_code, location_code)
+      DO UPDATE SET quantity = warehouse_stock.quantity + EXCLUDED.quantity,
+                    updated_at = CURRENT_TIMESTAMP
+    `, [item.code, toLocation, qty]);
+
+    // Note: total inventory.quantity does NOT change on transfer
+
+    // Record transaction
     await client.query(`
       INSERT INTO stock_transactions
       (
-        type,
-        item_code,
-        item_name,
-        quantity,
-        from_location,
-        to_location,
-        reference_no,
-        notes
+        type, item_code, item_name, quantity,
+        from_location, to_location,
+        reference_no, notes, site
       )
       VALUES
-      ('TRANSFER',$1,$2,$3,$4,$5,$6,$7)
+      ('TRANSFER',$1,$2,$3,$4,$5,$6,$7,$8)
     `, [
       item.code,
       item.name,
@@ -3674,17 +3691,12 @@ export async function transferStock(data = {}) {
       fromLocation,
       toLocation,
       pgStr(data.referenceNo ?? data.reference_no),
-      pgStr(data.notes)
+      pgStr(data.notes),
+      toLocation
     ]);
 
-    return {
-      success: true,
-      itemCode: item.code,
-      itemName: item.name,
-      quantity: qty,
-      fromLocation,
-      toLocation
-    };
+    const result = await client.query(`SELECT * FROM inventory WHERE id = $1`, [item.id]);
+    return result.rows[0];
   });
 }
 
@@ -3741,6 +3753,105 @@ export async function listStockTransactions() {
   `);
 
   return result.rows;
+}
+
+/* ============================================================
+   REBUILD warehouse_stock from stock_transactions history
+   Owner only. Idempotent — can be run multiple times.
+   ============================================================ */
+export async function rebuildWarehouseStock() {
+  await ensureWarehouseTables();
+
+  return await transaction(async client => {
+    // 1) Clear existing warehouse_stock
+    await client.query("DELETE FROM warehouse_stock");
+
+    // 2) Replay all transactions in chronological order
+    const txs = await client.query(`
+      SELECT id, type, item_code, quantity, from_location, to_location
+      FROM stock_transactions
+      ORDER BY created_at ASC, id ASC
+    `);
+
+    let inCount = 0, outCount = 0, transferCount = 0;
+
+    for (const t of txs.rows) {
+      const code = t.item_code;
+      const qty = Number(t.quantity);
+      if (!code || !qty) continue;
+
+      if (t.type === "IN" && t.to_location) {
+        await client.query(`
+          INSERT INTO warehouse_stock (item_code, location_code, quantity)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (item_code, location_code)
+          DO UPDATE SET quantity = warehouse_stock.quantity + EXCLUDED.quantity
+        `, [code, t.to_location, qty]);
+        inCount++;
+      } else if (t.type === "OUT" && t.from_location) {
+        await client.query(`
+          UPDATE warehouse_stock
+          SET quantity = GREATEST(quantity - $1, 0)
+          WHERE item_code = $2 AND location_code = $3
+        `, [qty, code, t.from_location]);
+        outCount++;
+      } else if (t.type === "TRANSFER" && t.from_location && t.to_location) {
+        await client.query(`
+          UPDATE warehouse_stock
+          SET quantity = GREATEST(quantity - $1, 0)
+          WHERE item_code = $2 AND location_code = $3
+        `, [qty, code, t.from_location]);
+        await client.query(`
+          INSERT INTO warehouse_stock (item_code, location_code, quantity)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (item_code, location_code)
+          DO UPDATE SET quantity = warehouse_stock.quantity + EXCLUDED.quantity
+        `, [code, t.to_location, qty]);
+        transferCount++;
+      }
+    }
+
+    // 3) For any inventory item that has quantity > 0 but no warehouse_stock,
+    //    put the remaining in its item.location (migration from old system)
+    const inv = await client.query("SELECT code, quantity, location FROM inventory WHERE quantity > 0");
+    let migrationCount = 0;
+    for (const item of inv.rows) {
+      const existing = await client.query(`
+        SELECT COALESCE(SUM(quantity), 0) AS total
+        FROM warehouse_stock WHERE item_code = $1
+      `, [item.code]);
+
+      const distributed = Number(existing.rows[0].total || 0);
+      const remaining = Number(item.quantity) - distributed;
+      if (remaining > 0) {
+        const loc = item.location || "Main Warehouse";
+        await client.query(`
+          INSERT INTO warehouse_stock (item_code, location_code, quantity)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (item_code, location_code)
+          DO UPDATE SET quantity = warehouse_stock.quantity + EXCLUDED.quantity
+        `, [item.code, loc, remaining]);
+        migrationCount++;
+      }
+    }
+
+    // 4) Return summary
+    const summary = await client.query(`
+      SELECT item_code, location_code, quantity
+      FROM warehouse_stock
+      WHERE quantity > 0
+      ORDER BY item_code, location_code
+    `);
+
+    return {
+      transactions_processed: txs.rows.length,
+      in_applied: inCount,
+      out_applied: outCount,
+      transfers_applied: transferCount,
+      migration_applied: migrationCount,
+      current_stock: summary.rows
+    };
+  });
 }
 
 export async function getLowStockItems() {

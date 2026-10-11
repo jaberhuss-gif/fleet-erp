@@ -19,6 +19,7 @@ import { mountTireRoutes } from "./tire-management.js";
 import { toWaMeNumber, toWaMeInternational } from "./phone.js";
 import { syncBuildingFromVelaOnce } from "./vela-project-sync.mjs";
 import { mountBuildingMaintenanceRequestRoutes } from "./building-maintenance-requests.js";
+import { mountInvoiceRoutes } from "./invoice-routes.js";
 import { handoverReportHtml } from "./handover-report.js";
 import { ensureInvoiceSchema } from "./invoice-schema.js";
 
@@ -282,6 +283,7 @@ app.get("/api/health", async (req, res) => res.json({ status: "ok", time: new Da
 
 // Building maintenance request routes must be mounted after JSON parsing and API authentication.
 mountBuildingMaintenanceRequestRoutes(app);
+mountInvoiceRoutes(app);
 
 // ===== TEMPORARY VEHICLE MIGRATION FEED (OLD ERP -> VELA) =====
 // Protected by a Render environment secret. This is intentionally limited to
@@ -2436,6 +2438,7 @@ app.listen(PORT, () => {
   console.log("Building APIs: /api/sites, /api/work-orders, /api/projects, /api/purchases");
   console.log("======================================");
 });
+
 
 
 

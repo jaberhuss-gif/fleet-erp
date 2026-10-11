@@ -145,4 +145,7 @@ export const getSites = () =>
 export const updateInvoiceSite = (id, site) =>
   api.put('/invoices/' + id, { site }).then((r) => r.data);
 
+export const createManualInvoice = (payload) =>
+  api.post('/invoices/manual', payload).then((r) => r.data);
+
 export default api;

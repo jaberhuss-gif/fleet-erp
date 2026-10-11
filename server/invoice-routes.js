@@ -105,8 +105,8 @@ function extractJodoudHeader(text) {
   const subtotal = num(subtotalMatch?.[1]);
 
   const vatMatch =
-    flat.match(/([\d,]+\.\d{2})\s*\u0625\u062c\u0645\u0627\u0644\u064a\s*\u0627\u0644\u0636\u0631[\u064a\u06cc]\u0628\u0629/) ||
-    flat.match(/\u0625\u062c\u0645\u0627\u0644\u064a\s*\u0627\u0644\u0636\u0631\u064a\u0628\u0629[^\d]*?([\d,]+\.\d{2})/);
+    flat.match(/\u0636\u0631\u064a\u0628\u0629\s*\u0627\u0644\u0642\u064a\u0645\u0629\s*\u0627\u0644\u0645\u0636\u0627\u0641\u0629[^\d]*?(\d{2,3}\.\d{2})/) ||
+    flat.match(/(?:VAT|\u0636\u0631\u064a\u0628\u0629)[^\d]*?SAR[^\d]*?([\d,]+\.\d{2})/i);
   const vat = num(vatMatch?.[1]);
 
   const totalMatch =
@@ -315,45 +315,56 @@ export function parseOcrText(text) {
 
   const flat = clean(source);
 
+  // --- Header ---
   const invoiceNoMatch =
     source.match(/Invoice\s*No\.?\s*[:#-]?\s*([\d\-]+)/i) ||
     source.match(/\u0631\u0642\u0645\s*\u0627\u0644\u0645\u0633\u062a\u0646\u062f\s*[:#-]?\s*([\d\-]+)/) ||
-    source.match(/\u0631\u0642\u0645\s*\u0627\u0644\u0641\u0627\u062a\u0648\u0631\u0629\s*[:#-]?\s*([A-Z0-9\-]+)/i);
+    source.match(/(\d{2}-\d{3}-\d{6})/);
   const invoice_no = clean(invoiceNoMatch?.[1]) || "";
 
   const dateMatch =
     source.match(/Date\s*[:#-]?\s*(\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4})/i) ||
-    source.match(/\u0627\u0644\u062a\u0627\u0631\u064a\u062e\s*[:#-]?\s*(\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4})/) ||
-    source.match(/(\d{4}-\d{2}-\d{2})/);
+    source.match(/\u0627\u0644\u062a\u0627\u0631\u064a\u062e\s*[:#-]?\s*(\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4})/);
   const invoice_date = dateValue(dateMatch?.[1] || "");
 
-  const subtotalMatch =
-    flat.match(/Subtotal[:\s]*\s*(?:SAR\s*)?([\d,]+\.\d{2})/i) ||
-    flat.match(/([\d,]+\.\d{2})\s*\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a\s*\u0627\u0644\u0641\u0631\u0639\u064a/) ||
-    flat.match(/\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a\s*\u0627\u0644\u0641\u0631\u0639\u064a[:\s]*\s*([\d,]+\.\d{2})/);
-  const subtotal = num(subtotalMatch?.[1]);
-
+  // VAT: "ضريبة القيمة المضافة 9615 324.75 SAR" or "VAT 15% SAR 324.75"
   const vatMatch =
     flat.match(/(?:VAT|\u0636\u0631\u064a\u0628\u0629\s*\u0627\u0644\u0642\u064a\u0645\u0629\s*\u0627\u0644\u0645\u0636\u0627\u0641\u0629)[^\d]*?([\d,]+\.\d{2})/i) ||
-    flat.match(/([\d,]+\.\d{2})\s*\u0636\u0631\u064a\u0628\u0629/);
+    flat.match(/\u0636\u0631\u064a\u0628\u0629[^\d]*?([\d,]+\.\d{2})/);
   const vat = num(vatMatch?.[1]);
 
+  // Subtotal: "الإجمالي الفرعي" — typically comes BEFORE VAT
+  const subtotalMatch =
+    flat.match(/\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a\s*\u0627\u0644\u0641\u0631\u0639\u064a[^\d]*?([\d,]+\.\d{2})/) ||
+    flat.match(/(?:Subtotal|Total\s*without)[^\d]*?([\d,]+\.\d{2})/i);
+  const subtotal = num(subtotalMatch?.[1]);
+
+  // Total: "الإجمالي" but may be corrupted. Try subtotal + vat if missing
   const totalMatch =
-    flat.match(/Total[:\s]*\s*(?:SAR\s*)?([\d,]+\.\d{2})/i) ||
-    flat.match(/\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a[:\s]*\s*(?:SAR\s*)?([\d,]+\.\d{2})/);
-  const total = num(totalMatch?.[1]);
+    flat.match(/\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a\s+(?:SAR\s+)?([\d,]+\.\d{2})/i) ||
+    flat.match(/(?:Total|Grand)[^\d]*?SAR[^\d]*?([\d,]+\.\d{2})/i);
+  let total = num(totalMatch?.[1]);
+  if (!total && subtotal && vat) total = Math.round((subtotal + vat) * 100) / 100;
+
+  // Try to detect subtotal as (total - vat) if subtotal is 0
+  let computedSubtotal = subtotal;
+  if (!computedSubtotal && total && vat) computedSubtotal = Math.round((total - vat) * 100) / 100;
 
   const header = {
     invoice_no,
     invoice_date,
     contractor_name: "Raghad Al Afaq",
     site: "",
-    subtotal,
+    subtotal: computedSubtotal,
     vat,
-    vat_percent: subtotal ? Math.round((vat / subtotal) * 100 * 100) / 100 : 15,
+    vat_percent: 15,
     total
   };
 
+  // --- Items ---
+  // Tesseract output has RTL issues. We look for rows matching:
+  //   [#] [desc] [qty] [unit_price?] [tax%] [discount] [total]
+  // With flexibility: unit_price may be 0 or missing, tax may appear as %15 or 15%, discount as %0.00.
   const lines = source.split("\n").map(l => l.replace(/\s+/g, " ").trim()).filter(Boolean);
   const items = [];
   let idx = 0;
@@ -367,8 +378,9 @@ export function parseOcrText(text) {
     /^\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a/i, /^Eotol/i, /^Total/i, /^Subtotal/i,
     /^VAT/i, /^\u0627\u0644\u0636\u0631\u064a\u0628\u0629/i,
     /^#/, /^\u0627\u0644\u0635\u0646\u0641/, /^\u0627\u0644\u0643\u0645\u064a\u0629/, /^\u0633\u0639\u0631/,
-    /^\u0627\u0644\u062e\u0635\u0645/, /^\u0627\u0644\u0636\u0631\u064a\u0628\u0629/, /^\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a/,
-    /^RCS/i, /^Rtt/i, /^SAR/i, /^\u0627\u0644\u0635\u0641\u062d\u0629/, /^Created with/i, /^Aronium/i
+    /^\u0627\u0644\u062e\u0635\u0645/, /^\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a/,
+    /^RCS/i, /^Rtt/i, /^SAR/i, /^\u0627\u0644\u0635\u0641\u062d\u0629/, /^Created with/i, /^Aronium/i,
+    /^Page/i, /^CE Fal/i, /^A oa/i, /^aH\]/i, /^I aml/i
   ];
 
   const isNoise = (line) => {
@@ -377,7 +389,10 @@ export function parseOcrText(text) {
     return false;
   };
 
-  const rowRe = /^(\d{1,3})\s+(.+?)\s+(\d{1,3})\s+([\d,]+\.\d{2})\s+(\d{1,3})%\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})$/;
+  // Flexible pattern for items:
+  // [#] [desc] [qty] [unit_price OR 0] [%tax] [%discount] [total]
+  // Tax and discount may appear BEFORE their values.
+  const rowRe = /^(\d{1,3})\s+(.+?)\s+(\d{1,3})\s+([\d,]+\.\d{2}|0)\s+%(\d{1,3})\s+%([\d,]+\.\d{2})\s+([\d,]+\.\d{2})$/;
 
   for (const line of lines) {
     if (isNoise(line)) continue;
@@ -388,10 +403,11 @@ export function parseOcrText(text) {
     const qty = Number(m[3]);
     const unit_price = num(m[4]);
     const tax_pct = Number(m[5]);
-    const total_with_vat = num(m[6]);
-    const discount = num(m[7]);
+    const discount = num(m[6]);
+    const total_with_vat = num(m[7]);
 
     if (!description || qty <= 0) continue;
+    if (description.length > 200) continue;
 
     items.push({
       line_no: lineNo,
@@ -400,13 +416,43 @@ export function parseOcrText(text) {
       unit: "",
       location: "",
       quantity: qty,
-      unit_price,
+      unit_price: unit_price || 0,
       discount_percent: discount,
       net_amount: total_with_vat,
       total_with_vat,
       tax_percent: tax_pct
     });
     idx++;
+  }
+
+  // Fallback: pattern without tax/discount prefixes
+  if (items.length < 3) {
+    const rowRe2 = /^(\d{1,3})\s+(.+?)\s+(\d{1,3})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})$/;
+    for (const line of lines) {
+      if (isNoise(line)) continue;
+      const m = line.match(rowRe2);
+      if (!m) continue;
+      const lineNo = Number(m[1]);
+      const description = clean(m[2]);
+      const qty = Number(m[3]);
+      const unit_price = num(m[4]);
+      const total_with_vat = num(m[5]);
+      if (!description || qty <= 0) continue;
+      items.push({
+        line_no: lineNo,
+        item_no: idx + 1,
+        description,
+        unit: "",
+        location: "",
+        quantity: qty,
+        unit_price,
+        discount_percent: 0,
+        net_amount: total_with_vat,
+        total_with_vat,
+        tax_percent: 15
+      });
+      idx++;
+    }
   }
 
   return { header, items };
@@ -973,6 +1019,66 @@ export function mountInvoiceRoutes(app) {
     } catch (e) {
       console.error("[InvoiceRoutes:update]", e);
       res.status(500).json({ success: false, error: e.message });
+    }
+  });
+  /* --- Manual invoice entry --- */
+  router.post("/manual", async (req, res) => {
+    try {
+      const body = req.body || {};
+      const {
+        invoice_no = "",
+        invoice_date = "",
+        contractor_name = "",
+        site = "",
+        subtotal = 0,
+        vat = 0,
+        vat_percent = 15,
+        total = 0,
+        notes = "",
+        items = []
+      } = body;
+
+      if (!Array.isArray(items) || !items.length) {
+        return res.status(400).json({ success: false, error: "At least one item is required." });
+      }
+
+      const importedBy = req.user?.full_name || req.user?.username || "system";
+      const headerSite = String(req.headers["x-invoice-site"] || site || "").trim();
+
+      const result = await transaction(async (client) => {
+        const invRes = await client.query(
+          "INSERT INTO invoices (invoice_no, invoice_date, contractor_name, site, subtotal, vat, vat_percent, total, source_file, source_type, imported_by, status, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Imported',$12) RETURNING *",
+          [invoice_no || null, invoice_date || null, contractor_name || null, headerSite || null, Number(subtotal) || 0, Number(vat) || 0, Number(vat_percent) || 15, Number(total) || 0, null, "Manual", importedBy, notes || null]
+        );
+        const invoice = invRes.rows[0];
+
+        const savedItems = [];
+        let lineNo = 0;
+        for (const it of items) {
+          lineNo++;
+          const qty = Number(it.quantity) || 1;
+          const price = Number(it.unit_price) || 0;
+          const totalWithVat = Number(it.total_with_vat) || (qty * price);
+          const r = await client.query(
+            "INSERT INTO invoice_items (invoice_id, line_no, description, unit, quantity, unit_price, discount_percent, net_amount, total_with_vat, confirmed_amount, match_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,'Unmatched') RETURNING *",
+            [invoice.id, lineNo, String(it.description || "").trim(), "", qty, price, 0, totalWithVat, totalWithVat]
+          );
+          savedItems.push(r.rows[0]);
+        }
+
+        return { invoice, items: savedItems };
+      });
+
+      res.status(201).json({
+        success: true,
+        message: "Invoice created manually.",
+        invoice: result.invoice,
+        items: result.items,
+        count: result.items.length
+      });
+    } catch (e) {
+      console.error("[InvoiceRoutes:manual]", e);
+      res.status(400).json({ success: false, error: e.message });
     }
   });
   app.use("/api/invoices", router);

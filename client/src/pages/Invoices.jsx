@@ -11,7 +11,8 @@ import api, {
   finalizeInvoice,
   importOcrInvoice,
   getSites,
-  updateInvoiceSite
+  updateInvoiceSite,
+  createManualInvoice
 } from "../api/client";
 import { extractTextFromPdfViaOcr } from "../utils/ocr";
 
@@ -30,6 +31,13 @@ export default function Invoices({ user }) {
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrProgress, setOcrProgress] = useState("");
   const [sites, setSites] = useState([]);
+  const [manualForm, setManualForm] = useState({
+    invoice_no: "", invoice_date: "", contractor_name: "", site: "",
+    subtotal: 0, vat: 0, vat_percent: 15, total: 0, notes: ""
+  });
+  const [manualItems, setManualItems] = useState([
+    { description: "", quantity: 1, unit_price: 0, total_with_vat: 0 }
+  ]);
   const [editSite, setEditSite] = useState("");
   const [savingSite, setSavingSite] = useState(false);
 
@@ -198,6 +206,29 @@ export default function Invoices({ user }) {
     }
   };
 
+  const handleManualSave = async () => {
+    setError("");
+    setMessage("");
+    if (!manualItems.length) return setError("Add at least one item.");
+    const cleanItems = manualItems.filter(it => String(it.description || "").trim());
+    if (!cleanItems.length) return setError("Every item must have a description.");
+    try {
+      setBusy(true);
+      const r = await createManualInvoice({
+        ...manualForm,
+        items: cleanItems
+      });
+      setMessage("Manual invoice saved: " + (r.invoice?.invoice_no || "OK") + " (" + r.count + " items)");
+      setView("list");
+      setManualForm({ invoice_no: "", invoice_date: "", contractor_name: "", site: "", subtotal: 0, vat: 0, vat_percent: 15, total: 0, notes: "" });
+      setManualItems([{ description: "", quantity: 1, unit_price: 0, total_with_vat: 0 }]);
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleAutoMatch = async () => {
     if (!selectedInvoice) return;
     setBusy(true);
@@ -220,6 +251,7 @@ export default function Invoices({ user }) {
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn" onClick={() => setView("list")} disabled={view === "list"}>List</button>
           <button className="btn btn-primary" onClick={() => { setView("upload"); setPreview(null); setPreviewFile(null); }} disabled={view === "upload"}>+ Upload</button>
+          <button className="btn btn-warning" onClick={() => setView("manual")} disabled={view === "manual"}>+ Manual Entry</button>
         </div>
       </div>
 
@@ -358,6 +390,95 @@ export default function Invoices({ user }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {view === "manual" && (
+        <div>
+          <h3>Manual Invoice Entry</h3>
+
+          <div className="cards-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", marginBottom: 12 }}>
+            <div className="form-group">
+              <label>Invoice No</label>
+              <input value={manualForm.invoice_no} onChange={e => setManualForm({ ...manualForm, invoice_no: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label>Date</label>
+              <input type="date" value={manualForm.invoice_date} onChange={e => setManualForm({ ...manualForm, invoice_date: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label>Contractor</label>
+              <input value={manualForm.contractor_name} onChange={e => setManualForm({ ...manualForm, contractor_name: e.target.value })} placeholder="e.g. Raghad Al Afaq" />
+            </div>
+            <div className="form-group">
+              <label>Site</label>
+              <select value={manualForm.site} onChange={e => setManualForm({ ...manualForm, site: e.target.value })}>
+                <option value="">-- Select Site --</option>
+                {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Subtotal (SAR)</label>
+              <input type="number" step="0.01" value={manualForm.subtotal} onChange={e => setManualForm({ ...manualForm, subtotal: Number(e.target.value) })} />
+            </div>
+            <div className="form-group">
+              <label>VAT 15% (SAR)</label>
+              <input type="number" step="0.01" value={manualForm.vat} onChange={e => setManualForm({ ...manualForm, vat: Number(e.target.value) })} />
+            </div>
+            <div className="form-group">
+              <label>Total (SAR)</label>
+              <input type="number" step="0.01" value={manualForm.total} onChange={e => setManualForm({ ...manualForm, total: Number(e.target.value) })} />
+            </div>
+            <div className="form-group">
+              <label>Notes</label>
+              <input value={manualForm.notes} onChange={e => setManualForm({ ...manualForm, notes: e.target.value })} />
+            </div>
+          </div>
+
+          <h4>Items</h4>
+          <table className="data-table" style={{ width: "100%", marginBottom: 12 }}>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Description</th>
+                <th>Qty</th>
+                <th>Unit Price</th>
+                <th>Total</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {manualItems.map((it, i) => (
+                <tr key={i}>
+                  <td>{i + 1}</td>
+                  <td><input value={it.description} onChange={e => {
+                    const v = [...manualItems]; v[i] = { ...v[i], description: e.target.value }; setManualItems(v);
+                  }} style={{ width: "100%" }} /></td>
+                  <td><input type="number" step="0.01" value={it.quantity} onChange={e => {
+                    const v = [...manualItems]; v[i] = { ...v[i], quantity: Number(e.target.value) }; setManualItems(v);
+                  }} style={{ width: 80 }} /></td>
+                  <td><input type="number" step="0.01" value={it.unit_price} onChange={e => {
+                    const v = [...manualItems]; v[i] = { ...v[i], unit_price: Number(e.target.value) }; setManualItems(v);
+                  }} style={{ width: 100 }} /></td>
+                  <td><input type="number" step="0.01" value={it.total_with_vat} onChange={e => {
+                    const v = [...manualItems]; v[i] = { ...v[i], total_with_vat: Number(e.target.value) }; setManualItems(v);
+                  }} style={{ width: 100 }} /></td>
+                  <td>
+                    <button className="btn btn-danger" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => {
+                      if (manualItems.length <= 1) return;
+                      setManualItems(manualItems.filter((_, j) => j !== i));
+                    }}>×</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn" onClick={() => setManualItems([...manualItems, { description: "", quantity: 1, unit_price: 0, total_with_vat: 0 }])}>+ Add Item</button>
+            <button className="btn btn-success" onClick={handleManualSave} disabled={busy}>{busy ? "Saving..." : "Save Invoice"}</button>
+            <button className="btn btn-warning" onClick={() => setView("list")}>Cancel</button>
+          </div>
         </div>
       )}
 

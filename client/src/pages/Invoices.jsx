@@ -627,6 +627,20 @@ export default function Invoices({ user }) {
             <button className="btn" onClick={handleAutoMatch} disabled={busy}>Auto-Match</button>
             <button className="btn btn-primary" onClick={handleVerify}>Verify Total</button>
             <button className="btn btn-success" onClick={handleFinalize} disabled={selectedInvoice.status === "Finalized"}>Finalize</button>
+            <button className="btn" onClick={async () => {
+              try {
+                const r = await api.get("/invoices/" + selectedInvoice.id + "/pdf", { responseType: "text" });
+                const w = window.open("", "_blank");
+                if (w) {
+                  w.document.write(r.data);
+                  w.document.close();
+                } else {
+                  setError("Popup blocked. Please allow popups.");
+                }
+              } catch (e) {
+                setError(e.response?.data?.error || e.message);
+              }
+            }} disabled={busy}>Print PDF</button>
           </div>
 
           <div style={{ marginBottom: 12, padding: 12, background: "#f8fafc", borderRadius: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>

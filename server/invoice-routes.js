@@ -1081,5 +1081,150 @@ export function mountInvoiceRoutes(app) {
       res.status(400).json({ success: false, error: e.message });
     }
   });
+  /* --- PDF (HTML) for invoice --- */
+  router.get("/:id/pdf", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isFinite(id)) return res.status(400).send("Invalid ID");
+
+      const inv = await query("SELECT * FROM invoices WHERE id = $1", [id]);
+      if (!inv.rows[0]) return res.status(404).send("Invoice not found");
+
+      const items = await query(
+        "SELECT * FROM invoice_items WHERE invoice_id = $1 ORDER BY line_no ASC, id ASC",
+        [id]
+      );
+
+      const invoice = inv.rows[0];
+      const invoiceItems = items.rows;
+
+      const esc = (v) => String(v ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+      const fmtMoney = (n) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      const totalConfirmed = invoiceItems.reduce((s, it) => s + Number(it.confirmed_amount || 0), 0);
+
+      const rowsHtml = invoiceItems.map(it => `
+        <tr>
+          <td style="text-align:center">${esc(it.line_no || "")}</td>
+          <td>${esc(it.description || "")}</td>
+          <td style="text-align:center">${esc(it.quantity || "")}</td>
+          <td style="text-align:right">${fmtMoney(it.unit_price)}</td>
+          <td style="text-align:right">${fmtMoney(it.net_amount)}</td>
+          <td style="text-align:right">${fmtMoney(it.total_with_vat)}</td>
+          <td style="text-align:right">${fmtMoney(it.confirmed_amount)}</td>
+          <td style="text-align:center">${esc(it.match_status || "Unmatched")}</td>
+        </tr>
+      `).join("");
+
+      const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Invoice ${esc(invoice.invoice_no || invoice.id)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; padding: 24px; color: #111827; }
+  .company-brand { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 3px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 16px; }
+  .company-brand img { width: 175px; max-height: 78px; object-fit: contain; }
+  .company-brand-copy { flex: 1; text-align: right; }
+  .company-brand-copy .company-name { font-size: 15px; font-weight: 700; color: #1e3a8a; }
+  .company-brand-copy .project-name { font-size: 10px; color: #475569; margin-top: 3px; }
+  .company-brand-copy .report-owner { font-size: 12px; font-weight: 700; margin-top: 7px; color: #111827; }
+  .company-brand-copy .report-role { font-size: 10px; color: #475569; margin-top: 2px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .subtitle { font-size: 12px; color: #475569; margin-bottom: 18px; }
+  .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+  .info-grid .card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 12px; background: #f8fafc; }
+  .info-grid .card .label { font-size: 10px; color: #64748b; text-transform: uppercase; }
+  .info-grid .card .value { font-size: 14px; font-weight: 700; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #cbd5e1; padding: 6px 8px; vertical-align: top; }
+  th { background: #e2e8f0; text-align: left; font-size: 11px; text-transform: uppercase; }
+  tr { page-break-inside: avoid; }
+  .totals { margin-top: 16px; width: 100%; display: flex; justify-content: flex-end; }
+  .totals table { width: 320px; }
+  .totals td { text-align: right; }
+  .totals .label { font-weight: 700; color: #1e3a8a; }
+  .footer { margin-top: 30px; padding-top: 12px; border-top: 2px solid #cbd5e1; text-align: center; font-size: 11px; color: #64748b; }
+  @media print { .no-print { display: none; } body { padding: 0; } }
+</style>
+</head>
+<body>
+
+<div class="company-brand">
+  <img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Ivanhoe Electric and Maaden" />
+  <div class="company-brand-copy">
+    <div class="company-name">Maaden Ivanhoe Electric Exploration and Development Limited Company</div>
+    <div class="project-name">Exploration Phase — Arabian Shield</div>
+    <div class="report-owner">Hussein Anwar</div>
+    <div class="report-role">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div>
+  </div>
+</div>
+
+<h1>Invoice ${esc(invoice.invoice_no || ("#" + invoice.id))}</h1>
+<div class="subtitle">System Generated Invoice Document — Fleet &amp; Camp Maintenance ERP</div>
+
+<div class="info-grid">
+  <div class="card"><div class="label">Invoice No</div><div class="value">${esc(invoice.invoice_no || "-")}</div></div>
+  <div class="card"><div class="label">Date</div><div class="value">${esc(invoice.invoice_date || "-")}</div></div>
+  <div class="card"><div class="label">Contractor</div><div class="value">${esc(invoice.contractor_name || "-")}</div></div>
+  <div class="card"><div class="label">Site</div><div class="value">${esc(invoice.site || "-")}</div></div>
+  <div class="card"><div class="label">Subtotal</div><div class="value">${fmtMoney(invoice.subtotal)}</div></div>
+  <div class="card"><div class="label">VAT (${esc(invoice.vat_percent || 15)}%)</div><div class="value">${fmtMoney(invoice.vat)}</div></div>
+  <div class="card"><div class="label">Total</div><div class="value">${fmtMoney(invoice.total)}</div></div>
+  <div class="card"><div class="label">Status</div><div class="value">${esc(invoice.status || "-")}</div></div>
+  <div class="card"><div class="label">Confirmed Total</div><div class="value">${fmtMoney(totalConfirmed)}</div></div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:32px">#</th>
+      <th>Description</th>
+      <th style="width:50px">Qty</th>
+      <th style="width:80px">Unit Price</th>
+      <th style="width:80px">Net</th>
+      <th style="width:90px">Total (VAT)</th>
+      <th style="width:90px">Confirmed</th>
+      <th style="width:90px">Match</th>
+    </tr>
+  </thead>
+  <tbody>${rowsHtml || '<tr><td colspan="8" style="text-align:center;color:#999">No items</td></tr>'}</tbody>
+</table>
+
+<div class="totals">
+  <table>
+    <tr><td class="label">Subtotal:</td><td>${fmtMoney(invoice.subtotal)}</td></tr>
+    <tr><td class="label">VAT:</td><td>${fmtMoney(invoice.vat)}</td></tr>
+    <tr><td class="label">Total:</td><td><strong>${fmtMoney(invoice.total)}</strong></td></tr>
+    <tr><td class="label">Confirmed Total:</td><td>${fmtMoney(totalConfirmed)}</td></tr>
+  </table>
+</div>
+
+<div class="footer">
+  This invoice was auto-generated by Fleet &amp; Camp Maintenance ERP • Printed on ${new Date().toLocaleString("en-GB")}
+</div>
+
+<div class="no-print" style="margin-top:24px;text-align:center">
+  <button onclick="window.print()" style="padding:12px 24px;font-size:16px;cursor:pointer">Print / Save as PDF</button>
+</div>
+
+<script>
+  // Auto-open print dialog when loaded
+  window.addEventListener("load", () => {
+    setTimeout(() => window.print(), 300);
+  });
+</script>
+
+</body>
+</html>`;
+
+      res.set("Content-Type", "text/html; charset=utf-8");
+      res.send(html);
+    } catch (e) {
+      console.error("[InvoiceRoutes:pdf]", e);
+      res.status(500).send("Failed to generate invoice PDF: " + e.message);
+    }
+  });
   app.use("/api/invoices", router);
 }

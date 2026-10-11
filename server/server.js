@@ -1430,6 +1430,30 @@ app.get("/api/inventory", async (req, res) => {
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+app.get("/api/inventory/report/by-site", async (req, res) => {
+  try {
+    const filters = { from: req.query.from, to: req.query.to, site: req.query.site };
+    res.json({ success: true, ...(await db.getInventoryReportBySite(filters)) });
+  } catch (e) {
+    console.error("[Inventory:report-by-site]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+app.get("/api/inventory/report/full", async (req, res) => {
+  try {
+    const filters = {
+      from: req.query.from,
+      to: req.query.to,
+      site: req.query.site,
+      vehicleId: req.query.vehicleId
+    };
+    res.json({ success: true, ...(await db.getInventoryReportFull(filters)) });
+  } catch (e) {
+    console.error("[Inventory:report-full]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.get("/api/inventory/low-stock", async (req, res) => {
   try { res.json({ success: true, items: await getLowStockItemsPG() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }

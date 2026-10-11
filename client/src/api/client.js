@@ -163,4 +163,33 @@ export const parseMaintenanceEmail = (text) =>
 export const updateInvoiceItemSite = (itemId, site) =>
   api.put('/invoices/items/' + itemId + '/site', { site }).then((r) => r.data);
 
+/* ============================================================
+   INVENTORY REPORT + STOCK OUT
+   ============================================================ */
+export const getInventoryReportBySite = (filters = {}) => {
+  const params = new URLSearchParams();
+  if (filters.from) params.append('from', filters.from);
+  if (filters.to) params.append('to', filters.to);
+  if (filters.site) params.append('site', filters.site);
+  const qs = params.toString();
+  return api.get('/inventory/report/by-site' + (qs ? '?' + qs : '')).then((r) => r.data);
+};
+
+export const stockOut = (payload) =>
+  api.post('/inventory/stock-out', payload).then((r) => r.data);
+
+export const stockIn = (payload) =>
+  api.post('/inventory/stock-in', payload).then((r) => r.data);
+
+
+export const getInventoryReportFull = (filters = {}) => {
+  const params = new URLSearchParams();
+  if (filters.from) params.append('from', filters.from);
+  if (filters.to) params.append('to', filters.to);
+  if (filters.site) params.append('site', filters.site);
+  if (filters.vehicleId) params.append('vehicleId', filters.vehicleId);
+  const qs = params.toString();
+  return api.get('/inventory/report/full' + (qs ? '?' + qs : '')).then((r) => r.data);
+};
+
 export default api;

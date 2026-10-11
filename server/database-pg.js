@@ -1,4 +1,4 @@
-﻿import { query, transaction } from "./postgres.js";
+import { query, transaction } from "./postgres.js";
 import { v2Query, v2Enabled } from "./v2/db.js";
 
 function numberValue(value, fallback = 0) {
@@ -3266,6 +3266,14 @@ export async function ensureWarehouseTables() {
   `);
   await query(`CREATE INDEX IF NOT EXISTS idx_inventory_created_by_user_id ON inventory(created_by_user_id)`);
 
+  // Vehicle / driver / site tracking on stock movements
+  await query(`ALTER TABLE stock_transactions ADD COLUMN IF NOT EXISTS vehicle_id BIGINT`);
+  await query(`ALTER TABLE stock_transactions ADD COLUMN IF NOT EXISTS vehicle_plate TEXT`);
+  await query(`ALTER TABLE stock_transactions ADD COLUMN IF NOT EXISTS driver_name TEXT`);
+  await query(`ALTER TABLE stock_transactions ADD COLUMN IF NOT EXISTS site TEXT`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_stock_transactions_vehicle ON stock_transactions(vehicle_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_stock_transactions_site ON stock_transactions(site)`);
+
   const locations = [
     ["MAIN", "Main Warehouse", "Main"],
     ["UQL", "Uqlat Al Soqour", "Uqlat Al Soqour"],
@@ -3469,6 +3477,8 @@ export async function stockIn(data = {}) {
     item.location ||
     "Main Warehouse";
 
+  const site = pgStr(data.site) || toLocation;
+
   return await transaction(async client => {
     await client.query(`
       UPDATE inventory
@@ -3488,17 +3498,19 @@ export async function stockIn(data = {}) {
         from_location,
         to_location,
         reference_no,
-        notes
+        notes,
+        site
       )
       VALUES
-      ('IN',$1,$2,$3,NULL,$4,$5,$6)
+      ('IN',$1,$2,$3,NULL,$4,$5,$6,$7)
     `, [
       item.code,
       item.name,
       qty,
       toLocation,
       pgStr(data.referenceNo ?? data.reference_no),
-      pgStr(data.notes)
+      pgStr(data.notes),
+      site
     ]);
 
     const result = await client.query(`
@@ -3510,7 +3522,6 @@ export async function stockIn(data = {}) {
     return result.rows[0];
   });
 }
-
 export async function stockOut(data = {}) {
   await ensureWarehouseTables();
 
@@ -3537,6 +3548,11 @@ export async function stockOut(data = {}) {
     item.location ||
     "Main Warehouse";
 
+  const vehicleId = data.vehicleId ?? data.vehicle_id ?? null;
+  const vehiclePlate = pgStr(data.vehiclePlate ?? data.vehicle_plate);
+  const driverName = pgStr(data.driverName ?? data.driver_name);
+  const site = pgStr(data.site) || fromLocation;
+
   return await transaction(async client => {
     await client.query(`
       UPDATE inventory
@@ -3556,17 +3572,25 @@ export async function stockOut(data = {}) {
         from_location,
         to_location,
         reference_no,
-        notes
+        notes,
+        vehicle_id,
+        vehicle_plate,
+        driver_name,
+        site
       )
       VALUES
-      ('OUT',$1,$2,$3,$4,NULL,$5,$6)
+      ('OUT',$1,$2,$3,$4,NULL,$5,$6,$7,$8,$9,$10)
     `, [
       item.code,
       item.name,
       qty,
       fromLocation,
       pgStr(data.referenceNo ?? data.reference_no),
-      pgStr(data.notes)
+      pgStr(data.notes),
+      vehicleId,
+      vehiclePlate,
+      driverName,
+      site
     ]);
 
     const result = await client.query(`
@@ -3578,7 +3602,6 @@ export async function stockOut(data = {}) {
     return result.rows[0];
   });
 }
-
 export async function transferStock(data = {}) {
   await ensureWarehouseTables();
 
@@ -4099,6 +4122,254 @@ export async function generateScheduledMaintenance(monthsAhead = 6) {
 /* ============================================================
    AUDIT LOG
    ============================================================ */
+
+/* ============================================================
+   INVENTORY REPORT BY SITE
+   ============================================================ */
+export async function getInventoryReportBySite(filters = {}) {
+  await ensureWarehouseTables();
+
+  const from = pgStr(filters.from) || null;
+  const to = pgStr(filters.to) || null;
+  const site = pgStr(filters.site) || null;
+
+  // Build WHERE
+  let where = "WHERE 1=1";
+  const params = [];
+  if (from) {
+    params.push(from);
+    where += ` AND created_at >= $${params.length}::date`;
+  }
+  if (to) {
+    params.push(to);
+    where += ` AND created_at < ($${params.length}::date + INTERVAL '1 day')`;
+  }
+  if (site) {
+    params.push(site);
+    where += ` AND site = $${params.length}`;
+  }
+
+  // Summary per site
+  const bySite = await query(`
+    SELECT
+      COALESCE(site, from_location, to_location, 'Unknown') AS site,
+      COUNT(*) FILTER (WHERE type = 'IN') AS in_count,
+      COALESCE(SUM(quantity) FILTER (WHERE type = 'IN'), 0) AS in_qty,
+      COUNT(*) FILTER (WHERE type = 'OUT') AS out_count,
+      COALESCE(SUM(quantity) FILTER (WHERE type = 'OUT'), 0) AS out_qty,
+      COUNT(*) FILTER (WHERE type = 'TRANSFER') AS transfer_count,
+      COUNT(*) AS total_movements
+    FROM stock_transactions
+    ${where}
+    GROUP BY COALESCE(site, from_location, to_location, 'Unknown')
+    ORDER BY site ASC
+  `, params);
+
+  // Movement per vehicle (OUT only)
+  const byVehicle = await query(`
+    SELECT
+      COALESCE(vehicle_plate, reference_no, 'Unknown') AS vehicle,
+      vehicle_id,
+      driver_name,
+      site,
+      COUNT(*) AS out_count,
+      COALESCE(SUM(quantity), 0) AS out_qty,
+      MAX(created_at) AS last_movement
+    FROM stock_transactions
+    ${where}
+      AND type = 'OUT'
+      AND (vehicle_id IS NOT NULL OR vehicle_plate IS NOT NULL OR reference_no IS NOT NULL)
+    GROUP BY COALESCE(vehicle_plate, reference_no, 'Unknown'), vehicle_id, driver_name, site
+    ORDER BY last_movement DESC
+  `, params);
+
+  // Totals
+  const totals = await query(`
+    SELECT
+      COUNT(*) FILTER (WHERE type = 'IN') AS total_in_count,
+      COALESCE(SUM(quantity) FILTER (WHERE type = 'IN'), 0) AS total_in_qty,
+      COUNT(*) FILTER (WHERE type = 'OUT') AS total_out_count,
+      COALESCE(SUM(quantity) FILTER (WHERE type = 'OUT'), 0) AS total_out_qty,
+      COUNT(*) FILTER (WHERE type = 'TRANSFER') AS total_transfer_count
+    FROM stock_transactions
+    ${where}
+  `, params);
+
+  // Recent movements
+  const recent = await query(`
+    SELECT *
+    FROM stock_transactions
+    ${where}
+    ORDER BY created_at DESC, id DESC
+    LIMIT 100
+  `, params);
+
+  return {
+    filters: { from, to, site },
+    totals: totals.rows[0] || {},
+    by_site: bySite.rows,
+    by_vehicle: byVehicle.rows,
+    recent: recent.rows
+  };
+}
+/* ============================================================
+   INVENTORY FULL REPORT (with vehicles + drivers + handovers)
+   ============================================================ */
+export async function getInventoryReportFull(filters = {}) {
+  await ensureWarehouseTables();
+
+  const from = pgStr(filters.from) || null;
+  const to = pgStr(filters.to) || null;
+  const site = pgStr(filters.site) || null;
+  const vehicleId = filters.vehicleId ? Number(filters.vehicleId) : null;
+
+  // WHERE for stock_transactions
+  let where = "WHERE 1=1";
+  const params = [];
+  if (from) {
+    params.push(from);
+    where += ` AND st.created_at >= ${params.length}::date`;
+  }
+  if (to) {
+    params.push(to);
+    where += ` AND st.created_at < (${params.length}::date + INTERVAL '1 day')`;
+  }
+  if (site) {
+    params.push(site);
+    where += ` AND COALESCE(st.site, st.from_location, st.to_location) = ${params.length}`;
+  }
+  if (vehicleId) {
+    params.push(vehicleId);
+    where += ` AND st.vehicle_id = ${params.length}`;
+  }
+
+  // 1) Summary
+  const summary = await query(`
+    SELECT
+      COUNT(*) FILTER (WHERE type = 'IN') AS in_count,
+      COALESCE(SUM(quantity) FILTER (WHERE type = 'IN'), 0) AS in_qty,
+      COUNT(*) FILTER (WHERE type = 'OUT') AS out_count,
+      COALESCE(SUM(quantity) FILTER (WHERE type = 'OUT'), 0) AS out_qty,
+      COUNT(*) FILTER (WHERE type = 'TRANSFER') AS transfer_count,
+      COALESCE(SUM(quantity) FILTER (WHERE type = 'TRANSFER'), 0) AS transfer_qty
+    FROM stock_transactions st
+    ${where}
+  `, params);
+
+  // 2) By Site
+  const bySite = await query(`
+    SELECT
+      COALESCE(st.site, st.from_location, st.to_location, 'Unknown') AS site,
+      COUNT(*) FILTER (WHERE st.type = 'IN') AS in_count,
+      COALESCE(SUM(st.quantity) FILTER (WHERE st.type = 'IN'), 0) AS in_qty,
+      COUNT(*) FILTER (WHERE st.type = 'OUT') AS out_count,
+      COALESCE(SUM(st.quantity) FILTER (WHERE st.type = 'OUT'), 0) AS out_qty,
+      COUNT(*) FILTER (WHERE st.type = 'TRANSFER') AS transfer_count,
+      COALESCE(SUM(st.quantity) FILTER (WHERE st.type = 'TRANSFER'), 0) AS transfer_qty
+    FROM stock_transactions st
+    ${where}
+    GROUP BY COALESCE(st.site, st.from_location, st.to_location, 'Unknown')
+    ORDER BY site ASC
+  `, params);
+
+  // 3) By Vehicle (with detailed movements)
+  const byVehicle = await query(`
+    SELECT
+      st.vehicle_id,
+      COALESCE(st.vehicle_plate, st.reference_no, 'Unknown') AS vehicle_plate,
+      MAX(st.driver_name) AS driver_name,
+      COALESCE(SUM(st.quantity) FILTER (WHERE st.type = 'OUT'), 0) AS out_qty,
+      COUNT(*) FILTER (WHERE st.type = 'OUT') AS out_count,
+      MAX(st.created_at) AS last_movement
+    FROM stock_transactions st
+    ${where}
+      AND st.type = 'OUT'
+      AND (st.vehicle_id IS NOT NULL OR st.vehicle_plate IS NOT NULL OR st.reference_no IS NOT NULL)
+    GROUP BY st.vehicle_id, COALESCE(st.vehicle_plate, st.reference_no, 'Unknown')
+    ORDER BY last_movement DESC
+  `, params);
+
+  // 4) By Driver
+  const byDriver = await query(`
+    SELECT
+      COALESCE(st.driver_name, 'Unknown') AS driver_name,
+      COUNT(*) FILTER (WHERE st.type = 'OUT') AS out_count,
+      COALESCE(SUM(st.quantity) FILTER (WHERE st.type = 'OUT'), 0) AS out_qty,
+      MAX(st.created_at) AS last_movement
+    FROM stock_transactions st
+    ${where}
+      AND st.type = 'OUT'
+      AND COALESCE(st.driver_name, '') <> ''
+    GROUP BY COALESCE(st.driver_name, 'Unknown')
+    ORDER BY last_movement DESC
+  `, params);
+
+  // 5) Detailed movements
+  const movements = await query(`
+    SELECT
+      st.id,
+      st.type,
+      st.item_code,
+      st.item_name,
+      st.quantity,
+      st.from_location,
+      st.to_location,
+      st.reference_no,
+      st.notes,
+      st.vehicle_id,
+      st.vehicle_plate,
+      st.driver_name,
+      st.site,
+      st.created_at
+    FROM stock_transactions st
+    ${where}
+    ORDER BY st.created_at DESC, st.id DESC
+    LIMIT 500
+  `, params);
+
+  // 6) Driver handovers (per vehicle, in period)
+  let handoverWhere = "WHERE 1=1";
+  const hParams = [];
+  if (from) {
+    hParams.push(from);
+    handoverWhere += ` AND dh.handover_date >= ${hParams.length}::date`;
+  }
+  if (to) {
+    hParams.push(to);
+    handoverWhere += ` AND dh.handover_date < (${hParams.length}::date + INTERVAL '1 day')`;
+  }
+  if (vehicleId) {
+    hParams.push(vehicleId);
+    handoverWhere += ` AND dh.vehicle_id = ${hParams.length}`;
+  }
+
+  let handovers = { rows: [] };
+  try {
+    handovers = await query(`
+      SELECT
+        dh.*,
+        v.plate_number,
+        v.plate_code
+      FROM driver_handovers dh
+      LEFT JOIN vehicles v ON v.id = dh.vehicle_id
+      ${handoverWhere}
+      ORDER BY dh.handover_date DESC, dh.id DESC
+      LIMIT 200
+    `, hParams);
+  } catch (e) {
+    console.warn("[ReportFull:handovers]", e.message);
+  }
+
+  return {
+    filters: { from, to, site, vehicleId },
+    summary: summary.rows[0] || {},
+    by_site: bySite.rows,
+    by_vehicle: byVehicle.rows,
+    by_driver: byDriver.rows,
+    movements: movements.rows,
+    handovers: handovers.rows
+  };
+}
 
 export async function logAction(data = {}) {
   try {

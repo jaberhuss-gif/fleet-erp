@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../api/client';
 import { exportToCSV, exportToExcel } from '../api/export';
 import { printContent } from '../api/print';
@@ -16,6 +16,8 @@ export default function Warehouse({ user, access = {} }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [actionModal, setActionModal] = useState(null); // 'in' | 'out' | 'transfer'
+  const [vehicles, setVehicles] = useState([]);
+  const [sites, setSites] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
@@ -28,6 +30,20 @@ export default function Warehouse({ user, access = {} }) {
   const [actionForm, setActionForm] = useState({
     quantity: 0, location: 'Main Warehouse', toLocation: '', referenceNo: '', notes: '', date: ''
   });
+
+  useEffect(() => {
+    // Load vehicles + sites for OUT dropdowns
+    (async () => {
+      try {
+        const [v, s] = await Promise.all([
+          api.get("/vehicles/list").catch(() => ({ data: { vehicles: [] } })),
+          api.get("/sites").catch(() => ({ data: { sites: [] } }))
+        ]);
+        setVehicles(v.data?.vehicles || []);
+        setSites(s.data?.sites || []);
+      } catch (e) { console.error("load helpers", e); }
+    })();
+  }, []);
 
   useEffect(() => { load(); }, []);
 
@@ -105,10 +121,14 @@ export default function Warehouse({ user, access = {} }) {
         quantity: Number(actionForm.quantity),
         location: actionForm.location,
         toLocation: actionForm.toLocation,
-        fromLocation: selectedItem.location,
+        fromLocation: actionForm.location || selectedItem.location,
         referenceNo: actionForm.referenceNo,
         notes: actionForm.notes,
-        date: actionForm.date
+        date: actionForm.date,
+        vehicleId: actionForm.vehicleId || null,
+        vehiclePlate: actionForm.vehiclePlate || '',
+        driverName: actionForm.driverName || '',
+        site: actionForm.location || ''
       };
       if (actionModal === 'in') await api.post('/inventory/stock-in', payload);
       else if (actionModal === 'out') await api.post('/inventory/stock-out', payload);
@@ -446,11 +466,52 @@ export default function Warehouse({ user, access = {} }) {
 
             <div className="form-group"><label>Quantity *</label><input type="number" value={actionForm.quantity} onChange={e => setActionForm({ ...actionForm, quantity: Number(e.target.value) })} /></div>
 
-            {actionModal !== 'transfer' && (
+            {actionModal === 'in' && (
               <div className="form-group">
                 <label>Location</label>
                 <input value={actionForm.location} onChange={e => setActionForm({ ...actionForm, location: e.target.value })} />
               </div>
+            )}
+
+            {actionModal === 'out' && (
+              <>
+                <div className="form-group">
+                  <label>Site / Location *</label>
+                  <select value={actionForm.location || ''} onChange={e => setActionForm({ ...actionForm, location: e.target.value })}>
+                    <option value="">-- Select Site --</option>
+                    {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                    <option value="Main Warehouse">Main Warehouse</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Vehicle (Optional)</label>
+                  <select value={actionForm.vehicleId || ''} onChange={e => {
+                    const vid = e.target.value;
+                    const v = vehicles.find(x => String(x.id) === String(vid));
+                    setActionForm({
+                      ...actionForm,
+                      vehicleId: vid,
+                      vehiclePlate: v ? (v.plate || ((v.plate_number || '') + ' ' + (v.plate_code || '')).trim()) : '',
+                      driverName: v ? (v.driver || '') : actionForm.driverName
+                    });
+                  }}>
+                    <option value="">-- No Vehicle (generic OUT) --</option>
+                    {vehicles.map(v => (
+                      <option key={v.id} value={v.id}>
+                        {(v.plate || ((v.plate_number || '') + ' ' + (v.plate_code || '')).trim())} — {v.driver || 'No driver'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {actionForm.vehicleId && (
+                  <div className="form-group">
+                    <label>Driver Name</label>
+                    <input value={actionForm.driverName || ''} onChange={e => setActionForm({ ...actionForm, driverName: e.target.value })} placeholder="Driver name" />
+                  </div>
+                )}
+              </>
             )}
 
             {actionModal === 'transfer' && (

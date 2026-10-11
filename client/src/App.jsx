@@ -17,11 +17,12 @@ import AdvancedReports from './pages/AdvancedReports';
 import OperationsHub from './pages/OperationsHub';
 import BuildingMaintenancePage from './pages/BuildingMaintenance';
 import WarehouseHub from './pages/WarehouseHub';
+import WarehouseReport from './pages/WarehouseReport';
 import api from './api/client';
 import DailyKmGate from './components/DailyKmGate';
 import Invoices from './pages/Invoices';
 
-const OWNER_ONLY_TABS = new Set(['drivers', 'users', 'audit', 'backup', 'invoices']);
+const OWNER_ONLY_TABS = new Set(['drivers', 'users', 'audit', 'backup', 'invoices', 'inventory-report']);
 
 const TAB_MODULES = {
   gm: ['gm'],
@@ -51,7 +52,8 @@ const TAB_LABELS = {
   users: 'Users',
   audit: 'Audit Log',
   backup: 'Backup',
-  invoices: '📄 Invoices'
+  invoices: '📄 Invoices',
+  'inventory-report': '📊 Warehouse Report'
 };
 
 const writeLog = (user, action, entityType, entityId, details) => {
@@ -285,7 +287,7 @@ export default function App() {
           {user.role === 'Owner' && (
             <div className="erp-nav-group">
               <div className="erp-nav-heading">Administration</div>
-              {['drivers','users','audit','backup','invoices'].map(t => (
+              {['drivers','users','audit','backup','invoices','inventory-report'].map(t => (
                 <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
                   {TAB_LABELS[t]}
                 </button>
@@ -323,6 +325,7 @@ export default function App() {
           {tab === 'audit' && user.role === 'Owner' && <AuditLog />}
           {tab === 'backup' && user.role === 'Owner' && <Backup />}
           {tab === 'invoices' && user.role === 'Owner' && <Invoices user={user} />}
+          {tab === 'inventory-report' && user.role === 'Owner' && <WarehouseReport user={user} />}
         </main>
       </div>
     </div>

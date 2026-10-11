@@ -1,15 +1,11 @@
-﻿import express from "express";
+import express from "express";
 import Busboy from "busboy";
 import pdfParse from "pdf-parse";
 import ExcelJS from "exceljs";
 import { query, transaction } from "./postgres.js";
 
 /* ============================================================
-   INVOICE ROUTES (Phase 3)
-   - PDF import (JD-Invoice format + generic fallback)
-   - Excel import
-   - Matching with maintenance requests
-   - Confirmation + Verification
+   INVOICE ROUTES (Phase 3) - Jodoud Al Khaleej format
    ============================================================ */
 
 const clean = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
@@ -19,139 +15,175 @@ const num = (v) => {
 };
 const dateValue = (v) => {
   const s = clean(v);
-  const m = s.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
-  if (m) return `${m[1]}-${String(m[2]).padStart(2, "0")}-${String(m[3]).padStart(2, "0")}`;
-  const dmy = s.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
-  if (dmy) return `${dmy[3]}-${String(dmy[2]).padStart(2, "0")}-${String(dmy[1]).padStart(2, "0")}`;
+  const iso = s.match(/(\d{4})[\-\/](\d{1,2})[\-\/](\d{1,2})/);
+  if (iso) return iso[1] + "-" + String(iso[2]).padStart(2, "0") + "-" + String(iso[3]).padStart(2, "0");
+  const dmy = s.match(/(\d{1,2})[\-\/](\d{1,2})[\-\/](\d{4})/);
+  if (dmy) return dmy[3] + "-" + String(dmy[2]).padStart(2, "0") + "-" + String(dmy[1]).padStart(2, "0");
   return "";
 };
-const slug = (v) =>
-  clean(v).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").toUpperCase();
 
 /* ============================================================
-   PDF PARSING — JD-Invoice format
-   Row layout (after pdf-parse extraction):
-     #  description  location  quantity  unit_price  discount  net  total_with_vat
-   Example: "1 AC Feron 1 auto 250.00 0.00 250.00 287.50"
+   TRANSLATION (Arabic -> English) via MyMemory API
+   ============================================================ */
+const translationCache = new Map();
+const ARABIC_RE = /[\u0600-\u06FF]/;
+
+async function translateToEnglish(text) {
+  const original = clean(text);
+  if (!original) return original;
+  if (!ARABIC_RE.test(original)) return original;
+  if (translationCache.has(original)) return translationCache.get(original);
+
+  try {
+    const url = "https://api.mymemory.translated.net/get?q=" +
+      encodeURIComponent(original.slice(0, 500)) +
+      "&langpair=ar|en";
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) {
+      translationCache.set(original, original);
+      return original;
+    }
+    const data = await res.json();
+    const translated = clean(data?.responseData?.translatedText || "");
+    const result = translated && translated !== original ? translated : original;
+    translationCache.set(original, result);
+    return result;
+  } catch (e) {
+    console.error("[Translate] failed:", e.message);
+    translationCache.set(original, original);
+    return original;
+  }
+}
+
+async function translateItemDescriptions(items) {
+  const out = [];
+  for (const it of items) {
+    const translated = await translateToEnglish(it.description);
+    out.push({ ...it, description: translated });
+  }
+  return out;
+}
+
+/* ============================================================
+   HEADER EXTRACTION (Jodoud format)
+   Numbers appear BEFORE their Arabic label in the extracted text.
    ============================================================ */
 function extractInvoiceHeader(text) {
   const flat = clean(text);
 
-  // Invoice number: "رقم الفاتورة: 12610003473" or "Invoice No. 26-200-000029"
-  const invoiceNo =
-    clean(text.match(/رقم\s*الفاتورة\s*[:#-]?\s*([A-Z0-9\-]+)/i)?.[1]) ||
-    clean(text.match(/Invoice\s*No\.?\s*[:#-]?\s*([A-Z0-9\-]+)/i)?.[1]) ||
-    "";
+  // Invoice No
+  const invoiceNo = clean(
+    text.match(/\u0631\u0642\u0645\s*\u0627\u0644\u0641\u0627\u062a\u0648\u0631\u0629\s*[:#-]?\s*([A-Z0-9\-]+)/i)?.[1] ||
+    text.match(/Invoice\s*No\.?\s*[:#-]?\s*([A-Z0-9\-]+)/i)?.[1] ||
+    ""
+  );
 
-  // Invoice date: "تاريخ الفاتورة: 18:31 - 2026-10-04" or "Date 30/09/2026"
-  const dateRaw =
-    text.match(/تاريخ\s*الفاتورة\s*[:#-]?\s*[\d:]+\s*[-–]?\s*([\d\-\/]+)/)?.[1] ||
-    text.match(/\bDate\s*[:#-]?\s*([\d\-\/]+)/i)?.[1] ||
-    "";
-  const invoiceDate = dateValue(dateRaw);
+  // Invoice Date
+  const dateMatch = text.match(/\u062a\u0627\u0631\u064a\u062e\s*\u0627\u0644\u0641\u0627\u062a\u0648\u0631\u0629\s*[:#-]?\s*[\d:]+\s*[-]?\s*([\d\-\/]+)/) ||
+                     text.match(/(\d{4}-\d{2}-\d{2})/);
+  const invoiceDate = dateValue(dateMatch?.[1] || "");
 
-  // VAT number of customer (optional)
-  const vatNo = clean(flat.match(/(?:الرقم\s*الضريبي|VAT)\s*[:#-]?\s*(\d{10,})/)?.[1]) || "";
+  // Contractor
+  const contractorName = clean(flat.match(/(JODOUD AL-KHALEEJ|Jodoud Al Khaleej)/i)?.[1]) || "";
 
-  // Subtotal / VAT / Total
-  const subtotal = num(flat.match(/(?:المجموع|الإجمالي\s*الفرعي|Subtotal)\s*[:#-]?\s*([\d,]+\.\d{2})/i)?.[1]);
-  const vat = num(flat.match(/(?:إجمالي\s*الضريبة|VAT|ضريبة\s*القيمة\s*المضافة)\s*[:#-]?\s*([\d,]+\.\d{2})/i)?.[1]);
-  const total = num(flat.match(/(?:الإجمالي\s*النهائي|Total)\s*[:#-]?\s*([\d,]+\.\d{2})/i)?.[1]);
+  // Site: "project : ALL Camp"
+  const siteMatch = flat.match(/project\s*[:#-]?\s*([A-Za-z0-9 \-]+?)(?=\s*(?:\u0627\u0644\u0645\u0644\u0627\u062d\u0638\u0627\u062a|\u062a\u0627\u0631\u064a\u062e|$))/i);
+  const site = clean(siteMatch?.[1]) || "";
 
-  // Project / site
-  const project = clean(flat.match(/project\s*[:#-]?\s*([A-Za-z0-9 \-]+?)(?=\s*الملاحظات|\s*Notes|$)/i)?.[1]) || "";
+  // Numbers appear BEFORE their Arabic label:
+  //   "8,385.00المجموع"
+  //   "1,257.75إجمالي الضريبة %15"
+  //   "9,642.75الإجمالي النھائي بعد الضريبة"
+  const subtotalMatch =
+    flat.match(/([\d,]+\.\d{2})\s*\u0627\u0644\u0645\u062c\u0645\u0648\u0639\b/) ||
+    flat.match(/\u0627\u0644\u0645\u062c\u0645\u0648\u0639\s*([\d,]+\.\d{2})/);
+  const subtotal = num(subtotalMatch?.[1]);
 
-  // Contractor name from header (first line usually)
-  const contractorName = clean(flat.match(/(JODOUD AL-KHALEEJ|Raghad Alafq|Jodoud Al Khaleej)/i)?.[1]) || "";
+  const vatMatch =
+    flat.match(/([\d,]+\.\d{2})\s*\u0625\u062c\u0645\u0627\u0644\u064a\s*\u0627\u0644\u0636\u0631[\u064a\u06cc]\u0628\u0629/) ||
+    flat.match(/\u0625\u062c\u0645\u0627\u0644\u064a\s*\u0627\u0644\u0636\u0631\u064a\u0628\u0629[^\d]*?([\d,]+\.\d{2})/);
+  const vat = num(vatMatch?.[1]);
+
+  const totalMatch =
+    flat.match(/([\d,]+\.\d{2})\s*\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a\s*\u0627\u0644\u0646[\u0647\u06be]\u0627\u0626\u064a/) ||
+    flat.match(/\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a\s*\u0627\u0644\u0646\u0647\u0627\u0626\u064a[^\d]*?([\d,]+\.\d{2})/);
+  const total = num(totalMatch?.[1]);
 
   return {
     invoice_no: invoiceNo,
     invoice_date: invoiceDate,
-    contractor_name: contractorName,
-    site: project,
+    contractor_name: contractorName || "JODOUD AL-KHALEEJ",
+    site,
     subtotal,
     vat,
     vat_percent: subtotal ? Math.round((vat / subtotal) * 100 * 100) / 100 : 15,
-    total,
-    vat_no: vatNo
+    total
   };
 }
 
+/* ============================================================
+   ITEMS EXTRACTION (Jodoud format)
+   ============================================================ */
 function extractInvoiceItems(text) {
-  // Clean RTL/LTR artifacts + normalize spaces
   const source = String(text || "")
     .replace(/\u00a0/g, " ")
     .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
     .replace(/\r/g, "");
 
+  const itemsStart = source.search(/\d+\.\d{2}\d+\.\d{2}\d+\.\d{2}\d+\.\d{2}\d+/);
+  const totalsMarker = source.search(/([\d,]+\.\d{2})\s*\u0627\u0644\u0645\u062c\u0645\u0648\u0639/);
+  const itemsRegion = itemsStart >= 0
+    ? source.slice(itemsStart, totalsMarker > 0 ? totalsMarker : undefined)
+    : source;
+
+  const flat = itemsRegion.replace(/[\n\r]+/g, " ").replace(/\s{2,}/g, " ");
+
+  const rowRe = /(\d+\.\d{2})(\d+\.\d{2})(\d+\.\d{2})(\d+\.\d{2})(\d+)(auto)?([A-Za-z][A-Za-z0-9 &().,'\/-]*?)(\d{1,4})(\d{1,3})(?= \d+\.\d{2}|$)/g;
+
   const items = [];
-  const lines = source.split("\n").map(l => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+  let m;
+  while ((m = rowRe.exec(flat))) {
+    const total = num(m[1]);
+    const net = num(m[2]);
+    const discount = num(m[3]);
+    const price = num(m[4]);
+    const qty = num(m[5]);
+    const description = clean(m[7]).replace(/^auto\s+/i, "");
+    const itemNo = num(m[8]);
+    const lineNo = num(m[9]);
 
-  // Strategy 1: line-by-line (best for JD-Invoice where each row is one line)
-  // Row pattern: # description location qty unit_price discount net total
-  // # = 1-4 digits, description = letters + spaces + dots, location = "auto"|"1"|"2",
-  // qty = 1-4 digits, then 4 decimals, at end.
-  const rowRe = /^(\d{1,4})\s+(.+?)\s+(auto|\d+)\s+(\d{1,4})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s*$/i;
-
-  for (const line of lines) {
-    const m = line.match(rowRe);
-    if (!m) continue;
-
-    const no = Number(m[1]);
-    const description = clean(m[2]);
-    const location = clean(m[3]);
-    const quantity = num(m[4]);
-    const unit_price = num(m[5]);
-    const discount_percent = num(m[6]);
-    const net_amount = num(m[7]);
-    const total_with_vat = num(m[8]);
-
-    if (!description) continue;
-    if (!Number.isFinite(no)) continue;
+    if (!description || qty <= 0) continue;
+    if (price <= 0 && total <= 0) continue;
+    if (description.length > 200) continue;
+    if (!/[A-Za-z]/.test(description)) continue;
 
     items.push({
-      line_no: no,
+      line_no: lineNo,
+      item_no: itemNo,
       description,
       unit: "",
-      location,
-      quantity,
-      unit_price,
-      discount_percent,
-      net_amount,
-      total_with_vat
+      location: "",
+      quantity: qty,
+      unit_price: price,
+      discount_percent: discount,
+      net_amount: net,
+      total_with_vat: total
     });
-  }
-
-  // Strategy 2: flattened fallback (if lines are not per-row)
-  if (items.length < 3) {
-    const flat = source.replace(/\s+/g, " ").trim();
-    const re = /(?:^|\s)(\d{1,4})\s+([A-Za-z][A-Za-z0-9 &().,\/'-]{2,120}?)\s+(auto|\d+)\s+(\d{1,4})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})(?=\s+\d{1,4}\s+[A-Za-z]|\s*$)/g;
-    let m;
-    while ((m = re.exec(flat))) {
-      const description = clean(m[2]);
-      if (!description) continue;
-      items.push({
-        line_no: Number(m[1]),
-        description,
-        unit: "",
-        location: clean(m[3]),
-        quantity: num(m[4]),
-        unit_price: num(m[5]),
-        discount_percent: num(m[6]),
-        net_amount: num(m[7]),
-        total_with_vat: num(m[8])
-      });
-    }
   }
 
   return items;
 }
-
-async function parsePdfBuffer(buffer) {
+async function parsePdfBuffer(buffer, options = {}) {
   const parsed = await pdfParse(buffer);
   const text = parsed.text || "";
   const header = extractInvoiceHeader(text);
-  const items = extractInvoiceItems(text);
+  let items = extractInvoiceItems(text);
+  if (options.translate !== false) {
+    items = await translateItemDescriptions(items);
+  }
   return {
     header,
     items,
@@ -161,17 +193,18 @@ async function parsePdfBuffer(buffer) {
 }
 
 /* ============================================================
-   EXCEL PARSING — generic (header row detection)
+   EXCEL PARSING
    ============================================================ */
 function detectHeaderRow(matrix) {
   const ALIASES = {
-    line_no: ["#", "no", "sr", "s/n", "serial", "م", "ت"],
-    description: ["description", "item", "product", "details", "الوصف", "الصنف", "البيان"],
-    quantity: ["qty", "quantity", "الكمية", "كمية"],
-    unit_price: ["unit price", "price", "rate", "سعر", "السعر"],
-    discount_percent: ["discount", "disc%", "خصم"],
-    net_amount: ["net", "subtotal", "صافي", "الصافي"],
-    total_with_vat: ["total", "amount", "اجمالي", "الإجمالي"]
+    line_no: ["#", "no", "sr", "s/n", "serial"],
+    item_no: ["item no", "item_no", "item#", "code"],
+    description: ["description", "item", "product", "details", "\u0627\u0644\u0628\u0646\u062f", "\u0627\u0644\u0648\u0635\u0641"],
+    quantity: ["qty", "quantity", "\u0627\u0644\u0643\u0645\u064a\u0629"],
+    unit_price: ["unit price", "price", "rate", "\u0627\u0644\u0633\u0639\u0631"],
+    discount_percent: ["discount", "disc%", "\u062e\u0635\u0645"],
+    net_amount: ["net", "subtotal", "\u0627\u0644\u0635\u0627\u0641\u064a"],
+    total_with_vat: ["total", "amount", "\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a"]
   };
   const key = (v) => clean(v).toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]+/g, "");
   const matchAny = (v, list) => list.some(a => key(v) === key(a) || key(v).includes(key(a)));
@@ -198,13 +231,11 @@ function parseExcelMatrix(matrix) {
   const key = (v) => clean(v).toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]+/g, "");
   const matchAny = (v, list) => list.some(a => key(v) === key(a) || key(v).includes(key(a)));
 
-  // Map column index -> field
   const colMap = {};
   for (let c = 0; c < rawHeaders.length; c++) {
-    const h = rawHeaders[c];
     for (const [field, aliases] of Object.entries(det.aliases)) {
       if (colMap[field] !== undefined) continue;
-      if (matchAny(h, aliases)) { colMap[field] = c; break; }
+      if (matchAny(rawHeaders[c], aliases)) { colMap[field] = c; break; }
     }
   }
 
@@ -213,10 +244,10 @@ function parseExcelMatrix(matrix) {
     const row = matrix[r] || [];
     const description = clean(row[colMap.description]);
     if (!description) continue;
-    if (/^(subtotal|total|vat|discount|المجموع|الإجمالي)/i.test(description)) continue;
-
+    if (/^(subtotal|total|vat|discount)/i.test(description)) continue;
     items.push({
       line_no: num(row[colMap.line_no]) || (items.length + 1),
+      item_no: num(row[colMap.item_no]) || (items.length + 1),
       description,
       unit: "",
       location: "",
@@ -242,7 +273,7 @@ function parseExcelMatrix(matrix) {
   return { items, header };
 }
 
-async function parseExcelBuffer(buffer) {
+async function parseExcelBuffer(buffer, options = {}) {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
   const ws = wb.worksheets[0];
@@ -257,11 +288,15 @@ async function parseExcelBuffer(buffer) {
     });
     matrix.push(values);
   });
-  return parseExcelMatrix(matrix);
+  const parsed = parseExcelMatrix(matrix);
+  if (options.translate !== false && parsed.items.length) {
+    parsed.items = await translateItemDescriptions(parsed.items);
+  }
+  return parsed;
 }
 
 /* ============================================================
-   FILE READING HELPERS (Busboy)
+   FILE READER
    ============================================================ */
 function readUpload(req, options = {}) {
   const maxSize = options.maxSize || 25 * 1024 * 1024;
@@ -293,7 +328,6 @@ function readUpload(req, options = {}) {
 export function mountInvoiceRoutes(app) {
   const router = express.Router();
 
-  /* --- PDF preview --- */
   router.post("/import-pdf/preview", async (req, res) => {
     try {
       const { buffer, filename } = await readUpload(req, { allowedExt: /\.pdf$/i });
@@ -302,8 +336,7 @@ export function mountInvoiceRoutes(app) {
       if (!parsed.header.invoice_no) warnings.push("Invoice number not detected");
       if (!parsed.header.invoice_date) warnings.push("Invoice date not detected");
       if (!parsed.items.length) warnings.push("No line items detected");
-      const hasPrices = parsed.items.some(x => x.unit_price > 0);
-      if (!hasPrices && parsed.items.length) warnings.push("No unit prices detected — manual entry required");
+      if (!parsed.header.total) warnings.push("Invoice total not detected");
 
       res.json({
         success: true,
@@ -314,7 +347,7 @@ export function mountInvoiceRoutes(app) {
         items: parsed.items,
         count: parsed.items.length,
         warnings,
-        valid: parsed.items.length > 0 && !!parsed.header.total
+        valid: parsed.items.length > 0
       });
     } catch (e) {
       console.error("[InvoiceRoutes:pdf-preview]", e);
@@ -322,15 +355,12 @@ export function mountInvoiceRoutes(app) {
     }
   });
 
-  /* --- Excel preview --- */
   router.post("/import-excel/preview", async (req, res) => {
     try {
       const { buffer, filename } = await readUpload(req, { allowedExt: /\.(xlsx|xls|csv)$/i });
       const parsed = await parseExcelBuffer(buffer);
       const warnings = [];
       if (!parsed.items.length) warnings.push("No line items detected");
-      const hasPrices = parsed.items.some(x => x.unit_price > 0);
-      if (!hasPrices && parsed.items.length) warnings.push("No unit prices detected — manual entry required");
 
       res.json({
         success: true,
@@ -344,6 +374,96 @@ export function mountInvoiceRoutes(app) {
     } catch (e) {
       console.error("[InvoiceRoutes:excel-preview]", e);
       res.status(400).json({ success: false, error: e.message });
+    }
+  });
+
+  router.post("/import-pdf", async (req, res) => {
+    try {
+      const { buffer, filename } = await readUpload(req, { allowedExt: /\.pdf$/i });
+      const parsed = await parsePdfBuffer(buffer);
+      if (!parsed.items.length) return res.status(400).json({ success: false, error: "No line items detected." });
+
+      const h = parsed.header;
+      const importedBy = req.user?.full_name || req.user?.username || "system";
+
+      const result = await transaction(async (client) => {
+        const invRes = await client.query(
+          "INSERT INTO invoices (invoice_no, invoice_date, contractor_name, site, subtotal, vat, vat_percent, total, source_file, source_type, imported_by, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Imported') RETURNING *",
+          [h.invoice_no || null, h.invoice_date || null, h.contractor_name || null, h.site || null, h.subtotal || 0, h.vat || 0, h.vat_percent || 15, h.total || 0, filename, "PDF", importedBy]
+        );
+        const invoice = invRes.rows[0];
+        const items = [];
+        for (const it of parsed.items) {
+          const r = await client.query(
+            "INSERT INTO invoice_items (invoice_id, line_no, description, unit, quantity, unit_price, discount_percent, net_amount, total_with_vat, confirmed_amount, match_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,'Unmatched') RETURNING *",
+            [invoice.id, it.line_no || null, it.description || "", it.unit || "", it.quantity || 1, it.unit_price || 0, it.discount_percent || 0, it.net_amount || 0, it.total_with_vat || 0]
+          );
+          items.push(r.rows[0]);
+        }
+        return { invoice, items };
+      });
+
+      res.status(201).json({ success: true, message: "Invoice imported.", invoice: result.invoice, items: result.items, count: result.items.length });
+    } catch (e) {
+      console.error("[InvoiceRoutes:import-pdf]", e);
+      res.status(400).json({ success: false, error: e.message });
+    }
+  });
+
+  router.post("/import-excel", async (req, res) => {
+    try {
+      const { buffer, filename } = await readUpload(req, { allowedExt: /\.(xlsx|xls|csv)$/i });
+      const parsed = await parseExcelBuffer(buffer);
+      if (!parsed.items.length) return res.status(400).json({ success: false, error: "No line items detected." });
+
+      const h = parsed.header || {};
+      const importedBy = req.user?.full_name || req.user?.username || "system";
+
+      const result = await transaction(async (client) => {
+        const invRes = await client.query(
+          "INSERT INTO invoices (invoice_no, invoice_date, contractor_name, site, subtotal, vat, vat_percent, total, source_file, source_type, imported_by, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Excel',$10,'Imported') RETURNING *",
+          [h.invoice_no || null, h.invoice_date || null, h.contractor_name || null, h.site || null, h.subtotal || 0, h.vat || 0, h.vat_percent || 15, h.total || 0, filename, importedBy]
+        );
+        const invoice = invRes.rows[0];
+        const items = [];
+        for (const it of parsed.items) {
+          const r = await client.query(
+            "INSERT INTO invoice_items (invoice_id, line_no, description, unit, quantity, unit_price, discount_percent, net_amount, total_with_vat, confirmed_amount, match_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,'Unmatched') RETURNING *",
+            [invoice.id, it.line_no || null, it.description || "", it.unit || "", it.quantity || 1, it.unit_price || 0, it.discount_percent || 0, it.net_amount || 0, it.total_with_vat || 0]
+          );
+          items.push(r.rows[0]);
+        }
+        return { invoice, items };
+      });
+
+      res.status(201).json({ success: true, message: "Invoice imported from Excel.", invoice: result.invoice, items: result.items, count: result.items.length });
+    } catch (e) {
+      console.error("[InvoiceRoutes:import-excel]", e);
+      res.status(400).json({ success: false, error: e.message });
+    }
+  });
+
+  router.get("/", async (req, res) => {
+    try {
+      const r = await query("SELECT i.*, (SELECT COUNT(*)::int FROM invoice_items WHERE invoice_id = i.id) AS item_count, (SELECT COUNT(*)::int FROM invoice_items WHERE invoice_id = i.id AND match_status = 'Matched') AS matched_count, (SELECT COUNT(*)::int FROM invoice_items WHERE invoice_id = i.id AND match_status = 'Unmatched') AS unmatched_count FROM invoices i WHERE i.archived_at IS NULL ORDER BY i.imported_at DESC, i.id DESC LIMIT 500");
+      res.json({ success: true, invoices: r.rows });
+    } catch (e) {
+      console.error("[InvoiceRoutes:list]", e);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  router.get("/:id", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: "Invalid ID" });
+      const inv = await query("SELECT * FROM invoices WHERE id = $1", [id]);
+      if (!inv.rows[0]) return res.status(404).json({ success: false, error: "Invoice not found" });
+      const items = await query("SELECT ii.*, mr.request_no AS matched_request_no, mr.site AS matched_request_site, mri.description AS matched_item_description FROM invoice_items ii LEFT JOIN maintenance_requests mr ON mr.id = ii.matched_request_id LEFT JOIN maintenance_request_items mri ON mri.id = ii.matched_request_item_id WHERE ii.invoice_id = $1 ORDER BY ii.line_no ASC, ii.id ASC", [id]);
+      res.json({ success: true, invoice: inv.rows[0], items: items.rows });
+    } catch (e) {
+      console.error("[InvoiceRoutes:get]", e);
+      res.status(500).json({ success: false, error: e.message });
     }
   });
 

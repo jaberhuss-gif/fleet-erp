@@ -262,6 +262,7 @@ export async function ensureUserAccessTable() {
     can_work BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE(user_id, module)
   )`);
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
 }
 
 export async function hasModuleAccess(user, module, mode = "view") {

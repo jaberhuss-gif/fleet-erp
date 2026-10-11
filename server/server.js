@@ -1496,7 +1496,7 @@ app.get("/api/vehicles/:id/inspection-reminder", async (req, res) => {
   try {
     const r = await pgQuery(`
       SELECT id, plate_number, plate_code, driver, location,
-             inspection_expiry_date::text AS inspection_expiry_date::text AS inspection_expiry_date, inspection_reminder_days,
+             inspection_expiry_date::text AS inspection_expiry_date, inspection_reminder_days,
              inspection_manager_email, inspection_cc_emails,
              inspection_last_email_sent_at, inspection_last_email_key
       FROM vehicles WHERE id=$1
@@ -1600,7 +1600,7 @@ app.get("/api/inspection-reminders/due", async (req, res) => {
   }
 });
 
-app.post("/api/inspection-reminders/send", async (req, res) => {
+app.post("/api/inspection-reminders/send", requireRole("Owner"), async (req, res) => {
   try {
     const mode = String(req.body?.mode || 'all').toLowerCase();
     const requestedSites = Array.isArray(req.body?.sites) ? req.body.sites.map(v => String(v || '').trim()).filter(Boolean) : [];
@@ -1997,7 +1997,7 @@ app.post("/api/audit-log", async (req, res) => {
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
-app.delete("/api/audit-log/clear", async (req, res) => {
+app.delete("/api/audit-log/clear", requireRole("Owner"), async (req, res) => {
   try {
     const days = Number(req.query.days) || 90;
     res.json({ success: true, deleted: await clearAuditLogPG(days) });
@@ -2005,7 +2005,7 @@ app.delete("/api/audit-log/clear", async (req, res) => {
 });
 
 // ===== BACKUP =====
-app.get("/api/backup/list", async (req, res) => {
+app.get("/api/backup/list", requireRole("Owner"), async (req, res) => {
   try {
     const backupDir = path.join(__dirname, "backups");
     if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
@@ -2020,7 +2020,7 @@ app.get("/api/backup/list", async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post("/api/backup/create", async (req, res) => {
+app.post("/api/backup/create", requireRole("Owner"), async (req, res) => {
   try {
     const backupDir = path.join(__dirname, "backups");
 
@@ -2086,7 +2086,7 @@ app.post("/api/backup/create", async (req, res) => {
     });
   }
 });
-app.delete("/api/backup/:name", async (req, res) => {
+app.delete("/api/backup/:name", requireRole("Owner"), async (req, res) => {
   try {
     const backupDir = path.join(__dirname, "backups");
     const name = req.params.name;
@@ -2102,7 +2102,7 @@ app.delete("/api/backup/:name", async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.get("/api/backup/download/:name", async (req, res) => {
+app.get("/api/backup/download/:name", requireRole("Owner"), async (req, res) => {
   try {
     const backupDir = path.join(__dirname, "backups");
     const name = req.params.name;
@@ -2404,12 +2404,15 @@ try {
   console.error("[Schema] building schema check failed:", e.message);
 }
 
-try {
-  await syncBuildingFromVelaOnce();
-} catch (e) {
-  console.error("[VelaBuildingSync] startup sync failed:", e.message);
-}
-
+app.post("/api/operations/vela-sync", requireRole("Owner"), async (req, res) => {
+  try {
+    await syncBuildingFromVelaOnce();
+    res.json({ success: true, message: "Vela building sync completed." });
+  } catch (e) {
+    console.error("[VelaBuildingSync] manual sync failed:", e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
 app.use(express.static(path.join(__dirname, '../client/dist')));
 app.get('*', async (req, res) => { res.sendFile(path.join(__dirname, '../client/dist/index.html')); });
 

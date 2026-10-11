@@ -1,4 +1,4 @@
-﻿import dotenv from "dotenv";
+import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import path from "path";
@@ -19,7 +19,7 @@ if (!JWT_SECRET) {
 }
 
 // ============================================================
-// AUTHENTICATION — PostgreSQL
+// AUTHENTICATION � PostgreSQL
 // ============================================================
 
 export async function login(username, password) {
@@ -38,6 +38,7 @@ export async function login(username, password) {
     FROM users
     WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
       AND is_active = 1
+      AND deleted_at IS NULL
     LIMIT 1
   `, [username]);
 
@@ -234,7 +235,7 @@ export async function updateUser(id, data = {}) {
 
 export async function deleteUser(id) {
   const result = await query(
-    `DELETE FROM users WHERE id = $1`,
+    `UPDATE users SET is_active = 0, deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted_at IS NULL`,
     [id]
   );
 

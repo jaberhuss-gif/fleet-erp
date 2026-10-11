@@ -20,6 +20,7 @@ import { toWaMeNumber, toWaMeInternational } from "./phone.js";
 import { syncBuildingFromVelaOnce } from "./vela-project-sync.mjs";
 import { mountBuildingMaintenanceRequestRoutes } from "./building-maintenance-requests.js";
 import { handoverReportHtml } from "./handover-report.js";
+import { ensureInvoiceSchema } from "./invoice-schema.js";
 
 const ANNUAL_INSPECTION_EMAIL_FROM = 'Hussein.Anwar@iemaadex.com';
 const ANNUAL_INSPECTION_CC_EMAILS = 'Mohamed.Hassan@iemaadex.com, Mohammed.Al-Marhabi@iemaadex.com';
@@ -2408,6 +2409,7 @@ try {
 // deleted_at which may not exist yet on a fresh or older database.
 try {
   await ensureUserAccessTable();
+  await ensureInvoiceSchema();
 } catch (e) {
   console.error("[Schema] user access table check failed:", e.message);
 }
@@ -2434,6 +2436,8 @@ app.listen(PORT, () => {
   console.log("Building APIs: /api/sites, /api/work-orders, /api/projects, /api/purchases");
   console.log("======================================");
 });
+
+
 
 
 

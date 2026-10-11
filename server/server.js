@@ -1546,6 +1546,19 @@ app.post("/api/inventory/transfer", async (req, res) => {
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
+app.put("/api/stock-transactions/:id", async (req, res) => {
+  try {
+    if (req.user?.role !== "Owner") {
+      return res.status(403).json({ success: false, error: "Owner only." });
+    }
+    const updated = await db.updateStockTransaction(req.params.id, req.body || {});
+    res.json({ success: true, transaction: updated });
+  } catch (e) {
+    console.error("[StockTransaction:update]", e);
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
 app.delete("/api/stock-transactions/:id", async (req, res) => {
   try {
     if (req.user?.role !== "Owner") {

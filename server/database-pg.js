@@ -3700,6 +3700,34 @@ export async function transferStock(data = {}) {
   });
 }
 
+export async function updateStockTransaction(id, data = {}) {
+  const current = await query("SELECT * FROM stock_transactions WHERE id = $1", [id]);
+  if (!current.rows[0]) throw new Error("Transaction not found");
+
+  const tx = current.rows[0];
+
+  const reference_no = data.referenceNo ?? data.reference_no ?? tx.reference_no;
+  const notes = data.notes ?? tx.notes;
+  const vehicle_id = data.vehicleId ?? data.vehicle_id ?? tx.vehicle_id;
+  const vehicle_plate = data.vehiclePlate ?? data.vehicle_plate ?? tx.vehicle_plate;
+  const driver_name = data.driverName ?? data.driver_name ?? tx.driver_name;
+  const site = data.site ?? tx.site;
+
+  const result = await query(`
+    UPDATE stock_transactions
+    SET reference_no = $1,
+        notes = $2,
+        vehicle_id = $3,
+        vehicle_plate = $4,
+        driver_name = $5,
+        site = $6
+    WHERE id = $7
+    RETURNING *
+  `, [reference_no, notes, vehicle_id, vehicle_plate, driver_name, site, id]);
+
+  return result.rows[0];
+}
+
 export async function deleteStockTransaction(id) {
   return transaction(async (client) => {
     const tx = await client.query(

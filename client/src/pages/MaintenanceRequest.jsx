@@ -7,7 +7,10 @@ export default function MaintenanceRequest({user,access={}}){
   const canWork=user?.role==='Owner'||!!access?.support?.can_work||!!access?.building?.can_work;
   const load=async()=>{if(!canWork)return;try{const [r,e]=await Promise.all([api.get('/maintenance-requests'),api.get('/maintenance-requests/executors')]);setRequests(r.data.requests||[]);setEmployees(e.data.employees||[]);setContractors(e.data.contractors||[])}catch(e){setError(e.response?.data?.error||e.message)}};
   useEffect(()=>{Promise.all([api.get('/sites').then(r=>setSites(r.data.sites||[])),load()]).catch(e=>setError(e.response?.data?.error||e.message)).finally(()=>setLoading(false))},[]);
-  const submit=async e=>{e.preventDefault();setMessage('');setError('');if(!form.description.trim())return setError('Please describe the problem.');try{const r=await api.post('/maintenance-requests',form);setMessage('✅ '+(r.data.request?.request_no||'Request')+' submitted. Fleet / Building Maintenance has been notified.');setForm(initialForm);await load()}catch(e){setError(e.response?.data?.error||e.message)}};
+  const submit=async e=>{e.preventDefault();setMessage('');setError('');if(!form.description.trim())return setError('Please describe the problem.');try{const r=await api.post('/maintenance-requests',form);const newId=r.data.request?.id;const reqNo=r.data.request?.request_no||'Request';const cleanItems=newItems.map(x=>String(x.description||'').trim()).filter(Boolean);if(newId&&cleanItems.length){try{await api.post('/maintenance-requests/'+newId+'/items/bulk',{descriptions:cleanItems})}catch(e){console.error('bulk items failed',e)}}setMessage('OK '+reqNo+' submitted with '+cleanItems.length+' item(s).');setForm(initialForm);setNewItems([{description:''}]);await load()}catch(e){setError(e.response?.data?.error||e.message)}};
+  const handleCloseItem=async(itemId,amount,notes)=>{try{setBusyItem(itemId);await api.put('/maintenance-request-items/'+itemId+'/close',{actual_amount:amount,notes:notes||''});await load()}catch(e){setError(e.response?.data?.error||e.message)}finally{setBusyItem(null)}};
+  const handleReopenItem=async(itemId)=>{try{setBusyItem(itemId);await api.put('/maintenance-request-items/'+itemId+'/reopen',{});await load()}catch(e){setError(e.response?.data?.error||e.message)}finally{setBusyItem(null)}};
+  const handleDeleteItem=async(itemId)=>{if(!confirm('Delete this item?'))return;try{setBusyItem(itemId);await api.delete('/maintenance-request-items/'+itemId);await load()}catch(e){setError(e.response?.data?.error||e.message)}finally{setBusyItem(null)}};
   const setType=(id,type)=>setAssign({...assign,[id]:{type,name:'',email:''}});
   const setExecutor=(id,name)=>{const a=assign[id]||{},list=a.type==='Contractor'?contractors:employees,x=list.find(v=>(v.name||v.full_name)===name);setAssign({...assign,[id]:{...a,name,email:x?.email||''}})};
   const doAssign=async id=>{const a=assign[id]||{};if(!a.type||!a.name)return setError('Select who will execute the work.');try{const r=await api.post('/maintenance-requests/'+id+'/assign',{executorType:a.type,executorName:a.name,executorEmail:a.email});setMessage(r.data.email?.sent ? '📧 '+r.data.request.request_no+' assigned to '+a.name+'. Email sent successfully. WO created.' : '⚠️ '+r.data.request.request_no+' assigned to '+a.name+'. WO created, but email failed: '+(r.data.email?.reason||'Unknown email error'));await load()}catch(e){setError(e.response?.data?.error||e.message)}};
@@ -35,6 +38,25 @@ export default function MaintenanceRequest({user,access={}}){
         <div className="form-group"><label>Category *</label><select value={form.category} onChange={e=>setForm({...form,category:e.target.value})} required><option value="">-- Select category --</option><option>Electrical</option><option>A/C & HVAC</option><option>Plumbing & Water</option><option>Doors, Locks & Windows</option><option>Civil & Building</option><option>Furniture & Facilities</option><option>Appliances & Equipment</option><option>Other</option></select></div><div className="form-group"><label>Priority</label><select value={form.priority} onChange={e=>setForm({...form,priority:e.target.value})}><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></div>
       </div>
       <div className="form-group"><label>What is the problem? *</label><textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Example: A/C in the accommodation room is not cooling." rows={5} required/></div>
+      <div className="form-group" style={{marginTop:12}}>
+        <label style={{fontWeight:700}}>Items / Faults</label>
+        <p style={{fontSize:12,color:"#64748b",margin:"4px 0 8px"}}>Add one line per fault. Each item can be closed individually later.</p>
+        <div style={{display:"grid",gap:6}}>
+          {newItems.map((it,idx)=>(
+            <div key={idx} style={{display:"flex",gap:6,alignItems:"center"}}>
+              <span style={{width:24,textAlign:"right",color:"#64748b",fontSize:12}}>{idx+1}.</span>
+              <input
+                value={it.description}
+                onChange={e=>{const v=[...newItems];v[idx]={...v[idx],description:e.target.value};setNewItems(v)}}
+                placeholder="e.g. AC in Room 12 not cooling"
+                style={{flex:1}}
+              />
+              <button type="button" className="btn" style={{padding:"4px 10px",fontSize:12}} onClick={()=>{if(newItems.length<=1)return;setNewItems(newItems.filter((_,j)=>j!==idx))}}>×</button>
+            </div>
+          ))}
+        </div>
+        <button type="button" className="btn" style={{marginTop:8,padding:"6px 12px",fontSize:12}} onClick={()=>setNewItems([...newItems,{description:""}])}>+ Add Item</button>
+      </div>
       <button className="btn btn-primary">📨 Submit Maintenance Request</button><button type="button" className="btn btn-warning" style={{marginLeft:8}} onClick={()=>setForm(initialForm)}>Clear</button>
     </form>
     {canWork&&<div className="panel">
@@ -67,6 +89,45 @@ export default function MaintenanceRequest({user,access={}}){
                 {r.status==='Assigned'&&!r.acknowledged_at&&<div style={{marginTop:12,display:'flex',justifyContent:'flex-end'}}>
                   <button type="button" className="btn btn-primary" onClick={()=>resendAssignment(r.id)}>📧 Resend Assignment Email</button>
                 </div>}
+                {itemsByRequest[r.id] && itemsByRequest[r.id].length > 0 && (
+                  <div style={{marginTop:14,padding:12,borderRadius:10,background:"#fff7ed",border:"1px solid #fdba74"}}>
+                    <div style={{fontWeight:700,marginBottom:8}}>📝 Items ({itemsByRequest[r.id].length})</div>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                      <thead>
+                        <tr style={{background:"#ffedd5"}}>
+                          <th style={{padding:6,textAlign:"left",width:40}}>#</th>
+                          <th style={{padding:6,textAlign:"left"}}>Description</th>
+                          <th style={{padding:6,width:100}}>Status</th>
+                          <th style={{padding:6,width:100}}>Amount</th>
+                          <th style={{padding:6,width:220}}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {itemsByRequest[r.id].map(it => (
+                          <tr key={it.id} style={{borderTop:"1px solid #fed7aa"}}>
+                            <td style={{padding:6}}>{it.line_no}</td>
+                            <td style={{padding:6}}>{it.description}</td>
+                            <td style={{padding:6}}>
+                              <span style={{padding:"2px 8px",borderRadius:10,fontSize:11,fontWeight:600,background:it.status==="Completed"?"#dcfce7":"#fee2e2",color:it.status==="Completed"?"#166534":"#991b1b"}}>{it.status}</span>
+                            </td>
+                            <td style={{padding:6}}>{it.actual_amount||0}</td>
+                            <td style={{padding:6,whiteSpace:"nowrap"}}>
+                              {it.status==="Completed" ? (
+                                <button type="button" className="btn" style={{padding:"4px 8px",fontSize:11}} disabled={busyItem===it.id} onClick={()=>handleReopenItem(it.id)}>Reopen</button>
+                              ) : (
+                                <>
+                                  <input type="number" step="0.01" min="0" placeholder="Amount" id={"amt-"+it.id} style={{width:80,marginRight:4}} />
+                                  <button type="button" className="btn btn-success" style={{padding:"4px 8px",fontSize:11,marginRight:4}} disabled={busyItem===it.id} onClick={()=>{const amt=Number(document.getElementById("amt-"+it.id).value)||0;handleCloseItem(it.id,amt,"")}}>Close</button>
+                                  <button type="button" className="btn btn-danger" style={{padding:"4px 8px",fontSize:11}} disabled={busyItem===it.id} onClick={()=>handleDeleteItem(it.id)}>×</button>
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
                 {r.work_order_id&&<div style={{marginTop:14,padding:12,borderRadius:10,background:'#f8fafc',border:'1px solid #e2e8f0'}}>
                   <div style={{fontWeight:700,marginBottom:8}}>🔄 Maintenance Workflow</div>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(120px,1fr))',gap:6}}>

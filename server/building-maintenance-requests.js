@@ -208,6 +208,213 @@ async function notifyRequesterReady(reqRow) {
 export function contractorOptions() { return CONTRACTORS; }
 
 export function mountBuildingMaintenanceRequestRoutes(app) {
+  /* ============================================================
+     MAINTENANCE REQUEST ITEMS
+     ============================================================ */
+
+  // List items for a request
+  app.get("/api/maintenance-requests/:id/items", async (req, res) => {
+    try {
+      await ensureSchema();
+      const rows = await query(
+        "SELECT * FROM maintenance_request_items WHERE request_id = $1 ORDER BY line_no ASC, id ASC",
+        [req.params.id]
+      );
+      res.json({ success: true, items: rows.rows });
+    } catch (e) {
+      console.error("[MR Items:list]", e);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // Add one item
+  app.post("/api/maintenance-requests/:id/items", async (req, res) => {
+    try {
+      await ensureSchema();
+      const requestId = Number(req.params.id);
+      if (!Number.isFinite(requestId)) return res.status(400).json({ success: false, error: "Invalid ID" });
+
+      const description = String(req.body?.description || "").trim();
+      const category = String(req.body?.category || "").trim();
+      if (!description) return res.status(400).json({ success: false, error: "description is required" });
+
+      const maxLine = await query(
+        "SELECT COALESCE(MAX(line_no), 0) AS max FROM maintenance_request_items WHERE request_id = $1",
+        [requestId]
+      );
+      const lineNo = Number(maxLine.rows[0].max) + 1;
+
+      const result = await query(
+        "INSERT INTO maintenance_request_items (request_id, line_no, description, category, status) VALUES ($1,$2,$3,$4,'Open') RETURNING *",
+        [requestId, lineNo, description, category || null]
+      );
+
+      const actor = String(req.user?.full_name || req.user?.username || "Fleet / Building Maintenance");
+      await auditEvent(requestId, "ITEM_ADDED", actor, actor, { description, line_no: lineNo });
+
+      res.status(201).json({ success: true, item: result.rows[0] });
+    } catch (e) {
+      console.error("[MR Items:add]", e);
+      res.status(400).json({ success: false, error: e.message });
+    }
+  });
+
+  // Add multiple items (bulk)
+  app.post("/api/maintenance-requests/:id/items/bulk", async (req, res) => {
+    try {
+      await ensureSchema();
+      const requestId = Number(req.params.id);
+      if (!Number.isFinite(requestId)) return res.status(400).json({ success: false, error: "Invalid ID" });
+
+      const descriptions = Array.isArray(req.body?.descriptions) ? req.body.descriptions : [];
+      const clean = descriptions.map(d => String(d || "").trim()).filter(Boolean);
+      if (!clean.length) return res.status(400).json({ success: false, error: "No descriptions provided" });
+
+      const maxLine = await query(
+        "SELECT COALESCE(MAX(line_no), 0) AS max FROM maintenance_request_items WHERE request_id = $1",
+        [requestId]
+      );
+      let lineNo = Number(maxLine.rows[0].max);
+
+      const saved = [];
+      for (const desc of clean) {
+        lineNo++;
+        const r = await query(
+          "INSERT INTO maintenance_request_items (request_id, line_no, description, status) VALUES ($1,$2,$3,'Open') RETURNING *",
+          [requestId, lineNo, desc]
+        );
+        saved.push(r.rows[0]);
+      }
+
+      const actor = String(req.user?.full_name || req.user?.username || "Fleet / Building Maintenance");
+      await auditEvent(requestId, "ITEMS_BULK_ADDED", actor, actor, { count: saved.length });
+
+      res.status(201).json({ success: true, items: saved });
+    } catch (e) {
+      console.error("[MR Items:bulk]", e);
+      res.status(400).json({ success: false, error: e.message });
+    }
+  });
+
+  // Update item (description, status)
+  app.put("/api/maintenance-request-items/:id", async (req, res) => {
+    try {
+      await ensureSchema();
+      const itemId = Number(req.params.id);
+      if (!Number.isFinite(itemId)) return res.status(400).json({ success: false, error: "Invalid ID" });
+
+      const current = await query("SELECT * FROM maintenance_request_items WHERE id = $1", [itemId]);
+      if (!current.rows[0]) return res.status(404).json({ success: false, error: "Item not found" });
+
+      const description = req.body?.description !== undefined
+        ? String(req.body.description).trim()
+        : current.rows[0].description;
+      const status = req.body?.status !== undefined
+        ? String(req.body.status).trim()
+        : current.rows[0].status;
+      const notes = req.body?.notes !== undefined
+        ? String(req.body.notes).trim()
+        : current.rows[0].notes;
+      const actualAmount = req.body?.actual_amount !== undefined
+        ? Number(req.body.actual_amount) || 0
+        : current.rows[0].actual_amount;
+
+      const closedAt = (status === "Completed" || status === "Closed")
+        ? (current.rows[0].closed_at || new Date())
+        : null;
+
+      const result = await query(
+        "UPDATE maintenance_request_items SET description=$1, status=$2, notes=$3, actual_amount=$4, closed_at=$5, updated_at=CURRENT_TIMESTAMP WHERE id=$6 RETURNING *",
+        [description, status, notes, actualAmount, closedAt, itemId]
+      );
+
+      const actor = String(req.user?.full_name || req.user?.username || "Fleet / Building Maintenance");
+      await auditEvent(current.rows[0].request_id, "ITEM_UPDATED", actor, actor, {
+        item_id: itemId, status, actual_amount: actualAmount
+      });
+
+      res.json({ success: true, item: result.rows[0] });
+    } catch (e) {
+      console.error("[MR Items:update]", e);
+      res.status(400).json({ success: false, error: e.message });
+    }
+  });
+
+  // Close item (with amount)
+  app.put("/api/maintenance-request-items/:id/close", async (req, res) => {
+    try {
+      await ensureSchema();
+      const itemId = Number(req.params.id);
+      if (!Number.isFinite(itemId)) return res.status(400).json({ success: false, error: "Invalid ID" });
+
+      const amount = Number(req.body?.actual_amount) || 0;
+      const notes = String(req.body?.notes || "").trim();
+
+      const result = await query(
+        "UPDATE maintenance_request_items SET status='Completed', actual_amount=$1, notes=$2, closed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$3 RETURNING *",
+        [amount, notes, itemId]
+      );
+      if (!result.rows[0]) return res.status(404).json({ success: false, error: "Item not found" });
+
+      const actor = String(req.user?.full_name || req.user?.username || "Fleet / Building Maintenance");
+      await auditEvent(result.rows[0].request_id, "ITEM_CLOSED", actor, actor, {
+        item_id: itemId, amount
+      });
+
+      res.json({ success: true, item: result.rows[0] });
+    } catch (e) {
+      console.error("[MR Items:close]", e);
+      res.status(400).json({ success: false, error: e.message });
+    }
+  });
+
+  // Reopen item
+  app.put("/api/maintenance-request-items/:id/reopen", async (req, res) => {
+    try {
+      await ensureSchema();
+      const itemId = Number(req.params.id);
+      if (!Number.isFinite(itemId)) return res.status(400).json({ success: false, error: "Invalid ID" });
+
+      const result = await query(
+        "UPDATE maintenance_request_items SET status='Open', closed_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING *",
+        [itemId]
+      );
+      if (!result.rows[0]) return res.status(404).json({ success: false, error: "Item not found" });
+
+      const actor = String(req.user?.full_name || req.user?.username || "Fleet / Building Maintenance");
+      await auditEvent(result.rows[0].request_id, "ITEM_REOPENED", actor, actor, { item_id: itemId });
+
+      res.json({ success: true, item: result.rows[0] });
+    } catch (e) {
+      console.error("[MR Items:reopen]", e);
+      res.status(400).json({ success: false, error: e.message });
+    }
+  });
+
+  // Delete item
+  app.delete("/api/maintenance-request-items/:id", async (req, res) => {
+    try {
+      await ensureSchema();
+      const itemId = Number(req.params.id);
+      if (!Number.isFinite(itemId)) return res.status(400).json({ success: false, error: "Invalid ID" });
+
+      const current = await query("SELECT * FROM maintenance_request_items WHERE id = $1", [itemId]);
+      if (!current.rows[0]) return res.status(404).json({ success: false, error: "Item not found" });
+
+      await query("DELETE FROM maintenance_request_items WHERE id = $1", [itemId]);
+
+      const actor = String(req.user?.full_name || req.user?.username || "Fleet / Building Maintenance");
+      await auditEvent(current.rows[0].request_id, "ITEM_DELETED", actor, actor, {
+        item_id: itemId, description: current.rows[0].description
+      });
+
+      res.json({ success: true });
+    } catch (e) {
+      console.error("[MR Items:delete]", e);
+      res.status(400).json({ success: false, error: e.message });
+    }
+  });
+
   app.get("/api/maintenance-requests/config/contacts", async (req,res) => {
     try {
       await ensureSchema();

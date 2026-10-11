@@ -229,6 +229,65 @@ export default function Invoices({ user }) {
     }
   };
 
+  const handleAutoFillEvenly = async () => {
+    if (!invoiceItems.length) return;
+    const total = Number(selectedInvoice?.total || 0);
+    const n = invoiceItems.length;
+    const base = Math.floor((total / n) * 100) / 100;
+    const remainder = Math.round((total - (base * n)) * 100) / 100;
+    const updates = invoiceItems.map((it, i) => {
+      const amount = (i === n - 1) ? Math.round((base + remainder) * 100) / 100 : base;
+      return { id: it.id, confirmed_amount: amount };
+    });
+    for (const u of updates) {
+      try { await confirmInvoiceItemAmount(u.id, u.confirmed_amount); } catch (e) { console.error(e); }
+    }
+    setInvoiceItems(prev => prev.map(it => {
+      const found = updates.find(u => u.id === it.id);
+      return found ? { ...it, confirmed_amount: found.confirmed_amount } : it;
+    }));
+  };
+
+  const handleAutoFillByQty = async () => {
+    if (!invoiceItems.length) return;
+    const total = Number(selectedInvoice?.total || 0);
+    const totalQty = invoiceItems.reduce((s, it) => s + Number(it.quantity || 0), 0);
+    if (!totalQty) return;
+    let running = 0;
+    const updates = invoiceItems.map((it, i) => {
+      const share = (Number(it.quantity || 0) / totalQty) * total;
+      let amount;
+      if (i === invoiceItems.length - 1) {
+        amount = Math.round((total - running) * 100) / 100;
+      } else {
+        amount = Math.floor(share * 100) / 100;
+      }
+      running += amount;
+      return { id: it.id, confirmed_amount: amount };
+    });
+    for (const u of updates) {
+      try { await confirmInvoiceItemAmount(u.id, u.confirmed_amount); } catch (e) { console.error(e); }
+    }
+    setInvoiceItems(prev => prev.map(it => {
+      const found = updates.find(u => u.id === it.id);
+      return found ? { ...it, confirmed_amount: found.confirmed_amount } : it;
+    }));
+  };
+
+  const handleClearAllConfirmed = async () => {
+    if (!invoiceItems.length) return;
+    if (!confirm("Clear all confirmed amounts?")) return;
+    const updates = invoiceItems.map(it => ({ id: it.id, confirmed_amount: 0 }));
+    for (const u of updates) {
+      try { await confirmInvoiceItemAmount(u.id, 0); } catch (e) { console.error(e); }
+    }
+    setInvoiceItems(prev => prev.map(it => ({ ...it, confirmed_amount: 0 })));
+  };
+
+  const confirmedTotal = invoiceItems.reduce((s, it) => s + Number(it.confirmed_amount || 0), 0);
+  const invoiceTotal = Number(selectedInvoice?.total || 0);
+  const difference = Math.round((confirmedTotal - invoiceTotal) * 100) / 100;
+
   const handleAutoMatch = async () => {
     if (!selectedInvoice) return;
     setBusy(true);
@@ -517,10 +576,20 @@ export default function Invoices({ user }) {
             </div>
           </div>
 
-          <div style={{ marginBottom: 12, display: "flex", gap: 8 }}>
+          <div style={{ marginBottom: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button className="btn" onClick={handleAutoMatch} disabled={busy}>Auto-Match</button>
             <button className="btn btn-primary" onClick={handleVerify}>Verify Total</button>
             <button className="btn btn-success" onClick={handleFinalize} disabled={selectedInvoice.status === "Finalized"}>Finalize</button>
+          </div>
+
+          <div style={{ marginBottom: 12, padding: 12, background: "#f8fafc", borderRadius: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <strong style={{ marginRight: 8 }}>Auto-fill:</strong>
+            <button className="btn" onClick={handleAutoFillEvenly} disabled={busy || !invoiceItems.length}>Evenly</button>
+            <button className="btn" onClick={handleAutoFillByQty} disabled={busy || !invoiceItems.length}>By Qty</button>
+            <button className="btn btn-warning" onClick={handleClearAllConfirmed} disabled={busy || !invoiceItems.length}>Clear All</button>
+            <span style={{ marginLeft: "auto", fontWeight: "bold", color: difference === 0 ? "green" : difference > 0 ? "#b45309" : "#b91c1c" }}>
+              Confirmed: {fmt(confirmedTotal)} / Invoice: {fmt(invoiceTotal)} | Diff: {fmt(difference)}
+            </span>
           </div>
 
           {verify && (

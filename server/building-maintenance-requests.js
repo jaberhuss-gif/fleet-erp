@@ -212,6 +212,39 @@ export function contractorOptions() { return CONTRACTORS; }
 
 export function mountBuildingMaintenanceRequestRoutes(app) {
   /* ============================================================
+     REOPEN CLOSED REQUEST (Owner only)
+     ============================================================ */
+  app.post("/api/maintenance-requests/:id/reopen", async (req, res) => {
+    try {
+      await ensureSchema();
+      if (req.user?.role !== "Owner") {
+        return res.status(403).json({ success: false, error: "Only Owner can reopen a closed request." });
+      }
+      const row = await getRequest(req.params.id);
+      if (!row) return res.status(404).json({ success: false, error: "Request not found" });
+      if (row.status !== "Closed") {
+        return res.status(400).json({ success: false, error: "Only Closed requests can be reopened." });
+      }
+      const notes = String(req.body?.notes || "").trim();
+      const actor = String(req.user?.full_name || req.user?.username || "Owner");
+
+      const updated = await query(
+        "UPDATE maintenance_requests SET status='Open', closed_at=NULL, closed_by=NULL, closing_notes=COALESCE(NULLIF($1,''), closing_notes), updated_at=CURRENT_TIMESTAMP WHERE id=$2 RETURNING *",
+        [notes, row.id]
+      );
+      if (row.work_order_id) {
+        await query("UPDATE work_orders SET status='Open', completed_date=NULL WHERE id=$1", [row.work_order_id]);
+      }
+      await auditEvent(row.id, "REOPENED_BY_OWNER", "Owner", actor, { notes });
+
+      res.json({ success: true, request: updated.rows[0] });
+    } catch (e) {
+      console.error("[MR:reopen]", e);
+      res.status(400).json({ success: false, error: e.message });
+    }
+  });
+
+  /* ============================================================
      EMAIL HTML (for manual copy-paste into Outlook)
      ============================================================ */
   app.get("/api/maintenance-requests/:id/email-html", async (req, res) => {

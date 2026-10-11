@@ -148,4 +148,10 @@ export const updateInvoiceSite = (id, site) =>
 export const createManualInvoice = (payload) =>
   api.post('/invoices/manual', payload).then((r) => r.data);
 
+export const reopenMaintenanceRequest = (id, notes) =>
+  api.post('/maintenance-requests/' + id + '/reopen', { notes }).then((r) => r.data);
+
+export const archiveMaintenanceRequest = (id) =>
+  api.post('/maintenance-requests/' + id + '/archive').then((r) => r.data);
+
 export default api;

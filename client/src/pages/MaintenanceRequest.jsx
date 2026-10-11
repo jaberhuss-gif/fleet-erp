@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import api from '../api/client';
+import api, { reopenMaintenanceRequest, archiveMaintenanceRequest } from '../api/client';
 
 const initialForm={site:'',category:'',priority:'Medium',description:''};
 export default function MaintenanceRequest({user,access={}}){
@@ -99,6 +99,28 @@ export default function MaintenanceRequest({user,access={}}){
     }
   };
 
+  const handleArchiveRequest = async (requestId) => {
+    if (!confirm("Archive this request? It will be hidden from the register (audit history is retained).")) return;
+    try {
+      await archiveMaintenanceRequest(requestId);
+      setMessage("Request archived.");
+      await load();
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
+  };
+
+  const handleReopenRequest = async (requestId) => {
+    const notes = prompt("Reopen notes (optional):") || "";
+    try {
+      await reopenMaintenanceRequest(requestId, notes);
+      setMessage("Request reopened.");
+      await load();
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
+  };
+
   if(loading)return <div className="loading">Loading Support & Service...</div>;
   return <div className="form-container" style={{maxWidth:1200}}>
     <div className="panel" style={{background:'linear-gradient(135deg,#0f766e,#0f172a)',color:'#fff',border:'none'}}>
@@ -168,6 +190,7 @@ export default function MaintenanceRequest({user,access={}}){
                 </div>}
                 {r.status==='Assigned'&&!r.acknowledged_at&&<div style={{marginTop:12,display:'flex',justifyContent:'flex-end'}}>
                   <button type="button" className="btn btn-primary" onClick={()=>resendAssignment(r.id)}>📧 Resend Assignment Email</button>
+                  {user?.role==='Owner'&&r.status==='New'&&<button type="button" className="btn btn-danger" style={{marginLeft:6}} onClick={()=>handleArchiveRequest(r.id)}>Archive</button>}
                   <button type="button" className="btn" style={{marginLeft:6}} onClick={()=>copyEmailHtml(r.id,"completion")} title="Copy Completion Email">📋 Copy Completion Email</button>
                 </div>}
                 {itemsByRequest[r.id] && itemsByRequest[r.id].length > 0 && (
@@ -265,6 +288,7 @@ export default function MaintenanceRequest({user,access={}}){
                     <button type="button" className="btn btn-warning" onClick={()=>financialAction(r,'open')}>🔓 Open</button>
                   </div>
                 </div>}
+                {r.status==='Closed'&&user?.role==='Owner'&&<div style={{marginTop:8}}><button type="button" className="btn btn-warning" onClick={()=>handleReopenRequest(r.id)}>Reopen Request</button></div>}
                 {r.status==='Closed'&&<div style={{marginTop:12,padding:10,borderRadius:8,background:'#dcfce7',color:'#166534'}}><b>🔒 CLOSED</b> • Final Amount: SAR {Number(r.final_amount||0).toFixed(2)} • Closed by: {r.closed_by||'Fleet / Building Maintenance'}</div>}
               </div>
             );

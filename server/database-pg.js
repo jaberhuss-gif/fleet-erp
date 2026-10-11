@@ -3543,10 +3543,10 @@ export async function stockOut(data = {}) {
     throw new Error("Insufficient stock");
   }
 
-  const fromLocation =
-    pgStr(data.fromLocation ?? data.from_location) ||
-    item.location ||
-    "Main Warehouse";
+  const fromLocation = pgStr(data.fromLocation ?? data.from_location);
+  if (!fromLocation) {
+    throw new Error("Location is required for OUT. Please select a site.");
+  }
 
   const vehicleId = data.vehicleId ?? data.vehicle_id ?? null;
   const vehiclePlate = pgStr(data.vehiclePlate ?? data.vehicle_plate);

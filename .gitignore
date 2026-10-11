@@ -1,31 +1,43 @@
-.env
-.env.*
-!.env.example
+﻿# ===== Dependencies =====
 node_modules/
-server/fleet.db
-server/fleet.db-shm
-server/fleet.db-wal
-server/backups/
+*/node_modules/
+server/node_modules/
+client/node_modules/
 
-server/*.backup-*
+# ===== Build outputs =====
+dist/
+client/dist/
+build/
 
-# Backups (بدون شرطة)
-server/*.backup
-server/*.backup2
+# ===== Environment =====
+.env
+.env.local
+.env.*.local
+
+# ===== Backups =====
+*.backup
+*.backup-*
+*.backup-handover
+backups-*/
 backups-before-production-*/
 
-# Test & utility files (محلية فقط)
-server/test-*.mjs
-server/cleanup-*.mjs
-server/check-*.mjs
-server/verify-*.mjs
-server/restore-*.mjs
-server/patch-*.mjs
-server/production-check.mjs
-# Test files
-test-*.pdf
-*.test.pdf
+# ===== Deprecated =====
+_deprecated/
 server/_deprecated/
-server/rewrite-*.mjs
-server/write-*.mjs
 
+# ===== Local modification scripts (root only) =====
+/*.mjs
+/server/*.mjs
+
+# ===== Test files =====
+test-*.pdf
+test-*.txt
+test-*.mjs
+/test-*.pdf
+/test-*.txt
+
+# ===== Logs =====
+*.log
+npm-debug.log*
+backup-*.txt
+backup-*.pdf

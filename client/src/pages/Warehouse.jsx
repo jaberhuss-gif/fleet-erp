@@ -21,6 +21,7 @@ export default function Warehouse({ user, access = {} }) {
   const [selectedItem, setSelectedItem] = useState(null);
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [currentSite, setCurrentSite] = useState('');
 
   const [form, setForm] = useState({
     code: '', name: '', category: 'General', unit: 'PCS',
@@ -47,21 +48,26 @@ export default function Warehouse({ user, access = {} }) {
     })();
   }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [currentSite]);
 
   const load = async () => {
     try {
       setLoading(true);
+      setError("");
+      const url = '/inventory/by-site' + (currentSite ? '?site=' + encodeURIComponent(currentSite) : '');
       const [i, t, l] = await Promise.all([
-        api.get('/inventory'),
+        api.get(url),
         api.get('/stock-transactions'),
         api.get('/inventory/low-stock')
       ]);
       setItems(i.data.items || []);
       setTransactions(t.data.transactions || []);
       setLowStock(l.data.items || []);
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetForm = () => {
@@ -167,6 +173,22 @@ export default function Warehouse({ user, access = {} }) {
         <button className={subTab === 'inventory' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('inventory')}>Inventory</button>
         <button className={subTab === 'transactions' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('transactions')}>Transactions</button>
         <button className={subTab === 'low-stock' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('low-stock')}>Low Stock ({lowStock.length})</button>
+      </div>
+
+      {/* Site Selector */}
+      <div className="panel" style={{ marginBottom: 16, padding: 12, background: "linear-gradient(135deg, #0f766e, #14b8a6)", borderRadius: 8, color: "#fff", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <label style={{ fontWeight: 700, fontSize: 16 }}>🌍 Select Site:</label>
+        <select
+          value={currentSite}
+          onChange={e => setCurrentSite(e.target.value)}
+          style={{ padding: "8px 14px", fontSize: 15, borderRadius: 6, border: "2px solid #fff", minWidth: 240, background: "#fff", color: "#0f766e", fontWeight: 600 }}
+        >
+          <option value="">All Sites (Total Inventory)</option>
+          {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+        </select>
+        <span style={{ fontSize: 13, opacity: 0.95 }}>
+          {currentSite ? "Showing inventory at: " + currentSite : "Showing total inventory across all sites"}
+        </span>
       </div>
 
       {message && <div className="alert alert-success">{message}</div>}

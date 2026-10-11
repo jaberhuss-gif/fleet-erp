@@ -248,6 +248,22 @@ export default function Invoices({ user }) {
             />
           </div>
 
+          <div className="form-group" style={{ marginTop: 12 }}>
+            <label>Or use OCR (for scanned / Arabic PDFs)</label>
+            <input
+              type="file"
+              accept=".pdf"
+              disabled={ocrBusy}
+              onChange={e => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                handleOcrImport(f);
+                e.target.value = "";
+              }}
+            />
+            {ocrProgress && <div style={{ marginTop: 8, color: "#2563eb" }}>{ocrProgress}</div>}
+          </div>
+
           {busy && <div>Processing...</div>}
 
           {preview && (

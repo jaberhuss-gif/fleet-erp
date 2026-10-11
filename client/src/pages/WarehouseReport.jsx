@@ -39,30 +39,161 @@ export default function WarehouseReport({ user }) {
 
   const exportPdf = () => {
     if (!data) return;
+
+    // Validate data
+    console.log("[PDF Export] by_site:", data.by_site?.length, "by_vehicle:", data.by_vehicle?.length, "movements:", data.movements?.length);
+
     const win = window.open("", "_blank");
     if (!win) { setError("Popup blocked. Allow popups."); return; }
+
     const esc = (v) => String(v ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const fmtDate = (d) => d ? String(d).slice(0, 10) : "-";
+    const fmtDateTime = (d) => d ? String(d).slice(0, 19).replace("T", " ") : "-";
+    const fmtNum = (n) => Number(n || 0).toLocaleString("en-US");
+
     const s = data.summary || {};
 
-    const movementsRows = (data.movements || []).map(m => "<tr><td>" + esc(String(m.created_at || "").slice(0, 10)) + "</td><td>" + esc(m.type) + "</td><td>" + esc(m.item_code) + " — " + esc(m.item_name) + "</td><td style='text-align:right'>" + m.quantity + "</td><td>" + esc(m.from_location || "") + "</td><td>" + esc(m.to_location || "") + "</td><td>" + esc(m.site || "") + "</td><td>" + esc(m.vehicle_plate || "") + "</td><td>" + esc(m.driver_name || "") + "</td><td>" + esc(m.reference_no || "") + "</td></tr>").join("");
+    // === Rows ===
 
-    const handoverRows = (data.handovers || []).map(h => "<tr><td>" + esc(String(h.handover_date || "").slice(0, 10)) + "</td><td>" + esc(h.plate_number || "") + " " + esc(h.plate_code || "") + "</td><td>" + esc(h.previous_driver_name || "") + "</td><td>" + esc(h.new_driver_name || "") + "</td><td>" + esc(h.notes || "") + "</td></tr>").join("");
+    // By Site
+    const siteRows = (data.by_site || []).map(x => {
+      const available = Number(x.available || 0);
+      const color = available > 0 ? "#16a34a" : "#dc2626";
+      return "<tr>"
+        + "<td>" + esc(x.site) + "</td>"
+        + "<td style='text-align:center'>" + fmtNum(x.received_count) + "</td>"
+        + "<td style='text-align:right'>" + fmtNum(x.received_qty) + "</td>"
+        + "<td style='text-align:center'>" + fmtNum(x.issued_count) + "</td>"
+        + "<td style='text-align:right'>" + fmtNum(x.issued_qty) + "</td>"
+        + "<td style='text-align:right'>" + fmtNum(x.transferred_out_qty) + "</td>"
+        + "<td style='text-align:right'>" + fmtNum(x.transferred_in_qty) + "</td>"
+        + "<td style='text-align:right;font-weight:700;color:" + color + "'>" + fmtNum(available) + "</td>"
+        + "</tr>";
+    }).join("");
 
-    const siteRows = (data.by_site || []).map(x => "<tr><td>" + esc(x.site) + "</td><td style='text-align:right'>" + (x.received_count||0) + " / " + (x.received_qty||0) + "</td><td style='text-align:right'>" + (x.issued_count||0) + " / " + (x.issued_qty||0) + "</td><td style='text-align:right'>" + (x.transferred_out_count||0) + " / " + (x.transferred_out_qty||0) + "</td><td style='text-align:right'>" + (x.transferred_in_count||0) + " / " + (x.transferred_in_qty||0) + "</td><td style='text-align:right;font-weight:700'>" + (x.available||0) + "</td></tr>").join("");
+    // By Vehicle
+    const vehRows = (data.by_vehicle || []).map(x =>
+      "<tr>"
+      + "<td>" + esc(x.vehicle_plate) + "</td>"
+      + "<td>" + esc(x.driver_name || "-") + "</td>"
+      + "<td style='text-align:center'>" + fmtNum(x.out_count) + "</td>"
+      + "<td style='text-align:right'>" + fmtNum(x.out_qty) + "</td>"
+      + "<td>" + fmtDateTime(x.last_movement) + "</td>"
+      + "</tr>"
+    ).join("");
 
-    const vehRows = (data.by_vehicle || []).map(x => "<tr><td>" + esc(x.vehicle_plate) + "</td><td>" + esc(x.driver_name || "") + "</td><td style='text-align:right'>" + x.out_count + "</td><td style='text-align:right'>" + x.out_qty + "</td><td>" + esc(String(x.last_movement || "").slice(0, 19).replace("T", " ")) + "</td></tr>").join("");
+    // Handovers
+    const handoverRows = (data.handovers || []).map(h =>
+      "<tr>"
+      + "<td>" + fmtDate(h.handover_date) + "</td>"
+      + "<td>" + esc(h.plate_number || "") + " " + esc(h.plate_code || "") + "</td>"
+      + "<td>" + esc(h.previous_driver_name || "-") + "</td>"
+      + "<td>" + esc(h.new_driver_name || "-") + "</td>"
+      + "<td>" + esc(h.notes || "-") + "</td>"
+      + "</tr>"
+    ).join("");
 
-    const html = "<!doctype html><html><head><meta charset='utf-8'><title>Warehouse Report</title><style>body{font-family:Arial;padding:20px;color:#111827}h1{color:#0f766e;margin:0 0 4px}.sub{font-size:12px;color:#475569;margin-bottom:14px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}.card{border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;background:#f8fafc}.card b{font-size:18px}table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:20px}th,td{border:1px solid #cbd5e1;padding:5px 6px;text-align:left}th{background:#e2e8f0;text-transform:uppercase;font-size:10px}h2{font-size:14px;color:#0f766e;margin:20px 0 8px}@media print{.no-print{display:none}}</style></head><body>" +
-      "<div style='display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f766e;padding-bottom:10px;margin-bottom:14px'><img src='https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png' style='width:175px;max-height:78px;object-fit:contain' /><div style='text-align:right'><div style='font-size:15px;font-weight:700;color:#0f766e'>Maaden Ivanhoe Electric Exploration and Development Limited Company</div><div style='font-size:10px;color:#475569'>Exploration Phase — Arabian Shield</div><div style='font-size:12px;font-weight:700;margin-top:6px'>Hussein Anwar</div><div style='font-size:10px;color:#475569'>Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div></div>" +
-      "<h1>Warehouse Report</h1><div class='sub'>Generated: " + new Date().toLocaleString("en-GB") + (filters.from ? " • From: " + filters.from : "") + (filters.to ? " • To: " + filters.to : "") + (filters.site ? " • Site: " + filters.site : "") + "</div>" +
-      "<div class='grid'><div class='card'><div>Total IN</div><b>" + (s.in_count || 0) + " (" + (s.in_qty || 0) + ")</b></div><div class='card'><div>Total OUT</div><b>" + (s.out_count || 0) + " (" + (s.out_qty || 0) + ")</b></div><div class='card'><div>Transfers</div><b>" + (s.transfer_count || 0) + " (" + (s.transfer_qty || 0) + ")</b></div></div>" +
-      "<h2>By Site</h2><table><thead><tr><th>Site</th><th>Received (count/qty)</th><th>Issued (count/qty)</th><th>Transferred Out</th><th>Transferred In</th><th>Available Balance</th></tr></thead><tbody>" + siteRows + "</tbody></table>" +
-      "<h2>By Vehicle (Issued)</h2><table><thead><tr><th>Vehicle</th><th>Driver</th><th>Issued Count</th><th>Issued Qty</th><th>Last Movement</th></tr></thead><tbody>" + vehRows + "</tbody></table>" +
-      "<h2>Driver Handovers</h2><table><thead><tr><th>Date</th><th>Vehicle</th><th>From</th><th>To</th><th>Notes</th></tr></thead><tbody>" + (handoverRows || "<tr><td colspan='5' style='text-align:center;color:#999'>None</td></tr>") + "</tbody></table>" +
-      "<h2>Detailed Movements (last 500)</h2><table><thead><tr><th>Date</th><th>Type</th><th>Item</th><th>Qty</th><th>From</th><th>To</th><th>Site</th><th>Vehicle</th><th>Driver</th><th>Ref</th></tr></thead><tbody>" + movementsRows + "</tbody></table>" +
-      "<div class='no-print' style='text-align:center;margin-top:20px'><button onclick='window.print()' style='padding:12px 24px;font-size:16px;cursor:pointer'>Print / Save PDF</button></div>" +
-      "<script>window.addEventListener('load',function(){setTimeout(function(){window.print();},300);});</script>" +
-      "</body></html>";
+    // Movements
+    const movementsRows = (data.movements || []).map(m => {
+      const typeColor = m.type === "IN" ? "#16a34a" : m.type === "OUT" ? "#dc2626" : "#b45309";
+      return "<tr>"
+        + "<td>" + fmtDate(m.created_at) + "</td>"
+        + "<td style='color:" + typeColor + ";font-weight:700'>" + esc(m.type) + "</td>"
+        + "<td>" + esc(m.item_code || "") + "<br><small>" + esc(m.item_name || "") + "</small></td>"
+        + "<td style='text-align:right'>" + fmtNum(m.quantity) + "</td>"
+        + "<td>" + esc(m.from_location || "-") + "</td>"
+        + "<td>" + esc(m.to_location || "-") + "</td>"
+        + "<td>" + esc(m.site || "-") + "</td>"
+        + "<td>" + esc(m.vehicle_plate || "-") + "</td>"
+        + "<td>" + esc(m.driver_name || "-") + "</td>"
+        + "<td>" + esc(m.reference_no || "-") + "</td>"
+        + "<td>" + esc(m.notes || "-") + "</td>"
+        + "</tr>";
+    }).join("");
+
+    // Filters
+    const filterInfo = [];
+    if (filters.from) filterInfo.push("From: " + filters.from);
+    if (filters.to) filterInfo.push("To: " + filters.to);
+    if (filters.site) filterInfo.push("Site: " + filters.site);
+    if (filters.vehicleId) filterInfo.push("Vehicle: " + filters.vehicleId);
+
+    const html = "<!doctype html><html><head><meta charset='utf-8'><title>Warehouse Report</title>"
+    + "<style>"
+    + "@page{size:A4;margin:15mm 10mm}*{box-sizing:border-box}"
+    + "body{font-family:'Segoe UI',Arial,sans-serif;padding:0;margin:0;color:#111827;font-size:11px}"
+    + "h1{font-size:20px;margin:0 0 4px;color:#0f766e}"
+    + "h2{font-size:14px;color:#0f766e;margin:18px 0 8px;border-bottom:2px solid #0f766e;padding-bottom:4px}"
+    + ".header{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:3px solid #0f766e;padding-bottom:12px;margin-bottom:16px}"
+    + ".header img{width:175px;max-height:78px;object-fit:contain}"
+    + ".header .company{text-align:right}"
+    + ".header .company-name{font-size:14px;font-weight:700;color:#0f766e}"
+    + ".header .project-name{font-size:10px;color:#475569;margin-top:2px}"
+    + ".header .owner{font-size:12px;font-weight:700;margin-top:6px}"
+    + ".header .role{font-size:10px;color:#475569}"
+    + ".meta{font-size:10px;color:#475569;margin-bottom:14px}"
+    + ".cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}"
+    + ".card{border:1px solid #cbd5e1;border-radius:8px;padding:10px 12px;background:#f8fafc}"
+    + ".card .label{font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px}"
+    + ".card .value{font-size:20px;font-weight:700;color:#0f766e}"
+    + ".card .sub{font-size:10px;color:#94a3b8;margin-top:2px}"
+    + "table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:14px;page-break-inside:auto}"
+    + "thead{background:#e2e8f0}"
+    + "th,td{border:1px solid #cbd5e1;padding:5px 6px;text-align:left;vertical-align:top}"
+    + "th{text-transform:uppercase;font-size:9px;font-weight:700;color:#0f766e}"
+    + "tbody tr:nth-child(even){background:#f8fafc}"
+    + "tr{page-break-inside:avoid}"
+    + ".footer{margin-top:24px;padding-top:10px;border-top:2px solid #cbd5e1;text-align:center;font-size:9px;color:#64748b}"
+    + ".no-print{text-align:center;margin-top:20px}"
+    + ".no-print button{padding:12px 24px;font-size:14px;cursor:pointer;background:#0f766e;color:#fff;border:0;border-radius:8px}"
+    + "@media print{.no-print{display:none}body{padding:0}h1{font-size:16px}h2{font-size:12px}}"
+    + "</style></head><body>"
+
+    + "<div class='header'>"
+    + "<img src='https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png' alt='Maaden Ivanhoe Electric' />"
+    + "<div class='company'>"
+    + "<div class='company-name'>Maaden Ivanhoe Electric Exploration and Development Limited Company</div>"
+    + "<div class='project-name'>Exploration Phase — Arabian Shield</div>"
+    + "<div class='owner'>Hussein Anwar</div>"
+    + "<div class='role'>Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div>"
+    + "</div></div>"
+
+    + "<h1>Warehouse Report</h1>"
+    + "<div class='meta'><strong>Generated:</strong> " + new Date().toLocaleString("en-GB") + (filterInfo.length ? " &nbsp;|&nbsp; " + filterInfo.map(esc).join(" &nbsp;|&nbsp; ") : "") + "</div>"
+
+    + "<div class='cards'>"
+    + "<div class='card'><div class='label'>Total IN</div><div class='value'>" + fmtNum(s.in_count || 0) + "</div><div class='sub'>" + fmtNum(s.in_qty || 0) + " units</div></div>"
+    + "<div class='card'><div class='label'>Total OUT</div><div class='value'>" + fmtNum(s.out_count || 0) + "</div><div class='sub'>" + fmtNum(s.out_qty || 0) + " units</div></div>"
+    + "<div class='card'><div class='label'>Transfers</div><div class='value'>" + fmtNum(s.transfer_count || 0) + "</div><div class='sub'>" + fmtNum(s.transfer_qty || 0) + " units</div></div>"
+    + "</div>"
+
+    + "<h2>By Site</h2>"
+    + "<table><thead><tr>"
+    + "<th>Site</th><th>Received Count</th><th>Received Qty</th><th>Issued Count</th><th>Issued Qty</th><th>Transferred Out</th><th>Transferred In</th><th>Available Balance</th>"
+    + "</tr></thead><tbody>" + (siteRows || "<tr><td colspan='8' style='text-align:center;color:#999'>No data</td></tr>") + "</tbody></table>"
+
+    + "<h2>By Vehicle (Issued)</h2>"
+    + "<table><thead><tr>"
+    + "<th>Vehicle</th><th>Driver</th><th>Issued Count</th><th>Issued Qty</th><th>Last Movement</th>"
+    + "</tr></thead><tbody>" + (vehRows || "<tr><td colspan='5' style='text-align:center;color:#999'>No data</td></tr>") + "</tbody></table>"
+
+    + "<h2>Driver Handovers</h2>"
+    + "<table><thead><tr>"
+    + "<th>Date</th><th>Vehicle</th><th>From</th><th>To</th><th>Notes</th>"
+    + "</tr></thead><tbody>" + (handoverRows || "<tr><td colspan='5' style='text-align:center;color:#999'>No handovers in period</td></tr>") + "</tbody></table>"
+
+    + "<h2>Detailed Movements</h2>"
+    + "<table><thead><tr>"
+    + "<th>Date</th><th>Type</th><th>Item</th><th>Qty</th><th>From</th><th>To</th><th>Site</th><th>Vehicle</th><th>Driver</th><th>Ref</th><th>Notes</th>"
+    + "</tr></thead><tbody>" + (movementsRows || "<tr><td colspan='11' style='text-align:center;color:#999'>No movements</td></tr>") + "</tbody></table>"
+
+    + "<div class='footer'>This report was auto-generated by Fleet &amp; Camp Maintenance ERP • Page 1</div>"
+
+    + "<div class='no-print'><button onclick='window.print()'>Print / Save PDF</button></div>"
+
+    + "<script>window.addEventListener('load',function(){setTimeout(function(){window.print();},300);});</script>"
+
+    + "</body></html>";
 
     win.document.write(html);
     win.document.close();

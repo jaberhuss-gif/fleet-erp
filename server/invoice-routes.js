@@ -467,5 +467,198 @@ export function mountInvoiceRoutes(app) {
     }
   });
 
+  /* --- Auto-match: suggest matches by text similarity --- */
+  router.post("/:id/auto-match", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: "Invalid ID" });
+
+      const inv = await query("SELECT * FROM invoices WHERE id = $1", [id]);
+      if (!inv.rows[0]) return res.status(404).json({ success: false, error: "Invoice not found" });
+
+      const items = (await query("SELECT * FROM invoice_items WHERE invoice_id = $1 ORDER BY line_no ASC, id ASC", [id])).rows;
+
+      const openCards = (await query(`
+        SELECT mr.id AS request_id, mr.request_no, mr.site, mr.status,
+               mri.id AS item_id, mri.description AS item_description, mri.line_no
+        FROM maintenance_requests mr
+        JOIN maintenance_request_items mri ON mri.request_id = mr.id
+        WHERE mr.status NOT IN ('Closed', 'Operationally Completed')
+      `)).rows;
+
+      const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+      const suggest = (a, b) => {
+        const A = norm(a), B = norm(b);
+        if (!A || !B) return 0;
+        if (A === B) return 1;
+        if (A.includes(B) || B.includes(A)) return 0.85;
+        const tokensA = new Set(A.match(/.{3,}/g) || []);
+        const tokensB = new Set(B.match(/.{3,}/g) || []);
+        let common = 0;
+        for (const t of tokensA) if (tokensB.has(t)) common++;
+        const max = Math.max(tokensA.size, tokensB.size) || 1;
+        return common / max;
+      };
+
+      const results = items.map(it => {
+        const scored = openCards.map(c => ({
+          request_id: c.request_id,
+          request_no: c.request_no,
+          request_site: c.site,
+          item_id: c.item_id,
+          item_description: c.item_description,
+          score: suggest(it.description, c.item_description)
+        })).sort((a, b) => b.score - a.score);
+        return {
+          invoice_item_id: it.id,
+          description: it.description,
+          current_match_status: it.match_status,
+          current_request_id: it.matched_request_id,
+          suggestions: scored.slice(0, 3)
+        };
+      });
+
+      res.json({ success: true, invoice_id: id, items: results });
+    } catch (e) {
+      console.error("[InvoiceRoutes:auto-match]", e);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  /* --- Match invoice item to a card item --- */
+  router.post("/:id/match", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: "Invalid ID" });
+
+      const { invoice_item_id, request_id, request_item_id } = req.body || {};
+      if (!invoice_item_id) return res.status(400).json({ success: false, error: "invoice_item_id required" });
+
+      const itemRes = await query("SELECT * FROM invoice_items WHERE id = $1 AND invoice_id = $2", [invoice_item_id, id]);
+      if (!itemRes.rows[0]) return res.status(404).json({ success: false, error: "Invoice item not found" });
+
+      if (!request_id || !request_item_id) {
+        await query(
+          "UPDATE invoice_items SET matched_request_id=NULL, matched_request_item_id=NULL, match_status='Unmatched', updated_at=CURRENT_TIMESTAMP WHERE id=$1",
+          [invoice_item_id]
+        );
+        return res.json({ success: true, message: "Unmatched" });
+      }
+
+      const cardRes = await query("SELECT * FROM maintenance_requests WHERE id = $1", [request_id]);
+      if (!cardRes.rows[0]) return res.status(404).json({ success: false, error: "Maintenance request not found" });
+
+      const cardItemRes = await query("SELECT * FROM maintenance_request_items WHERE id = $1 AND request_id = $2", [request_item_id, request_id]);
+      if (!cardItemRes.rows[0]) return res.status(404).json({ success: false, error: "Card item not found" });
+
+      await query(
+        "UPDATE invoice_items SET matched_request_id=$1, matched_request_item_id=$2, match_status='Matched', updated_at=CURRENT_TIMESTAMP WHERE id=$3",
+        [request_id, request_item_id, invoice_item_id]
+      );
+
+      // Auto-close card item
+      await query(
+        "UPDATE maintenance_request_items SET status='Completed', closed_at=CURRENT_TIMESTAMP, invoice_item_id=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2",
+        [invoice_item_id, request_item_id]
+      );
+
+      res.json({ success: true, message: "Matched" });
+    } catch (e) {
+      console.error("[InvoiceRoutes:match]", e);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  /* --- Confirm amount for invoice item --- */
+  router.put("/items/:itemId/confirm-amount", async (req, res) => {
+    try {
+      const itemId = Number(req.params.itemId);
+      if (!Number.isFinite(itemId)) return res.status(400).json({ success: false, error: "Invalid ID" });
+
+      const amount = Number(req.body?.amount);
+      if (!Number.isFinite(amount) || amount < 0) {
+        return res.status(400).json({ success: false, error: "amount must be a non-negative number" });
+      }
+
+      const result = await query(
+        "UPDATE invoice_items SET confirmed_amount=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2 RETURNING *",
+        [amount, itemId]
+      );
+      if (!result.rows[0]) return res.status(404).json({ success: false, error: "Invoice item not found" });
+
+      res.json({ success: true, item: result.rows[0] });
+    } catch (e) {
+      console.error("[InvoiceRoutes:confirm-amount]", e);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  /* --- Verify total: sum of confirmed amounts vs invoice total --- */
+  router.get("/:id/verify-total", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: "Invalid ID" });
+
+      const inv = await query("SELECT * FROM invoices WHERE id = $1", [id]);
+      if (!inv.rows[0]) return res.status(404).json({ success: false, error: "Invoice not found" });
+
+      const sum = await query(
+        "SELECT COALESCE(SUM(confirmed_amount),0) AS total FROM invoice_items WHERE invoice_id = $1",
+        [id]
+      );
+      const enteredTotal = Number(sum.rows[0].total || 0);
+      const invoiceTotal = Number(inv.rows[0].total || 0);
+      const diff = Math.round((enteredTotal - invoiceTotal) * 100) / 100;
+
+      res.json({
+        success: true,
+        invoice_id: id,
+        invoice_total: invoiceTotal,
+        entered_total: enteredTotal,
+        difference: diff,
+        matched: diff === 0,
+        status: diff === 0 ? "matched" : (diff < 0 ? "less" : "more")
+      });
+    } catch (e) {
+      console.error("[InvoiceRoutes:verify-total]", e);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  /* --- Finalize invoice: verify + close --- */
+  router.post("/:id/finalize", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: "Invalid ID" });
+
+      const inv = await query("SELECT * FROM invoices WHERE id = $1", [id]);
+      if (!inv.rows[0]) return res.status(404).json({ success: false, error: "Invoice not found" });
+
+      const sum = await query(
+        "SELECT COALESCE(SUM(confirmed_amount),0) AS total FROM invoice_items WHERE invoice_id = $1",
+        [id]
+      );
+      const enteredTotal = Number(sum.rows[0].total || 0);
+      const invoiceTotal = Number(inv.rows[0].total || 0);
+      const diff = Math.round((enteredTotal - invoiceTotal) * 100) / 100;
+
+      if (diff !== 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Total mismatch. Confirmed total does not equal invoice total.",
+          difference: diff,
+          entered_total: enteredTotal,
+          invoice_total: invoiceTotal
+        });
+      }
+
+      await query("UPDATE invoices SET status='Finalized', updated_at=CURRENT_TIMESTAMP WHERE id=$1", [id]);
+      res.json({ success: true, message: "Invoice finalized.", invoice_id: id });
+    } catch (e) {
+      console.error("[InvoiceRoutes:finalize]", e);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   app.use("/api/invoices", router);
 }

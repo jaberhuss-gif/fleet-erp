@@ -90,7 +90,7 @@ function extractInvoiceHeader(text) {
   const contractorName = clean(flat.match(/(JODOUD AL-KHALEEJ|Jodoud Al Khaleej)/i)?.[1]) || "";
 
   // Site: "project : ALL Camp"
-  const siteMatch = flat.match(/project\s*[:#-]?\s*([A-Za-z0-9 \-]+?)(?=\s*(?:\u0627\u0644\u0645\u0644\u0627\u062d\u0638\u0627\u062a|\u062a\u0627\u0631\u064a\u062e|$))/i);
+  const siteMatch = flat.match(/project\s*[:#-]+\s*([A-Za-z0-9 \-]+?)(?=\s+(?:\u0627\u0644\u0645\u0644\u0627\u062d\u0638\u0627\u062a|\u062a\u0627\u0631\u064a\u062e)|$)/i);
   const site = clean(siteMatch?.[1]) || "";
 
   // Numbers appear BEFORE their Arabic label:
@@ -98,7 +98,8 @@ function extractInvoiceHeader(text) {
   //   "1,257.75إجمالي الضريبة %15"
   //   "9,642.75الإجمالي النھائي بعد الضريبة"
   const subtotalMatch =
-    flat.match(/([\d,]+\.\d{2})\s*\u0627\u0644\u0645\u062c\u0645\u0648\u0639\b/) ||
+    flat.match(/([\d,]+\.\d{2})\s*\u0627\u0644\u0645\u062c\u0645\u0648\u0639(?:\s|$|\u0635|\u0627)/) ||
+    flat.match(/([\d,]+\.\d{2})\s*\u0627\u0644\u0645\u062c\u0645\u0648\u0639/) ||
     flat.match(/\u0627\u0644\u0645\u062c\u0645\u0648\u0639\s*([\d,]+\.\d{2})/);
   const subtotal = num(subtotalMatch?.[1]);
 

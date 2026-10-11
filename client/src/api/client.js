@@ -126,4 +126,11 @@ export const verifyInvoiceTotal = (id) =>
 export const finalizeInvoice = (id) =>
   api.post('/invoices/' + id + '/finalize').then((r) => r.data);
 
+/* ============================================================
+   OCR INVOICE IMPORT
+   Sends pre-extracted text (from Tesseract) + metadata to backend.
+   ============================================================ */
+export const importOcrInvoice = (payload) =>
+  api.post('/invoices/import-ocr', payload, { timeout: 120000 }).then((r) => r.data);
+
 export default api;

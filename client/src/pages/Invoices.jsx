@@ -8,8 +8,10 @@ import api, {
   matchInvoiceItem,
   confirmInvoiceItemAmount,
   verifyInvoiceTotal,
-  finalizeInvoice
+  finalizeInvoice,
+  importOcrInvoice
 } from "../api/client";
+import { extractTextFromPdfViaOcr } from "../utils/ocr";
 
 const fmt = (n) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -23,6 +25,8 @@ export default function Invoices({ user }) {
   const [preview, setPreview] = useState(null);
   const [previewFile, setPreviewFile] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [ocrBusy, setOcrBusy] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState("");
 
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [invoiceItems, setInvoiceItems] = useState([]);
@@ -58,6 +62,38 @@ export default function Invoices({ user }) {
       setError(e.response?.data?.error || e.message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleOcrImport = async (file) => {
+    if (!file) return;
+    setError("");
+    setMessage("");
+    setOcrBusy(true);
+    setOcrProgress("Starting OCR...");
+    try {
+      const text = await extractTextFromPdfViaOcr(file, (stage, page, total, progress) => {
+        if (stage === "rendering") setOcrProgress(`Rendering page ${page}/${total}...`);
+        else if (stage === "ocr") setOcrProgress(`OCR page ${page}/${total}...`);
+        else if (stage === "ocr-progress") setOcrProgress(`OCR page ${page}/${total} - ${Math.round(progress * 100)}%`);
+      });
+      setOcrProgress("Sending to server...");
+      const payload = {
+        filename: file.name,
+        text,
+        invoice_no: "",
+        invoice_date: "",
+        source_type: "OCR"
+      };
+      const r = await importOcrInvoice(payload);
+      setMessage("OCR imported: " + (r.invoice?.invoice_no || "OK") + " (" + r.count + " items)");
+      setOcrProgress("");
+      setView("list");
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+      setOcrProgress("");
+    } finally {
+      setOcrBusy(false);
     }
   };
 

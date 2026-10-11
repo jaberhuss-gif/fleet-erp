@@ -115,7 +115,7 @@ export default function Warehouse({ user, access = {} }) {
     setActionModal(type);
     setSelectedItem(item);
     setActionForm({
-      quantity: 0, location: item.location || 'Main Warehouse',
+      quantity: 0, location: currentSite || item.location || 'Main Warehouse',
       toLocation: '', referenceNo: '', notes: '',
       date: new Date().toISOString().slice(0, 10)
     });
@@ -127,16 +127,16 @@ export default function Warehouse({ user, access = {} }) {
       const payload = {
         itemCode: selectedItem.code,
         quantity: Number(actionForm.quantity),
-        location: actionForm.location,
+        location: actionForm.location || currentSite,
         toLocation: actionForm.toLocation,
-        fromLocation: actionForm.location || selectedItem.location,
+        fromLocation: actionForm.location || currentSite || selectedItem.location,
         referenceNo: actionForm.referenceNo,
         notes: actionForm.notes,
         date: actionForm.date,
         vehicleId: actionForm.vehicleId || null,
         vehiclePlate: actionForm.vehiclePlate || '',
         driverName: actionForm.driverName || '',
-        site: actionForm.location || '',
+        site: actionForm.location || currentSite || '',
         odo: actionForm.odo ? Number(actionForm.odo) : null,
         odoDate: actionForm.odoDate || null
       };

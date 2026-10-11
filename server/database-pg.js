@@ -3553,6 +3553,12 @@ export async function stockOut(data = {}) {
   const vehiclePlate = pgStr(data.vehiclePlate ?? data.vehicle_plate);
   const driverName = pgStr(data.driverName ?? data.driver_name);
   const site = pgStr(data.site) || fromLocation;
+  const odo = data.odo ?? data.odometer ?? null;
+  const odoDate = data.odoDate ?? data.odo_date ?? new Date().toISOString().slice(0, 10);
+  const userNotes = pgStr(data.notes);
+  const finalNotes = odo != null
+    ? "ODO: " + Number(odo).toLocaleString("en-US") + " km @ " + odoDate + (userNotes ? " | " + userNotes : "")
+    : userNotes;
 
   return await transaction(async client => {
     // 1) Check stock at that specific location
@@ -3600,7 +3606,7 @@ export async function stockOut(data = {}) {
       qty,
       fromLocation,
       pgStr(data.referenceNo ?? data.reference_no),
-      pgStr(data.notes),
+      finalNotes,
       vehicleId,
       vehiclePlate,
       driverName,

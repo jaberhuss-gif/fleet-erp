@@ -28,7 +28,9 @@ export default function Warehouse({ user, access = {} }) {
   });
 
   const [actionForm, setActionForm] = useState({
-    quantity: 0, location: 'Main Warehouse', toLocation: '', referenceNo: '', notes: '', date: ''
+    quantity: 0, location: 'Main Warehouse', toLocation: '', referenceNo: '', notes: '', date: '',
+    vehicleId: '', vehiclePlate: '', driverName: '', site: '',
+    odo: '', odoDate: new Date().toISOString().slice(0, 10)
   });
 
   useEffect(() => {
@@ -128,7 +130,9 @@ export default function Warehouse({ user, access = {} }) {
         vehicleId: actionForm.vehicleId || null,
         vehiclePlate: actionForm.vehiclePlate || '',
         driverName: actionForm.driverName || '',
-        site: actionForm.location || ''
+        site: actionForm.location || '',
+        odo: actionForm.odo ? Number(actionForm.odo) : null,
+        odoDate: actionForm.odoDate || null
       };
       if (actionModal === 'in') await api.post('/inventory/stock-in', payload);
       else if (actionModal === 'out') await api.post('/inventory/stock-out', payload);
@@ -489,11 +493,13 @@ export default function Warehouse({ user, access = {} }) {
                   <select value={actionForm.vehicleId || ''} onChange={e => {
                     const vid = e.target.value;
                     const v = vehicles.find(x => String(x.id) === String(vid));
+                    const autoOdo = v ? (v.current_km || v.currentKm || 0) : 0;
                     setActionForm({
                       ...actionForm,
                       vehicleId: vid,
                       vehiclePlate: v ? (v.plate || ((v.plate_number || '') + ' ' + (v.plate_code || '')).trim()) : '',
-                      driverName: v ? (v.driver || '') : actionForm.driverName
+                      driverName: v ? (v.driver || '') : actionForm.driverName,
+                      odo: autoOdo > 0 ? String(autoOdo) : actionForm.odo
                     });
                   }}>
                     <option value="">-- No Vehicle (generic OUT) --</option>
@@ -506,10 +512,20 @@ export default function Warehouse({ user, access = {} }) {
                 </div>
 
                 {actionForm.vehicleId && (
-                  <div className="form-group">
-                    <label>Driver Name</label>
-                    <input value={actionForm.driverName || ''} onChange={e => setActionForm({ ...actionForm, driverName: e.target.value })} placeholder="Driver name" />
-                  </div>
+                  <>
+                    <div className="form-group">
+                      <label>Driver Name</label>
+                      <input value={actionForm.driverName || ''} onChange={e => setActionForm({ ...actionForm, driverName: e.target.value })} placeholder="Driver name" />
+                    </div>
+                    <div className="form-group">
+                      <label>ODO Reading (km) *</label>
+                      <input type="number" value={actionForm.odo || ''} onChange={e => setActionForm({ ...actionForm, odo: e.target.value })} placeholder="e.g. 292843" />
+                    </div>
+                    <div className="form-group">
+                      <label>ODO Date</label>
+                      <input type="date" value={actionForm.odoDate || ''} onChange={e => setActionForm({ ...actionForm, odoDate: e.target.value })} />
+                    </div>
+                  </>
                 )}
               </>
             )}

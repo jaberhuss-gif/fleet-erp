@@ -4521,12 +4521,14 @@ export async function getInventoryReportFull(filters = {}) {
   const bySite = await query(`
     SELECT
       COALESCE(st.site, st.from_location, st.to_location, 'Unknown') AS site,
-      COUNT(*) FILTER (WHERE st.type = 'IN') AS in_count,
-      COALESCE(SUM(st.quantity) FILTER (WHERE st.type = 'IN'), 0) AS in_qty,
-      COUNT(*) FILTER (WHERE st.type = 'OUT') AS out_count,
-      COALESCE(SUM(st.quantity) FILTER (WHERE st.type = 'OUT'), 0) AS out_qty,
-      COUNT(*) FILTER (WHERE st.type = 'TRANSFER') AS transfer_count,
-      COALESCE(SUM(st.quantity) FILTER (WHERE st.type = 'TRANSFER'), 0) AS transfer_qty
+      COUNT(*) FILTER (WHERE st.type = 'IN') AS received_count,
+      COALESCE(SUM(st.quantity) FILTER (WHERE st.type = 'IN'), 0) AS received_qty,
+      COUNT(*) FILTER (WHERE st.type = 'OUT') AS issued_count,
+      COALESCE(SUM(st.quantity) FILTER (WHERE st.type = 'OUT'), 0) AS issued_qty,
+      COUNT(*) FILTER (WHERE st.type = 'TRANSFER' AND st.from_location = COALESCE(st.site, st.from_location, st.to_location, 'Unknown')) AS transferred_out_count,
+      COALESCE(SUM(st.quantity) FILTER (WHERE st.type = 'TRANSFER' AND st.from_location = COALESCE(st.site, st.from_location, st.to_location, 'Unknown')), 0) AS transferred_out_qty,
+      COUNT(*) FILTER (WHERE st.type = 'TRANSFER' AND st.to_location = COALESCE(st.site, st.from_location, st.to_location, 'Unknown')) AS transferred_in_count,
+      COALESCE(SUM(st.quantity) FILTER (WHERE st.type = 'TRANSFER' AND st.to_location = COALESCE(st.site, st.from_location, st.to_location, 'Unknown')), 0) AS transferred_in_qty
     FROM stock_transactions st
     ${where}
     GROUP BY COALESCE(st.site, st.from_location, st.to_location, 'Unknown')
@@ -4621,10 +4623,18 @@ export async function getInventoryReportFull(filters = {}) {
     console.warn("[ReportFull:handovers]", e.message);
   }
 
+  const bySiteWithBalance = bySite.rows.map(row => ({
+    ...row,
+    available: Number(row.received_qty || 0)
+      - Number(row.issued_qty || 0)
+      - Number(row.transferred_out_qty || 0)
+      + Number(row.transferred_in_qty || 0)
+  }));
+
   return {
     filters: { from, to, site, vehicleId },
     summary: summary.rows[0] || {},
-    by_site: bySite.rows,
+    by_site: bySiteWithBalance,
     by_vehicle: byVehicle.rows,
     by_driver: byDriver.rows,
     movements: movements.rows,

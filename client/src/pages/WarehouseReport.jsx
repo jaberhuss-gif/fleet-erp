@@ -48,7 +48,7 @@ export default function WarehouseReport({ user }) {
 
     const handoverRows = (data.handovers || []).map(h => "<tr><td>" + esc(String(h.handover_date || "").slice(0, 10)) + "</td><td>" + esc(h.plate_number || "") + " " + esc(h.plate_code || "") + "</td><td>" + esc(h.previous_driver_name || "") + "</td><td>" + esc(h.new_driver_name || "") + "</td><td>" + esc(h.notes || "") + "</td></tr>").join("");
 
-    const siteRows = (data.by_site || []).map(x => "<tr><td>" + esc(x.site) + "</td><td style='text-align:right'>" + x.in_count + " / " + x.in_qty + "</td><td style='text-align:right'>" + x.out_count + " / " + x.out_qty + "</td><td style='text-align:right'>" + x.transfer_count + " / " + x.transfer_qty + "</td></tr>").join("");
+    const siteRows = (data.by_site || []).map(x => "<tr><td>" + esc(x.site) + "</td><td style='text-align:right'>" + (x.received_count||0) + " / " + (x.received_qty||0) + "</td><td style='text-align:right'>" + (x.issued_count||0) + " / " + (x.issued_qty||0) + "</td><td style='text-align:right'>" + (x.transferred_out_count||0) + " / " + (x.transferred_out_qty||0) + "</td><td style='text-align:right'>" + (x.transferred_in_count||0) + " / " + (x.transferred_in_qty||0) + "</td><td style='text-align:right;font-weight:700'>" + (x.available||0) + "</td></tr>").join("");
 
     const vehRows = (data.by_vehicle || []).map(x => "<tr><td>" + esc(x.vehicle_plate) + "</td><td>" + esc(x.driver_name || "") + "</td><td style='text-align:right'>" + x.out_count + "</td><td style='text-align:right'>" + x.out_qty + "</td><td>" + esc(String(x.last_movement || "").slice(0, 19).replace("T", " ")) + "</td></tr>").join("");
 
@@ -56,8 +56,8 @@ export default function WarehouseReport({ user }) {
       "<div style='display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f766e;padding-bottom:10px;margin-bottom:14px'><img src='https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png' style='width:175px;max-height:78px;object-fit:contain' /><div style='text-align:right'><div style='font-size:15px;font-weight:700;color:#0f766e'>Maaden Ivanhoe Electric Exploration and Development Limited Company</div><div style='font-size:10px;color:#475569'>Exploration Phase — Arabian Shield</div><div style='font-size:12px;font-weight:700;margin-top:6px'>Hussein Anwar</div><div style='font-size:10px;color:#475569'>Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div></div>" +
       "<h1>Warehouse Report</h1><div class='sub'>Generated: " + new Date().toLocaleString("en-GB") + (filters.from ? " • From: " + filters.from : "") + (filters.to ? " • To: " + filters.to : "") + (filters.site ? " • Site: " + filters.site : "") + "</div>" +
       "<div class='grid'><div class='card'><div>Total IN</div><b>" + (s.in_count || 0) + " (" + (s.in_qty || 0) + ")</b></div><div class='card'><div>Total OUT</div><b>" + (s.out_count || 0) + " (" + (s.out_qty || 0) + ")</b></div><div class='card'><div>Transfers</div><b>" + (s.transfer_count || 0) + " (" + (s.transfer_qty || 0) + ")</b></div></div>" +
-      "<h2>By Site</h2><table><thead><tr><th>Site</th><th>IN (count/qty)</th><th>OUT (count/qty)</th><th>Transfer (count/qty)</th></tr></thead><tbody>" + siteRows + "</tbody></table>" +
-      "<h2>By Vehicle (Out)</h2><table><thead><tr><th>Vehicle</th><th>Driver</th><th>OUT Count</th><th>OUT Qty</th><th>Last Movement</th></tr></thead><tbody>" + vehRows + "</tbody></table>" +
+      "<h2>By Site</h2><table><thead><tr><th>Site</th><th>Received (count/qty)</th><th>Issued (count/qty)</th><th>Transferred Out</th><th>Transferred In</th><th>Available Balance</th></tr></thead><tbody>" + siteRows + "</tbody></table>" +
+      "<h2>By Vehicle (Issued)</h2><table><thead><tr><th>Vehicle</th><th>Driver</th><th>Issued Count</th><th>Issued Qty</th><th>Last Movement</th></tr></thead><tbody>" + vehRows + "</tbody></table>" +
       "<h2>Driver Handovers</h2><table><thead><tr><th>Date</th><th>Vehicle</th><th>From</th><th>To</th><th>Notes</th></tr></thead><tbody>" + (handoverRows || "<tr><td colspan='5' style='text-align:center;color:#999'>None</td></tr>") + "</tbody></table>" +
       "<h2>Detailed Movements (last 500)</h2><table><thead><tr><th>Date</th><th>Type</th><th>Item</th><th>Qty</th><th>From</th><th>To</th><th>Site</th><th>Vehicle</th><th>Driver</th><th>Ref</th></tr></thead><tbody>" + movementsRows + "</tbody></table>" +
       "<div class='no-print' style='text-align:center;margin-top:20px'><button onclick='window.print()' style='padding:12px 24px;font-size:16px;cursor:pointer'>Print / Save PDF</button></div>" +
@@ -108,17 +108,37 @@ export default function WarehouseReport({ user }) {
 
           <h3>By Site</h3>
           <table className="data-table" style={{ width: "100%" }}>
-            <thead><tr><th>Site</th><th>IN Count</th><th>IN Qty</th><th>OUT Count</th><th>OUT Qty</th><th>Transfers</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Site</th>
+                <th>Received Count</th>
+                <th>Received Qty</th>
+                <th>Issued Count</th>
+                <th>Issued Qty</th>
+                <th>Transferred Out</th>
+                <th>Transferred In</th>
+                <th>Available Balance</th>
+              </tr>
+            </thead>
             <tbody>
               {data.by_site?.map((x, i) => (
-                <tr key={i}><td>{x.site}</td><td>{x.in_count}</td><td>{x.in_qty}</td><td>{x.out_count}</td><td>{x.out_qty}</td><td>{x.transfer_count} / {x.transfer_qty}</td></tr>
+                <tr key={i}>
+                  <td>{x.site}</td>
+                  <td>{x.received_count || 0}</td>
+                  <td>{x.received_qty || 0}</td>
+                  <td>{x.issued_count || 0}</td>
+                  <td>{x.issued_qty || 0}</td>
+                  <td>{x.transferred_out_count || 0} / {x.transferred_out_qty || 0}</td>
+                  <td>{x.transferred_in_count || 0} / {x.transferred_in_qty || 0}</td>
+                  <td style={{ fontWeight: "bold", color: (x.available || 0) > 0 ? "#16a34a" : "#dc2626" }}>{x.available || 0}</td>
+                </tr>
               ))}
             </tbody>
           </table>
 
-          <h3 style={{ marginTop: 20 }}>By Vehicle</h3>
+          <h3 style={{ marginTop: 20 }}>By Vehicle (Issued)</h3>
           <table className="data-table" style={{ width: "100%" }}>
-            <thead><tr><th>Vehicle</th><th>Driver</th><th>OUT Count</th><th>OUT Qty</th><th>Last Movement</th></tr></thead>
+            <thead><tr><th>Vehicle</th><th>Driver</th><th>Issued Count</th><th>Issued Qty</th><th>Last Movement</th></tr></thead>
             <tbody>
               {data.by_vehicle?.map((x, i) => (
                 <tr key={i}><td>{x.vehicle_plate}</td><td>{x.driver_name || "-"}</td><td>{x.out_count}</td><td>{x.out_qty}</td><td>{String(x.last_movement || "").slice(0, 19).replace("T", " ")}</td></tr>

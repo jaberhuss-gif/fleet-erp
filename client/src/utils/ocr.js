@@ -50,5 +50,9 @@ export async function extractTextFromPdfViaOcr(file, onProgress) {
     allText.push(data.text || "");
   }
 
-  return allText.join("\n\n===PAGE_BREAK===\n\n");
+  const finalText = allText.join("\n\n===PAGE_BREAK===\n\n");
+  console.log("=== OCR FULL TEXT START ===");
+  console.log(finalText);
+  console.log("=== OCR FULL TEXT END ===");
+  return finalText;
 }

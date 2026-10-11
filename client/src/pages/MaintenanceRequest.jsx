@@ -142,6 +142,21 @@ export default function MaintenanceRequest({user,access={}}){
     }
   };
 
+  const handlePrintTicket = async (requestId) => {
+    try {
+      const r = await api.get("/maintenance-requests/" + requestId + "/pdf-ticket", { responseType: "text" });
+      const w = window.open("", "_blank");
+      if (w) {
+        w.document.write(r.data);
+        w.document.close();
+      } else {
+        setError("Popup blocked. Please allow popups.");
+      }
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
+  };
+
   if(loading)return <div className="loading">Loading Support & Service...</div>;
   return <div className="form-container" style={{maxWidth:1200}}>
     <div className="panel" style={{background:'linear-gradient(135deg,#0f766e,#0f172a)',color:'#fff',border:'none'}}>
@@ -299,6 +314,7 @@ export default function MaintenanceRequest({user,access={}}){
                 {r.completed_at&&!r.requester_confirmed_at&&<div style={{marginTop:12,display:"flex",gap:8,flexWrap:"wrap"}}>
                   <button type="button" className="btn btn-primary" onClick={()=>copyEmailHtml(r.id,"confirmation")}>📋 Copy Campus Confirmation Email</button>
                   <button type="button" className="btn btn-success" style={{marginLeft:6}} onClick={()=>handleCampusWhatsApp(r.id)}>📱 Send to Campus via WhatsApp</button>
+                  <button type="button" className="btn" style={{marginLeft:6}} onClick={()=>handlePrintTicket(r.id)}>🖨️ Print Ticket</button>
                 </div>}
                 {r.requester_confirmation==='yes'&&['Operationally Completed','Open'].includes(r.status)&&<div style={{marginTop:12,padding:12,borderRadius:10,background:'#ecfdf5',border:'1px solid #86efac'}}>
                   <div style={{fontWeight:700,marginBottom:8}}>💰 Final Financial Control</div>

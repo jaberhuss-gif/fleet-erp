@@ -212,6 +212,187 @@ export function contractorOptions() { return CONTRACTORS; }
 
 export function mountBuildingMaintenanceRequestRoutes(app) {
   /* ============================================================
+     PDF TICKET (HTML) for Maintenance Request
+     ============================================================ */
+  app.get("/api/maintenance-requests/:id/pdf-ticket", async (req, res) => {
+    try {
+      await ensureSchema();
+      const row = await getRequest(req.params.id);
+      if (!row) return res.status(404).send("Request not found");
+
+      const items = await query(
+        "SELECT * FROM maintenance_request_items WHERE request_id = $1 ORDER BY line_no ASC, id ASC",
+        [req.params.id]
+      );
+
+      const events = await query(
+        "SELECT action, actor_name, actor_type, created_at FROM maintenance_request_events WHERE request_id = $1 ORDER BY created_at ASC",
+        [req.params.id]
+      );
+
+      const esc = (v) => String(v ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+      const fmt = (n) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const fmtDate = (d) => d ? String(d).slice(0, 10) : "-";
+
+      const itemsTotal = items.rows.reduce((s, it) => s + Number(it.actual_amount || 0), 0);
+
+      const itemsHtml = items.rows.map(it => `
+        <tr>
+          <td style="text-align:center">${esc(it.line_no)}</td>
+          <td>${esc(it.description)}</td>
+          <td style="text-align:center">${esc(it.status)}</td>
+          <td style="text-align:right">${fmt(it.actual_amount)}</td>
+          <td>${esc(it.notes || "")}</td>
+        </tr>
+      `).join("");
+
+      const eventsHtml = events.rows.map(ev => `
+        <tr>
+          <td style="white-space:nowrap">${esc(String(ev.created_at || "").slice(0, 19).replace("T", " "))}</td>
+          <td>${esc(ev.action)}</td>
+          <td>${esc(ev.actor_name || ev.actor_type || "-")}</td>
+        </tr>
+      `).join("");
+
+      const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Maintenance Request ${esc(row.request_no)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; padding: 24px; color: #111827; }
+  .company-brand { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 3px solid #0f766e; padding-bottom: 12px; margin-bottom: 16px; }
+  .company-brand img { width: 175px; max-height: 78px; object-fit: contain; }
+  .company-brand-copy { flex: 1; text-align: right; }
+  .company-brand-copy .company-name { font-size: 15px; font-weight: 700; color: #0f766e; }
+  .company-brand-copy .project-name { font-size: 10px; color: #475569; margin-top: 3px; }
+  .company-brand-copy .report-owner { font-size: 12px; font-weight: 700; margin-top: 7px; color: #111827; }
+  .company-brand-copy .report-role { font-size: 10px; color: #475569; margin-top: 2px; }
+  h1 { font-size: 22px; margin: 0 0 4px; color: #0f766e; }
+  .subtitle { font-size: 12px; color: #475569; margin-bottom: 18px; }
+  .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+  .info-grid .card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 12px; background: #f8fafc; }
+  .info-grid .card .label { font-size: 10px; color: #64748b; text-transform: uppercase; }
+  .info-grid .card .value { font-size: 14px; font-weight: 700; margin-top: 2px; }
+  h3 { font-size: 15px; margin: 18px 0 8px; color: #0f766e; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #cbd5e1; padding: 6px 8px; vertical-align: top; }
+  th { background: #e2e8f0; text-align: left; font-size: 11px; text-transform: uppercase; }
+  tr { page-break-inside: avoid; }
+  .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 40px; }
+  .signatures .box { border-top: 2px solid #475569; padding-top: 8px; font-size: 11px; color: #475569; }
+  .footer { margin-top: 30px; padding-top: 12px; border-top: 2px solid #cbd5e1; text-align: center; font-size: 11px; color: #64748b; }
+  @media print { .no-print { display: none; } body { padding: 0; } }
+</style>
+</head>
+<body>
+
+<div class="company-brand">
+  <img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Ivanhoe Electric and Maaden" />
+  <div class="company-brand-copy">
+    <div class="company-name">Maaden Ivanhoe Electric Exploration and Development Limited Company</div>
+    <div class="project-name">Exploration Phase — Arabian Shield</div>
+    <div class="report-owner">Hussein Anwar</div>
+    <div class="report-role">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div>
+  </div>
+</div>
+
+<h1>Maintenance Request ${esc(row.request_no)}</h1>
+<div class="subtitle">System Generated Maintenance Ticket — Fleet &amp; Camp Maintenance ERP</div>
+
+<div class="info-grid">
+  <div class="card"><div class="label">Request No</div><div class="value">${esc(row.request_no || "-")}</div></div>
+  <div class="card"><div class="label">Site</div><div class="value">${esc(row.site || "-")}</div></div>
+  <div class="card"><div class="label">City</div><div class="value">${esc(row.city || "-")}</div></div>
+  <div class="card"><div class="label">Category</div><div class="value">${esc(row.category || "-")}</div></div>
+  <div class="card"><div class="label">Priority</div><div class="value">${esc(row.priority || "-")}</div></div>
+  <div class="card"><div class="label">Status</div><div class="value">${esc(row.status || "-")}</div></div>
+  <div class="card"><div class="label">Requested By</div><div class="value">${esc(row.requester_name || "-")}</div></div>
+  <div class="card"><div class="label">Assigned To</div><div class="value">${esc(row.executor_name || "-")}</div></div>
+  <div class="card"><div class="label">Final Amount</div><div class="value">${row.final_amount != null ? fmt(row.final_amount) + " SAR" : "-"}</div></div>
+</div>
+
+<h3>Description</h3>
+<p style="font-size:13px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">${esc(row.description || "-").replace(/\n/g, "<br>")}</p>
+
+<h3>Items (${items.rows.length})</h3>
+<table>
+  <thead>
+    <tr>
+      <th style="width:40px">#</th>
+      <th>Description</th>
+      <th style="width:100px">Status</th>
+      <th style="width:100px">Amount</th>
+      <th style="width:200px">Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${itemsHtml || '<tr><td colspan="5" style="text-align:center;color:#999">No items</td></tr>'}
+    ${items.rows.length ? '<tr style="font-weight:700;background:#f1f5f9"><td colspan="3" style="text-align:right">Total:</td><td style="text-align:right">' + fmt(itemsTotal) + '</td><td></td></tr>' : ''}
+  </tbody>
+</table>
+
+<h3>Audit Trail (${events.rows.length})</h3>
+<table>
+  <thead>
+    <tr>
+      <th style="width:160px">Date</th>
+      <th style="width:200px">Action</th>
+      <th>Actor</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${eventsHtml || '<tr><td colspan="3" style="text-align:center;color:#999">No events</td></tr>'}
+  </tbody>
+</table>
+
+${row.closing_notes ? '<h3>Closing Notes</h3><p style="font-size:13px;background:#ecfdf5;border:1px solid #86efac;border-radius:8px;padding:12px">' + esc(row.closing_notes) + '</p>' : ''}
+
+<div class="signatures">
+  <div class="box">
+    <strong>Fleet / Building Maintenance</strong><br>
+    Name: ______________________________<br><br>
+    Signature: ______________________________
+  </div>
+  <div class="box">
+    <strong>Executor / Contractor</strong><br>
+    Name: ______________________________<br><br>
+    Signature: ______________________________
+  </div>
+  <div class="box">
+    <strong>Campus Representative</strong><br>
+    Name: ______________________________<br><br>
+    Signature: ______________________________
+  </div>
+</div>
+
+<div class="footer">
+  This ticket was auto-generated by Fleet &amp; Camp Maintenance ERP • Printed on ${new Date().toLocaleString("en-GB")}
+</div>
+
+<div class="no-print" style="margin-top:24px;text-align:center">
+  <button onclick="window.print()" style="padding:12px 24px;font-size:16px;cursor:pointer">Print / Save as PDF</button>
+</div>
+
+<script>
+  window.addEventListener("load", () => {
+    setTimeout(() => window.print(), 300);
+  });
+</script>
+
+</body>
+</html>`;
+
+      res.set("Content-Type", "text/html; charset=utf-8");
+      res.send(html);
+    } catch (e) {
+      console.error("[MR:pdf-ticket]", e);
+      res.status(500).send("Failed to generate ticket: " + e.message);
+    }
+  });
+
+  /* ============================================================
      CAMPUS WHATSAPP INFO
      ============================================================ */
   app.get("/api/maintenance-requests/:id/campus-whatsapp", async (req, res) => {

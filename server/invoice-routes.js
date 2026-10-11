@@ -1255,5 +1255,22 @@ export function mountInvoiceRoutes(app) {
     }
   });
 
+  /* --- Delete invoice (Owner only) --- */
+  router.delete("/:id", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: "Invalid ID" });
+      if (req.user?.role !== "Owner") return res.status(403).json({ success: false, error: "Owner only" });
+
+      const result = await query("DELETE FROM invoices WHERE id = $1 RETURNING id, invoice_no", [id]);
+      if (!result.rows[0]) return res.status(404).json({ success: false, error: "Invoice not found" });
+
+      res.json({ success: true, deleted: result.rows[0] });
+    } catch (e) {
+      console.error("[InvoiceRoutes:delete]", e);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   app.use("/api/invoices", router);
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import api, { reopenMaintenanceRequest, archiveMaintenanceRequest, getCampusWhatsAppInfo } from '../api/client';
+import api, { reopenMaintenanceRequest, archiveMaintenanceRequest, getCampusWhatsAppInfo, parseMaintenanceEmail } from '../api/client';
 
 const initialForm={site:'',category:'',priority:'Medium',description:''};
 export default function MaintenanceRequest({user,access={}}){
@@ -9,6 +9,9 @@ export default function MaintenanceRequest({user,access={}}){
   const [busyItem,setBusyItem]=useState(null);
   const [auditByRequest,setAuditByRequest]=useState({});
   const [showAuditFor,setShowAuditFor]=useState(null);
+  const [emailText,setEmailText]=useState('');
+  const [parsedEmail,setParsedEmail]=useState(null);
+  const [parsing,setParsing]=useState(false);
   const canWork=user?.role==='Owner'||!!access?.support?.can_work||!!access?.building?.can_work;
   const load=async()=>{if(!canWork)return;try{const [r,e]=await Promise.all([api.get('/maintenance-requests'),api.get('/maintenance-requests/executors')]);setRequests(r.data.requests||[]);setEmployees(e.data.employees||[]);setContractors(e.data.contractors||[])}catch(e){setError(e.response?.data?.error||e.message)}};
   useEffect(()=>{Promise.all([api.get('/sites').then(r=>setSites(r.data.sites||[])),load()]).catch(e=>setError(e.response?.data?.error||e.message)).finally(()=>setLoading(false))},[]);
@@ -157,6 +160,34 @@ export default function MaintenanceRequest({user,access={}}){
     }
   };
 
+  const handleParseEmail = async () => {
+    if (!emailText.trim()) return setError("Paste an email first.");
+    setParsing(true);
+    setError("");
+    try {
+      const r = await parseMaintenanceEmail(emailText);
+      if (!r.success) return setError(r.error || "Parse failed");
+      setParsedEmail(r);
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const handleUseParsedEmail = () => {
+    if (!parsedEmail) return;
+    setForm({
+      ...form,
+      category: parsedEmail.category || form.category,
+      priority: parsedEmail.priority || form.priority,
+      description: emailText.trim() || form.description
+    });
+    setNewItems(parsedEmail.items.map(it => ({ description: it.description })));
+    setParsedEmail(null);
+    setMessage("Parsed. Review items and click Submit.");
+  };
+
   if(loading)return <div className="loading">Loading Support & Service...</div>;
   return <div className="form-container" style={{maxWidth:1200}}>
     <div className="panel" style={{background:'linear-gradient(135deg,#0f766e,#0f172a)',color:'#fff',border:'none'}}>
@@ -168,6 +199,52 @@ export default function MaintenanceRequest({user,access={}}){
       </div>
     </div>
     {message&&<div className="alert alert-success">{message}</div>}{error&&<div className="alert alert-error">{error}</div>}
+    <div className="panel" style={{marginBottom:16,border:"1px solid #0f766e",background:"#f0fdfa"}}>
+      <h2 style={{marginTop:0,color:"#0f766e"}}>📧 Paste Campus Email (Auto-Extract Items)</h2>
+      <p style={{color:"#64748b",fontSize:13}}>Paste the full email from the campus. The system will detect items, category, and priority.</p>
+      <div className="form-group">
+        <textarea
+          value={emailText}
+          onChange={e=>setEmailText(e.target.value)}
+          placeholder="Paste the email body here..."
+          rows={6}
+          style={{width:"100%",fontFamily:"monospace",fontSize:13}}
+        />
+      </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <button type="button" className="btn btn-primary" onClick={handleParseEmail} disabled={parsing||!emailText.trim()}>
+          {parsing?"Analyzing...":"🔍 Analyze Email"}
+        </button>
+        {emailText && <button type="button" className="btn" onClick={()=>{setEmailText("");setParsedEmail(null)}}>Clear</button>}
+      </div>
+
+      {parsedEmail && (
+        <div style={{marginTop:14,padding:12,background:"#fff",borderRadius:8,border:"1px solid #cbd5e1"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+            <strong>Detected: {parsedEmail.detected_count} item(s)</strong>
+            <div style={{display:"flex",gap:8}}>
+              <span style={{padding:"2px 10px",borderRadius:10,background:"#dbeafe",color:"#1e40af",fontSize:12,fontWeight:600}}>{parsedEmail.category}</span>
+              <span style={{padding:"2px 10px",borderRadius:10,background:"#fef3c7",color:"#b45309",fontSize:12,fontWeight:600}}>{parsedEmail.priority}</span>
+            </div>
+          </div>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,marginTop:8}}>
+            <thead><tr style={{background:"#f1f5f9"}}><th style={{padding:6,textAlign:"left",width:40}}>#</th><th style={{padding:6,textAlign:"left"}}>Detected Item</th></tr></thead>
+            <tbody>
+              {parsedEmail.items.map((it,i)=>(
+                <tr key={i} style={{borderTop:"1px solid #e2e8f0"}}>
+                  <td style={{padding:6}}>{i+1}</td>
+                  <td style={{padding:6}}>{it.description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button type="button" className="btn btn-success" style={{marginTop:10}} onClick={handleUseParsedEmail}>
+            ✅ Use These Items (Fill Form Below)
+          </button>
+        </div>
+      )}
+    </div>
+
     <form className="panel" onSubmit={submit}>
       <h2 style={{marginTop:0}}>📝 Report a Building / Facility Problem</h2><p style={{color:'#64748b'}}>Only report the problem here. Contractor and cost are controlled by Fleet / Building Maintenance.</p>
       <div className="cards-grid" style={{gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))'}}>

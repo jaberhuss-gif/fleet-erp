@@ -212,6 +212,82 @@ export function contractorOptions() { return CONTRACTORS; }
 
 export function mountBuildingMaintenanceRequestRoutes(app) {
   /* ============================================================
+     EMAIL PARSER for Campus Maintenance Requests
+     Extracts items from free-form email text.
+     ============================================================ */
+  app.post("/api/maintenance-requests/parse-email", async (req, res) => {
+    try {
+      const text = String(req.body?.text || "").trim();
+      if (!text) return res.status(400).json({ success: false, error: "text is required" });
+
+      const lines = text.split(/\r?\n/).map(l => l.trim());
+
+      // 1) Detect numbered items: "1. xxx", "1) xxx", "1- xxx"
+      const numbered = [];
+      for (const line of lines) {
+        const m = line.match(/^(\d{1,3})[\.\)\-:]\s*(.+)$/);
+        if (m && m[2].trim().length > 3) {
+          numbered.push({ no: Number(m[1]), description: m[2].trim() });
+        }
+      }
+
+      // 2) Detect bullet items: "- xxx", "• xxx", "* xxx"
+      const bulleted = [];
+      for (const line of lines) {
+        const m = line.match(/^[\-\*•·]\s*(.+)$/);
+        if (m && m[1].trim().length > 3) {
+          bulleted.push({ no: bulleted.length + 1, description: m[1].trim() });
+        }
+      }
+
+      // 3) Fallback: split by newlines, keep lines > 15 chars
+      const nonEmpty = lines.filter(l => l.length > 15);
+      const byLines = nonEmpty.map((l, i) => ({ no: i + 1, description: l }));
+
+      // Choose the best extraction
+      let items = [];
+      if (numbered.length >= 2) items = numbered;
+      else if (bulleted.length >= 2) items = bulleted;
+      else if (byLines.length >= 1 && byLines.length <= 30) items = byLines;
+      else items = [{ no: 1, description: text.slice(0, 500) }];
+
+      // 4) Auto-detect category
+      const lower = text.toLowerCase();
+      const categoryRules = [
+        { cat: "A/C & HVAC", keywords: ["ac", "a/c", "air condition", "cooling", "hvac", "مكيف", "تكييف", "تبريد"] },
+        { cat: "Plumbing & Water", keywords: ["water", "plumbing", "leak", "sink", "toilet", "pipe", "drain", "سباكة", "تسريب", "ماء", "أنابيب", "حمام"] },
+        { cat: "Electrical", keywords: ["electric", "electrical", "light", "lamp", "power", "switch", "socket", "كهرباء", "لمبة", "إضاءة", "مفتاح", "قابس"] },
+        { cat: "Doors, Locks & Windows", keywords: ["door", "window", "lock", "hinge", "handle", "باب", "نافذة", "قفل", "مفصل"] },
+        { cat: "Civil & Building", keywords: ["wall", "floor", "ceiling", "roof", "paint", "crack", "جدار", "أرضية", "سقف", "سطح", "دهان", "تشقق"] },
+        { cat: "Furniture & Facilities", keywords: ["furniture", "chair", "desk", "table", "bed", "cabinet", "كرسي", "طاولة", "سرير", "خزانة", "أثاث"] },
+        { cat: "Appliances & Equipment", keywords: ["appliance", "equipment", "fridge", "microwave", "oven", "جهاز", "معدات", "ثلاجة"] }
+      ];
+      let category = "General Maintenance";
+      for (const rule of categoryRules) {
+        if (rule.keywords.some(k => lower.includes(k))) { category = rule.cat; break; }
+      }
+
+      // 5) Auto-detect priority
+      let priority = "Medium";
+      if (/\b(urgent|emergency|critical|asap|immediately|عاجل|طارئ|فوري)\b/i.test(text)) priority = "Critical";
+      else if (/\b(high|important|مهم|عالي)\b/i.test(text)) priority = "High";
+      else if (/\b(low|minor|بسيط|منخفض)\b/i.test(text)) priority = "Low";
+
+      res.json({
+        success: true,
+        items,
+        category,
+        priority,
+        detected_count: items.length,
+        original_text: text
+      });
+    } catch (e) {
+      console.error("[MR:parse-email]", e);
+      res.status(400).json({ success: false, error: e.message });
+    }
+  });
+
+  /* ============================================================
      PDF TICKET (HTML) for Maintenance Request
      ============================================================ */
   app.get("/api/maintenance-requests/:id/pdf-ticket", async (req, res) => {

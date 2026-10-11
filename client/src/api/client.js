@@ -157,4 +157,7 @@ export const archiveMaintenanceRequest = (id) =>
 export const getCampusWhatsAppInfo = (id) =>
   api.get('/maintenance-requests/' + id + '/campus-whatsapp').then((r) => r.data);
 
+export const parseMaintenanceEmail = (text) =>
+  api.post('/maintenance-requests/parse-email', { text }).then((r) => r.data);
+
 export default api;

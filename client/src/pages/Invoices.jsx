@@ -234,7 +234,7 @@ export default function Invoices({ user }) {
 
   const handleAutoFillEvenly = async () => {
     if (!invoiceItems.length) return;
-    const total = Number(selectedInvoice?.total || 0);
+    const total = Number(selectedInvoice?.subtotal || selectedInvoice?.total || 0);
     const n = invoiceItems.length;
     const base = Math.floor((total / n) * 100) / 100;
     const remainder = Math.round((total - (base * n)) * 100) / 100;
@@ -253,7 +253,7 @@ export default function Invoices({ user }) {
 
   const handleAutoFillByQty = async () => {
     if (!invoiceItems.length) return;
-    const total = Number(selectedInvoice?.total || 0);
+    const total = Number(selectedInvoice?.subtotal || selectedInvoice?.total || 0);
     const totalQty = invoiceItems.reduce((s, it) => s + Number(it.quantity || 0), 0);
     if (!totalQty) return;
     let running = 0;
@@ -288,7 +288,7 @@ export default function Invoices({ user }) {
   };
 
   const confirmedTotal = invoiceItems.reduce((s, it) => s + Number(it.confirmed_amount || 0), 0);
-  const invoiceTotal = Number(selectedInvoice?.total || 0);
+  const invoiceTotal = Number(selectedInvoice?.subtotal || selectedInvoice?.total || 0);
   const difference = Math.round((confirmedTotal - invoiceTotal) * 100) / 100;
 
   const handleItemSiteChange = async (itemId, site) => {

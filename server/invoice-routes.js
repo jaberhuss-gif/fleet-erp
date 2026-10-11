@@ -680,7 +680,7 @@ export function mountInvoiceRoutes(app) {
         for (const it of parsed.items) {
           const r = await client.query(
             "INSERT INTO invoice_items (invoice_id, line_no, description, unit, quantity, unit_price, discount_percent, net_amount, total_with_vat, confirmed_amount, match_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,'Unmatched') RETURNING *",
-            [invoice.id, it.line_no || null, it.description || "", it.unit || "", it.quantity || 1, it.unit_price || 0, it.discount_percent || 0, it.net_amount || 0, it.total_with_vat || 0]
+            [invoice.id, it.line_no || null, it.description || "", it.unit || "", it.quantity || 1, it.unit_price || 0, it.discount_percent || 0, it.net_amount || 0, it.net_amount || 0]
           );
           items.push(r.rows[0]);
         }
@@ -713,7 +713,7 @@ export function mountInvoiceRoutes(app) {
         for (const it of parsed.items) {
           const r = await client.query(
             "INSERT INTO invoice_items (invoice_id, line_no, description, unit, quantity, unit_price, discount_percent, net_amount, total_with_vat, confirmed_amount, match_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,'Unmatched') RETURNING *",
-            [invoice.id, it.line_no || null, it.description || "", it.unit || "", it.quantity || 1, it.unit_price || 0, it.discount_percent || 0, it.net_amount || 0, it.total_with_vat || 0]
+            [invoice.id, it.line_no || null, it.description || "", it.unit || "", it.quantity || 1, it.unit_price || 0, it.discount_percent || 0, it.net_amount || 0, it.net_amount || 0]
           );
           items.push(r.rows[0]);
         }
@@ -977,7 +977,7 @@ export function mountInvoiceRoutes(app) {
         for (const it of parsed.items) {
           const r = await client.query(
             "INSERT INTO invoice_items (invoice_id, line_no, description, unit, quantity, unit_price, discount_percent, net_amount, total_with_vat, confirmed_amount, match_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,'Unmatched') RETURNING *",
-            [invoice.id, it.line_no || null, it.description || "", it.unit || "", it.quantity || 1, it.unit_price || 0, it.discount_percent || 0, it.net_amount || 0, it.total_with_vat || 0]
+            [invoice.id, it.line_no || null, it.description || "", it.unit || "", it.quantity || 1, it.unit_price || 0, it.discount_percent || 0, it.net_amount || 0, it.net_amount || 0]
           );
           items.push(r.rows[0]);
         }

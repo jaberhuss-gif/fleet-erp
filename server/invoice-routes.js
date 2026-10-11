@@ -201,9 +201,10 @@ function extractJodoudItems(text) {
 
   const flat = itemsRegion.replace(/[\n\r]+/g, " ").replace(/\s{2,}/g, " ");
 
-  const rowRe = /(\d+\.\d{2})(\d+\.\d{2})(\d+\.\d{2})(\d+\.\d{2})(\d+)(auto)?([A-Za-z][A-Za-z0-9 &().,'\/\-]*?)(\d{1,4})(\d{1,3})(?= \d+\.\d{2}|$)/g;
+  const rowRe = /(\d+\.\d{2})(\d+\.\d{2})(\d+\.\d{2})(\d+\.\d{2})(\d+)(auto)?([A-Za-z][A-Za-z0-9 &().,'\/-]*?)(\d{1,4})(\d{1,3})(?= \d+\.\d{2}|$)/g;
 
   const items = [];
+  let counter = 0;
   let m;
   while ((m = rowRe.exec(flat))) {
     const total = num(m[1]);
@@ -212,17 +213,17 @@ function extractJodoudItems(text) {
     const price = num(m[4]);
     const qty = num(m[5]);
     const description = clean(m[7]).replace(/^auto\s+/i, "");
-    const itemNo = num(m[8]);
-    const lineNo = num(m[9]);
 
     if (!description || qty <= 0) continue;
     if (price <= 0 && total <= 0) continue;
     if (description.length > 200) continue;
     if (!/[A-Za-z]/.test(description)) continue;
 
+    counter++;
+
     items.push({
-      line_no: lineNo,
-      item_no: itemNo,
+      line_no: counter,
+      item_no: counter,
       description,
       unit: "",
       location: "",
@@ -236,15 +237,6 @@ function extractJodoudItems(text) {
 
   return items;
 }
-
-/* ============================================================
-   GENERIC_AR items extraction
-   For "26-200-000029" style: Arabic descriptions + qty only.
-   Row pattern (from PDF table):
-     {#}{description}{qty}
-   Example: "1لمبة جبس مقاس 204"
-            "2لمبة خارجي دائر3"
-   ============================================================ */
 function extractGenericArItems(text) {
   const source = String(text || "")
     .replace(/\u00a0/g, " ")

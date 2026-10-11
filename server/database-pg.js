@@ -878,6 +878,11 @@ export async function getDriverHandover(id) {
   return result.rows[0] || null;
 }
 
+export async function deleteDriverHandover(id) {
+  const result = await query("DELETE FROM driver_handovers WHERE id = $1", [id]);
+  return { changes: result.rowCount };
+}
+
 export async function markHandoverWhatsAppSent(id) {
   const result = await query(`
     UPDATE driver_handovers

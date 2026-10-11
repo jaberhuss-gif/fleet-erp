@@ -501,6 +501,22 @@ app.get("/api/driver-handovers/:id", async (req, res) => {
 });
 
 
+app.delete("/api/driver-handovers/:id", async (req, res) => {
+  try {
+    if (req.user?.role !== "Owner") {
+      return res.status(403).json({ success: false, error: "Only the Owner can delete driver handovers." });
+    }
+    const result = await db.deleteDriverHandover(req.params.id);
+    if (!result || result.changes === 0) {
+      return res.status(404).json({ success: false, error: "Handover not found" });
+    }
+    res.json({ success: true, ...result });
+  } catch (e) {
+    console.error("[HandoverDelete]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.get("/api/driver-handovers/:id/pdf", async (req, res) => {
   try {
     const handover = await db.getDriverHandover(req.params.id);

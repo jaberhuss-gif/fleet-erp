@@ -99,14 +99,17 @@ export const uploadInvoicePreview = (file, type = 'pdf') => {
   }).then((r) => r.data);
 };
 
-export const importInvoice = (file, type = 'pdf') => {
+export const importInvoice = (file, type = 'pdf', site = '') => {
   const fd = new FormData();
   fd.append('file', file);
   const endpoint = type === 'excel'
     ? '/invoices/import-excel'
     : '/invoices/import-pdf';
   return api.post(endpoint, fd, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+    headers: {
+      'Content-Type': 'multipart/form-data',
+      'X-Invoice-Site': site || ''
+    },
     timeout: 120000
   }).then((r) => r.data);
 };
@@ -132,5 +135,14 @@ export const finalizeInvoice = (id) =>
    ============================================================ */
 export const importOcrInvoice = (payload) =>
   api.post('/invoices/import-ocr', payload, { timeout: 120000 }).then((r) => r.data);
+
+/* ============================================================
+   SITES + INVOICE UPDATE
+   ============================================================ */
+export const getSites = () =>
+  api.get('/sites').then((r) => r.data);
+
+export const updateInvoiceSite = (id, site) =>
+  api.put('/invoices/' + id, { site }).then((r) => r.data);
 
 export default api;

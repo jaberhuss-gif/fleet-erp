@@ -620,6 +620,8 @@ export function mountInvoiceRoutes(app) {
       if (!parsed.items.length) return res.status(400).json({ success: false, error: "No line items detected." });
 
       const h = parsed.header;
+      const headerSite = String(req.headers["x-invoice-site"] || "").trim();
+      if (headerSite) h.site = headerSite;
       const importedBy = req.user?.full_name || req.user?.username || "system";
 
       const result = await transaction(async (client) => {
@@ -910,6 +912,8 @@ export function mountInvoiceRoutes(app) {
       }
 
       const h = parsed.header;
+      const headerSite = String(req.headers["x-invoice-site"] || "").trim();
+      if (headerSite) h.site = headerSite;
       if (invoice_no) h.invoice_no = invoice_no;
       if (invoice_date) h.invoice_date = invoice_date;
 
@@ -945,6 +949,30 @@ export function mountInvoiceRoutes(app) {
     } catch (e) {
       console.error("[InvoiceRoutes:import-ocr]", e);
       res.status(400).json({ success: false, error: e.message });
+    }
+  });
+  /* --- Update invoice (site, notes) --- */
+  router.put("/:id", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: "Invalid ID" });
+
+      const inv = await query("SELECT * FROM invoices WHERE id = $1", [id]);
+      if (!inv.rows[0]) return res.status(404).json({ success: false, error: "Invoice not found" });
+
+      const body = req.body || {};
+      const site = body.site !== undefined ? String(body.site || "").trim() : inv.rows[0].site;
+      const notes = body.notes !== undefined ? String(body.notes || "").trim() : inv.rows[0].notes;
+
+      const result = await query(
+        "UPDATE invoices SET site=$1, notes=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3 RETURNING *",
+        [site || null, notes || null, id]
+      );
+
+      res.json({ success: true, invoice: result.rows[0] });
+    } catch (e) {
+      console.error("[InvoiceRoutes:update]", e);
+      res.status(500).json({ success: false, error: e.message });
     }
   });
   app.use("/api/invoices", router);

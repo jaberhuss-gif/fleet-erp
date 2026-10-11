@@ -9,7 +9,9 @@ import api, {
   confirmInvoiceItemAmount,
   verifyInvoiceTotal,
   finalizeInvoice,
-  importOcrInvoice
+  importOcrInvoice,
+  getSites,
+  updateInvoiceSite
 } from "../api/client";
 import { extractTextFromPdfViaOcr } from "../utils/ocr";
 
@@ -27,6 +29,9 @@ export default function Invoices({ user }) {
   const [busy, setBusy] = useState(false);
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrProgress, setOcrProgress] = useState("");
+  const [sites, setSites] = useState([]);
+  const [editSite, setEditSite] = useState("");
+  const [savingSite, setSavingSite] = useState(false);
 
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [invoiceItems, setInvoiceItems] = useState([]);
@@ -48,6 +53,21 @@ export default function Invoices({ user }) {
   useEffect(() => {
     if (view === "list") loadList();
   }, [view]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await getSites();
+        setSites(r.sites || []);
+      } catch (e) {
+        console.error("Failed to load sites:", e);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (selectedInvoice) setEditSite(selectedInvoice.site || "");
+  }, [selectedInvoice]);
 
   const handleFile = async (file, type) => {
     if (!file) return;
@@ -103,7 +123,7 @@ export default function Invoices({ user }) {
     setError("");
     setMessage("");
     try {
-      const r = await importInvoice(previewFile, previewFile.name.endsWith(".pdf") ? "pdf" : "excel");
+      const r = await importInvoice(previewFile, previewFile.name.endsWith(".pdf") ? "pdf" : "excel", preview.header?.site || "");
       setMessage("Imported: " + (r.invoice?.invoice_no || "OK") + " (" + r.count + " items)");
       setPreview(null);
       setPreviewFile(null);
@@ -160,6 +180,21 @@ export default function Invoices({ user }) {
       await openInvoice(selectedInvoice.id);
     } catch (e) {
       setError(e.response?.data?.error || e.message);
+    }
+  };
+
+  const handleSaveSite = async () => {
+    if (!selectedInvoice) return;
+    setSavingSite(true);
+    setError("");
+    try {
+      const r = await updateInvoiceSite(selectedInvoice.id, editSite);
+      setSelectedInvoice(r.invoice);
+      setMessage("Site updated");
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    } finally {
+      setSavingSite(false);
     }
   };
 
@@ -279,6 +314,17 @@ export default function Invoices({ user }) {
                 <div className="card"><div>Items</div><b>{preview.count}</b></div>
               </div>
 
+              <div className="form-group" style={{ marginBottom: 12 }}>
+                <label>Site (required)</label>
+                <select
+                  value={preview.header?.site || ""}
+                  onChange={e => setPreview({ ...preview, header: { ...preview.header, site: e.target.value } })}
+                >
+                  <option value="">-- Select Site --</option>
+                  {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                </select>
+              </div>
+
               {preview.warnings?.length > 0 && (
                 <div className="alert alert-error">
                   <b>Warnings:</b>
@@ -326,6 +372,28 @@ export default function Invoices({ user }) {
             <div className="card"><div>Site</div><b>{selectedInvoice.site || "-"}</b></div>
             <div className="card"><div>Total</div><b>{fmt(selectedInvoice.total)}</b></div>
             <div className="card"><div>Status</div><b>{selectedInvoice.status}</b></div>
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 12, maxWidth: 400 }}>
+            <label>Site</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <select
+                value={editSite}
+                onChange={e => setEditSite(e.target.value)}
+                disabled={savingSite}
+                style={{ flex: 1 }}
+              >
+                <option value="">-- Select Site --</option>
+                {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+              </select>
+              <button
+                className="btn btn-success"
+                disabled={savingSite || editSite === (selectedInvoice.site || "")}
+                onClick={handleSaveSite}
+              >
+                {savingSite ? "Saving..." : "Save Site"}
+              </button>
+            </div>
           </div>
 
           <div style={{ marginBottom: 12, display: "flex", gap: 8 }}>

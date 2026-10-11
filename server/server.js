@@ -1496,6 +1496,22 @@ app.post("/api/inventory/fix-locations", async (req, res) => {
   }
 });
 
+app.post("/api/inventory/set-stock", async (req, res) => {
+  try {
+    if (req.user?.role !== "Owner") {
+      return res.status(403).json({ success: false, error: "Owner only." });
+    }
+    const itemCode = String(req.body?.itemCode || "").trim();
+    const quantities = req.body?.quantities || {};
+    if (!itemCode) return res.status(400).json({ success: false, error: "itemCode is required" });
+    const result = await db.setWarehouseStockManually(itemCode, quantities);
+    res.json({ success: true, ...result });
+  } catch (e) {
+    console.error("[Inventory:set-stock]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.get("/api/inventory/low-stock", async (req, res) => {
   try { res.json({ success: true, items: await getLowStockItemsPG() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }

@@ -3936,6 +3936,44 @@ export async function fixStockLocations() {
   });
 }
 
+/* ============================================================
+   SET WAREHOUSE STOCK MANUALLY (Owner only)
+   Replaces warehouse_stock for an item with specific quantities per site.
+   ============================================================ */
+export async function setWarehouseStockManually(itemCode, quantitiesBySite) {
+  await ensureWarehouseTables();
+
+  return await transaction(async client => {
+    // 1) Delete existing warehouse_stock for this item
+    await client.query("DELETE FROM warehouse_stock WHERE item_code = $1", [itemCode]);
+
+    // 2) Insert new values
+    const results = [];
+    for (const [location, qty] of Object.entries(quantitiesBySite)) {
+      const q = Number(qty);
+      if (!location || isNaN(q) || q < 0) continue;
+      const r = await client.query(`
+        INSERT INTO warehouse_stock (item_code, location_code, quantity)
+        VALUES ($1, $2, $3)
+        RETURNING *
+      `, [itemCode, location, q]);
+      results.push(r.rows[0]);
+    }
+
+    // 3) Update inventory.quantity to match sum
+    const sum = results.reduce((s, r) => s + Number(r.quantity), 0);
+    await client.query(`
+      UPDATE inventory SET quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE code = $2
+    `, [sum, itemCode]);
+
+    return {
+      item_code: itemCode,
+      total: sum,
+      by_site: results
+    };
+  });
+}
+
 export async function getLowStockItems() {
   await ensureWarehouseTables();
   const result = await query(`

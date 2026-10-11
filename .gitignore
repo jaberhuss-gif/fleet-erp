@@ -22,3 +22,10 @@ server/verify-*.mjs
 server/restore-*.mjs
 server/patch-*.mjs
 server/production-check.mjs
+# Test files
+test-*.pdf
+*.test.pdf
+server/_deprecated/
+server/rewrite-*.mjs
+server/write-*.mjs
+

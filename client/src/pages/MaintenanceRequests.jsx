@@ -10,6 +10,7 @@ export default function MaintenanceRequests() {
   const [sixMonthNotes, setSixMonthNotes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');
   const [issueFilter, setIssueFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -167,6 +168,8 @@ export default function MaintenanceRequests() {
       </div>
     </div>
 
+    {message && <div className="alert alert-success" style={{marginBottom:8}}>{message}</div>}
+      {message && <div className="alert alert-success" style={{marginBottom:8}}>{message}</div>}
     {error && <div className="alert alert-error">{error}</div>}
 
     <div className="panel" style={{marginBottom:16}}>

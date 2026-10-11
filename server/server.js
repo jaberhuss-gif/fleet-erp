@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { login, listUsers, createUser, updateUser, deleteUser, requireAuth } from "./auth.js";
-import { requirePermission, ACCESS_MODULES, getUserAccess, saveUserAccess } from "./rbac.js";
+import { requirePermission, ACCESS_MODULES, getUserAccess, saveUserAccess, ensureUserAccessTable } from "./rbac.js";
 import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
@@ -2402,6 +2402,14 @@ try {
   await db.ensureBuildingSchema();
 } catch (e) {
   console.error("[Schema] building schema check failed:", e.message);
+}
+
+// Ensure soft-delete support for users. Without this, login checks
+// deleted_at which may not exist yet on a fresh or older database.
+try {
+  await ensureUserAccessTable();
+} catch (e) {
+  console.error("[Schema] user access table check failed:", e.message);
 }
 
 app.post("/api/operations/vela-sync", requireRole("Owner"), async (req, res) => {

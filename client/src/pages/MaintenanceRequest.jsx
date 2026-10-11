@@ -4,6 +4,11 @@ import api from '../api/client';
 const initialForm={site:'',category:'',priority:'Medium',description:''};
 export default function MaintenanceRequest({user,access={}}){
   const [form,setForm]=useState(initialForm),[sites,setSites]=useState([]),[requests,setRequests]=useState([]),[employees,setEmployees]=useState([]),[contractors,setContractors]=useState([]),[assign,setAssign]=useState({}), [message,setMessage]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(true),[finance,setFinance]=useState({});
+  const [newItems,setNewItems]=useState([{description:''}]);
+  const [itemsByRequest,setItemsByRequest]=useState({});
+  const [busyItem,setBusyItem]=useState(null);
+  const [auditByRequest,setAuditByRequest]=useState({});
+  const [showAuditFor,setShowAuditFor]=useState(null);
   const canWork=user?.role==='Owner'||!!access?.support?.can_work||!!access?.building?.can_work;
   const load=async()=>{if(!canWork)return;try{const [r,e]=await Promise.all([api.get('/maintenance-requests'),api.get('/maintenance-requests/executors')]);setRequests(r.data.requests||[]);setEmployees(e.data.employees||[]);setContractors(e.data.contractors||[])}catch(e){setError(e.response?.data?.error||e.message)}};
   useEffect(()=>{Promise.all([api.get('/sites').then(r=>setSites(r.data.sites||[])),load()]).catch(e=>setError(e.response?.data?.error||e.message)).finally(()=>setLoading(false))},[]);
@@ -48,6 +53,50 @@ export default function MaintenanceRequest({user,access={}}){
   const openOutlookOnly = (recipients, subject) => {
     const mailto = "mailto:" + encodeURIComponent(recipients || "") + "?subject=" + encodeURIComponent(subject || "");
     window.location.href = mailto;
+  };
+
+  const loadAudit = async (requestId) => {
+    try {
+      const r = await api.get("/maintenance-requests/" + requestId + "/audit");
+      setAuditByRequest(prev => ({ ...prev, [requestId]: r.data.events || [] }));
+      setShowAuditFor(requestId);
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
+  };
+
+  const toggleAudit = (requestId) => {
+    if (showAuditFor === requestId) {
+      setShowAuditFor(null);
+      return;
+    }
+    if (auditByRequest[requestId]) {
+      setShowAuditFor(requestId);
+    } else {
+      loadAudit(requestId);
+    }
+  };
+
+  const loadAudit = async (requestId) => {
+    try {
+      const r = await api.get("/maintenance-requests/" + requestId + "/audit");
+      setAuditByRequest(prev => ({ ...prev, [requestId]: r.data.events || [] }));
+      setShowAuditFor(requestId);
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
+  };
+
+  const toggleAudit = (requestId) => {
+    if (showAuditFor === requestId) {
+      setShowAuditFor(null);
+      return;
+    }
+    if (auditByRequest[requestId]) {
+      setShowAuditFor(requestId);
+    } else {
+      loadAudit(requestId);
+    }
   };
 
   if(loading)return <div className="loading">Loading Support & Service...</div>;
@@ -160,7 +209,37 @@ export default function MaintenanceRequest({user,access={}}){
                     </table>
                   </div>
                 )}
-                {r.work_order_id&&<div style={{marginTop:14,padding:12,borderRadius:10,background:'#f8fafc',border:'1px solid #e2e8f0'}}>
+                                <div style={{marginTop:12}}>
+                  <button type="button" className="btn" style={{padding:"6px 12px",fontSize:12}} onClick={()=>toggleAudit(r.id)}>
+                    {showAuditFor===r.id ? "Hide Audit Trail" : "Show Audit Trail"}
+                  </button>
+                </div>
+                {showAuditFor===r.id&&auditByRequest[r.id]&&(
+                  <div style={{marginTop:8,padding:12,borderRadius:10,background:"#f1f5f9",border:"1px solid #cbd5e1",maxHeight:400,overflowY:"auto"}}>
+                    <div style={{fontWeight:700,marginBottom:8}}>Audit Trail ({auditByRequest[r.id].length} event(s))</div>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                      <thead>
+                        <tr style={{background:"#e2e8f0"}}>
+                          <th style={{padding:6,textAlign:"left",width:160}}>Date</th>
+                          <th style={{padding:6,textAlign:"left",width:140}}>Action</th>
+                          <th style={{padding:6,textAlign:"left",width:120}}>Actor</th>
+                          <th style={{padding:6,textAlign:"left"}}>Details</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {auditByRequest[r.id].map((ev, i) => (
+                          <tr key={ev.id || i} style={{borderTop:"1px solid #e2e8f0"}}>
+                            <td style={{padding:6,whiteSpace:"nowrap"}}>{String(ev.created_at || "").slice(0,19).replace("T"," ")}</td>
+                            <td style={{padding:6,fontWeight:600,color:"#1e3a8a"}}>{ev.action}</td>
+                            <td style={{padding:6}}>{ev.actor_name || ev.actor_type || "-"}</td>
+                            <td style={{padding:6,color:"#475569"}}>{ev.details ? JSON.stringify(ev.details) : ""}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+{r.work_order_id&&<div style={{marginTop:14,padding:12,borderRadius:10,background:'#f8fafc',border:'1px solid #e2e8f0'}}>
                   <div style={{fontWeight:700,marginBottom:8}}>🔄 Maintenance Workflow</div>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(120px,1fr))',gap:6}}>
                     {[{t:'1. Report',ok:true},{t:'2. Assigned',ok:!!r.work_order_id},{t:'3. Work Completed',ok:!!r.completed_at},{t:'4. Campus Confirmed',ok:!!r.requester_confirmed_at}].map(s=><div key={s.t} style={{padding:'8px 6px',textAlign:'center',borderRadius:8,background:s.ok?'#dcfce7':'#fee2e2',color:s.ok?'#166534':'#991b1b',fontSize:12,fontWeight:700}}>{s.ok?'✓':'○'} {s.t}</div>)}

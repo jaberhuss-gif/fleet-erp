@@ -12,7 +12,8 @@ import api, {
   importOcrInvoice,
   getSites,
   updateInvoiceSite,
-  createManualInvoice
+  createManualInvoice,
+  updateInvoiceItemSite
 } from "../api/client";
 import { extractTextFromPdfViaOcr } from "../utils/ocr";
 
@@ -289,6 +290,15 @@ export default function Invoices({ user }) {
   const confirmedTotal = invoiceItems.reduce((s, it) => s + Number(it.confirmed_amount || 0), 0);
   const invoiceTotal = Number(selectedInvoice?.total || 0);
   const difference = Math.round((confirmedTotal - invoiceTotal) * 100) / 100;
+
+  const handleItemSiteChange = async (itemId, site) => {
+    try {
+      await updateInvoiceItemSite(itemId, site);
+      setInvoiceItems(prev => prev.map(it => it.id === itemId ? { ...it, site } : it));
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
+  };
 
   const handleAutoMatch = async () => {
     if (!selectedInvoice) return;
@@ -667,6 +677,7 @@ export default function Invoices({ user }) {
                   <th>#</th>
                   <th>Description</th>
                   <th>Qty</th>
+                <th>Site</th>
                   <th>Unit Price</th>
                   <th>Total</th>
                   <th>Match</th>
@@ -679,6 +690,12 @@ export default function Invoices({ user }) {
                     <td>{it.line_no}</td>
                     <td>{it.description}</td>
                     <td>{it.quantity}</td>
+                    <td style={{minWidth:130}}>
+                      <select value={it.site || ""} onChange={e => handleItemSiteChange(it.id, e.target.value)} style={{width:"100%",fontSize:12}}>
+                        <option value="">-- Site --</option>
+                        {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                      </select>
+                    </td>
                     <td>{fmt(it.unit_price)}</td>
                     <td>{fmt(it.total_with_vat)}</td>
                     <td style={{ minWidth: 240 }}>

@@ -1,4 +1,4 @@
-﻿import { query } from "./postgres.js";
+import { query } from "./postgres.js";
 
 /* ============================================================
    INVOICE SCHEMA (Phase 2)
@@ -135,5 +135,7 @@ export async function ensureInvoiceSchema() {
   await query(`CREATE INDEX IF NOT EXISTS idx_mri_request ON maintenance_request_items(request_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_mri_status ON maintenance_request_items(status)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_wo_items_wo ON work_order_items(work_order_id)`);
+  await query(`ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS site TEXT`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_invoice_items_site ON invoice_items(site)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_pi_project ON project_items(project_id)`);
 }

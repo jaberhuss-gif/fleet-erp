@@ -160,4 +160,7 @@ export const getCampusWhatsAppInfo = (id) =>
 export const parseMaintenanceEmail = (text) =>
   api.post('/maintenance-requests/parse-email', { text }).then((r) => r.data);
 
+export const updateInvoiceItemSite = (itemId, site) =>
+  api.put('/invoices/items/' + itemId + '/site', { site }).then((r) => r.data);
+
 export default api;

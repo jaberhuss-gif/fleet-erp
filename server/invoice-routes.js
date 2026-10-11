@@ -1226,5 +1226,25 @@ export function mountInvoiceRoutes(app) {
       res.status(500).send("Failed to generate invoice PDF: " + e.message);
     }
   });
+  /* --- Update site for an invoice item --- */
+  router.put("/items/:itemId/site", async (req, res) => {
+    try {
+      const itemId = Number(req.params.itemId);
+      if (!Number.isFinite(itemId)) return res.status(400).json({ success: false, error: "Invalid ID" });
+
+      const site = String(req.body?.site || "").trim();
+
+      const r = await query(
+        "UPDATE invoice_items SET site=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2 RETURNING *",
+        [site || null, itemId]
+      );
+      if (!r.rows[0]) return res.status(404).json({ success: false, error: "Item not found" });
+
+      res.json({ success: true, item: r.rows[0] });
+    } catch (e) {
+      console.error("[InvoiceRoutes:item-site]", e);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
   app.use("/api/invoices", router);
 }

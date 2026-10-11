@@ -3976,6 +3976,23 @@ export async function setWarehouseStockManually(itemCode, quantitiesBySite) {
   });
 }
 
+/* ============================================================
+   SYNC inventory.quantity from warehouse_stock (Owner only)
+   ============================================================ */
+export async function syncInventoryFromWarehouseStock() {
+  await ensureWarehouseTables();
+  const result = await query(`
+    UPDATE inventory i
+    SET quantity = COALESCE(
+      (SELECT SUM(quantity) FROM warehouse_stock ws WHERE ws.item_code = i.code),
+      0
+    ),
+    updated_at = CURRENT_TIMESTAMP
+    RETURNING id, code, quantity
+  `);
+  return { updated: result.rows };
+}
+
 export async function getLowStockItems() {
   await ensureWarehouseTables();
   const result = await query(`

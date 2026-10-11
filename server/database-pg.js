@@ -3999,6 +3999,43 @@ export async function syncInventoryFromWarehouseStock() {
   return { updated: result.rows };
 }
 
+/* ============================================================
+   INVENTORY BY SITE
+   ============================================================ */
+export async function getInventoryBySite(site) {
+  await ensureWarehouseTables();
+
+  if (!site) {
+    const all = await query(`
+      SELECT
+        i.id, i.code, i.name, i.category, i.unit, i.min_stock, i.unit_cost,
+        i.supplier, i.status, i.notes,
+        COALESCE(
+          (SELECT SUM(quantity) FROM warehouse_stock WHERE item_code = i.code),
+          0
+        ) AS quantity,
+        i.location
+      FROM inventory i
+      ORDER BY i.name ASC, i.id ASC
+    `);
+    return { site: null, items: all.rows };
+  }
+
+  const result = await query(`
+    SELECT
+      i.id, i.code, i.name, i.category, i.unit, i.min_stock, i.unit_cost,
+      i.supplier, i.status, i.notes,
+      COALESCE(ws.quantity, 0) AS quantity,
+      $1::text AS location
+    FROM inventory i
+    LEFT JOIN warehouse_stock ws
+      ON ws.item_code = i.code AND ws.location_code = $1
+    ORDER BY i.name ASC, i.id ASC
+  `, [site]);
+
+  return { site, items: result.rows };
+}
+
 export async function getLowStockItems() {
   await ensureWarehouseTables();
   const result = await query(`

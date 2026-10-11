@@ -1535,6 +1535,17 @@ app.post("/api/inventory/sync-from-warehouse", async (req, res) => {
   }
 });
 
+app.get("/api/inventory/by-site", async (req, res) => {
+  try {
+    const site = String(req.query.site || "").trim() || null;
+    const result = await db.getInventoryBySite(site);
+    res.json({ success: true, ...result });
+  } catch (e) {
+    console.error("[Inventory:by-site]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.get("/api/inventory/low-stock", async (req, res) => {
   try { res.json({ success: true, items: await getLowStockItemsPG() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }

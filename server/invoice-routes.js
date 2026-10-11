@@ -71,32 +71,33 @@ async function translateItemDescriptions(items) {
    HEADER EXTRACTION (Jodoud format)
    Numbers appear BEFORE their Arabic label in the extracted text.
    ============================================================ */
-function extractInvoiceHeader(text) {
+export function detectInvoiceType(text) {
+  if (/JODOUD AL-KHALEEJ/i.test(text)) return "JODOUD";
+  if (/Invoice No\.\s*\d+-\d+-\d+/i.test(text)) return "GENERIC_AR";
+  return "UNKNOWN";
+}
+
+/* ============================================================
+   JODOUD header extraction
+   ============================================================ */
+function extractJodoudHeader(text) {
   const flat = clean(text);
 
-  // Invoice No
   const invoiceNo = clean(
     text.match(/\u0631\u0642\u0645\s*\u0627\u0644\u0641\u0627\u062a\u0648\u0631\u0629\s*[:#-]?\s*([A-Z0-9\-]+)/i)?.[1] ||
     text.match(/Invoice\s*No\.?\s*[:#-]?\s*([A-Z0-9\-]+)/i)?.[1] ||
     ""
   );
 
-  // Invoice Date
   const dateMatch = text.match(/\u062a\u0627\u0631\u064a\u062e\s*\u0627\u0644\u0641\u0627\u062a\u0648\u0631\u0629\s*[:#-]?\s*[\d:]+\s*[-]?\s*([\d\-\/]+)/) ||
                      text.match(/(\d{4}-\d{2}-\d{2})/);
   const invoiceDate = dateValue(dateMatch?.[1] || "");
 
-  // Contractor
   const contractorName = clean(flat.match(/(JODOUD AL-KHALEEJ|Jodoud Al Khaleej)/i)?.[1]) || "";
 
-  // Site: "project : ALL Camp"
   const siteMatch = flat.match(/project\s*[:#\-\s]+([A-Za-z0-9 \-]+)/i);
   const site = clean(siteMatch?.[1]) || "";
 
-  // Numbers appear BEFORE their Arabic label:
-  //   "8,385.00المجموع"
-  //   "1,257.75إجمالي الضريبة %15"
-  //   "9,642.75الإجمالي النھائي بعد الضريبة"
   const subtotalMatch =
     flat.match(/([\d,]+\.\d{2})\s*\u0627\u0644\u0645\u062c\u0645\u0648\u0639(?:\s|$|\u0635|\u0627)/) ||
     flat.match(/([\d,]+\.\d{2})\s*\u0627\u0644\u0645\u062c\u0645\u0648\u0639/) ||
@@ -109,7 +110,7 @@ function extractInvoiceHeader(text) {
   const vat = num(vatMatch?.[1]);
 
   const totalMatch =
-    flat.match(/([\d,]+\.\d{2})\s*\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a\s*\u0627\u0644\u0646[\u0647\u06be]\u0627\u0626\u064a/) ||
+    flat.match(/([\d,]+\.\d{2})\s*\u0627\u0644[\u0625\u0627]\u062c\u0645\u0627\u0644\u064a\s*\u0627\u0644\u0646[\u0647\u06be]\u0627\u0626\u064a/) ||
     flat.match(/\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a\s*\u0627\u0644\u0646\u0647\u0627\u0626\u064a[^\d]*?([\d,]+\.\d{2})/);
   const total = num(totalMatch?.[1]);
 
@@ -126,9 +127,67 @@ function extractInvoiceHeader(text) {
 }
 
 /* ============================================================
-   ITEMS EXTRACTION (Jodoud format)
+   GENERIC_AR header extraction
+   For invoices like "26-200-000029":
+     Invoice No. 26-200-000029  Date 30/09/2026
+     Subtotal: SAR 2,165.00
+     VAT 15%: SAR 324.75
+     Total: SAR 2,489.75
    ============================================================ */
-function extractInvoiceItems(text) {
+function extractGenericArHeader(text) {
+  const flat = clean(text);
+
+  const invoiceNoMatch = text.match(/Invoice\s*No\.?\s*([\d\-]+)/i);
+  const invoiceNo = clean(invoiceNoMatch?.[1]) || "";
+
+  const dateMatch = text.match(/Date\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i);
+  const invoiceDate = dateValue(dateMatch?.[1] || "");
+
+  const subcontractorMatch = flat.match(/\u0634\u0631\u0643\u0629\s+([\u0600-\u06FF\s]+?)\s+\u0627\u0644\u0631\u0642\u0645/);
+  const siteMatch = flat.match(/(?:Bill to|العمل)\s+([\u0600-\u06FF\s]+?)\s+\u0627\u0644\u0631\u0642\u0645/);
+  const customerMatch = flat.match(/(\u0634\u0631\u0643\u0629\s+\u0645\u0639\u0627\u062f\u0646[\u0600-\u06FF\s]*)/);
+
+  // Subtotal: SAR 2,165.00
+  const subtotalMatch = flat.match(/Subtotal[:\s]*\s*SAR\s*([\d,]+\.\d{2})/i);
+  const subtotal = num(subtotalMatch?.[1]);
+
+  // VAT: SAR 324.75  (with 15% nearby)
+  const vatMatch = flat.match(/(?:VAT|\u0636\u0631\u064a\u0628\u0629)[^\d]*?SAR\s*([\d,]+\.\d{2})/i);
+  const vat = num(vatMatch?.[1]);
+
+  // Total: SAR 2,489.75
+  const totalMatch = flat.match(/(?:Total|\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a)[^\d]*?SAR\s*([\d,]+\.\d{2})/i);
+  const total = num(totalMatch?.[1]);
+
+  const site = clean(siteMatch?.[1]) || clean(customerMatch?.[1]) || "";
+
+  return {
+    invoice_no: invoiceNo,
+    invoice_date: invoiceDate,
+    contractor_name: "Ivanhoe Supplier",
+    site,
+    subtotal,
+    vat,
+    vat_percent: subtotal ? Math.round((vat / subtotal) * 100 * 100) / 100 : 15,
+    total
+  };
+}
+
+/* ============================================================
+   Dispatcher: Header
+   ============================================================ */
+export function extractInvoiceHeader(text) {
+  const type = detectInvoiceType(text);
+  if (type === "JODOUD") return extractJodoudHeader(text);
+  if (type === "GENERIC_AR") return extractGenericArHeader(text);
+  return extractJodoudHeader(text);
+}
+
+/* ============================================================
+   JODOUD items extraction
+   Row: {total}{net}{discount}{price}{qty}[auto]{description}{item_no}{#}
+   ============================================================ */
+function extractJodoudItems(text) {
   const source = String(text || "")
     .replace(/\u00a0/g, " ")
     .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
@@ -142,7 +201,7 @@ function extractInvoiceItems(text) {
 
   const flat = itemsRegion.replace(/[\n\r]+/g, " ").replace(/\s{2,}/g, " ");
 
-  const rowRe = /(\d+\.\d{2})(\d+\.\d{2})(\d+\.\d{2})(\d+\.\d{2})(\d+)(auto)?([A-Za-z][A-Za-z0-9 &().,'\/-]*?)(\d{1,4})(\d{1,3})(?= \d+\.\d{2}|$)/g;
+  const rowRe = /(\d+\.\d{2})(\d+\.\d{2})(\d+\.\d{2})(\d+\.\d{2})(\d+)(auto)?([A-Za-z][A-Za-z0-9 &().,'\/\-]*?)(\d{1,4})(\d{1,3})(?= \d+\.\d{2}|$)/g;
 
   const items = [];
   let m;
@@ -177,6 +236,182 @@ function extractInvoiceItems(text) {
 
   return items;
 }
+
+/* ============================================================
+   GENERIC_AR items extraction
+   For "26-200-000029" style: Arabic descriptions + qty only.
+   Row pattern (from PDF table):
+     {#}{description}{qty}
+   Example: "1لمبة جبس مقاس 204"
+            "2لمبة خارجي دائر3"
+   ============================================================ */
+function extractGenericArItems(text) {
+  const source = String(text || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
+    .replace(/\r/g, "");
+
+  // Isolate items region: between "العمل" and "الإجمالي الفرعي"
+  const itemsStart = source.search(/\u0627\u0644\u0639\u0645\u0644/);
+  const itemsEnd = source.search(/\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a\s*\u0627\u0644\u0641\u0631\u0639\u064a/);
+  const region = itemsStart >= 0
+    ? source.slice(itemsStart, itemsEnd > 0 ? itemsEnd : undefined)
+    : source;
+
+  // Flatten
+  const flat = region.replace(/[\n\r]+/g, "").replace(/\s{2,}/g, " ").trim();
+
+  // Each row: {#}{description}{qty}
+  // # = 1-3 digits at start, description = Arabic + digits + spaces, qty = 1-3 digits at end.
+  const rowRe = /(\d{1,3})([\u0600-\u06FF][\u0600-\u06FF\s\d\u060C.,()\-]*?)(\d{1,3})(?=\d{1,3}[\u0600-\u06FF]|$)/g;
+
+  const items = [];
+  let m;
+  let idx = 0;
+  while ((m = rowRe.exec(flat))) {
+    idx++;
+    const lineNo = num(m[1]);
+    const description = clean(m[2]);
+    const qty = num(m[3]);
+
+    if (!description || qty <= 0) continue;
+    if (description.length > 200) continue;
+
+    items.push({
+      line_no: lineNo || idx,
+      item_no: idx,
+      description,
+      unit: "",
+      location: "",
+      quantity: qty,
+      unit_price: 0,
+      discount_percent: 0,
+      net_amount: 0,
+      total_with_vat: 0
+    });
+  }
+
+  return items;
+}
+
+/* ============================================================
+   Dispatcher: Items
+   ============================================================ */
+export function extractInvoiceItems(text) {
+  const type = detectInvoiceType(text);
+  if (type === "JODOUD") return extractJodoudItems(text);
+  if (type === "GENERIC_AR") return extractGenericArItems(text);
+  return extractJodoudItems(text);
+}
+
+/* ============================================================
+   OCR TEXT PARSER (Frontend Tesseract output)
+   ============================================================ */
+export function parseOcrText(text) {
+  const source = String(text || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
+    .replace(/===PAGE_BREAK===/g, "\n");
+
+  const flat = clean(source);
+
+  const invoiceNoMatch =
+    source.match(/Invoice\s*No\.?\s*[:#-]?\s*([\d\-]+)/i) ||
+    source.match(/\u0631\u0642\u0645\s*\u0627\u0644\u0645\u0633\u062a\u0646\u062f\s*[:#-]?\s*([\d\-]+)/) ||
+    source.match(/\u0631\u0642\u0645\s*\u0627\u0644\u0641\u0627\u062a\u0648\u0631\u0629\s*[:#-]?\s*([A-Z0-9\-]+)/i);
+  const invoice_no = clean(invoiceNoMatch?.[1]) || "";
+
+  const dateMatch =
+    source.match(/Date\s*[:#-]?\s*(\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4})/i) ||
+    source.match(/\u0627\u0644\u062a\u0627\u0631\u064a\u062e\s*[:#-]?\s*(\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4})/) ||
+    source.match(/(\d{4}-\d{2}-\d{2})/);
+  const invoice_date = dateValue(dateMatch?.[1] || "");
+
+  const subtotalMatch =
+    flat.match(/Subtotal[:\s]*\s*(?:SAR\s*)?([\d,]+\.\d{2})/i) ||
+    flat.match(/([\d,]+\.\d{2})\s*\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a\s*\u0627\u0644\u0641\u0631\u0639\u064a/) ||
+    flat.match(/\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a\s*\u0627\u0644\u0641\u0631\u0639\u064a[:\s]*\s*([\d,]+\.\d{2})/);
+  const subtotal = num(subtotalMatch?.[1]);
+
+  const vatMatch =
+    flat.match(/(?:VAT|\u0636\u0631\u064a\u0628\u0629\s*\u0627\u0644\u0642\u064a\u0645\u0629\s*\u0627\u0644\u0645\u0636\u0627\u0641\u0629)[^\d]*?([\d,]+\.\d{2})/i) ||
+    flat.match(/([\d,]+\.\d{2})\s*\u0636\u0631\u064a\u0628\u0629/);
+  const vat = num(vatMatch?.[1]);
+
+  const totalMatch =
+    flat.match(/Total[:\s]*\s*(?:SAR\s*)?([\d,]+\.\d{2})/i) ||
+    flat.match(/\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a[:\s]*\s*(?:SAR\s*)?([\d,]+\.\d{2})/);
+  const total = num(totalMatch?.[1]);
+
+  const header = {
+    invoice_no,
+    invoice_date,
+    contractor_name: "Raghad Al Afaq",
+    site: "",
+    subtotal,
+    vat,
+    vat_percent: subtotal ? Math.round((vat / subtotal) * 100 * 100) / 100 : 15,
+    total
+  };
+
+  const lines = source.split("\n").map(l => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const items = [];
+  let idx = 0;
+
+  const skipPatterns = [
+    /^JODOUD/i, /^Branch/i, /^Mobile/i, /^VAT Number/i, /^CR\/License/i,
+    /^\u0627\u0644\u0631\u0642\u0645\s*\u0627\u0644\u0648\u0637\u0646\u064a/,
+    /^\u0634\u0627\u0631\u0639/, /^\u0645\u0624\u0633\u0633\u0629/, /^\u0641\u0627\u062a\u0648\u0631\u0629/,
+    /^ECI/i, /^Tax No/i, /^Bill to/i, /^\u0634\u0631\u0643\u0629/, /^\u0627\u0644\u0639\u0645\u064a\u0644/,
+    /^Invoice No/i, /^Date/i, /^Due date/i, /^Payment status/i,
+    /^\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a/i, /^Eotol/i, /^Total/i, /^Subtotal/i,
+    /^VAT/i, /^\u0627\u0644\u0636\u0631\u064a\u0628\u0629/i,
+    /^#/, /^\u0627\u0644\u0635\u0646\u0641/, /^\u0627\u0644\u0643\u0645\u064a\u0629/, /^\u0633\u0639\u0631/,
+    /^\u0627\u0644\u062e\u0635\u0645/, /^\u0627\u0644\u0636\u0631\u064a\u0628\u0629/, /^\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a/,
+    /^RCS/i, /^Rtt/i, /^SAR/i, /^\u0627\u0644\u0635\u0641\u062d\u0629/, /^Created with/i, /^Aronium/i
+  ];
+
+  const isNoise = (line) => {
+    if (!line) return true;
+    if (skipPatterns.some(p => p.test(line))) return true;
+    return false;
+  };
+
+  const rowRe = /^(\d{1,3})\s+(.+?)\s+(\d{1,3})\s+([\d,]+\.\d{2})\s+(\d{1,3})%\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})$/;
+
+  for (const line of lines) {
+    if (isNoise(line)) continue;
+    const m = line.match(rowRe);
+    if (!m) continue;
+    const lineNo = Number(m[1]);
+    const description = clean(m[2]);
+    const qty = Number(m[3]);
+    const unit_price = num(m[4]);
+    const tax_pct = Number(m[5]);
+    const total_with_vat = num(m[6]);
+    const discount = num(m[7]);
+
+    if (!description || qty <= 0) continue;
+
+    items.push({
+      line_no: lineNo,
+      item_no: idx + 1,
+      description,
+      unit: "",
+      location: "",
+      quantity: qty,
+      unit_price,
+      discount_percent: discount,
+      net_amount: total_with_vat,
+      total_with_vat,
+      tax_percent: tax_pct
+    });
+    idx++;
+  }
+
+  return { header, items };
+}
+
 async function parsePdfBuffer(buffer, options = {}) {
   const parsed = await pdfParse(buffer);
   const text = parsed.text || "";
@@ -661,5 +896,56 @@ export function mountInvoiceRoutes(app) {
     }
   });
 
+  /* --- Import via OCR text (from frontend Tesseract) --- */
+  router.post("/import-ocr", async (req, res) => {
+    try {
+      const { text, filename, invoice_no, invoice_date, source_type } = req.body || {};
+      if (!text || typeof text !== "string") {
+        return res.status(400).json({ success: false, error: "text is required (OCR output)" });
+      }
+
+      const parsed = parseOcrText(text);
+      if (!parsed.items.length) {
+        return res.status(400).json({ success: false, error: "No line items detected in OCR text." });
+      }
+
+      const h = parsed.header;
+      if (invoice_no) h.invoice_no = invoice_no;
+      if (invoice_date) h.invoice_date = invoice_date;
+
+      const importedBy = req.user?.full_name || req.user?.username || "system";
+      const sourceFile = filename || "ocr-upload.pdf";
+      const srcType = source_type || "OCR";
+
+      const result = await transaction(async (client) => {
+        const invRes = await client.query(
+          "INSERT INTO invoices (invoice_no, invoice_date, contractor_name, site, subtotal, vat, vat_percent, total, source_file, source_type, imported_by, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Imported') RETURNING *",
+          [h.invoice_no || null, h.invoice_date || null, h.contractor_name || null, h.site || null, h.subtotal || 0, h.vat || 0, h.vat_percent || 15, h.total || 0, sourceFile, srcType, importedBy]
+        );
+        const invoice = invRes.rows[0];
+        const items = [];
+        for (const it of parsed.items) {
+          const r = await client.query(
+            "INSERT INTO invoice_items (invoice_id, line_no, description, unit, quantity, unit_price, discount_percent, net_amount, total_with_vat, confirmed_amount, match_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,'Unmatched') RETURNING *",
+            [invoice.id, it.line_no || null, it.description || "", it.unit || "", it.quantity || 1, it.unit_price || 0, it.discount_percent || 0, it.net_amount || 0, it.total_with_vat || 0]
+          );
+          items.push(r.rows[0]);
+        }
+        return { invoice, items };
+      });
+
+      res.status(201).json({
+        success: true,
+        message: "Invoice imported from OCR.",
+        invoice: result.invoice,
+        items: result.items,
+        count: result.items.length,
+        header: h
+      });
+    } catch (e) {
+      console.error("[InvoiceRoutes:import-ocr]", e);
+      res.status(400).json({ success: false, error: e.message });
+    }
+  });
   app.use("/api/invoices", router);
 }

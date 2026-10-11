@@ -1,9 +1,9 @@
 import * as pdfjsLib from "pdfjs-dist";
 import Tesseract from "tesseract.js";
 
-// Use the pdfjs worker from a CDN to avoid bundling issues
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs";
+// Use the bundled pdfjs worker (same version as the API)
+import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
 /**
  * Convert a PDF file to images (canvas -> dataURL) and run Tesseract OCR.

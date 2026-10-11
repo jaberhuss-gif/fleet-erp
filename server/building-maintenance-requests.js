@@ -74,6 +74,9 @@ async function ensureSchema() {
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS city TEXT`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS executor_whatsapp TEXT`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);
+  await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS acknowledgement_token_expires_at TIMESTAMPTZ`);
+  await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS completion_token_expires_at TIMESTAMPTZ`);
+  await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS confirmation_token_expires_at TIMESTAMPTZ`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_status TEXT NOT NULL DEFAULT 'Not Sent'`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMPTZ`);
   await query(`ALTER TABLE maintenance_requests ADD COLUMN IF NOT EXISTS email_error TEXT`);

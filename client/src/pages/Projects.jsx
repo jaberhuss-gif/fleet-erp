@@ -66,7 +66,7 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
   const handleEdit = (p) => {
     setForm({
       name: p.name || '', description: p.description || '', site: p.site || '',
-      projectType: p.project_type || 'Development', status: p.status || 'Active',
+      projectType: p.project_type || 'Development', status: p.status || 'Not Started',
       budget: p.budget || 0, spent: p.spent || 0,
       startDate: p.start_date || '', endDate: p.end_date || '',
       manager: p.manager || '', contractor: p.contractor || '', notes: p.notes || ''
@@ -412,7 +412,7 @@ export default function Projects({ user, access = {}, entryOnly = false }) {
                             </select></td>
                             <td>{item.actual_amount || 0}</td><td>{item.notes || '-'}</td>
                             <td style={{whiteSpace:'nowrap'}}>
-  {item.status === 'Completed' && Number(item.actual_amount || 0) > 0 && String(item.notes || '').trim() ? (
+  {item.status === 'Completed' ? (
     <button className="btn btn-warning" style={{padding:'5px 8px'}} onClick={() => reopenItem(item)}>Reopen</button>
   ) : (
     <button className="btn btn-success" style={{padding:'5px 8px'}} onClick={() => closeItem(item)}>Close</button>

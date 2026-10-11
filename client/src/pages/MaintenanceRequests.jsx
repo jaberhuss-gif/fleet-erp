@@ -71,7 +71,7 @@ export default function MaintenanceRequests() {
         && (!statusFilter || status === statusFilter)
         && (!dateFilter || opened === dateFilter);
     });
-  }, [tickets, search, issueFilter, statusFilter, dateFilter]);
+  }, [tickets, sixMonthNotes, search, issueFilter, statusFilter, dateFilter]);
 
   const rows = filtered.map(t => ({
     'Vehicle': t.plate || '',
@@ -143,13 +143,14 @@ export default function MaintenanceRequests() {
         '',
         'Fleet Management'
       ].join('\n');
-      window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(message), '_blank');
+            window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(message), '_blank');
+      setMessage('✅ WhatsApp opened for ' + phone + '. Review and send manually.');
     } catch (e) {
       setError(e.response?.data?.error || e.message);
     }
   };
 
-  const statuses = [...new Set(tickets.map(t => String(t.status || '')).filter(Boolean))];
+  const statuses = [...new Set([...tickets.map(t => String(t.status || '')), ...sixMonthNotes.map(t => String(t.status || ''))].filter(Boolean))];
 
   return <div style={{width:'100%',maxWidth:'none'}}>
     <div className="panel" style={{marginBottom:16}}>

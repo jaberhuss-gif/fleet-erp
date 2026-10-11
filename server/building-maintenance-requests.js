@@ -209,6 +209,66 @@ export function contractorOptions() { return CONTRACTORS; }
 
 export function mountBuildingMaintenanceRequestRoutes(app) {
   /* ============================================================
+     OPEN REQUESTS + ITEMS (for invoice matching)
+     ============================================================ */
+  app.get("/api/maintenance-requests/open", async (req, res) => {
+    try {
+      await ensureSchema();
+      const result = await query(`
+        SELECT 
+          mr.id AS request_id,
+          mr.request_no,
+          mr.site,
+          mr.status AS request_status,
+          mr.category,
+          mr.priority,
+          mr.description AS request_description,
+          mri.id AS item_id,
+          mri.line_no,
+          mri.description AS item_description,
+          mri.status AS item_status,
+          mri.actual_amount
+        FROM maintenance_requests mr
+        LEFT JOIN maintenance_request_items mri ON mri.request_id = mr.id
+        WHERE mr.archived_at IS NULL
+          AND mr.status NOT IN ('Closed', 'Operationally Completed')
+        ORDER BY mr.id DESC, mri.line_no ASC
+      `);
+
+      // Group by request
+      const map = new Map();
+      for (const row of result.rows) {
+        if (!map.has(row.request_id)) {
+          map.set(row.request_id, {
+            request_id: row.request_id,
+            request_no: row.request_no,
+            site: row.site,
+            status: row.request_status,
+            category: row.category,
+            priority: row.priority,
+            request_description: row.request_description,
+            items: []
+          });
+        }
+        if (row.item_id) {
+          map.get(row.request_id).items.push({
+            item_id: row.item_id,
+            line_no: row.line_no,
+            description: row.item_description,
+            status: row.item_status,
+            actual_amount: row.actual_amount
+          });
+        }
+      }
+
+      res.json({ success: true, requests: Array.from(map.values()) });
+    } catch (e) {
+      console.error("[MR:open]", e);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  /* ============================================================
      MAINTENANCE REQUEST ITEMS
      ============================================================ */
 

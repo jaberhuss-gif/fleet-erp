@@ -40,6 +40,8 @@ export default function Invoices({ user }) {
   ]);
   const [editSite, setEditSite] = useState("");
   const [savingSite, setSavingSite] = useState(false);
+  const [matchSuggestions, setMatchSuggestions] = useState({});
+  const [openRequests, setOpenRequests] = useState([]);
 
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [invoiceItems, setInvoiceItems] = useState([]);
@@ -291,10 +293,55 @@ export default function Invoices({ user }) {
   const handleAutoMatch = async () => {
     if (!selectedInvoice) return;
     setBusy(true);
+    setError("");
     try {
       const r = await autoMatchInvoice(selectedInvoice.id);
-      setMessage("Auto-match done. Review suggestions below.");
-      // Re-fetch
+      // r.items = [{ invoice_item_id, suggestions: [...] }]
+      const map = {};
+      (r.items || []).forEach(x => { map[x.invoice_item_id] = x.suggestions || []; });
+      setMatchSuggestions(map);
+      setMessage("Auto-match done. Review suggestions in the Match column.");
+      // Also load open requests for manual matching
+      try {
+        const or = await api.get("/maintenance-requests/open");
+        setOpenRequests(or.data.requests || []);
+      } catch {}
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleMatchItem = async (invoiceItemId, requestId, requestItemId) => {
+    if (!selectedInvoice) return;
+    setBusy(true);
+    try {
+      await matchInvoiceItem(selectedInvoice.id, {
+        invoice_item_id: invoiceItemId,
+        request_id: requestId,
+        request_item_id: requestItemId
+      });
+      setMessage("Item matched.");
+      setMatchSuggestions(prev => { const c = { ...prev }; delete c[invoiceItemId]; return c; });
+      await openInvoice(selectedInvoice.id);
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleUnmatchItem = async (invoiceItemId) => {
+    if (!selectedInvoice) return;
+    setBusy(true);
+    try {
+      await matchInvoiceItem(selectedInvoice.id, {
+        invoice_item_id: invoiceItemId,
+        request_id: null,
+        request_item_id: null
+      });
+      setMessage("Item unmatched.");
       await openInvoice(selectedInvoice.id);
     } catch (e) {
       setError(e.response?.data?.error || e.message);
@@ -620,11 +667,40 @@ export default function Invoices({ user }) {
                     <td>{it.quantity}</td>
                     <td>{fmt(it.unit_price)}</td>
                     <td>{fmt(it.total_with_vat)}</td>
-                    <td>
+                    <td style={{ minWidth: 240 }}>
                       {it.matched_request_id ? (
-                        <span style={{ color: "green" }}>✓ {it.matched_request_no || "Matched"}</span>
+                        <div>
+                          <span style={{ color: "green", fontWeight: 600 }}>✓ {it.matched_request_no || "Matched"}</span>
+                          {it.matched_item_description && <div style={{ fontSize: 11, color: "#666" }}>{it.matched_item_description}</div>}
+                          <button className="btn btn-warning" style={{ padding: "2px 6px", fontSize: 10, marginTop: 4 }} onClick={() => handleUnmatchItem(it.id)} disabled={busy}>Unmatch</button>
+                        </div>
                       ) : (
-                        <span style={{ color: "#999" }}>Unmatched</span>
+                        <div>
+                          <div style={{ color: "#999", marginBottom: 4 }}>Unmatched</div>
+                          {(matchSuggestions[it.id] || []).slice(0, 3).map((s, i) => (
+                            <div key={i} style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 2 }}>
+                              <span style={{ fontSize: 11, color: "#1e3a8a", flex: 1 }}>{s.request_no} — {s.item_description?.slice(0, 40)} ({Math.round((s.score || 0) * 100)}%)</span>
+                              <button className="btn btn-success" style={{ padding: "2px 6px", fontSize: 10 }} onClick={() => handleMatchItem(it.id, s.request_id, s.item_id)} disabled={busy}>Match</button>
+                            </div>
+                          ))}
+                          <select
+                            style={{ width: "100%", fontSize: 11, marginTop: 4 }}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (!val) return;
+                              const [reqId, itemId] = val.split(":");
+                              handleMatchItem(it.id, Number(reqId), Number(itemId));
+                            }}
+                            defaultValue=""
+                          >
+                            <option value="">-- Manual match --</option>
+                            {openRequests.flatMap(req => (req.items || []).map(item => (
+                              <option key={req.request_id + ":" + item.item_id} value={req.request_id + ":" + item.item_id}>
+                                {req.request_no} ({req.site}) — {item.description?.slice(0, 40)}
+                              </option>
+                            )))}
+                          </select>
+                        </div>
                       )}
                     </td>
                     <td>

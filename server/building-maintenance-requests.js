@@ -209,6 +209,99 @@ export function contractorOptions() { return CONTRACTORS; }
 
 export function mountBuildingMaintenanceRequestRoutes(app) {
   /* ============================================================
+     EMAIL HTML (for manual copy-paste into Outlook)
+     ============================================================ */
+  app.get("/api/maintenance-requests/:id/email-html", async (req, res) => {
+    try {
+      await ensureSchema();
+      const row = await getRequest(req.params.id);
+      if (!row) return res.status(404).json({ success: false, error: "Request not found" });
+
+      const stage = String(req.query.stage || "assignment").toLowerCase();
+      const baseUrl = String(process.env.PUBLIC_APP_URL || "https://fleet-erp-kn0c.onrender.com").replace(/\/$/, "");
+
+      let subject = "";
+      let html = "";
+      let recipients = "";
+
+      const esc = (v) => String(v ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+      if (stage === "assignment") {
+        const ackUrl = baseUrl + "/api/maintenance-requests/public/" + row.acknowledgement_token + "/acknowledge";
+        subject = "BUILDING MAINTENANCE — " + row.request_no + " ASSIGNED";
+        recipients = row.executor_email || "";
+        html = `
+          <div style="font-family:Arial,sans-serif;max-width:700px;padding:24px;color:#1f2937">
+            <h2 style="color:#1e3a8a">BUILDING MAINTENANCE WORK ASSIGNMENT</h2>
+            <p>Dear ${esc(row.executor_name) || "Executor"},</p>
+            <p><b>Request No.:</b> ${esc(row.request_no)}</p>
+            <p><b>Site:</b> ${esc(row.site || "-")}</p>
+            <p><b>Category:</b> ${esc(row.category || "-")}</p>
+            <p><b>Priority:</b> ${esc(row.priority || "-")}</p>
+            <p><b>Description:</b><br>${esc(row.description).replace(/\n/g, "<br>")}</p>
+            <div style="margin-top:24px;padding:16px;background:#eff6ff;border-radius:10px">
+              <h3 style="margin-top:0">STEP 1 — ACKNOWLEDGE RECEIPT</h3>
+              <p>Please confirm that you received this work assignment by clicking the link below:</p>
+              <p><a href="${ackUrl}" style="display:inline-block;padding:11px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:7px;font-weight:700">📩 ACKNOWLEDGE RECEIPT</a></p>
+              <p style="font-size:12px;color:#475569;margin-top:12px">If the button does not work, copy and paste this link into your browser:<br>
+              <a href="${ackUrl}">${ackUrl}</a></p>
+            </div>
+            <p style="margin-top:24px">Regards,<br>Fleet / Building Maintenance</p>
+          </div>
+        `;
+      } else if (stage === "completion") {
+        const compUrl = baseUrl + "/api/maintenance-requests/public/" + row.completion_token + "/work-completed";
+        subject = "BUILDING MAINTENANCE — " + row.request_no + " READY TO COMPLETE";
+        recipients = row.executor_email || "";
+        html = `
+          <div style="font-family:Arial,sans-serif;max-width:700px;padding:24px;color:#1f2937">
+            <h2 style="color:#1e3a8a">BUILDING MAINTENANCE — WORK IN PROGRESS</h2>
+            <p><b>Request No.:</b> ${esc(row.request_no)}</p>
+            <p><b>Site:</b> ${esc(row.site || "-")}</p>
+            <p>Your assignment has been acknowledged. After finishing the work, click the link below:</p>
+            <div style="margin-top:24px;padding:16px;background:#f0fdf4;border-radius:10px">
+              <h3 style="margin-top:0">STEP 2 — WORK COMPLETED</h3>
+              <p><a href="${compUrl}" style="display:inline-block;padding:11px 18px;background:#15803d;color:#fff;text-decoration:none;border-radius:7px;font-weight:700">✅ WORK COMPLETED</a></p>
+              <p style="font-size:12px;color:#475569;margin-top:12px">If the button does not work, copy and paste this link into your browser:<br>
+              <a href="${compUrl}">${compUrl}</a></p>
+            </div>
+            <p style="margin-top:24px">Regards,<br>Fleet / Building Maintenance</p>
+          </div>
+        `;
+      } else if (stage === "confirmation") {
+        const yes = baseUrl + "/api/maintenance-requests/public/" + row.confirmation_token + "/confirm?answer=yes";
+        const no = baseUrl + "/api/maintenance-requests/public/" + row.confirmation_token + "/confirm?answer=no";
+        subject = "BUILDING MAINTENANCE — " + row.request_no + " READY FOR CONFIRMATION";
+        recipients = row.requester_email || "";
+        html = `
+          <div style="font-family:Arial,sans-serif;max-width:700px;padding:24px;color:#1f2937">
+            <h2 style="color:#1e3a8a">🛠️ Maintenance Work Completed</h2>
+            <p>Your building maintenance request <b>${esc(row.request_no)}</b> has been reported as completed.</p>
+            <p><b>Site:</b> ${esc(row.site || "-")}</p>
+            <p><b>Problem:</b> ${esc(row.description).replace(/\n/g, "<br>")}</p>
+            <p>Please confirm whether everything is now OK:</p>
+            <p style="margin-top:16px">
+              <a href="${yes}" style="display:inline-block;padding:11px 18px;background:#15803d;color:#fff;text-decoration:none;border-radius:7px;font-weight:700;margin-right:8px">✅ YES — Everything is OK</a>
+              <a href="${no}" style="display:inline-block;padding:11px 18px;background:#b91c1c;color:#fff;text-decoration:none;border-radius:7px;font-weight:700">❌ NO — Problem Not Fixed</a>
+            </p>
+            <p style="font-size:12px;color:#475569;margin-top:12px">If the buttons do not work, copy and paste these links into your browser:<br>
+            YES: <a href="${yes}">${yes}</a><br>
+            NO: <a href="${no}">${no}</a></p>
+            <p style="margin-top:24px">Regards,<br>Fleet / Building Maintenance</p>
+          </div>
+        `;
+      } else {
+        return res.status(400).json({ success: false, error: "Invalid stage. Use: assignment | completion | confirmation" });
+      }
+
+      res.json({ success: true, stage, subject, recipients, html });
+    } catch (e) {
+      console.error("[MR:email-html]", e);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  /* ============================================================
      OPEN REQUESTS + ITEMS (for invoice matching)
      ============================================================ */
   app.get("/api/maintenance-requests/open", async (req, res) => {

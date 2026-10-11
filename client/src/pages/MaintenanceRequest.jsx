@@ -20,6 +20,36 @@ export default function MaintenanceRequest({user,access={}}){
     if(action==='close'&&amount!==null&&(!Number.isFinite(amount)||amount<0))return setError('Enter a valid non-negative Amount or leave it blank.');
     try{await api.post('/maintenance-requests/'+r.id+'/financial-close',{action,amount,notes:f.notes||''});setMessage(action==='close'?(amount===null?'✅ '+r.request_no+' is CLOSED without Amount.':'✅ '+r.request_no+' is CLOSED with Amount '+amount+'.'):'🔓 '+r.request_no+' is OPEN for further action.');await load()}catch(e){setError(e.response?.data?.error||e.message)}
   };
+  const copyEmailHtml = async (requestId, stage) => {
+    try {
+      const r = await api.get("/maintenance-requests/" + requestId + "/email-html?stage=" + stage);
+      if (!r.data.success) return setError(r.data.error || "Failed");
+      const html = r.data.html || "";
+      const subject = r.data.subject || "";
+      const recipients = r.data.recipients || "";
+      // Copy HTML to clipboard (rich text)
+      try {
+        const blob = new Blob([html], { type: "text/html" });
+        const textBlob = new Blob([html], { type: "text/plain" });
+        await navigator.clipboard.write([new ClipboardItem({ "text/html": blob, "text/plain": textBlob })]);
+      } catch {
+        // Fallback: copy as text
+        await navigator.clipboard.writeText(html);
+      }
+      setMessage("✅ Email copied (" + stage + "). Opening Outlook...");
+      // Open Outlook with subject
+      const mailto = "mailto:" + encodeURIComponent(recipients) + "?subject=" + encodeURIComponent(subject);
+      window.location.href = mailto;
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
+  };
+
+  const openOutlookOnly = (recipients, subject) => {
+    const mailto = "mailto:" + encodeURIComponent(recipients || "") + "?subject=" + encodeURIComponent(subject || "");
+    window.location.href = mailto;
+  };
+
   if(loading)return <div className="loading">Loading Support & Service...</div>;
   return <div className="form-container" style={{maxWidth:1200}}>
     <div className="panel" style={{background:'linear-gradient(135deg,#0f766e,#0f172a)',color:'#fff',border:'none'}}>
@@ -85,9 +115,11 @@ export default function MaintenanceRequest({user,access={}}){
                   <div className="form-group" style={{margin:0}}><label>Performed By</label><select value={a.type||''} onChange={e=>setType(r.id,e.target.value)}><option value="">Select...</option><option>Our Employee</option><option>Contractor</option></select></div>
                   <div className="form-group" style={{margin:0}}><label>{a.type==='Contractor'?'Contractor':'Employee'}</label><select value={a.name||''} disabled={!a.type} onChange={e=>setExecutor(r.id,e.target.value)}><option value="">Select...</option>{list.map(x=><option key={x.email||x.id} value={x.name||x.full_name}>{x.name||x.full_name}{x.email?' — '+x.email:''}</option>)}</select></div>
                   <button className="btn btn-primary" onClick={()=>doAssign(r.id)}>🛠️ Assign & Create WO</button>
+                  <button type="button" className="btn" style={{marginLeft:6}} onClick={()=>copyEmailHtml(r.id,"assignment")} title="Copy HTML + Open Outlook">📋 Copy Assignment Email</button>
                 </div>}
                 {r.status==='Assigned'&&!r.acknowledged_at&&<div style={{marginTop:12,display:'flex',justifyContent:'flex-end'}}>
                   <button type="button" className="btn btn-primary" onClick={()=>resendAssignment(r.id)}>📧 Resend Assignment Email</button>
+                  <button type="button" className="btn" style={{marginLeft:6}} onClick={()=>copyEmailHtml(r.id,"completion")} title="Copy Completion Email">📋 Copy Completion Email</button>
                 </div>}
                 {itemsByRequest[r.id] && itemsByRequest[r.id].length > 0 && (
                   <div style={{marginTop:14,padding:12,borderRadius:10,background:"#fff7ed",border:"1px solid #fdba74"}}>
@@ -140,6 +172,9 @@ export default function MaintenanceRequest({user,access={}}){
                     {r.requester_confirmation==='yes'&&'✅ Campus confirmed YES. Ready for final financial control.'}
                     {r.requester_confirmation==='no'&&'❌ Campus reported NOT FIXED. Request is reopened for rework.'}
                   </div>
+                </div>}
+                {r.completed_at&&!r.requester_confirmed_at&&<div style={{marginTop:12,display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <button type="button" className="btn btn-primary" onClick={()=>copyEmailHtml(r.id,"confirmation")}>📋 Copy Campus Confirmation Email</button>
                 </div>}
                 {r.requester_confirmation==='yes'&&['Operationally Completed','Open'].includes(r.status)&&<div style={{marginTop:12,padding:12,borderRadius:10,background:'#ecfdf5',border:'1px solid #86efac'}}>
                   <div style={{fontWeight:700,marginBottom:8}}>💰 Final Financial Control</div>

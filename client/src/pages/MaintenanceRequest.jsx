@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import api, { reopenMaintenanceRequest, archiveMaintenanceRequest } from '../api/client';
+import api, { reopenMaintenanceRequest, archiveMaintenanceRequest, getCampusWhatsAppInfo } from '../api/client';
 
 const initialForm={site:'',category:'',priority:'Medium',description:''};
 export default function MaintenanceRequest({user,access={}}){
@@ -116,6 +116,27 @@ export default function MaintenanceRequest({user,access={}}){
       await reopenMaintenanceRequest(requestId, notes);
       setMessage("Request reopened.");
       await load();
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
+  };
+
+  const handleCampusWhatsApp = async (requestId) => {
+    try {
+      const info = await getCampusWhatsAppInfo(requestId);
+      if (!info.success) return setError(info.error || "Failed to load WhatsApp info");
+      if (!info.campus_phone) {
+        // No phone: copy message + link to clipboard
+        try {
+          await navigator.clipboard.writeText(info.message || "");
+          setMessage("No campus phone set. Message copied to clipboard.");
+        } catch {
+          setError("No campus phone set, and clipboard failed.");
+        }
+        return;
+      }
+      window.open(info.whatsapp_url, "_blank");
+      setMessage("WhatsApp opened for " + info.campus_name + " (" + info.campus_phone + "). Review and send.");
     } catch (e) {
       setError(e.response?.data?.error || e.message);
     }
@@ -277,6 +298,7 @@ export default function MaintenanceRequest({user,access={}}){
                 </div>}
                 {r.completed_at&&!r.requester_confirmed_at&&<div style={{marginTop:12,display:"flex",gap:8,flexWrap:"wrap"}}>
                   <button type="button" className="btn btn-primary" onClick={()=>copyEmailHtml(r.id,"confirmation")}>📋 Copy Campus Confirmation Email</button>
+                  <button type="button" className="btn btn-success" style={{marginLeft:6}} onClick={()=>handleCampusWhatsApp(r.id)}>📱 Send to Campus via WhatsApp</button>
                 </div>}
                 {r.requester_confirmation==='yes'&&['Operationally Completed','Open'].includes(r.status)&&<div style={{marginTop:12,padding:12,borderRadius:10,background:'#ecfdf5',border:'1px solid #86efac'}}>
                   <div style={{fontWeight:700,marginBottom:8}}>💰 Final Financial Control</div>

@@ -154,4 +154,7 @@ export const reopenMaintenanceRequest = (id, notes) =>
 export const archiveMaintenanceRequest = (id) =>
   api.post('/maintenance-requests/' + id + '/archive').then((r) => r.data);
 
+export const getCampusWhatsAppInfo = (id) =>
+  api.get('/maintenance-requests/' + id + '/campus-whatsapp').then((r) => r.data);
+
 export default api;

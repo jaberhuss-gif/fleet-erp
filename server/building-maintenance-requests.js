@@ -212,6 +212,63 @@ export function contractorOptions() { return CONTRACTORS; }
 
 export function mountBuildingMaintenanceRequestRoutes(app) {
   /* ============================================================
+     CAMPUS WHATSAPP INFO
+     ============================================================ */
+  app.get("/api/maintenance-requests/:id/campus-whatsapp", async (req, res) => {
+    try {
+      await ensureSchema();
+      const row = await getRequest(req.params.id);
+      if (!row) return res.status(404).json({ success: false, error: "Request not found" });
+      if (!row.confirmation_token) return res.status(400).json({ success: false, error: "Confirmation token missing" });
+
+      const baseUrl = String(process.env.PUBLIC_APP_URL || "https://fleet-erp-kn0c.onrender.com").replace(/\/$/, "");
+      const confirmUrl = baseUrl + "/api/maintenance-requests/public/" + row.confirmation_token + "/confirm";
+
+      // Look up campus contact (from maintenance_workflow_contacts)
+      let campusPhone = "";
+      let campusName = row.requester_name || "Campus";
+      try {
+        const contacts = await query(
+          "SELECT full_name, whatsapp, phone FROM maintenance_workflow_contacts WHERE active = TRUE AND (LOWER(contact_role) LIKE '%campus%' OR LOWER(contact_role) LIKE '%manager%') LIMIT 5"
+        );
+        if (contacts.rows.length) {
+          campusName = contacts.rows[0].full_name || campusName;
+          campusPhone = contacts.rows[0].whatsapp || contacts.rows[0].phone || "";
+        }
+      } catch {}
+
+      const message = [
+        "Hello " + campusName + ",",
+        "",
+        "Maintenance request " + row.request_no + " at " + (row.site || "-") + " is ready for your confirmation.",
+        "",
+        "Problem: " + (row.description || ""),
+        "",
+        "Please confirm whether the work has been completed satisfactorily:",
+        confirmUrl,
+        "",
+        "Thank you,",
+        "Fleet / Building Maintenance"
+      ].join("\n");
+
+      res.json({
+        success: true,
+        request_no: row.request_no,
+        site: row.site,
+        description: row.description,
+        campus_name: campusName,
+        campus_phone: campusPhone,
+        confirm_url: confirmUrl,
+        message,
+        whatsapp_url: campusPhone ? "https://wa.me/" + campusPhone.replace(/\D/g, "") + "?text=" + encodeURIComponent(message) : ""
+      });
+    } catch (e) {
+      console.error("[MR:campus-whatsapp]", e);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  /* ============================================================
      REOPEN CLOSED REQUEST (Owner only)
      ============================================================ */
   app.post("/api/maintenance-requests/:id/reopen", async (req, res) => {

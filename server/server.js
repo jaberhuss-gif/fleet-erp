@@ -1512,6 +1512,16 @@ app.post("/api/inventory/set-stock", async (req, res) => {
   }
 });
 
+app.get("/api/inventory/warehouse-stock", async (req, res) => {
+  try {
+    const { query } = await import("./postgres.js");
+    const r = await query("SELECT * FROM warehouse_stock ORDER BY item_code, location_code");
+    res.json({ success: true, stock: r.rows });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.get("/api/inventory/low-stock", async (req, res) => {
   try { res.json({ success: true, items: await getLowStockItemsPG() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }

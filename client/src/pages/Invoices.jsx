@@ -146,6 +146,20 @@ export default function Invoices({ user }) {
     }
   };
 
+  const handleDeleteInvoice = async (inv) => {
+    if (user?.role !== "Owner") return setError("Owner only.");
+    if (!confirm("Delete invoice " + (inv.invoice_no || inv.id) + "? Cannot be undone.")) return;
+    try {
+      const r = await api.delete("/invoices/" + inv.id);
+      if (r.data?.success) {
+        setMessage("Invoice deleted.");
+        await loadList();
+      }
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
+  };
+
   const openInvoice = async (id) => {
     setBusy(true);
     setError("");
@@ -404,7 +418,10 @@ export default function Invoices({ user }) {
                     <td>{fmt(inv.total)}</td>
                     <td>{inv.item_count || 0}</td>
                     <td>{inv.status || "-"}</td>
-                    <td><button className="btn" onClick={() => openInvoice(inv.id)}>Open</button></td>
+                    <td>
+                      <button className="btn" onClick={() => openInvoice(inv.id)}>Open</button>
+                      {user?.role === "Owner" && <button className="btn btn-danger" style={{marginLeft:6}} onClick={() => handleDeleteInvoice(inv)}>Delete</button>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

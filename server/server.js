@@ -1483,6 +1483,19 @@ app.post("/api/inventory/rebuild-stock", async (req, res) => {
   }
 });
 
+app.post("/api/inventory/fix-locations", async (req, res) => {
+  try {
+    if (req.user?.role !== "Owner") {
+      return res.status(403).json({ success: false, error: "Owner only." });
+    }
+    const result = await db.fixStockLocations();
+    res.json({ success: true, ...result });
+  } catch (e) {
+    console.error("[Inventory:fix-locations]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.get("/api/inventory/low-stock", async (req, res) => {
   try { res.json({ success: true, items: await getLowStockItemsPG() }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }

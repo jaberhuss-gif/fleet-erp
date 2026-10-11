@@ -3854,6 +3854,54 @@ export async function rebuildWarehouseStock() {
   });
 }
 
+/* ============================================================
+   FIX STOCK LOCATIONS — normalize location names to match sites.name
+   Owner only. Idempotent.
+   ============================================================ */
+export async function fixStockLocations() {
+  await ensureWarehouseTables();
+
+  return await transaction(async client => {
+    // 1) Normalize stock_transactions
+    const updates = [
+      ["Uqlat Al-Suqour", "Uqlat Al Soqour"],
+      ["Uqlat Al-Suqor", "Uqlat Al Soqour"],
+      ["Al Hulifa", "Al Hulayfa"],
+      ["Al Quwayiyah.", "Al Quwayiyah"],
+      ["Al-Quwayiyiah Wadi Bida", "Al Quwayiyah"],
+      ["Mahd adh Dhahab", "Mahd ad Dhahab"]
+    ];
+
+    let txUpdated = 0;
+    for (const [oldName, newName] of updates) {
+      const r1 = await client.query(`UPDATE stock_transactions SET from_location = $1 WHERE from_location = $2`, [newName, oldName]);
+      const r2 = await client.query(`UPDATE stock_transactions SET to_location = $1 WHERE to_location = $2`, [newName, oldName]);
+      const r3 = await client.query(`UPDATE stock_transactions SET site = $1 WHERE site = $2`, [newName, oldName]);
+      txUpdated += r1.rowCount + r2.rowCount + r3.rowCount;
+    }
+
+    // 2) Normalize inventory.location
+    let invUpdated = 0;
+    for (const [oldName, newName] of updates) {
+      const r = await client.query(`UPDATE inventory SET location = $1 WHERE location = $2`, [newName, oldName]);
+      invUpdated += r.rowCount;
+    }
+
+    // 3) Normalize warehouse_stock.location_code
+    let wsUpdated = 0;
+    for (const [oldName, newName] of updates) {
+      const r = await client.query(`UPDATE warehouse_stock SET location_code = $1 WHERE location_code = $2`, [newName, oldName]);
+      wsUpdated += r.rowCount;
+    }
+
+    return {
+      stock_transactions_updated: txUpdated,
+      inventory_updated: invUpdated,
+      warehouse_stock_updated: wsUpdated
+    };
+  });
+}
+
 export async function getLowStockItems() {
   await ensureWarehouseTables();
   const result = await query(`

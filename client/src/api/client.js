@@ -77,4 +77,53 @@ export const getDashboard = () =>
 export const sendVoiceTranscript = (data) =>
   api.post('/voice/transcript', data).then((r) => r.data);
 
+/* ============================================================
+   INVOICES (Phase 4)
+   ============================================================ */
+
+export const getInvoices = () =>
+  api.get('/invoices').then((r) => r.data);
+
+export const getInvoice = (id) =>
+  api.get('/invoices/' + id).then((r) => r.data);
+
+export const uploadInvoicePreview = (file, type = 'pdf') => {
+  const fd = new FormData();
+  fd.append('file', file);
+  const endpoint = type === 'excel'
+    ? '/invoices/import-excel/preview'
+    : '/invoices/import-pdf/preview';
+  return api.post(endpoint, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000
+  }).then((r) => r.data);
+};
+
+export const importInvoice = (file, type = 'pdf') => {
+  const fd = new FormData();
+  fd.append('file', file);
+  const endpoint = type === 'excel'
+    ? '/invoices/import-excel'
+    : '/invoices/import-pdf';
+  return api.post(endpoint, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000
+  }).then((r) => r.data);
+};
+
+export const autoMatchInvoice = (id) =>
+  api.post('/invoices/' + id + '/auto-match').then((r) => r.data);
+
+export const matchInvoiceItem = (id, data) =>
+  api.post('/invoices/' + id + '/match', data).then((r) => r.data);
+
+export const confirmInvoiceItemAmount = (itemId, amount) =>
+  api.put('/invoices/items/' + itemId + '/confirm-amount', { amount }).then((r) => r.data);
+
+export const verifyInvoiceTotal = (id) =>
+  api.get('/invoices/' + id + '/verify-total').then((r) => r.data);
+
+export const finalizeInvoice = (id) =>
+  api.post('/invoices/' + id + '/finalize').then((r) => r.data);
+
 export default api;

@@ -3839,26 +3839,36 @@ export async function rebuildWarehouseStock() {
       }
     }
 
-    // 3) For any inventory item that has quantity > 0 but no warehouse_stock,
-    //    put the remaining in its item.location (migration from old system)
-    const inv = await client.query("SELECT code, quantity, location FROM inventory WHERE quantity > 0");
+    // 3) Reconcile with inventory.quantity
+    const inv = await client.query("SELECT id, code, quantity, location FROM inventory");
     let migrationCount = 0;
     for (const item of inv.rows) {
-      const existing = await client.query(`
+      const targetQty = Number(item.quantity);
+      const wsSum = await client.query(`
         SELECT COALESCE(SUM(quantity), 0) AS total
         FROM warehouse_stock WHERE item_code = $1
       `, [item.code]);
 
-      const distributed = Number(existing.rows[0].total || 0);
-      const remaining = Number(item.quantity) - distributed;
-      if (remaining > 0) {
-        const loc = item.location || "Main Warehouse";
+      const distributed = Number(wsSum.rows[0].total || 0);
+      const diff = targetQty - distributed;
+      const loc = item.location || "Main Warehouse";
+
+      if (diff > 0) {
+        // Add the difference to item.location
         await client.query(`
           INSERT INTO warehouse_stock (item_code, location_code, quantity)
           VALUES ($1, $2, $3)
           ON CONFLICT (item_code, location_code)
           DO UPDATE SET quantity = warehouse_stock.quantity + EXCLUDED.quantity
-        `, [item.code, loc, remaining]);
+        `, [item.code, loc, diff]);
+        migrationCount++;
+      } else if (diff < 0) {
+        // Remove the excess from item.location
+        await client.query(`
+          UPDATE warehouse_stock
+          SET quantity = GREATEST(quantity + $1, 0)
+          WHERE item_code = $2 AND location_code = $3
+        `, [diff, item.code, loc]);
         migrationCount++;
       }
     }
@@ -3882,10 +3892,6 @@ export async function rebuildWarehouseStock() {
   });
 }
 
-/* ============================================================
-   FIX STOCK LOCATIONS — normalize location names to match sites.name
-   Owner only. Idempotent.
-   ============================================================ */
 export async function fixStockLocations() {
   await ensureWarehouseTables();
 

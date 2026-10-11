@@ -1067,11 +1067,11 @@ app.put("/api/work-orders/:id", async (req, res) => {
   try { res.json({ success: true, order: await updateWorkOrderPG(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
-app.put("/api/work-orders/:id/close", async (req, res) => {
+app.put("/api/work-orders/:id/close", requireRole("Owner"), async (req, res) => {
   try { res.json({ success: true, order: await closeWorkOrderPG(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
-app.delete("/api/work-orders/:id", async (req, res) => {
+app.delete("/api/work-orders/:id", requireRole("Owner"), async (req, res) => {
   try { res.json({ success: await deleteWorkOrderPG(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
@@ -1103,11 +1103,11 @@ app.put("/api/projects/:id", async (req, res) => {
   try { res.json({ success: true, project: await updateProjectPG(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
-app.put("/api/projects/:id/close", async (req, res) => {
+app.put("/api/projects/:id/close", requireRole("Owner"), async (req, res) => {
   try { res.json({ success: true, project: await closeProjectPG(req.params.id, req.body) }); }
   catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
-app.delete("/api/projects/:id", async (req, res) => {
+app.delete("/api/projects/:id", requireRole("Owner"), async (req, res) => {
   try { res.json({ success: await deleteProjectPG(req.params.id) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });

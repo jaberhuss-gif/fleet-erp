@@ -14,6 +14,7 @@ import { mountV2 } from "./v2/index.js";
 import { getKmDailyNotifications, getDailyKmReport, getDriverDailyKmStatus } from "./kmDailyNotifications.js";
 import { updateLastOilChangePG } from "./vehicles-pg.js";
 import { mountPdfWorkOrderImport } from "./pdfWorkOrderImport.js";
+import { vehicleReportHtml } from "./vehicle-report.js";
 import { mountPdfProjectImport } from "./pdfProjectImport.js";
 import { mountTireRoutes } from "./tire-management.js";
 import { toWaMeNumber, toWaMeInternational } from "./phone.js";
@@ -415,6 +416,34 @@ app.get("/api/vehicles/:id/details", async (req, res) => {
   } catch (e) {
     console.error("[details]", e);
     res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get("/api/vehicles/:id/report", async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const vid = req.params.id;
+    const v = await getVehicleByIdPG(vid);
+    if (!v) return res.status(404).send("Vehicle not found");
+    const safe = (p) => p.catch(e => { console.warn("[report]", e.message); return []; });
+    const [readings, oilChanges, handovers, stockTransactions, inspections] = await Promise.all([
+      safe(listReadingsPG(vid)),
+      safe(listOilChangesPG(vid)),
+      safe(db.listHandoversByVehicle ? db.listHandoversByVehicle(vid) : []),
+      safe(db.listStockTransactionsByVehicle ? db.listStockTransactionsByVehicle(vid) : []),
+      safe(db.listPeriodicMaintenance ? db.listPeriodicMaintenance({ vehicleId: vid }) : [])
+    ]);
+    let tires = [];
+    try {
+      const { getVehicleTires } = await import("./tire-management.js");
+      const tiresData = await getVehicleTires(vid).catch(() => ({}));
+      tires = tiresData.tires || [];
+    } catch (e) { console.warn("[report] tires:", e.message); }
+    const html = vehicleReportHtml(v, { readings, oilChanges, handovers, stockTransactions, inspections, tires });
+    res.type("html").send(html);
+  } catch (e) {
+    console.error("[VehicleReport]", e);
+    res.status(500).send(e.message || "Unable to generate report");
   }
 });
 

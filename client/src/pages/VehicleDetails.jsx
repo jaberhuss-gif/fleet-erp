@@ -32,7 +32,11 @@ export default function VehicleDetails({vehicleId,onBack}){
  const healthClass=health==='Critical'?'status-urgent':health==='Attention'?'status-warning':'status-safe';
  const fmt=n=>Number(n||0).toLocaleString();
  return <div className="vehicle360">
-  <button className="btn" onClick={onBack} style={{marginBottom:16}}>← Back to Fleet</button>
+  <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:16}}>
+    <button className="btn" onClick={onBack}>← Back to Fleet</button>
+    <a className="btn" href={'/api/vehicles/'+vehicleId+'/report'} target="_blank" rel="noopener noreferrer" style={{textDecoration:'none'}}>🖨️ Print PDF</a>
+    <a className="btn" href={'https://wa.me/'+String(v&&v.driver_phone||'').replace(/[^0-9]/g,'')+'?text='+encodeURIComponent('تقرير السيارة '+(v&&v.plate_number||'')+' '+(v&&v.plate_code||'')+' | المشرف: Hussein Anwar')} target="_blank" rel="noopener noreferrer" style={{textDecoration:'none'}}>📱 WhatsApp</a>
+  </div>
   <div className="panel" style={{overflow:'hidden'}}>
    <div style={{padding:'24px',background:'linear-gradient(135deg,#0f766e,#0891b2)',color:'#fff'}}>
     <div style={{fontSize:12,opacity:.8,fontWeight:800,letterSpacing:'.12em'}}>VEHICLE 360</div>

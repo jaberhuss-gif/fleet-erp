@@ -35,14 +35,20 @@ app.get("/api/gm/dashboard", async (req, res) => {
     let urgentCount = 0;
     let warningCount = 0;
     let safeCount = 0;
+    let invalidCount = 0;
 
     const processedVehicles = vehicles.map(v => {
       const current = Number(v.current_km || 0);
       const last = Number(v.last_oil_km || 0);
       const diff = current - last;
+      const invalidReading = current > 0 && last > current;
 
       let status = "Safe";
-      if (diff >= 5000 || last === 0) {
+      if (invalidReading) {
+        // Never label a negative oil-KM difference as Safe or overdue.
+        status = "Invalid Reading";
+        invalidCount++;
+      } else if (diff >= 5000 || last === 0) {
         status = "Urgent Overdue";
         urgentCount++;
       } else if (diff >= 4500) {
@@ -66,6 +72,7 @@ app.get("/api/gm/dashboard", async (req, res) => {
         safe: safeCount,
         warning: warningCount,
         urgentOverdue: urgentCount,
+        invalidReading: invalidCount,
         vehicles: processedVehicles
       },
       workOrdersSummary: { total: 0, open: 0, closed: 0 },

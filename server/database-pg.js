@@ -84,11 +84,16 @@ function formatVehicle(row) {
   const interval = numberValue(row.oil_change_interval, 5000);
 
   const kmSinceOil = currentKM - lastOilKM;
-  const remaining = interval - kmSinceOil;
+  const invalidReading = currentKM > 0 && lastOilKM > currentKM;
+  const remaining = invalidReading ? null : interval - kmSinceOil;
 
   let oilStatus = "Safe";
 
-  if (kmSinceOil >= interval) {
+  // A recorded oil-change odometer cannot be higher than a known current odometer.
+  // Never classify this data-integrity problem as Safe or Overdue.
+  if (invalidReading) {
+    oilStatus = "Invalid Reading";
+  } else if (kmSinceOil >= interval || lastOilKM === 0) {
     oilStatus = "Urgent Overdue";
   } else if (kmSinceOil >= interval - 500) {
     oilStatus = "Warning";
@@ -2070,11 +2075,15 @@ function formatPGVehicle(v) {
   const currentKm = Number(v.current_km || 0);
   const lastOilKm = Number(v.last_oil_km || 0);
   const interval = Number(v.oil_change_interval || 5000);
-  const sinceOil = Math.max(0, currentKm - lastOilKm);
+  const sinceOil = currentKm - lastOilKm;
+  const invalidReading = currentKm > 0 && lastOilKm > currentKm;
 
   let calculatedStatus = v.status || "Safe";
 
-  if (lastOilKm === 0 && currentKm > 0) {
+  // Invalid odometer chronology must never be reported as Safe or as an oil-change alert.
+  if (invalidReading) {
+    calculatedStatus = "Invalid Reading";
+  } else if (lastOilKm === 0 && currentKm > 0) {
     calculatedStatus = "Urgent Overdue";
   } else if (sinceOil >= interval) {
     calculatedStatus = "Urgent Overdue";
@@ -2098,7 +2107,7 @@ function formatPGVehicle(v) {
     currentKm,
     lastOilKm,
     sinceOil,
-    remaining: Math.max(0, interval - sinceOil),
+    remaining: invalidReading ? null : Math.max(0, interval - sinceOil),
     interval,
     status: calculatedStatus,
     lastOilChangeDate: v.last_oil_change_date || null,
@@ -2114,15 +2123,30 @@ function formatPGVehicle(v) {
 
 export async function getAlerts() {
   const vehiclesResult = await query(`
-    SELECT *
-    FROM vehicles
-    ORDER BY id ASC
+    SELECT v.*,
+           oh.oil_change_km AS canonical_last_oil_km,
+           oh.oil_change_date AS canonical_last_oil_change_date
+    FROM vehicles v
+    LEFT JOIN LATERAL (
+      SELECT oil_change_km, oil_change_date
+      FROM oil_changes
+      WHERE vehicle_id = v.id
+        AND COALESCE(notes, '') NOT ILIKE '%Google Sheet%'
+      ORDER BY oil_change_date DESC NULLS LAST, id DESC
+      LIMIT 1
+    ) oh ON true
+    ORDER BY v.id ASC
   `);
 
-  const vehicles = vehiclesResult.rows.map(formatPGVehicle);
+  const vehicles = vehiclesResult.rows.map(row => formatPGVehicle({
+    ...row,
+    last_oil_km: row.canonical_last_oil_km ?? row.last_oil_km,
+    last_oil_change_date: row.canonical_last_oil_change_date ?? row.last_oil_change_date
+  }));
 
   const urgent = vehicles.filter(v => v.status === "Urgent Overdue");
   const warning = vehicles.filter(v => v.status === "Warning");
+  const invalid = vehicles.filter(v => v.status === "Invalid Reading");
   const safe = vehicles.filter(v => v.status === "Safe");
 
   // Contract: urgent/warning/safe are vehicle ARRAYS (the shape every
@@ -2133,10 +2157,13 @@ export async function getAlerts() {
     urgent,
     warning,
     safe,
+    invalid,
     urgentVehicles: urgent,
     warningVehicles: warning,
+    invalidVehicles: invalid,
     urgentCount: urgent.length,
     warningCount: warning.length,
+    invalidCount: invalid.length,
     safeCount: safe.length,
     summary: {
       total: vehicles.length,

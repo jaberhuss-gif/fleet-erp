@@ -519,6 +519,32 @@ function VehiclesTab({ data, alerts }) {
         <GMCARD icon={Icon.vehicle} label="Total" value={data.vehicles.total} sub="All vehicles" gradient="blue" />
       </div>
 
+      {alerts?.invalid?.length > 0 && (
+        <div className="gm-panel gm-panel-warning">
+          <div className="gm-panel-header">
+            <h2>⚠️ Invalid Odometer Readings — Verify Before Oil Alerts ({alerts.invalid.length})</h2>
+          </div>
+          <div className="gm-table-wrap">
+            <table>
+              <thead><tr><th>Plate</th><th>Driver</th><th>Location</th><th>Current KM</th><th>Last Oil KM</th><th>Difference</th><th>Status</th></tr></thead>
+              <tbody>
+                {alerts.invalid.map(v => (
+                  <tr key={v.id}>
+                    <td style={{ fontWeight: 700 }}>{v.plate}</td>
+                    <td>{v.driver || '-'}</td>
+                    <td>{v.location || '-'}</td>
+                    <td>{fmt(v.currentKm)}</td>
+                    <td>{fmt(v.lastOilKm)}</td>
+                    <td className="gm-text-danger gm-text-bold">{fmt(v.sinceOil)}</td>
+                    <td><strong>Invalid Reading — verify source</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {alerts?.urgent?.length > 0 && (
         <div className="gm-panel gm-panel-danger">
           <div className="gm-panel-header">

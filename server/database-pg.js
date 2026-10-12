@@ -1843,7 +1843,8 @@ export async function listSites() {
     ["SAB", "Al Sabiyah", "Madina"],
     ["WB", "Wadi Beddah", "Al Baha"],
     ["QUW", "Al Quwayiyah", "Al Quwayiyah"],
-    ["MAH", "Mahd ad Dhahab", "Mahd"]
+    ["MAH", "Mahd ad Dhahab", "Mahd"],
+    ["RIB", "Riyadh (Bawazeer)", "Riyadh"]
   ];
 
   for (const [code, name, region] of canonicalSites) {
@@ -1877,7 +1878,8 @@ export async function listSites() {
       'al quwayiyah',
       'mah',
       'mahd',
-      'mahd ad dhahab'
+      'mahd ad dhahab',
+      'riyadh (bawazeer)'
     )
     ORDER BY id ASC
   `);
@@ -1893,6 +1895,7 @@ export async function listSites() {
     if (['wadi beddah', 'wadi bidah', 'wadi bida'].includes(key)) return 'Wadi Beddah';
     if (['al quwayiyah'].includes(key)) return 'Al Quwayiyah';
     if (['mah', 'mahd', 'mahd ad dhahab'].includes(key)) return 'Mahd ad Dhahab';
+    if (['riyadh (bawazeer)', 'riyadh bawazeer'].includes(key)) return 'Riyadh (Bawazeer)';
     return String(value || '').trim();
   };
 

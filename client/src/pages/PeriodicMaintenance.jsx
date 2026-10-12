@@ -1364,13 +1364,13 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
 
             {loading ? <div className="loading">Loading...</div> : (
               <table className="periodic-maintenance-screen-table" style={{marginTop:14}}>
-                <thead><tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Inspection Expiry</th><th>Completed</th><th>Status</th><th>Technician</th><th>Cost</th><th>Notes</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Inspection Expiry</th><th>Completed</th><th>Status</th><th>Driver Confirmed</th><th>Technician</th><th>Cost</th><th>Notes</th><th>Actions</th></tr></thead>
                 <tbody>
                   {currentList.map(r=>(
                     <tr key={r.id}>
                       <td><strong>{r.vehicle_plate||'-'}</strong></td><td>{r.vehicle_location||'-'}</td><td>{r.driver_name||'-'}</td>
                       <td>{TYPE_LABELS[r.type]||r.type}</td><td>{r.scheduled_date||'-'}</td><td><strong>{getInspectionExpiry(r.vehicle_id)}</strong></td>
-                      <td>{r.completed_date||'-'}</td><td>{getStatusBadge(r)}</td><td>{r.technician||'-'}</td><td>{Number(r.cost||0).toLocaleString()}</td>
+                      <td>{r.completed_date||'-'}</td><td>{getStatusBadge(r)}</td><td>{r.whatsapp_confirmed_at ? <span className="status-badge status-safe">✓ {new Date(r.whatsapp_confirmed_at).toLocaleDateString()}</span> : r.status === 'Pending Driver Confirmation' ? <span className="status-badge status-warning">⏳ Pending</span> : <span>-</span>}</td><td>{r.technician||'-'}</td><td>{Number(r.cost||0).toLocaleString()}</td>
                       <td style={{whiteSpace:'pre-wrap',minWidth:220}}>{r.notes||'-'}</td>
                       <td>
                         <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>

@@ -4689,12 +4689,22 @@ export async function getInventoryReportFull(filters = {}) {
     console.warn("[ReportFull:handovers]", e.message);
   }
 
+  // ? Use warehouse_stock for actual available balance
+  const stockRows = await query(`
+    SELECT location_code AS site, SUM(quantity) AS available
+    FROM warehouse_stock
+    GROUP BY location_code
+  `);
+  const stockMap = Object.fromEntries(stockRows.rows.map(r => [r.site, Number(r.available || 0)]));
+
   const bySiteWithBalance = bySite.rows.map(row => ({
     ...row,
-    available: Number(row.received_qty || 0)
-      - Number(row.issued_qty || 0)
-      - Number(row.transferred_out_qty || 0)
-      + Number(row.transferred_in_qty || 0)
+    available: stockMap[row.site] !== undefined
+      ? stockMap[row.site]
+      : Number(row.received_qty || 0)
+        - Number(row.issued_qty || 0)
+        - Number(row.transferred_out_qty || 0)
+        + Number(row.transferred_in_qty || 0)
   }));
 
   return {

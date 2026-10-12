@@ -835,6 +835,48 @@ export async function createDriverHandover(data = {}) {
   return result.rows[0];
 }
 
+export async function updateDriverHandover(id, data = {}) {
+  await ensureDriverHandoverSchema();
+
+  const current = await query("SELECT * FROM driver_handovers WHERE id = $1", [id]);
+  if (!current.rows[0]) throw new Error("Handover not found");
+
+  const h = current.rows[0];
+
+  const previous_driver_id = data.previousDriverId ?? data.previous_driver_id ?? h.previous_driver_id;
+  const previous_driver_name = data.previousDriverName ?? data.previous_driver_name ?? h.previous_driver_name;
+  const previous_driver_phone = data.previousDriverPhone ?? data.previous_driver_phone ?? h.previous_driver_phone;
+  const new_driver_id = data.newDriverId ?? data.new_driver_id ?? h.new_driver_id;
+  const new_driver_name = data.newDriverName ?? data.new_driver_name ?? h.new_driver_name;
+  const new_driver_phone = data.newDriverPhone ?? data.new_driver_phone ?? h.new_driver_phone;
+  const km_at_handover = data.kmAtHandover ?? data.km_at_handover ?? h.km_at_handover;
+  const notes = data.notes ?? h.notes;
+  const open_issues = data.openIssues !== undefined
+    ? JSON.stringify(data.openIssues)
+    : (data.open_issues !== undefined ? JSON.stringify(data.open_issues) : JSON.stringify(h.open_issues || []));
+
+  const result = await query(`
+    UPDATE driver_handovers
+    SET previous_driver_id = $1,
+        previous_driver_name = $2,
+        previous_driver_phone = $3,
+        new_driver_id = $4,
+        new_driver_name = $5,
+        new_driver_phone = $6,
+        km_at_handover = $7,
+        notes = $8,
+        open_issues = $9::jsonb
+    WHERE id = $10
+    RETURNING *
+  `, [
+    previous_driver_id, previous_driver_name, previous_driver_phone,
+    new_driver_id, new_driver_name, new_driver_phone,
+    km_at_handover, notes, open_issues, id
+  ]);
+
+  return result.rows[0];
+}
+
 export async function listDriverHandovers(filters = {}) {
   await ensureDriverHandoverSchema();
 

@@ -562,6 +562,19 @@ app.get("/api/driver-handovers/:id", async (req, res) => {
 });
 
 
+app.put("/api/driver-handovers/:id", async (req, res) => {
+  try {
+    if (req.user?.role !== "Owner") {
+      return res.status(403).json({ success: false, error: "Owner only." });
+    }
+    const updated = await db.updateDriverHandover(req.params.id, req.body || {});
+    res.json({ success: true, handover: updated });
+  } catch (e) {
+    console.error("[Handover:update]", e);
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
 app.delete("/api/driver-handovers/:id", async (req, res) => {
   try {
     if (req.user?.role !== "Owner") {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../api/client';
 
-const tabs=['Overview','KM','Maintenance','Oil','Tires','Inspection','Documents','Alerts','History'];
+const tabs=['Overview','KM','Maintenance','Oil','Tires','Inspection','Documents','Alerts','History','Handovers','Stock'];
 
 export default function VehicleDetails({vehicleId,onBack}){
  const [data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[tab,setTab]=useState('Overview');
@@ -15,7 +15,7 @@ export default function VehicleDetails({vehicleId,onBack}){
     ]);
     const v=detail.data?.vehicle||{};
     const pm=pmRes.data?.records||pmRes.data?.maintenance||[];
-    setData({vehicle:{...v,plate_number:v.plate_number||String(v.plate||'').split(/\s+/)[0],plate_code:v.plate_code||String(v.plate||'').split(/\s+/).slice(1).join(' '),driver_name:v.driver_name||v.driver||'',driver_phone:v.driver_phone||v.phone||'',legacy_location:v.location||'',legacy_driver_name:v.driver||'',legacy_driver_phone:v.phone||'',current_km:v.currentKm??v.currentKM??0,last_oil_km:v.lastOilKm??v.lastOilKM??0,oil_interval_km:v.oilChangeInterval??5000,last_oil_change_date:v.lastOilChangeDate||v.last_oil_change_date||'',status:'Active'},readings:detail.data?.readings||[],alerts:[],submissions:[],compliance:[],maintenance:pm,tickets:ticketRes.data?.tickets||[],schedules:pm,documents:[],tires:[]});
+    setData({vehicle:{...v,plate_number:v.plate_number||String(v.plate||'').split(/\s+/)[0],plate_code:v.plate_code||String(v.plate||'').split(/\s+/).slice(1).join(' '),driver_name:v.driver_name||v.driver||'',driver_phone:v.driver_phone||v.phone||'',legacy_location:v.location||'',legacy_driver_name:v.driver||'',legacy_driver_phone:v.phone||'',current_km:v.currentKm??v.currentKM??0,last_oil_km:v.lastOilKm??v.lastOilKM??0,oil_interval_km:v.oilChangeInterval??5000,last_oil_change_date:v.lastOilChangeDate||v.last_oil_change_date||'',status:'Active'},readings:detail.data?.readings||[],alerts:[],submissions:[],compliance:[],maintenance:pm,tickets:ticketRes.data?.tickets||[],schedules:pm,documents:[],tires:detail.data?.tires||[],handovers:detail.data?.handovers||[],stockTransactions:detail.data?.stockTransactions||[],inspections:detail.data?.inspections||[]});
     return;
   }catch(legacyError){
     const r=await api.get('/v2/vehicles/'+vehicleId+'/360');
@@ -25,7 +25,7 @@ export default function VehicleDetails({vehicleId,onBack}){
  if(loading)return <div className="loading">Loading Vehicle 360...</div>;
  if(error)return <div className="alert alert-error">{error}</div>;
  if(!data)return <div className="loading">Vehicle not found.</div>;
- const v=data.vehicle,alerts=data.alerts||[],readings=data.readings||[],maintenance=data.maintenance||[],tickets=data.tickets||[],submissions=data.submissions||[],compliance=data.compliance||[],schedules=data.schedules||[],documents=data.documents||[],tires=data.tires||[];
+ const v=data.vehicle,alerts=data.alerts||[],readings=data.readings||[],maintenance=data.maintenance||[],tickets=data.tickets||[],submissions=data.submissions||[],compliance=data.compliance||[],schedules=data.schedules||[],documents=data.documents||[],tires=data.tires||[],handovers=data.handovers||[],stockTransactions=data.stockTransactions||[],inspections=data.inspections||[];
  const sinceOil=Math.max(0,Number(v.current_km||0)-Number(v.last_oil_km||0)),interval=Number(v.oil_interval_km||5000),remaining=Math.max(0,interval-sinceOil);
  const openAlerts=alerts.filter(a=>a.status!=='Closed'),critical=openAlerts.filter(a=>a.severity==='Critical').length,high=openAlerts.filter(a=>a.severity==='High').length;
  const health=critical?'Critical':high?'Attention':v.status==='Active'?'Operational':'Unavailable';
@@ -63,6 +63,8 @@ export default function VehicleDetails({vehicleId,onBack}){
   {tab==='Tires'&&<DataTable rows={tires} columns={['position','brand','size','serial_number','installed_km','condition','status']} headers={['Position','Brand','Size','Serial','Installed KM','Condition','Status']} empty="No tire records recorded."/>}
   {tab==='Inspection'&&<><div className="panel"><h2>Inspection & Compliance</h2><Info label="Last Inspection" value={v.inspection_last_date||'Not recorded'}/><Info label="Inspection Due" value={v.inspection_due_date||'Not recorded'}/><Info label="Registration Expiry" value={v.registration_expiry||'Not recorded'}/><Info label="Insurance Expiry" value={v.insurance_expiry||'Not recorded'}/></div><DataTable rows={schedules} columns={['maintenance_type','next_due_km','next_due_date','status']} headers={['Periodic Service','Next KM','Next Date','Status']} empty="No periodic schedule."/></>}
   {tab==='History'&&<div className="cards-grid"><DataTable rows={submissions} columns={['submission_date','status','sheet_driver']} headers={['Date','Daily Submission','Driver']} empty="No daily submissions yet."/><DataTable rows={compliance} columns={['compliance_date','status']} headers={['Date','KM Compliance']} empty="No KM compliance records yet."/><DataTable rows={tickets} columns={['opened_at','title','priority','status']} headers={['Opened','Ticket','Priority','Status']} empty="No vehicle tickets yet."/></div>}
+  {tab==='Handovers'&&<DataTable rows={handovers} columns={['handover_date','new_driver_name','new_driver_phone','km_at_handover','previous_driver_name','notes']} headers={['Date','New Driver','Phone','KM at Handover','Previous Driver','Notes']} empty="No driver handovers recorded."/>}
+  {tab==='Stock'&&<DataTable rows={stockTransactions} columns={['trans_date','type','item_code','quantity','from_location','to_location','vehicle_plate','driver_name','reference_no','notes']} headers={['Date','Type','Item','Qty','From','To','Vehicle','Driver','Ref','Notes']} empty="No stock transactions for this vehicle."/>}
  </div>;
 }
 function Info({label,value}){return <div style={{display:'flex',justifyContent:'space-between',gap:16,padding:'11px 0',borderBottom:'1px solid var(--border-color)'}}><span style={{color:'var(--text-secondary)'}}>{label}</span><strong>{String(value)}</strong></div>}

@@ -4056,6 +4056,32 @@ export async function getLowStockItems() {
    PERIODIC MAINTENANCE
    ============================================================ */
 
+/* ============================================================
+   VEHICLE DETAILS — Handovers + Stock Transactions
+   ============================================================ */
+
+export async function listHandoversByVehicle(vehicleId) {
+  await ensureDriverHandoverSchema();
+  const result = await query(
+    `SELECT * FROM driver_handovers
+     WHERE vehicle_id = $1
+     ORDER BY handover_date DESC, id DESC`,
+    [vehicleId]
+  );
+  return result.rows;
+}
+
+export async function listStockTransactionsByVehicle(vehicleId) {
+  await ensureWarehouseTables();
+  const result = await query(
+    `SELECT * FROM stock_transactions
+     WHERE vehicle_id = $1
+     ORDER BY trans_date DESC, id DESC`,
+    [vehicleId]
+  );
+  return result.rows;
+}
+
 export async function listPeriodicMaintenance(filters = {}) {
   let sql = `
     SELECT

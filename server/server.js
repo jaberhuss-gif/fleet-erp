@@ -378,12 +378,39 @@ app.get("/api/vehicles/list", async (req, res) => {
     res.status(500).json({ success: false, error: e.message });
   }
 });
-
 app.get("/api/vehicles/:id/details", async (req, res) => {
   try {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    const v = await getVehicleByIdPG(req.params.id); if (!v) return res.status(404).json({ success: false }); res.json({ success: true, vehicle: v, readings: await listReadingsPG(req.params.id), oilChanges: await listOilChangesPG(req.params.id) }); }
-  catch (e) { res.status(500).json({ success: false, error: e.message }); }
+    const v = await getVehicleByIdPG(req.params.id);
+    if (!v) return res.status(404).json({ success: false });
+    const vid = req.params.id;
+    const safe = (p) => p.catch(e => { console.warn("[details]", e.message); return []; });
+    const [readings, oilChanges, handovers, stockTransactions, inspections] = await Promise.all([
+      safe(listReadingsPG(vid)),
+      safe(listOilChangesPG(vid)),
+      safe(db.listHandoversByVehicle ? db.listHandoversByVehicle(vid) : []),
+      safe(db.listStockTransactionsByVehicle ? db.listStockTransactionsByVehicle(vid) : []),
+      safe(db.listPeriodicMaintenance ? db.listPeriodicMaintenance({ vehicleId: vid }) : [])
+    ]);
+    let tires = [];
+    try {
+      const { getVehicleTires } = await import("./tire-management.js");
+      tires = await getVehicleTires(vid).catch(() => []);
+    } catch (e) { console.warn("[details] tires:", e.message); }
+    res.json({
+      success: true,
+      vehicle: v,
+      readings,
+      oilChanges,
+      handovers,
+      stockTransactions,
+      inspections: inspections || [],
+      tires: tires || []
+    });
+  } catch (e) {
+    console.error("[details]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 app.post("/api/vehicles", async (req, res) => {

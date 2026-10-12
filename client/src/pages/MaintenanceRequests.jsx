@@ -45,7 +45,8 @@ export default function MaintenanceRequests() {
           priority: 'Medium',
           status: repairStatuses[String(r.id)] || 'Open',
           opened_at: r.completed_date || r.scheduled_date || '',
-          pm_record_id: r.id
+          pm_record_id: r.id,
+          whatsapp_confirmed_at: r.whatsapp_confirmed_at || null
         }));
       setSixMonthNotes(pmNotes);
     } catch (e) {
@@ -82,7 +83,8 @@ export default function MaintenanceRequests() {
     'Description': t.description || '',
     'Priority': t.priority || 'Medium',
     'Status': t.status || '',
-    'Opened Date': t.opened_at ? String(t.opened_at).slice(0, 10) : ''
+    'Opened Date': t.opened_at ? String(t.opened_at).slice(0, 10) : '',
+    'Driver Confirmed': t.whatsapp_confirmed_at ? String(t.whatsapp_confirmed_at).slice(0, 10) : ''
   }));
 
   const exportExcel = () => {
@@ -192,7 +194,7 @@ export default function MaintenanceRequests() {
        <div style={{width:'100%',overflowX:'auto'}}>
         <table className="data-table" style={{width:'100%',minWidth:1100}}>
           <thead><tr>
-            <th>Vehicle</th><th>Location</th><th>Driver</th><th>Issue Type</th><th>Description</th><th>Priority</th><th>Status</th><th>Opened</th><th>Actions</th>
+            <th>Vehicle</th><th>Location</th><th>Driver</th><th>Issue Type</th><th>Description</th><th>Priority</th><th>Status</th><th>Opened</th><th>Driver Confirmed</th><th>Actions</th>
           </tr></thead>
           <tbody>{filtered.map(t=><tr key={t.id}>
             <td><strong>{t.plate || '—'}</strong></td>
@@ -203,6 +205,7 @@ export default function MaintenanceRequests() {
             <td>{t.priority || 'Medium'}</td>
             <td>{t.status || '—'}</td>
             <td>{t.opened_at ? String(t.opened_at).slice(0,10) : '—'}</td>
+            <td>{t.whatsapp_confirmed_at ? <span style={{color:'#16a34a',whiteSpace:'nowrap'}}>? {String(t.whatsapp_confirmed_at).slice(0,10)}</span> : '�'}</td>
             <td>{['completed','closed','confirmed'].includes(String(t.status || '').trim().toLowerCase()) ? <span style={{whiteSpace:'nowrap'}}>✓ Confirmed</span> : <button type="button" className="btn" style={{whiteSpace:'nowrap'}} onClick={()=>sendWhatsApp(t)}>📱 WhatsApp</button>}</td>
           </tr>)}</tbody>
         </table>

@@ -772,11 +772,16 @@ app.get("/api/periodic-maintenance/repair-statuses", async (req, res) => {
         pm.whatsapp_confirmation_source AS pm_source,
         t.status AS ticket_status,
         t.whatsapp_confirmed_at AS ticket_confirmed_at,
-        t.whatsapp_confirmation_source AS ticket_source
+          t.whatsapp_confirmation_source AS ticket_source,
+          annual.whatsapp_confirmed_at AS annual_confirmed_at
       FROM periodic_maintenance pm
       LEFT JOIN tickets t
         ON t.category = '6-Month Maintenance'
        AND COALESCE(t.resolution_notes, '') LIKE '[PM_REPAIR:' || pm.id || ']%'
+        LEFT JOIN periodic_maintenance annual
+          ON annual.vehicle_id = pm.vehicle_id
+         AND annual.type = 'inspection'
+         AND annual.status = 'Completed'
       WHERE pm.type = '6_months_general'
         AND pm.status IN ('Completed', 'Pending Driver Confirmation', 'Pending', 'Open')
       ORDER BY pm.id DESC
@@ -786,7 +791,7 @@ app.get("/api/periodic-maintenance/repair-statuses", async (req, res) => {
       const key = String(row.pm_id);
       if (statuses[key]) continue;
       const status = row.ticket_status || row.pm_status || 'Open';
-      const confirmedAt = row.ticket_confirmed_at || row.pm_confirmed_at || null;
+        const confirmedAt = row.ticket_confirmed_at || row.pm_confirmed_at || row.annual_confirmed_at || null;
       const source = row.ticket_source || row.pm_source || null;
       statuses[key] = {
         status,

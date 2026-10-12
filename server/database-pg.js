@@ -4153,6 +4153,20 @@ export async function autoCloseSixMonthCoveredByAnnual() {
           notes = COALESCE(notes, '') || CASE WHEN COALESCE(notes, '') = '' THEN '' ELSE E'\n\n' END || $2
       WHERE id = $3
     `, [row.annual_completed_date || row.annual_confirmed_at, autoNote, row.six_id]);
+    
+    // Update the linked ticket to Completed (for Maintenance Requests page)
+    await query(`
+      UPDATE tickets
+      SET status = 'Completed',
+          closed_at = CURRENT_TIMESTAMP,
+          closed_by = 'Auto-closed (Annual Confirmed)',
+          whatsapp_confirmed_at = $1,
+          whatsapp_confirmation_source = 'Fleet Management - Auto-closed (Annual)',
+          whatsapp_confirmation_token = NULL
+      WHERE category = '6-Month Maintenance'
+        AND COALESCE(resolution_notes, '') LIKE $2
+    `, [row.annual_confirmed_at || row.annual_completed_date, '[PM_REPAIR:' + row.six_id + ']%']);
+
     closedCount++;
     closedRecords.push({
       six_id: row.six_id,

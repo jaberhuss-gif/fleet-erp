@@ -4127,7 +4127,6 @@ export async function autoCloseSixMonthCoveredByAnnual() {
       ON annual.vehicle_id = six.vehicle_id
      AND annual.type = 'inspection'
      AND annual.status = 'Completed'
-     AND annual.whatsapp_confirmed_at IS NOT NULL
     WHERE six.type = '6_months_general'
       AND six.status = 'Pending'
       AND COALESCE(six.notes, '') NOT LIKE '%Auto-closed%'
@@ -4143,7 +4142,7 @@ export async function autoCloseSixMonthCoveredByAnnual() {
   for (const row of toClose) {
     const annualDate = row.annual_completed_date
       ? String(row.annual_completed_date).slice(0, 10)
-      : String(row.annual_confirmed_at || '').slice(0, 10);
+      : String(row.annual_confirmed_at || new Date().toISOString()).slice(0, 10);
     const autoNote = 'Auto-closed: Annual inspection confirmed by driver via WhatsApp on ' + annualDate;
     await query(`
       UPDATE periodic_maintenance
@@ -4152,7 +4151,7 @@ export async function autoCloseSixMonthCoveredByAnnual() {
           technician = 'Auto-closed (Annual Confirmed)',
           notes = COALESCE(notes, '') || CASE WHEN COALESCE(notes, '') = '' THEN '' ELSE E'\n\n' END || $2
       WHERE id = $3
-    `, [row.annual_completed_date || row.annual_confirmed_at, autoNote, row.six_id]);
+    `, [row.annual_completed_date || row.annual_confirmed_at || new Date(), autoNote, row.six_id]);
     
     // Update the linked ticket to Completed (for Maintenance Requests page)
     await query(`

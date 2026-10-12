@@ -4703,6 +4703,7 @@ export async function getInventoryReportFull(filters = {}) {
       st.vehicle_id,
       COALESCE(st.vehicle_plate, st.reference_no, 'Unknown') AS vehicle_plate,
       MAX(st.driver_name) AS driver_name,
+      MAX(st.site) AS site,
       COALESCE(SUM(st.quantity) FILTER (WHERE st.type = 'OUT'), 0) AS out_qty,
       COUNT(*) FILTER (WHERE st.type = 'OUT') AS out_count,
       MAX(st.created_at) AS last_movement

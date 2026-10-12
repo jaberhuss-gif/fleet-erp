@@ -413,6 +413,41 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       setError(e.response?.data?.error || e.message);
     }
   };
+  const reportMaintenanceWhatsApp = async (row) => {
+    try {
+      setError('');
+      const info = (await api.get('/periodic-maintenance/' + row.id + '/repair-whatsapp-info')).data || {};
+      const phone = normalizeWaPhone(info.driverPhone);
+      const driver = info.driverName || row.driver_name || 'Driver';
+      const plate = info.vehiclePlate || row.vehicle_plate || '';
+      if (!phone) {
+        setError('No driver WhatsApp number found for vehicle ' + plate);
+        return;
+      }
+      const confirmationUrl = String(info.confirmationUrl || '').trim();
+      const description = String(info.description || row.notes || '').trim();
+      const message = [
+        'Hello ' + driver + ',',
+        '',
+        'Vehicle ' + plate + ' - 6-Month Maintenance.',
+        '',
+        'Issues to repair:',
+        description,
+        '',
+        'IMPORTANT: If the maintenance has been completed, open the link below and press YES.',
+        'If NOT completed yet, DO NOT press YES.',
+        '',
+        'Confirmation link:',
+        confirmationUrl,
+        '',
+        'Fleet Management'
+      ].join('\n');
+      window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(message), '_blank');
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
+  };
+
   const openConfirmationLink = async (row) => {
     try {
       setError('');
@@ -1337,7 +1372,14 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
                       <td>{TYPE_LABELS[r.type]||r.type}</td><td>{r.scheduled_date||'-'}</td><td><strong>{getInspectionExpiry(r.vehicle_id)}</strong></td>
                       <td>{r.completed_date||'-'}</td><td>{getStatusBadge(r)}</td><td>{r.technician||'-'}</td><td>{Number(r.cost||0).toLocaleString()}</td>
                       <td style={{whiteSpace:'pre-wrap',minWidth:220}}>{r.notes||'-'}</td>
-                      <td>{canWork&&r.status==='Pending'&&<button className="btn btn-success" onClick={()=>handleComplete(r)}>Complete</button>} {canWork&&<button className="btn btn-primary" onClick={()=>handleEdit(r)}>Edit</button>} {canWork&&<button className="btn btn-danger" onClick={()=>handleDelete(r.id)}>Del</button>}</td>
+                      <td>
+                        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                          {canWork&&r.status==='Pending'&&<button className="btn btn-success" onClick={()=>handleComplete(r)}>Complete</button>}
+                          {r.type==='6_months_general'&&<button className="btn" style={{padding:'6px 10px',background:'#25D366',color:'#fff'}} onClick={()=>reportMaintenanceWhatsApp(r)}>📱 WhatsApp</button>}
+                          {canWork&&<button className="btn btn-primary" onClick={()=>handleEdit(r)}>Edit</button>}
+                          {canWork&&<button className="btn btn-danger" onClick={()=>handleDelete(r.id)}>Del</button>}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

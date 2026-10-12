@@ -84,7 +84,7 @@ export default function MaintenanceRequests() {
     'Priority': t.priority || 'Medium',
     'Status': t.status || '',
     'Opened Date': t.opened_at ? String(t.opened_at).slice(0, 10) : '',
-    'Driver Confirmed': t.whatsapp_confirmed_at ? String(t.whatsapp_confirmed_at).slice(0, 10) : ''
+    'Driver Confirmed': t.whatsapp_confirmed_at ? 'Confirmed via WhatsApp (' + String(t.whatsapp_confirmed_at).slice(0, 10) + ')' : 'Not Confirmed'
   }));
 
   const exportExcel = () => {

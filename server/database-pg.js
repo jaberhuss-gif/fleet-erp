@@ -905,28 +905,22 @@ export async function listDriverHandovers(filters = {}) {
   sql += ` ORDER BY h.handover_date DESC, h.id DESC LIMIT 200`;
 
   const result = await query(sql, params);
-  // Filter open_issues by current tickets for each handover
+  // Add current_status to each open_issue
   const rows = result.rows;
   for (const h of rows) {
-    if (!h.vehicle_id) continue;
+    if (!h.open_issues || !h.open_issues.length) continue;
     try {
-      const liveTickets = await query(`
-        SELECT id, title, category, priority, status, opened_at, description
-        FROM tickets
-        WHERE vehicle_id = $1
-          AND status NOT IN ('Closed', 'Completed')
-          AND title NOT LIKE '%Maintenance Overdue%'
-          AND opened_at >= NOW() - INTERVAL '60 days'
-        ORDER BY opened_at DESC
-        LIMIT 50
-      `, [h.vehicle_id]);
-      h.open_issues = liveTickets.rows.map(t => ({
-        id: t.id, title: t.title, category: t.category,
-        priority: t.priority, status: t.status,
-        opened_at: t.opened_at,
-        description: String(t.description || '').slice(0, 500)
+      const ids = h.open_issues.map(i => i.id).filter(Boolean);
+      if (!ids.length) continue;
+      const currentStatuses = await query(`
+        SELECT id, status FROM tickets WHERE id = ANY($1)
+      `, [ids]);
+      const statusMap = Object.fromEntries(currentStatuses.rows.map(r => [String(r.id), r.status]));
+      h.open_issues = h.open_issues.map(i => ({
+        ...i,
+        current_status: statusMap[String(i.id)] || i.status
       }));
-    } catch (e) { console.warn("[listDriverHandovers:liveIssues]", e.message); }
+    } catch (e) { console.warn("[listDriverHandovers:currentStatus]", e.message); }
   }
   return rows;
 }
@@ -949,29 +943,24 @@ export async function getDriverHandover(id) {
 
   const h = result.rows[0];
   if (!h) return null;
-  
-  // Filter open_issues by current tickets
-  if (h.vehicle_id) {
+
+  // Add current_status to each open_issue (from stored snapshot)
+  if (h.open_issues && h.open_issues.length) {
     try {
-      const liveTickets = await query(`
-        SELECT id, title, category, priority, status, opened_at, description
-        FROM tickets
-        WHERE vehicle_id = $1
-          AND status NOT IN ('Closed', 'Completed')
-          AND title NOT LIKE '%Maintenance Overdue%'
-          AND opened_at >= NOW() - INTERVAL '60 days'
-        ORDER BY opened_at DESC
-        LIMIT 50
-      `, [h.vehicle_id]);
-      h.open_issues = liveTickets.rows.map(t => ({
-        id: t.id, title: t.title, category: t.category,
-        priority: t.priority, status: t.status,
-        opened_at: t.opened_at,
-        description: String(t.description || '').slice(0, 500)
-      }));
-    } catch (e) { console.warn("[getDriverHandover:liveIssues]", e.message); }
+      const ids = h.open_issues.map(i => i.id).filter(Boolean);
+      if (ids.length) {
+        const currentStatuses = await query(`
+          SELECT id, status FROM tickets WHERE id = ANY($1)
+        `, [ids]);
+        const statusMap = Object.fromEntries(currentStatuses.rows.map(r => [String(r.id), r.status]));
+        h.open_issues = h.open_issues.map(i => ({
+          ...i,
+          current_status: statusMap[String(i.id)] || i.status
+        }));
+      }
+    } catch (e) { console.warn("[getDriverHandover:currentStatus]", e.message); }
   }
-  
+
   return h;
 }
 

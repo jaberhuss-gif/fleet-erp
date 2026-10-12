@@ -2124,8 +2124,8 @@ function formatPGVehicle(v) {
 export async function getAlerts() {
   const vehiclesResult = await query(`
     SELECT v.*,
-           COALESCE(oh.oil_change_km, v.last_oil_km) AS last_oil_km,
-           COALESCE(oh.oil_change_date, v.last_oil_change_date) AS last_oil_change_date
+           oh.oil_change_km AS canonical_last_oil_km,
+           oh.oil_change_date AS canonical_last_oil_change_date
     FROM vehicles v
     LEFT JOIN LATERAL (
       SELECT oil_change_km, oil_change_date
@@ -2138,7 +2138,11 @@ export async function getAlerts() {
     ORDER BY v.id ASC
   `);
 
-  const vehicles = vehiclesResult.rows.map(formatPGVehicle);
+  const vehicles = vehiclesResult.rows.map(row => formatPGVehicle({
+    ...row,
+    last_oil_km: row.canonical_last_oil_km ?? row.last_oil_km,
+    last_oil_change_date: row.canonical_last_oil_change_date ?? row.last_oil_change_date
+  }));
 
   const urgent = vehicles.filter(v => v.status === "Urgent Overdue");
   const warning = vehicles.filter(v => v.status === "Warning");

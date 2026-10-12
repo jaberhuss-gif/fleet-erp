@@ -905,22 +905,48 @@ export async function listDriverHandovers(filters = {}) {
   sql += ` ORDER BY h.handover_date DESC, h.id DESC LIMIT 200`;
 
   const result = await query(sql, params);
-  // Add current_status to each open_issue
   const rows = result.rows;
+
   for (const h of rows) {
-    if (!h.open_issues || !h.open_issues.length) continue;
-    try {
-      const ids = h.open_issues.map(i => i.id).filter(Boolean);
-      if (!ids.length) continue;
-      const currentStatuses = await query(`
-        SELECT id, status FROM tickets WHERE id = ANY($1)
-      `, [ids]);
-      const statusMap = Object.fromEntries(currentStatuses.rows.map(r => [String(r.id), r.status]));
-      h.open_issues = h.open_issues.map(i => ({
-        ...i,
-        current_status: statusMap[String(i.id)] || i.status
-      }));
-    } catch (e) { console.warn("[listDriverHandovers:currentStatus]", e.message); }
+    const handoverDate = h.handover_date || h.created_at;
+
+    // Smart: if open_issues empty, fetch tickets at handover time
+    if ((!h.open_issues || h.open_issues.length === 0) && h.vehicle_id && handoverDate) {
+      try {
+        const ticketsAtHandover = await query(`
+          SELECT id, title, category, priority, status, opened_at, description
+          FROM tickets
+          WHERE vehicle_id = $1
+            AND opened_at <= $2
+            AND (closed_at IS NULL OR closed_at >= $2)
+          ORDER BY opened_at DESC
+          LIMIT 50
+        `, [h.vehicle_id, handoverDate]);
+        h.open_issues = ticketsAtHandover.rows.map(t => ({
+          id: t.id, title: t.title, category: t.category,
+          priority: t.priority, status: t.status,
+          opened_at: t.opened_at,
+          description: String(t.description || '').slice(0, 500)
+        }));
+      } catch (e) { console.warn("[listDriverHandovers:atHandover]", e.message); }
+    }
+
+    // Add current_status
+    if (h.open_issues && h.open_issues.length) {
+      try {
+        const ids = h.open_issues.map(i => i.id).filter(Boolean);
+        if (ids.length) {
+          const currentStatuses = await query(`
+            SELECT id, status FROM tickets WHERE id = ANY($1)
+          `, [ids]);
+          const statusMap = Object.fromEntries(currentStatuses.rows.map(r => [String(r.id), r.status]));
+          h.open_issues = h.open_issues.map(i => ({
+            ...i,
+            current_status: statusMap[String(i.id)] || i.status
+          }));
+        }
+      } catch (e) { console.warn("[listDriverHandovers:currentStatus]", e.message); }
+    }
   }
   return rows;
 }
@@ -944,7 +970,31 @@ export async function getDriverHandover(id) {
   const h = result.rows[0];
   if (!h) return null;
 
-  // Add current_status to each open_issue (from stored snapshot)
+  // Smart: if open_issues is empty, fetch tickets that were open at handover time
+  const handoverDate = h.handover_date || h.created_at;
+  if ((!h.open_issues || h.open_issues.length === 0) && h.vehicle_id && handoverDate) {
+    try {
+      const ticketsAtHandover = await query(`
+        SELECT id, title, category, priority, status, opened_at, description
+        FROM tickets
+        WHERE vehicle_id = $1
+          AND opened_at <= $2
+          AND (
+            closed_at IS NULL OR closed_at >= $2
+          )
+        ORDER BY opened_at DESC
+        LIMIT 50
+      `, [h.vehicle_id, handoverDate]);
+      h.open_issues = ticketsAtHandover.rows.map(t => ({
+        id: t.id, title: t.title, category: t.category,
+        priority: t.priority, status: t.status,
+        opened_at: t.opened_at,
+        description: String(t.description || '').slice(0, 500)
+      }));
+    } catch (e) { console.warn("[getDriverHandover:atHandover]", e.message); }
+  }
+
+  // Add current_status for each issue
   if (h.open_issues && h.open_issues.length) {
     try {
       const ids = h.open_issues.map(i => i.id).filter(Boolean);

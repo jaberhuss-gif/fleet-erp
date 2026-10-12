@@ -3749,6 +3749,7 @@ export async function updateStockTransaction(id, data = {}) {
   const driver_name = data.driverName ?? data.driver_name ?? tx.driver_name;
   const site = data.site ?? tx.site;
   const created_at = data.createdAt ?? data.created_at ?? tx.created_at;
+  const trans_date = data.transDate ?? data.trans_date ?? tx.trans_date;
 
   const result = await query(`
     UPDATE stock_transactions
@@ -3758,10 +3759,11 @@ export async function updateStockTransaction(id, data = {}) {
         vehicle_plate = $4,
         driver_name = $5,
         site = $6,
-        created_at = $7
-    WHERE id = $8
+        created_at = $7,
+        trans_date = $8
+    WHERE id = $9
     RETURNING *
-  `, [reference_no, notes, vehicle_id, vehicle_plate, driver_name, site, created_at, id]);
+  `, [reference_no, notes, vehicle_id, vehicle_plate, driver_name, site, created_at, trans_date, id]);
 
   return result.rows[0];
 }

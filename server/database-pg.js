@@ -905,7 +905,30 @@ export async function listDriverHandovers(filters = {}) {
   sql += ` ORDER BY h.handover_date DESC, h.id DESC LIMIT 200`;
 
   const result = await query(sql, params);
-  return result.rows;
+  // Filter open_issues by current tickets for each handover
+  const rows = result.rows;
+  for (const h of rows) {
+    if (!h.vehicle_id) continue;
+    try {
+      const liveTickets = await query(`
+        SELECT id, title, category, priority, status, opened_at, description
+        FROM tickets
+        WHERE vehicle_id = $1
+          AND status NOT IN ('Closed', 'Completed')
+          AND title NOT LIKE '%Maintenance Overdue%'
+          AND opened_at >= NOW() - INTERVAL '60 days'
+        ORDER BY opened_at DESC
+        LIMIT 50
+      `, [h.vehicle_id]);
+      h.open_issues = liveTickets.rows.map(t => ({
+        id: t.id, title: t.title, category: t.category,
+        priority: t.priority, status: t.status,
+        opened_at: t.opened_at,
+        description: String(t.description || '').slice(0, 500)
+      }));
+    } catch (e) { console.warn("[listDriverHandovers:liveIssues]", e.message); }
+  }
+  return rows;
 }
 
 export async function getDriverHandover(id) {
@@ -924,7 +947,32 @@ export async function getDriverHandover(id) {
     LIMIT 1
   `, [id]);
 
-  return result.rows[0] || null;
+  const h = result.rows[0];
+  if (!h) return null;
+  
+  // Filter open_issues by current tickets
+  if (h.vehicle_id) {
+    try {
+      const liveTickets = await query(`
+        SELECT id, title, category, priority, status, opened_at, description
+        FROM tickets
+        WHERE vehicle_id = $1
+          AND status NOT IN ('Closed', 'Completed')
+          AND title NOT LIKE '%Maintenance Overdue%'
+          AND opened_at >= NOW() - INTERVAL '60 days'
+        ORDER BY opened_at DESC
+        LIMIT 50
+      `, [h.vehicle_id]);
+      h.open_issues = liveTickets.rows.map(t => ({
+        id: t.id, title: t.title, category: t.category,
+        priority: t.priority, status: t.status,
+        opened_at: t.opened_at,
+        description: String(t.description || '').slice(0, 500)
+      }));
+    } catch (e) { console.warn("[getDriverHandover:liveIssues]", e.message); }
+  }
+  
+  return h;
 }
 
 export async function deleteDriverHandover(id) {
@@ -1085,8 +1133,30 @@ export async function listReadings(vehicleId) {
      LIMIT 50`,
     [vehicleId]
   );
-
-  return result.rows;
+  // Filter open_issues by current tickets for each handover
+  const rows = result.rows;
+  for (const h of rows) {
+    if (!h.vehicle_id) continue;
+    try {
+      const liveTickets = await query(`
+        SELECT id, title, category, priority, status, opened_at, description
+        FROM tickets
+        WHERE vehicle_id = $1
+          AND status NOT IN ('Closed', 'Completed')
+          AND title NOT LIKE '%Maintenance Overdue%'
+          AND opened_at >= NOW() - INTERVAL '60 days'
+        ORDER BY opened_at DESC
+        LIMIT 50
+      `, [h.vehicle_id]);
+      h.open_issues = liveTickets.rows.map(t => ({
+        id: t.id, title: t.title, category: t.category,
+        priority: t.priority, status: t.status,
+        opened_at: t.opened_at,
+        description: String(t.description || '').slice(0, 500)
+      }));
+    } catch (e) { console.warn("[listDriverHandovers:liveIssues]", e.message); }
+  }
+  return rows;
 }
 
 export async function ensurePeriodicMaintenanceSchema() {

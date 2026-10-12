@@ -782,7 +782,9 @@ export async function createDriverHandover(data = {}) {
     SELECT id, title, category, priority, status, opened_at, description
     FROM tickets
     WHERE vehicle_id = $1
-      AND status <> 'Closed'
+      AND status NOT IN ('Closed', 'Completed')
+      AND title NOT LIKE '%Maintenance Overdue%'
+      AND opened_at >= NOW() - INTERVAL '60 days'
     ORDER BY opened_at DESC
     LIMIT 50
   `, [data.vehicleId]);

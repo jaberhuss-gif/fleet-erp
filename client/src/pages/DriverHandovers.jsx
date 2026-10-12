@@ -33,8 +33,18 @@ export default function DriverHandovers() {
     );
   });
 
-  const openPdf = (id) => {
-    window.open('/api/driver-handovers/' + id + '/pdf', '_blank');
+  const openPdf = async (id) => {
+    try {
+      setMessage("");
+      setError("");
+      const res = await api.get("/driver-handovers/" + id + "/pdf", { responseType: "text" });
+      const html = typeof res.data === "string" ? res.data : JSON.stringify(res.data);
+      const blob = new Blob([html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
   };
 
   const sendWhatsApp = async (h) => {

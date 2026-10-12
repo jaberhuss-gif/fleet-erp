@@ -19,7 +19,7 @@ export default function TireServiceRequests({ driverMode=false }) {
     fromPosition:'',
     toPosition:'',
     tireSerial:'',
-    tireYear:',
+    tireYear:'',
     tireSize:'',
     pressurePsi:'',
     notes:'',
@@ -77,7 +77,7 @@ export default function TireServiceRequests({ driverMode=false }) {
         fromPosition:'',
         toPosition:'',
         tireSerial:'',
-        tireYear:',
+        tireYear:'',
         tireSize:'',
         pressurePsi:'',
         notes:'',
@@ -138,6 +138,50 @@ export default function TireServiceRequests({ driverMode=false }) {
     </div>
   </div>;
 
+  const exportPdf = () => {
+    const win = window.open('', '_blank');
+    if (!win) return;
+    const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const fmtDate = (d) => d ? String(d).slice(0, 10) : '-';
+    const body = filteredRows.map(r => '<tr>'
+      + '<td>' + esc(fmtDate(r.created_at)) + '</td>'
+      + '<td>' + esc(r.plate || r.vehicle_id || '-') + '</td>'
+      + '<td>' + esc(REQUEST_TYPES.find(x => x[0] === r.request_type)?.[1] || r.request_type) + '</td>'
+      + '<td>' + esc(r.position || '-') + '</td>'
+      + '<td>' + esc(r.tire_serial || '-') + '</td>'
+      + '<td>' + esc(r.tire_year || '-') + '</td>'
+      + '<td>' + esc(r.tire_size || '-') + '</td>'
+      + '<td>' + esc(r.pressure_psi ?? '-') + '</td>'
+      + '<td>' + esc(r.created_by_name || r.driver || r.created_by || '-') + '</td>'
+      + '<td>' + esc(r.notes || '-') + '</td>'
+      + '<td>' + esc(r.status || '-') + '</td>'
+      + '</tr>').join('');
+    win.document.write('<!doctype html><html><head><title>Tire Service Requests Report</title><style>'
+      + '@page{size:A4 landscape;margin:10mm}'
+      + 'body{font-family:Arial,sans-serif;padding:20px;color:#111827}'
+      + '.header{display:flex;align-items:center;gap:16px;border-bottom:3px solid #0f766e;padding-bottom:12px;margin-bottom:16px}'
+      + '.header img{width:90px;height:50px;object-fit:contain}'
+      + '.company{font-size:11pt;font-weight:700;color:#0f766e}'
+      + '.role{font-size:9pt;color:#475569}'
+      + 'h1{color:#0f766e;font-size:18pt}'
+      + 'table{width:100%;border-collapse:collapse;font-size:9pt}'
+      + 'th,td{border:1px solid #cbd5e1;padding:5px;text-align:left}'
+      + 'th{background:#e2e8f0}'
+      + '</style></head><body>'
+      + '<div class="header"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Logo"><div>'
+      + '<div class="company">Maaden Ivanhoe Electric Exploration and Development Limited Company</div>'
+      + '<div class="role">Exploration Phase — Arabian Shield</div>'
+      + '<div class="role">Hussein Anwar — Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div>'
+      + '</div></div>'
+      + '<h1>Tire Service Requests Report</h1>'
+      + '<p>Generated: ' + new Date().toLocaleString() + ' | Total: ' + filteredRows.length + '</p>'
+      + '<table><thead><tr><th>Date</th><th>Vehicle</th><th>Request</th><th>Position</th><th>Serial</th><th>Mfg. Year</th><th>Size</th><th>PSI</th><th>Driver</th><th>Notes</th><th>Status</th></tr></thead>'
+      + '<tbody>' + body + '</tbody></table>'
+      + '<script>window.onload=function(){setTimeout(function(){window.print();},500);}</script>'
+      + '</body></html>');
+    win.document.close();
+  };
+
   const filteredRows=useMemo(()=>rows.filter(r=>!search.trim()||String(r.plate||'').toLowerCase().includes(search.trim().toLowerCase())),[rows,search]);
   return <div className="hub-page">
     <div className="panel">
@@ -147,6 +191,7 @@ export default function TireServiceRequests({ driverMode=false }) {
         <div><label>Vehicle</label><select value={search} onChange={e=>setSearch(e.target.value)}><option value="">All Vehicles</option>{vehicles.map(v=><option key={v.id} value={v.plate}>{v.plate}</option>)}</select></div>
         <div><label>Status</label><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="">All Statuses</option>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></div>
         <button className="btn btn-secondary" onClick={loadRequests}>Refresh</button>
+        <button className="btn btn-primary" onClick={exportPdf} disabled={!filteredRows.length}>🖨️ Export PDF</button>
       </div>
     </div>
     <div className="panel" style={{marginTop:12}}>

@@ -103,7 +103,7 @@ export default function MaintenanceRequests() {
     if (!win) return;
     const esc = value => String(value ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     const body = rows.map(r => '<tr>' +
-      ['Vehicle','Location','Driver','Issue Type','Description','Priority','Status','Opened Date']
+      ['Vehicle','Location','Driver','Issue Type','Description','Priority','Status','Opened Date','Driver Confirmed']
         .map(k => '<td>' + esc(r[k]) + '</td>').join('') + '</tr>').join('');
     win.document.write('<!doctype html><html><head><title>Maintenance Requests Report</title><style>' +
       'body{font-family:Arial,sans-serif;margin:28px;color:#111827}h1{margin:0 0 6px;font-size:22px}p{margin:4px 0 18px;color:#475569;font-size:12px}' +
@@ -112,7 +112,7 @@ export default function MaintenanceRequests() {
       '</style></head><body>' + '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:3px solid #1e3a8a;padding:0 0 12px;margin:0 0 16px;page-break-inside:avoid"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Ivanhoe Electric and Maaden" style="width:175px;max-height:78px;object-fit:contain"><div style="flex:1;text-align:right;font-family:Arial,sans-serif"><div style="font-size:15px;font-weight:700;color:#1e3a8a">Maaden Ivanhoe Electric Exploration and Development Limited Company</div><div style="font-size:10px;color:#475569;margin-top:3px">Exploration Phase — Arabian Shield</div><div style="font-size:12px;font-weight:700;margin-top:7px;color:#111827">Hussein Anwar</div><div style="font-size:10px;color:#475569;margin-top:2px">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div></div>' + '<h1>Fleet Management — Maintenance Requests Report</h1>' +
       '<p>Report Date: ' + new Date().toLocaleDateString() + ' &nbsp; | &nbsp; Total Requests: ' + rows.length + '</p>' +
       '<table><thead><tr>' +
-      ['Vehicle','Location','Driver','Issue Type','Description','Priority','Status','Opened Date'].map(k => '<th>'+k+'</th>').join('') +
+      ['Vehicle','Location','Driver','Issue Type','Description','Priority','Status','Opened Date','Driver Confirmed'].map(k => '<th>'+k+'</th>').join('') +
       '</tr></thead><tbody>' + body + '</tbody></table>' +
       '<script>window.onload=function(){window.print();}</script></body></html>');
     win.document.close();

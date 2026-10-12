@@ -765,7 +765,7 @@ app.get("/api/issues/types", async (req, res) => {
 app.get("/api/periodic-maintenance/repair-statuses", async (req, res) => {
   try {
     const result = await pgQuery(`
-      SELECT id, vehicle_id, status, description, resolution_notes
+      SELECT id, vehicle_id, status, description, resolution_notes, whatsapp_confirmed_at, whatsapp_confirmation_source
       FROM tickets
       WHERE category = '6-Month Maintenance'
         AND COALESCE(resolution_notes, '') LIKE '[PM_REPAIR:%'
@@ -778,7 +778,7 @@ app.get("/api/periodic-maintenance/repair-statuses", async (req, res) => {
       // older duplicate/open ticket.
       const match = String(row.resolution_notes || '').match(/^\[PM_REPAIR:(\d+)\]/);
       if (match && !Object.prototype.hasOwnProperty.call(statuses, match[1])) {
-        statuses[match[1]] = row.status || 'Open';
+        statuses[match[1]] = { status: row.status || 'Open', whatsapp_confirmed_at: row.whatsapp_confirmed_at || null, whatsapp_confirmation_source: row.whatsapp_confirmation_source || null };
       }
     }
     res.json({ success: true, statuses });

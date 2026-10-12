@@ -43,10 +43,10 @@ export default function MaintenanceRequests() {
           category: '6-Month Maintenance',
           description: String(r.notes || '').trim(),
           priority: 'Medium',
-          status: repairStatuses[String(r.id)] || 'Open',
+          status: repairStatuses[String(r.id)]?.status || 'Open',
+          whatsapp_confirmed_at: repairStatuses[String(r.id)]?.whatsapp_confirmed_at || null,
           opened_at: r.completed_date || r.scheduled_date || '',
           pm_record_id: r.id,
-          whatsapp_confirmed_at: r.whatsapp_confirmed_at || null
         }));
       setSixMonthNotes(pmNotes);
     } catch (e) {

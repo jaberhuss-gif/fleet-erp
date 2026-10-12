@@ -1907,6 +1907,19 @@ app.get("/api/periodic-maintenance/alerts", async (req, res) => {
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+app.post("/api/periodic-maintenance/auto-close-annual-covered", async (req, res) => {
+  try {
+    if (req.user?.role !== "Owner") {
+      return res.status(403).json({ success: false, error: "Owner only." });
+    }
+    const result = await db.autoCloseSixMonthCoveredByAnnual();
+    res.json({ success: true, ...result });
+  } catch (e) {
+    console.error("[AutoCloseAnnual]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.get("/api/periodic-maintenance/:id", async (req, res) => {
   try {
     const r = await getPeriodicMaintenancePG(req.params.id);

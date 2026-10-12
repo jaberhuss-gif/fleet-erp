@@ -363,6 +363,22 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     return digits;
   };
 
+  const handleAutoClose = async () => {
+    if (!canWork) return;
+    if (!window.confirm('سيتم قفل كل السيارات اللي عملت الفحص السنوي (مع تأكيد السائق) في فحص 6 شهور.\n\nمتأكد؟')) return;
+    try {
+      setLoading(true);
+      setError('');
+      const res = await api.post('/periodic-maintenance/auto-close-annual-covered');
+      setMessage('✅ Auto-closed ' + (res.data.closed || 0) + ' vehicles');
+      await load();
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const reportWhatsApp = async (row, component, inspectedState) => {
     try {
       const info = (await api.get('/vehicles/' + row.vehicle_id + '/whatsapp-info')).data || {};
@@ -1289,6 +1305,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
         <button className={reportTab==='original' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('original')}>
           📚 Original Maintenance Records ({records.length})
         </button>
+        {canWork && <button className="sub-btn" style={{background:'#7c3aed',color:'#fff'}} onClick={handleAutoClose}>Auto-Close (Annual Covered)</button>}
       </div>
 
       {reportTab === 'six' && renderControlTable('six')}

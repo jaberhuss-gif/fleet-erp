@@ -2075,11 +2075,15 @@ function formatPGVehicle(v) {
   const currentKm = Number(v.current_km || 0);
   const lastOilKm = Number(v.last_oil_km || 0);
   const interval = Number(v.oil_change_interval || 5000);
-  const sinceOil = Math.max(0, currentKm - lastOilKm);
+  const sinceOil = currentKm - lastOilKm;
+  const invalidReading = currentKm > 0 && lastOilKm > currentKm;
 
   let calculatedStatus = v.status || "Safe";
 
-  if (lastOilKm === 0 && currentKm > 0) {
+  // Invalid odometer chronology must never be reported as Safe or as an oil-change alert.
+  if (invalidReading) {
+    calculatedStatus = "Invalid Reading";
+  } else if (lastOilKm === 0 && currentKm > 0) {
     calculatedStatus = "Urgent Overdue";
   } else if (sinceOil >= interval) {
     calculatedStatus = "Urgent Overdue";
@@ -2103,7 +2107,7 @@ function formatPGVehicle(v) {
     currentKm,
     lastOilKm,
     sinceOil,
-    remaining: Math.max(0, interval - sinceOil),
+    remaining: invalidReading ? null : Math.max(0, interval - sinceOil),
     interval,
     status: calculatedStatus,
     lastOilChangeDate: v.last_oil_change_date || null,

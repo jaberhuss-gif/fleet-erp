@@ -19,7 +19,7 @@ export default function TireServiceRequests({ driverMode=false }) {
     fromPosition:'',
     toPosition:'',
     tireSerial:'',
-    tireDate:'',
+    tireYear:',
     tireSize:'',
     pressurePsi:'',
     notes:'',
@@ -62,7 +62,7 @@ export default function TireServiceRequests({ driverMode=false }) {
     }else{
       if(!form.position)return setError('Select the tire installation position.');
       if(!form.tireSerial.trim())return setError('Enter the tire serial number.');
-      if(!form.tireDate)return setError('Enter the tire date.');
+      if(!form.tireYear)return setError('Enter the tire manufacturing year.');
       if(!form.tireSize.trim())return setError('Enter the tire size.');
       if(form.pressurePsi===''||Number(form.pressurePsi)<0)return setError('Enter the tire air pressure.');
       if(['DAMAGED_TIRE_REPLACEMENT','PUNCTURE_REPAIR'].includes(form.requestType)&&!form.photo)return setError('A photo of the tire is required.');
@@ -77,7 +77,7 @@ export default function TireServiceRequests({ driverMode=false }) {
         fromPosition:'',
         toPosition:'',
         tireSerial:'',
-        tireDate:'',
+        tireYear:',
         tireSize:'',
         pressurePsi:'',
         notes:'',
@@ -121,7 +121,7 @@ export default function TireServiceRequests({ driverMode=false }) {
       {['NEW_TIRE_INSTALLATION','DAMAGED_TIRE_REPLACEMENT'].includes(form.requestType)&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:8,marginTop:12}}>
         <div><label>Installation Position</label><select value={form.position} onChange={e=>setForm({...form,position:e.target.value})}><option value="">-- Select position --</option>{POSITIONS.map(p=><option key={p}>{p}</option>)}</select></div>
         <div><label>Tire Serial Number</label><input value={form.tireSerial} onChange={e=>setForm({...form,tireSerial:e.target.value})} placeholder="Serial number"/></div>
-        <div><label>Tire Date</label><input type="date" value={form.tireDate} onChange={e=>setForm({...form,tireDate:e.target.value})}/></div>
+        <div><label>Manufacturing Year</label><input type="number" min="1900" max="2100" step="1" placeholder="e.g. 2025" value={form.tireYear} onChange={e=>setForm({...form,tireYear:e.target.value})}/></div>
         <div><label>Tire Size</label><input value={form.tireSize} onChange={e=>setForm({...form,tireSize:e.target.value})} placeholder="e.g. 265/65R17"/></div>
         <div><label>Air Pressure (PSI)</label><input type="number" min="0" step="0.1" value={form.pressurePsi} onChange={e=>setForm({...form,pressurePsi:e.target.value})} placeholder="PSI"/></div>
       </div>}
@@ -151,12 +151,12 @@ export default function TireServiceRequests({ driverMode=false }) {
     </div>
     <div className="panel" style={{marginTop:12}}>
       <div style={{display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap',marginBottom:10}}><h2 style={{margin:0}}>Request Log</h2><strong>Total: {filteredRows.length}</strong></div>
-      <div style={{overflowX:'auto'}}><table><thead><tr><th>Date</th><th>Vehicle</th><th>Request</th><th>Position</th><th>Serial</th><th>Tire Date</th><th>Size</th><th>PSI</th><th>Driver / User</th><th>Notes</th><th>Status</th></tr></thead>
+      <div style={{overflowX:'auto'}}><table><thead><tr><th>Date</th><th>Vehicle</th><th>Request</th><th>Position</th><th>Serial</th><th>Mfg. Year</th><th>Size</th><th>PSI</th><th>Driver / User</th><th>Notes</th><th>Status</th></tr></thead>
       <tbody>{filteredRows.length===0?<tr><td colSpan="11" style={{textAlign:'center',padding:24,color:'#64748b'}}>No tire service requests found.</td></tr>:filteredRows.map(r=><tr key={r.id}>
         <td>{r.created_at?new Date(r.created_at).toLocaleString():'-'}</td><td><strong>{r.plate||r.vehicle_id}</strong></td>
         <td>{REQUEST_TYPES.find(x=>x[0]===r.request_type)?.[1]||r.request_type}</td>
         <td>{r.request_type==='TIRE_ROTATION'?(r.from_position&&r.to_position?r.from_position+' → '+r.to_position:(r.position||'-')):(r.position||'-')}</td>
-        <td>{r.tire_serial||'-'}</td><td>{r.tire_date||'-'}</td><td>{r.tire_size||'-'}</td><td>{r.pressure_psi??'-'}</td>
+        <td>{r.tire_serial||'-'}</td><td>{r.tire_year||'-'}</td><td>{r.tire_size||'-'}</td><td>{r.pressure_psi??'-'}</td>
         <td>{r.created_by_name||r.driver||r.created_by||'-'}</td>
         <td style={{minWidth:240}}>{r.notes||'-'}{r.photo&&<div><a href={r.photo} target="_blank" rel="noreferrer">View Photo</a></div>}</td>
         <td><select value={r.status||'PENDING'} onChange={e=>updateStatus(r.id,e.target.value)}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></td>

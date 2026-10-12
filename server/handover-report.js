@@ -31,17 +31,25 @@ export function handoverReportHtml(handover) {
   const h = handover || {};
   const openIssues = Array.isArray(h.open_issues) ? h.open_issues : [];
 
-  const issueRows = openIssues.length
-    ? openIssues.map((t, i) => `
-        <tr>
-          <td>${i + 1}</td>
-          <td>${esc(t.category || '-')}</td>
-          <td>${esc(t.title || '-')}</td>
-          <td>${esc(t.priority || '-')}</td>
-          <td>${esc(t.status || '-')}</td>
-          <td>${esc(fmtDate(t.opened_at))}</td>
-        </tr>
-      `).join('')
+const issueRows = openIssues.length
+  ? openIssues.map((t, i) => {
+      const currentStatus = t.current_status || t.status || '-';
+      const wasOpen = t.status === 'Open' || t.status === 'IN_PROGRESS' || t.status === 'Acknowledged';
+      const isClosed = currentStatus === 'Closed' || currentStatus === 'Completed';
+      const statusDisplay = isClosed
+        ? '<span style="color:#16a34a;font-weight:700">✓ Closed</span>'
+        : '<span style="color:#dc2626;font-weight:700">' + esc(currentStatus) + '</span>';
+      return `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${esc(t.category || '-')}</td>
+        <td>${esc(t.title || '-')}</td>
+        <td>${esc(t.priority || '-')}</td>
+        <td>${statusDisplay}</td>
+        <td>${esc(fmtDate(t.opened_at))}</td>
+      </tr>
+    `;
+    }).join('')
     : `<tr><td colspan="6" style="text-align:center;color:#15803d;padding:12px">No open issues at handover time</td></tr>`;
 
   return `<!doctype html>

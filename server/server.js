@@ -765,21 +765,34 @@ app.get("/api/issues/types", async (req, res) => {
 app.get("/api/periodic-maintenance/repair-statuses", async (req, res) => {
   try {
     const result = await pgQuery(`
-      SELECT id, vehicle_id, status, description, resolution_notes, whatsapp_confirmed_at, whatsapp_confirmation_source
-      FROM tickets
-      WHERE category = '6-Month Maintenance'
-        AND COALESCE(resolution_notes, '') LIKE '[PM_REPAIR:%'
-      ORDER BY id DESC
+      SELECT
+        pm.id AS pm_id,
+        pm.status AS pm_status,
+        pm.whatsapp_confirmed_at AS pm_confirmed_at,
+        pm.whatsapp_confirmation_source AS pm_source,
+        t.status AS ticket_status,
+        t.whatsapp_confirmed_at AS ticket_confirmed_at,
+        t.whatsapp_confirmation_source AS ticket_source
+      FROM periodic_maintenance pm
+      LEFT JOIN tickets t
+        ON t.category = '6-Month Maintenance'
+       AND COALESCE(t.resolution_notes, '') LIKE '[PM_REPAIR:' || pm.id || ']%'
+      WHERE pm.type = '6_months_general'
+        AND pm.status IN ('Completed', 'Pending Driver Confirmation', 'Pending', 'Open')
+      ORDER BY pm.id DESC
     `);
     const statuses = {};
     for (const row of result.rows) {
-      // The PM id is stored in the ticket marker. Use the newest linked
-      // repair ticket so a later confirmation is never overwritten by an
-      // older duplicate/open ticket.
-      const match = String(row.resolution_notes || '').match(/^\[PM_REPAIR:(\d+)\]/);
-      if (match && !Object.prototype.hasOwnProperty.call(statuses, match[1])) {
-        statuses[match[1]] = { status: row.status || 'Open', whatsapp_confirmed_at: row.whatsapp_confirmed_at || null, whatsapp_confirmation_source: row.whatsapp_confirmation_source || null };
-      }
+      const key = String(row.pm_id);
+      if (statuses[key]) continue;
+      const status = row.ticket_status || row.pm_status || 'Open';
+      const confirmedAt = row.ticket_confirmed_at || row.pm_confirmed_at || null;
+      const source = row.ticket_source || row.pm_source || null;
+      statuses[key] = {
+        status,
+        whatsapp_confirmed_at: confirmedAt,
+        whatsapp_confirmation_source: source
+      };
     }
     res.json({ success: true, statuses });
   } catch (e) {

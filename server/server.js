@@ -392,10 +392,13 @@ app.get("/api/vehicles/:id/details", async (req, res) => {
       safe(db.listStockTransactionsByVehicle ? db.listStockTransactionsByVehicle(vid) : []),
       safe(db.listPeriodicMaintenance ? db.listPeriodicMaintenance({ vehicleId: vid }) : [])
     ]);
-    let tires = [];
+    let tires = [], tireSurvey = null, tireEvents = [];
     try {
       const { getVehicleTires } = await import("./tire-management.js");
-      tires = await getVehicleTires(vid).catch(() => []);
+      const tiresData = await getVehicleTires(vid).catch(() => ({}));
+      tires = tiresData.tires || [];
+      tireSurvey = tiresData.survey || null;
+      tireEvents = tiresData.events || [];
     } catch (e) { console.warn("[details] tires:", e.message); }
     res.json({
       success: true,
@@ -405,7 +408,9 @@ app.get("/api/vehicles/:id/details", async (req, res) => {
       handovers,
       stockTransactions,
       inspections: inspections || [],
-      tires: tires || []
+      tires: tires || [],
+      tireSurvey,
+      tireEvents
     });
   } catch (e) {
     console.error("[details]", e);

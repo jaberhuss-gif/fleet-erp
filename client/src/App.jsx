@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import GMDashboard from './pages/GMDashboardExecutive';
 import FleetHub from './pages/FleetHub';
 import VehicleDetails from './pages/VehicleDetails';
+import DriverHandovers from './pages/DriverHandovers';
 import Tickets from './pages/Tickets';
 import Reports from './pages/Reports';
 import SupportServiceHub from './pages/SupportServiceHub';
@@ -35,6 +36,7 @@ const TAB_MODULES = {
   tickets: ['tickets'],
   reports: ['reports'],
   'advanced-reports': ['advanced_reports'],
+  'driver-handovers': ['fleet'],
 };
 
 const TAB_LABELS = {
@@ -53,6 +55,7 @@ const TAB_LABELS = {
   audit: 'Audit Log',
   backup: 'Backup',
   invoices: '📄 Invoices',
+  'driver-handovers': '📋 Driver Handovers',
   'inventory-report': '📊 Warehouse Report'
 };
 
@@ -152,7 +155,7 @@ export default function App() {
   };
 
   const allowedTabs = useMemo(() => {
-    const allTabs = ['gm', 'support-service', 'operations', 'warehouse', 'fleet', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports'];
+    const allTabs = ['gm', 'support-service', 'operations', 'warehouse', 'fleet', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports', 'driver-handovers'];
     const visible = allTabs.filter(canViewTab);
     if (user?.role === 'Owner') {
       return [...visible, 'drivers', 'users', 'audit', 'backup'];
@@ -248,6 +251,9 @@ export default function App() {
                     {label}
                   </button>
                 ))}
+                <button className={tab === 'driver-handovers' ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange('driver-handovers')}>
+                  ?? Driver Handovers
+                </button>
               </>
             )}
 
@@ -315,6 +321,7 @@ export default function App() {
             <FleetHub user={user} access={access || {}} onViewVehicle={handleViewVehicle} initialOwnerGroup={fleetGroup} />
           )}
           {tab === 'vehicle-details' && viewingVehicleId && <VehicleDetails vehicleId={viewingVehicleId} onBack={handleBackToVehicles} />}
+          {tab === 'driver-handovers' && <DriverHandovers />}
           {tab === 'troubleshooter' && <Troubleshooter />}
           {tab === 'fleet-tickets' && <FleetTicketViewer user={user} />}
           {tab === 'tickets' && canViewModule('tickets') && <Tickets user={user} access={access || {}} />}

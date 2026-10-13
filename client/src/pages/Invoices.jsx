@@ -339,6 +339,12 @@ export default function Invoices({ user }) {
 
   const handleMatchItem = async (invoiceItemId, requestId, requestItemId) => {
     if (!selectedInvoice) return;
+    // Site required
+    const _siteCheckItem = invoiceItems.find(it => it.id === invoiceItemId);
+    if (!_siteCheckItem || !_siteCheckItem.site) {
+      setError('Please select a Site for this item before matching.');
+      return;
+    }
     setBusy(true);
     try {
       await matchInvoiceItem(selectedInvoice.id, {
@@ -698,7 +704,7 @@ export default function Invoices({ user }) {
                   <th>Unit Price</th>
                   <th>Total</th>
                   <th>Match</th>
-                  <th>Confirmed Amount</th>
+                  
                 </tr>
               </thead>
               <tbody>
@@ -750,16 +756,6 @@ export default function Invoices({ user }) {
                           </select>
                         </div>
                       )}
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        defaultValue={it.confirmed_amount || 0}
-                        onBlur={e => handleConfirmAmount(it.id, e.target.value)}
-                        style={{ width: 100 }}
-                      />
                     </td>
                   </tr>
                 ))}

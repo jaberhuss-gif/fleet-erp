@@ -203,7 +203,7 @@ export default function TireServiceRequests({ driverMode=false }) {
         <td>{r.request_type==='TIRE_ROTATION'?(r.from_position&&r.to_position?r.from_position+' → '+r.to_position:(r.position||'-')):(r.position||'-')}</td>
         <td>{r.tire_serial||'-'}</td><td>{r.tire_year||'-'}</td><td>{r.tire_size||'-'}</td><td>{r.pressure_psi??'-'}</td>
         <td>{r.created_by_name||r.driver||r.created_by||'-'}</td>
-        <td style={{minWidth:240}}>{r.notes||'-'}{r.photo&&<div><a href={r.photo} target="_blank" rel="noreferrer">View Photo</a></div>}</td>
+        <td style={{minWidth:240}}>{r.notes||'-'}{r.photo&&<div style={{marginTop:6}}><img src={r.photo} alt="Tire" style={{width:100,height:75,objectFit:'cover',borderRadius:4,border:'1px solid #cbd5e1',cursor:'pointer'}} onClick={()=>{const w=window.open('','_blank');if(!w)return;w.document.write('<!doctype html><html><head><title>Tire Photo</title></head><body style="margin:0;display:flex;justify-content:center;align-items:center;height:100vh;background:#111"><img src="'+r.photo+'" style="max-width:100%;max-height:100%"/></body></html>');w.document.close();}}/></div>}</td>
         <td><select value={r.status||'PENDING'} onChange={e=>updateStatus(r.id,e.target.value)}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></td>
       </tr>)}</tbody></table></div>
     </div>

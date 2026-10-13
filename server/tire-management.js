@@ -1001,8 +1001,8 @@ export async function updateTireServiceRequestStatus(id, status, user) {
     APPROVED: new Set(["IN_PROGRESS", "REJECTED", "CANCELLED"]),
     IN_PROGRESS: new Set(["COMPLETED", "CANCELLED"]),
     COMPLETED: new Set(),
-    REJECTED: new Set(),
-    CANCELLED: new Set()
+    REJECTED: new Set(["PENDING"]),
+    CANCELLED: new Set(["PENDING"])
   };
   if (!transitions[current]?.has(next)) {
     throw httpError(409, `Invalid tire service request transition: ${current} → ${next}.`);

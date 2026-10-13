@@ -136,27 +136,23 @@ export default function TireServiceRequests({ driverMode=false }) {
   };
 
   const sendEmailApproval = (r) => {
-    const subject = 'Tire Service Approval - ' + (r.plate || r.vehicle_id || 'Vehicle');
+    const subject = '[APPROVED] - Tire Service for ' + (r.plate || r.vehicle_id || 'Vehicle');
     const body = [
-      'Dear Fleet Management,',
+      'Dear Campus Team,',
       '',
-      'This is to confirm that I have approved the following tire service request:',
+      'I have approved the following tire service request:',
       '',
-      '--- Request Details ---',
-      'Date: ' + (r.created_at ? new Date(r.created_at).toLocaleString() : '-'),
-      'Vehicle: ' + (r.plate || r.vehicle_id || '-'),
-      'Request Type: ' + (REQUEST_TYPES.find(x => x[0] === r.request_type)?.[1] || r.request_type || '-'),
-      'Position: ' + (r.position || '-'),
-      'Tire Serial: ' + (r.tire_serial || '-'),
-      'Manufacturing Year: ' + (r.tire_year || '-'),
-      'Tire Size: ' + (r.tire_size || '-'),
-      'Air Pressure (PSI): ' + (r.pressure_psi ?? '-'),
-      'Driver / User: ' + (r.created_by_name || r.driver || r.created_by || '-'),
-      'Notes: ' + (r.notes || '-'),
-      'Status: ' + (r.status || '-'),
+      'Vehicle:        ' + (r.plate || r.vehicle_id || '-'),
+      'Driver:         ' + (r.created_by_name || r.driver || '-'),
+      'Request:        ' + (REQUEST_TYPES.find(x => x[0] === r.request_type)?.[1] || r.request_type || '-'),
+      'Position:       ' + (r.position || '-'),
+      'Serial:         ' + (r.tire_serial || '-'),
+      'Year:           ' + (r.tire_year || '-'),
+      'Size:           ' + (r.tire_size || '-'),
+      'PSI:            ' + (r.pressure_psi ?? '-'),
+      'Status:         ' + (r.status || '-'),
       '',
-      'Best regards,',
-      'Fleet Management'
+      'Please proceed.'
     ].join('\n');
     const mailto = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
     window.open(mailto, '_blank');

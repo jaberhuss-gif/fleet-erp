@@ -135,6 +135,33 @@ export default function TireServiceRequests({ driverMode=false }) {
     finally { setLoading(false); }
   };
 
+  const sendEmailApproval = (r) => {
+    const subject = 'Tire Service Approval - ' + (r.plate || r.vehicle_id || 'Vehicle');
+    const body = [
+      'Dear Fleet Management,',
+      '',
+      'This is to confirm that I have approved the following tire service request:',
+      '',
+      '--- Request Details ---',
+      'Date: ' + (r.created_at ? new Date(r.created_at).toLocaleString() : '-'),
+      'Vehicle: ' + (r.plate || r.vehicle_id || '-'),
+      'Request Type: ' + (REQUEST_TYPES.find(x => x[0] === r.request_type)?.[1] || r.request_type || '-'),
+      'Position: ' + (r.position || '-'),
+      'Tire Serial: ' + (r.tire_serial || '-'),
+      'Manufacturing Year: ' + (r.tire_year || '-'),
+      'Tire Size: ' + (r.tire_size || '-'),
+      'Air Pressure (PSI): ' + (r.pressure_psi ?? '-'),
+      'Driver / User: ' + (r.created_by_name || r.driver || r.created_by || '-'),
+      'Notes: ' + (r.notes || '-'),
+      'Status: ' + (r.status || '-'),
+      '',
+      'Best regards,',
+      'Fleet Management'
+    ].join('\n');
+    const mailto = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+    window.open(mailto, '_blank');
+  };
+
   const updateStatus=async(id,status)=>{try{await api.put('/tire/service-requests/'+id,{status});await loadRequests();}catch(e){setError(e.response?.data?.error||e.message);}};
 
   if(driverMode)return <div className="hub-page">
@@ -252,7 +279,8 @@ export default function TireServiceRequests({ driverMode=false }) {
         <td>{r.tire_serial||'-'}</td><td>{r.tire_year||'-'}</td><td>{r.tire_size||'-'}</td><td>{r.pressure_psi??'-'}</td>
         <td>{r.created_by_name||r.driver||r.created_by||'-'}</td>
         <td style={{minWidth:240}}>{r.notes||'-'}{r.photo&&<div style={{marginTop:6}}><img src={r.photo} alt="Tire" style={{width:100,height:75,objectFit:'cover',borderRadius:4,border:'1px solid #cbd5e1',cursor:'pointer'}} onClick={()=>{const w=window.open('','_blank');if(!w)return;w.document.write('<!doctype html><html><head><title>Tire Photo</title></head><body style="margin:0;display:flex;justify-content:center;align-items:center;height:100vh;background:#111"><img src="'+r.photo+'" style="max-width:100%;max-height:100%"/></body></html>');w.document.close();}}/></div>}</td>
-        <td><div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}><select value={r.status||'PENDING'} onChange={e=>updateStatus(r.id,e.target.value)}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select>{r.status==='APPROVED'&&<button className="btn btn-secondary" style={{padding:'4px 8px',fontSize:'12px'}} onClick={()=>updateStatus(r.id,'PENDING')} title="Reset to Pending">??</button>}</div></td>
+        <td><div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}><select value={r.status||'PENDING'} onChange={e=>updateStatus(r.id,e.target.value)}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select>{r.status==='APPROVED'&&<button className="btn btn-secondary" style={{padding:'4px 8px',fontSize:'12px'}} onClick={()=>updateStatus(r.id,'PENDING')} title="Reset to Pending">Reset</button>}
+              {r.status==='APPROVED'&&<button className="btn btn-primary" style={{padding:'4px 8px',fontSize:'12px'}} onClick={()=>sendEmailApproval(r)} title="Send Email Approval">📧 Email</button>}</div></td>
       </tr>)}</tbody></table></div>
     </div>
   {showNewTireModal && (

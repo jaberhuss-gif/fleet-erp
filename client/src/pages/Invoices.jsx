@@ -29,6 +29,8 @@ export default function Invoices({ user }) {
   const [preview, setPreview] = useState(null);
   const [previewFile, setPreviewFile] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [bulkSite, setBulkSite] = useState('');
+  const [selectedItems, setSelectedItems] = useState([]);
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrProgress, setOcrProgress] = useState("");
   const [sites, setSites] = useState([]);
@@ -337,6 +339,27 @@ export default function Invoices({ user }) {
     }
   };
 
+  const applyBulkSite = async () => {
+    if (!bulkSite || !selectedItems.length) return;
+    setBusy(true);
+    setError("");
+    try {
+      for (const itemId of selectedItems) {
+        await updateInvoiceItemSite(itemId, bulkSite);
+      }
+      setInvoiceItems(prev => prev.map(it =>
+        selectedItems.includes(it.id) ? { ...it, site: bulkSite } : it
+      ));
+      setMessage("Updated " + selectedItems.length + " items to " + bulkSite);
+      setSelectedItems([]);
+      setBulkSite("");
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleMatchItem = async (invoiceItemId, requestId, requestItemId) => {
     if (!selectedInvoice) return;
     // Site required
@@ -512,7 +535,10 @@ export default function Invoices({ user }) {
                   <tbody>
                     {preview.items?.slice(0, 100).map((it, i) => (
                       <tr key={i}>
-                        <td>{it.line_no}</td>
+                        <td><input type="checkbox" checked={selectedItems.includes(it.id)} onChange={() => {
+                      setSelectedItems(prev => prev.includes(it.id) ? prev.filter(id => id !== it.id) : [...prev, it.id]);
+                    }} /></td>
+                    <td>{it.line_no}</td>
                         <td>{it.description}</td>
                         <td>{it.quantity}</td>
                         <td>{fmt(it.unit_price)}</td>
@@ -693,10 +719,24 @@ export default function Invoices({ user }) {
           )}
 
           <h3>Items ({invoiceItems.length})</h3>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center", padding: 10, background: "#f0f9ff", borderRadius: 8 }}>
+            <label style={{ fontWeight: 600 }}>🔄 Bulk Site:</label>
+            <select value={bulkSite} onChange={e => setBulkSite(e.target.value)} style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #cbd5e1", minWidth: 180 }}>
+              <option value="">-- Select Site --</option>
+              {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+            </select>
+            <button className="btn btn-primary" disabled={!bulkSite || !selectedItems.length || busy} onClick={applyBulkSite}>
+              Apply to Selected ({selectedItems.length})
+            </button>
+            <button className="btn btn-secondary" onClick={() => setSelectedItems([])} disabled={!selectedItems.length}>
+              Clear Selection
+            </button>
+          </div>
           <div style={{ maxHeight: 600, overflow: "auto" }}>
             <table className="data-table" style={{ width: "100%" }}>
               <thead>
                 <tr>
+                  <th style={{width:30}}><input type="checkbox" onChange={(e) => { if (e.target.checked) setSelectedItems(invoiceItems.map(it => it.id)); else setSelectedItems([]); }} checked={selectedItems.length === invoiceItems.length && invoiceItems.length > 0} /></th>
                   <th>#</th>
                   <th>Description</th>
                   <th>Qty</th>
@@ -710,6 +750,9 @@ export default function Invoices({ user }) {
               <tbody>
                 {invoiceItems.map(it => (
                   <tr key={it.id}>
+                    <td><input type="checkbox" checked={selectedItems.includes(it.id)} onChange={() => {
+                      setSelectedItems(prev => prev.includes(it.id) ? prev.filter(id => id !== it.id) : [...prev, it.id]);
+                    }} /></td>
                     <td>{it.line_no}</td>
                     <td>{it.description}</td>
                     <td>{it.quantity}</td>

@@ -3,7 +3,6 @@ import api from '../api/client';
 
 const REQUEST_TYPES = [
   ['TIRE_ROTATION', 'Tire Rotation'],
-  ['NEW_TIRE_INSTALLATION', 'New Tire Installation'],
   ['DAMAGED_TIRE_REPLACEMENT', 'Damaged Tire Replacement'],
   ['PUNCTURE_REPAIR', 'Puncture Repair']
 ];
@@ -26,11 +25,22 @@ export default function TireServiceRequests({ driverMode=false }) {
     photo:''
   });
   const [rows,setRows]=useState([]);
+  const [newTireForm, setNewTireForm] = useState({
+    requestType: 'NEW_TIRE_INSTALLATION',
+    position: '',
+    tireSerial: '',
+    tireYear: '',
+    tireSize: '',
+    pressurePsi: '',
+    notes: '',
+    photo: ''
+  });
   const [search,setSearch]=useState('');
   const [statusFilter,setStatusFilter]=useState('');
   const [loading,setLoading]=useState(false);
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
+  const [showNewTireModal, setShowNewTireModal] = useState(false);
 
   const loadVehicles=async()=>{try{const endpoint=driverMode?'/tire/driver/vehicles':'/vehicles/list';const r=await api.get(endpoint);setVehicles(r.data.vehicles||[]);}catch(e){setError(e.response?.data?.error||e.message);}};
   const loadRequests=async()=>{try{
@@ -88,6 +98,43 @@ export default function TireServiceRequests({ driverMode=false }) {
     }catch(e){setError(e.response?.data?.error||e.message);}
     finally{setLoading(false);}
   };
+  const chooseNewTirePhoto = async (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setNewTireForm(f => ({ ...f, photo: reader.result }));
+    reader.onerror = () => setError('Could not read the tire photo.');
+    reader.readAsDataURL(file);
+  };
+
+  const submitNewTire = async () => {
+    setMessage(''); setError('');
+    if (!vehicleId) return setError('Select a vehicle first.');
+    if (!newTireForm.position) return setError('Select the tire installation position.');
+    if (!newTireForm.tireSerial.trim()) return setError('Enter the tire serial number.');
+    if (!newTireForm.tireYear) return setError('Enter the tire manufacturing year.');
+    if (!newTireForm.tireSize.trim()) return setError('Enter the tire size.');
+    if (newTireForm.pressurePsi === '' || Number(newTireForm.pressurePsi) < 0) return setError('Enter the tire air pressure.');
+    if (!newTireForm.photo) return setError('A photo of the tire is required.');
+    setLoading(true);
+    try {
+      await api.post('/tire/vehicle/' + vehicleId + '/service-request', newTireForm);
+      setNewTireForm({
+        requestType: 'NEW_TIRE_INSTALLATION',
+        position: '',
+        tireSerial: '',
+        tireYear: '',
+        tireSize: '',
+        pressurePsi: '',
+        notes: '',
+        photo: ''
+      });
+      setMessage('New Tire Installation submitted successfully.');
+      setShowNewTireModal(false);
+      if (!driverMode) await loadRequests();
+    } catch (e) { setError(e.response?.data?.error || e.message); }
+    finally { setLoading(false); }
+  };
+
   const updateStatus=async(id,status)=>{try{await api.put('/tire/service-requests/'+id,{status});await loadRequests();}catch(e){setError(e.response?.data?.error||e.message);}};
 
   if(driverMode)return <div className="hub-page">
@@ -191,6 +238,7 @@ export default function TireServiceRequests({ driverMode=false }) {
         <div><label>Vehicle</label><select value={search} onChange={e=>setSearch(e.target.value)}><option value="">All Vehicles</option>{vehicles.map(v=><option key={v.id} value={v.plate}>{v.plate}</option>)}</select></div>
         <div><label>Status</label><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="">All Statuses</option>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></div>
         <button className="btn btn-secondary" onClick={loadRequests}>Refresh</button>
+        <button className="btn btn-primary" onClick={() => setShowNewTireModal(true)}>🆕 Install New Tire</button>
         <button className="btn btn-primary" onClick={exportPdf} disabled={!filteredRows.length}>🖨️ Export PDF</button>
       </div>
     </div>
@@ -207,5 +255,38 @@ export default function TireServiceRequests({ driverMode=false }) {
         <td><select value={r.status||'PENDING'} onChange={e=>updateStatus(r.id,e.target.value)}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></td>
       </tr>)}</tbody></table></div>
     </div>
+  {showNewTireModal && (
+    <div className="modal-overlay" style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+      <div className="panel" style={{maxWidth:700,width:'90%',maxHeight:'90vh',overflowY:'auto',background:'#fff',padding:20,borderRadius:12}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <h2 style={{margin:0}}>🆕 Install New Tire</h2>
+          <button className="btn btn-secondary" onClick={()=>setShowNewTireModal(false)}>✕ Close</button>
+        </div>
+        <div style={{marginBottom:12}}>
+          <label>Vehicle</label>
+          <select value={vehicleId} onChange={e=>setVehicleId(e.target.value)}>
+            <option value="">-- Select vehicle --</option>
+            {vehicles.map(v=><option key={v.id} value={v.id}>{v.plate || [v.plate_number,v.plate_code].filter(Boolean).join(' ') || ('Vehicle ID '+v.id)}</option>)}
+          </select>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:8}}>
+          <div><label>Installation Position *</label><select value={newTireForm.position} onChange={e=>setNewTireForm({...newTireForm,position:e.target.value})}><option value="">-- Select position --</option>{POSITIONS.map(p=><option key={p}>{p}</option>)}</select></div>
+          <div><label>Tire Serial Number *</label><input value={newTireForm.tireSerial} onChange={e=>setNewTireForm({...newTireForm,tireSerial:e.target.value})} placeholder="Serial number"/></div>
+          <div><label>Manufacturing Year *</label><input type="number" min="1900" max="2100" step="1" placeholder="e.g. 2025" value={newTireForm.tireYear} onChange={e=>setNewTireForm({...newTireForm,tireYear:e.target.value})}/></div>
+          <div><label>Tire Size *</label><input value={newTireForm.tireSize} onChange={e=>setNewTireForm({...newTireForm,tireSize:e.target.value})} placeholder="e.g. 265/65R17"/></div>
+          <div><label>Air Pressure (PSI) *</label><input type="number" min="0" step="0.1" value={newTireForm.pressurePsi} onChange={e=>setNewTireForm({...newTireForm,pressurePsi:e.target.value})} placeholder="PSI"/></div>
+        </div>
+        <label style={{display:'block',marginTop:12,fontWeight:600}}>📷 Tire Photo (required)</label>
+        <input type="file" accept="image/*" capture="environment" onChange={e=>chooseNewTirePhoto(e.target.files?.[0])}/>
+        {newTireForm.photo && <img src={newTireForm.photo} alt="New tire" style={{width:'100%',maxWidth:420,height:180,objectFit:'cover',borderRadius:8,marginTop:8}}/>}
+        <textarea placeholder="Notes (optional)" value={newTireForm.notes} onChange={e=>setNewTireForm({...newTireForm,notes:e.target.value})} style={{marginTop:12,minHeight:80,width:'100%'}}/>
+        <div style={{marginTop:12,display:'flex',gap:8,justifyContent:'flex-end'}}>
+          <button className="btn btn-secondary" onClick={()=>setShowNewTireModal(false)}>Cancel</button>
+          <button className="btn btn-primary" disabled={loading} onClick={submitNewTire}>{loading?'Submitting...':'Submit'}</button>
+        </div>
+      </div>
+    </div>
+  )}
+
   </div>;
 }

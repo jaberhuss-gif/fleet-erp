@@ -944,7 +944,7 @@ export async function createTireServiceRequest(vehicleId, body, userId) {
       tireYear ? Number(tireYear) : null,
       tireSize || null,
       pressurePsi,
-      notes || null,
+      notes || '',
       photo || null,
       userId || null
     ]

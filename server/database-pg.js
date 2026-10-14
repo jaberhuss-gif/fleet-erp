@@ -5566,8 +5566,8 @@ export async function getMonthlyReport(filters = {}) {
 export async function getFinancialReport() {
   const MAINT_BASELINE = 20577;
   const DEV_BASELINE = 132551;
-  const SALARY_MAINT = 2200;
-  const SALARY_DEV = 2200;
+  const SALARY_MAINT = 2240;
+  const SALARY_DEV = 2240;
 
   const workOrders = await listWorkOrders();
   const projects = await listProjects();

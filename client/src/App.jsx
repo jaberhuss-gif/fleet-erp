@@ -22,6 +22,8 @@ import WarehouseReport from './pages/WarehouseReport';
 import api from './api/client';
 import DailyKmGate from './components/DailyKmGate';
 import Invoices from './pages/Invoices';
+import PdfUpload from './pages/PdfUpload';
+import EmailUpload from './pages/EmailUpload';
 
 const OWNER_ONLY_TABS = new Set(['drivers', 'users', 'audit', 'backup', 'invoices', 'inventory-report']);
 
@@ -37,6 +39,8 @@ const TAB_MODULES = {
   reports: ['reports'],
   'advanced-reports': ['advanced_reports'],
   'driver-handovers': ['fleet'],
+  'intake-pdf': ['building'],
+  'intake-email': ['building'],
 };
 
 const TAB_LABELS = {
@@ -56,6 +60,8 @@ const TAB_LABELS = {
   backup: 'Backup',
   invoices: '📄 Invoices',
   'driver-handovers': '📋 Driver Handovers',
+  'intake-pdf': '📄 PDF Intake',
+  'intake-email': '📧 Email Intake',
   'inventory-report': '📊 Warehouse Report'
 };
 
@@ -126,9 +132,6 @@ export default function App() {
     return () => window.removeEventListener('navigate', handler);
   }, [user, access]);
 
-  // Vehicle Master is the single edit point for vehicle identity, driver assignment,
-  // current KM and oil fields. Remount the active page immediately after a save so
-  // every module re-reads the same canonical vehicle data.
   useEffect(() => {
     const handler = () => setVehicleDataVersion(v => v + 1);
     const storageHandler = (e) => {
@@ -155,7 +158,7 @@ export default function App() {
   };
 
   const allowedTabs = useMemo(() => {
-    const allTabs = ['gm', 'support-service', 'operations', 'warehouse', 'fleet', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports', 'driver-handovers'];
+    const allTabs = ['gm', 'support-service', 'operations', 'warehouse', 'fleet', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports', 'driver-handovers', 'intake-pdf', 'intake-email'];
     const visible = allTabs.filter(canViewTab);
     if (user?.role === 'Owner') {
       return [...visible, 'drivers', 'users', 'audit', 'backup'];
@@ -252,11 +255,10 @@ export default function App() {
                   </button>
                 ))}
                 <button className={tab === 'driver-handovers' ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange('driver-handovers')}>
-                  ?? Driver Handovers
+                  📋 Driver Handovers
                 </button>
               </>
             )}
-
           </div>
 
           {allowedTabs.includes('operations') && (
@@ -272,6 +274,17 @@ export default function App() {
             <div className="erp-nav-group">
               <div className="erp-nav-heading">Support & Service</div>
               {['support-service','tickets','troubleshooter'].filter(t => allowedTabs.includes(t)).map(t => (
+                <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
+                  {TAB_LABELS[t]}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {['intake-pdf','intake-email'].some(t => allowedTabs.includes(t)) && (
+            <div className="erp-nav-group">
+              <div className="erp-nav-heading">📥 Data Intake</div>
+              {['intake-pdf','intake-email'].filter(t => allowedTabs.includes(t)).map(t => (
                 <button key={t} className={tab === t ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange(t)}>
                   {TAB_LABELS[t]}
                 </button>
@@ -322,6 +335,8 @@ export default function App() {
           )}
           {tab === 'vehicle-details' && viewingVehicleId && <VehicleDetails vehicleId={viewingVehicleId} onBack={handleBackToVehicles} />}
           {tab === 'driver-handovers' && <DriverHandovers />}
+          {tab === 'intake-pdf' && <PdfUpload />}
+          {tab === 'intake-email' && <EmailUpload />}
           {tab === 'troubleshooter' && <Troubleshooter />}
           {tab === 'fleet-tickets' && <FleetTicketViewer user={user} />}
           {tab === 'tickets' && canViewModule('tickets') && <Tickets user={user} access={access || {}} />}

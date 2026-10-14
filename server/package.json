@@ -15,7 +15,8 @@
     "express": "^4.19.2",
     "firebase-admin": "^13.5.0",
     "jsonwebtoken": "^9.0.3",
-    "pdf-parse": "^1.1.1",
+    "multer": "^2.4.0",
+    "pdf-parse": "^1.1.4",
     "pg": "^8.23.0"
   },
   "license": "ISC"

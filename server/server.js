@@ -1,4 +1,6 @@
 import express from "express";
+import intakePdfRouter from './intake-pdf.js';
+import intakeEmailRouter from './intake-email.js';
 import cors from "cors";
 import { login, listUsers, createUser, updateUser, deleteUser, requireAuth } from "./auth.js";
 import { requirePermission, ACCESS_MODULES, getUserAccess, saveUserAccess, ensureUserAccessTable } from "./rbac.js";
@@ -225,6 +227,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.use(intakePdfRouter);
+app.use(intakeEmailRouter);
 mountPdfWorkOrderImport(app);
 mountPdfProjectImport(app);
 async function syncBuildingProjectAmountsOnce() {

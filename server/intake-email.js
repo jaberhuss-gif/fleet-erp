@@ -65,52 +65,174 @@ router.post('/api/intake/email/save', async (req, res) => {
   }
 });
 
+// ============================================================
+// PARSER محسّن لملفات .eml و .msg و .txt
+// ============================================================
 function parseEmail(content) {
-  const result = { from: '', fromName: '', subject: '', body: '', receivedDate: new Date().toISOString(), issues: [] };
-  const fromMatch = content.match(/From:\s*(.+?)(?:\n|$)/i);
-  if (fromMatch) {
-    const fromStr = fromMatch[1].trim();
-    const emailMatch = fromStr.match(/<(.+?)>/);
-    const nameMatch = fromStr.match(/^([^<]+)/);
-    result.from = emailMatch ? emailMatch[1] : fromStr;
-    result.fromName = nameMatch ? nameMatch[1].trim() : '';
+  const result = { 
+    from: '', 
+    fromName: '', 
+    subject: '', 
+    body: '', 
+    receivedDate: new Date().toISOString(), 
+    issues: [] 
+  };
+  
+  // تنظيف: تحويل \r\n إلى \n
+  const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  
+  // فصل Headers عن Body (أول سطر فاضي)
+  const headerBodySplit = normalized.indexOf('\n\n');
+  const headers = headerBodySplit > 0 ? normalized.slice(0, headerBodySplit) : normalized;
+  const body = headerBodySplit > 0 ? normalized.slice(headerBodySplit + 2) : '';
+  
+  // دالة مساعدة لاستخراج Headers (تدعم folded headers)
+  function getHeader(name) {
+    const regex = new RegExp('^' + name + ':\\s*([\\s\\S]*?)(?=\\n[A-Za-z][A-Za-z0-9-]*:\\s|\\n\\n|$)', 'im');
+    const match = headers.match(regex);
+    if (!match) return '';
+    // دمج الأسطر المطوية (اللي تبدأ بـ space/tab)
+    return match[1].replace(/\n\s+/g, ' ').trim();
   }
-  const subjMatch = content.match(/Subject:\s*(.+?)(?:\n|$)/i);
-  if (subjMatch) result.subject = subjMatch[1].trim();
-  const dateMatch = content.match(/Date:\s*(.+?)(?:\n|$)/i);
-  if (dateMatch) { const d = new Date(dateMatch[1]); if (!isNaN(d.getTime())) result.receivedDate = d.toISOString(); }
-  const bodyStart = content.indexOf('\n\n');
-  result.body = bodyStart > 0 ? content.slice(bodyStart).trim() : content;
+  
+  // ============ FROM ============
+  const fromRaw = getHeader('From');
+  if (fromRaw) {
+    const emailMatch = fromRaw.match(/<([^>]+)>/);
+    const nameMatch = fromRaw.match(/^"?([^"<]+?)"?\s*</);
+    result.from = emailMatch ? emailMatch[1].trim() : fromRaw.replace(/^<|>$/g, '').trim();
+    result.fromName = nameMatch ? nameMatch[1].trim().replace(/^"|"$/g, '') : '';
+  }
+  
+  // ============ SUBJECT (مع MIME decode) ============
+  let subject = getHeader('Subject');
+  if (subject) {
+    // فك تشفير MIME encoded words: =?UTF-8?B?...?= أو =?UTF-8?Q?...?=
+    subject = subject.replace(/=\?([^?]+)\?([BQ])\?([^?]+)\?=/gi, (match, charset, encoding, text) => {
+      try {
+        if (encoding.toUpperCase() === 'B') {
+          return Buffer.from(text, 'base64').toString('utf-8');
+        } else {
+          // Q encoding
+          const decoded = text.replace(/_/g, ' ').replace(/=([0-9A-F]{2})/gi, (m, hex) => 
+            String.fromCharCode(parseInt(hex, 16))
+          );
+          return Buffer.from(decoded, 'binary').toString('utf-8');
+        }
+      } catch { return text; }
+    });
+    result.subject = subject;
+  }
+  
+  // ============ DATE ============
+  const dateRaw = getHeader('Date');
+  if (dateRaw) {
+    const d = new Date(dateRaw);
+    if (!isNaN(d.getTime())) result.receivedDate = d.toISOString();
+  }
+  
+  // ============ BODY ============
+  let rawBody = body.trim();
+  
+  // إذا ما لقينا Body، نستخدم كل المحتوى بعد Headers
+  if (!rawBody) {
+    rawBody = normalized;
+  }
+  
+  // إذا كان Body بصيغة multipart، نحاول نستخرج الجزء النصي
+  if (rawBody.includes('Content-Type: text/plain') || rawBody.includes('Content-Type: text/html')) {
+    // نجرب نلقط الجزء text/plain أولاً
+    const textPlainMatch = rawBody.match(/Content-Type:\s*text\/plain[^\n]*\n(?:[^\n]*\n)*?\n([\s\S]*?)(?=\n--|$)/i);
+    if (textPlainMatch) {
+      rawBody = textPlainMatch[1];
+    } else {
+      // نجرب HTML
+      const htmlMatch = rawBody.match(/Content-Type:\s*text\/html[^\n]*\n(?:[^\n]*\n)*?\n([\s\S]*?)(?=\n--|$)/i);
+      if (htmlMatch) {
+        // إزالة وسوم HTML
+        rawBody = htmlMatch[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
+      }
+    }
+  }
+  
+  // فك تشفير MIME encoded words في Body أيضاً
+  rawBody = rawBody.replace(/=\?([^?]+)\?([BQ])\?([^?]+)\?=/gi, (match, charset, encoding, text) => {
+    try {
+      if (encoding.toUpperCase() === 'B') {
+        return Buffer.from(text, 'base64').toString('utf-8');
+      } else {
+        const decoded = text.replace(/_/g, ' ').replace(/=([0-9A-F]{2})/gi, (m, hex) => 
+          String.fromCharCode(parseInt(hex, 16))
+        );
+        return Buffer.from(decoded, 'binary').toString('utf-8');
+      }
+    } catch { return text; }
+  });
+  
+  result.body = rawBody.trim();
+  
+  // ============ استخراج المشاكل ============
   result.issues = extractIssues(result.body);
+  
   return result;
 }
 
+// ============================================================
+// استخراج المشاكل من نص الإيميل
+// ============================================================
 function extractIssues(body) {
   const issues = [];
   const lines = body.split(/\n/).map(l => l.trim()).filter(l => l);
-  const keywords = ['damaged','broken','not working','issue','problem','leak','cracked','urgent','repair','maintenance','failed','faulty','needs','requires','تالف','مكسور','لا يعمل','مشكلة','عطل','تسريب','متضرر','بحاجة','يحتاج','عاجل','صيانة','إصلاح'];
+  
+  const keywords = [
+    'damaged', 'broken', 'not working', 'issue', 'problem',
+    'leak', 'cracked', 'urgent', 'repair', 'maintenance',
+    'failed', 'faulty', 'needs', 'requires',
+    'تالف', 'مكسور', 'لا يعمل', 'مشكلة', 'عطل', 'تسريب',
+    'متضرر', 'بحاجة', 'يحتاج', 'عاجل', 'صيانة', 'إصلاح'
+  ];
+  
   let itemNo = 1;
+  
   for (const line of lines) {
     if (line.length < 10) continue;
+    
+    // تجاهل التحيات والختام
     if (/^(Dear|Hi|Hello|Best|Regards|Thanks|Sincerely|أهلاً|مرحباً|مع تحياتي)/i.test(line)) continue;
+    
+    // تجاهل السطور اللي ما فيها حروف
+    if (!/[a-zA-Z\u0600-\u06FF]/.test(line)) continue;
+    
     const hasKeyword = keywords.some(k => line.toLowerCase().includes(k.toLowerCase()));
     const startsWithBullet = /^[-•*\d][\.\)]?\s/.test(line);
+    
     if (hasKeyword || startsWithBullet) {
       const cleanName = line.replace(/^[-•*\d][\.\)]?\s*/, '').trim();
+      
       if (cleanName.length >= 5) {
         issues.push({
-          no: itemNo++, name: cleanName, description: cleanName,
+          no: itemNo++,
+          name: cleanName,
+          description: cleanName,
           priority: /urgent|عاجل|critical/i.test(line) ? 'Urgent' : 'Medium',
           category: detectCategory(cleanName),
-          quantity: 1, price: 0, site: '', type: 'work_order',
-          month: new Date().getMonth() + 1, year: new Date().getFullYear()
+          quantity: 1,
+          price: 0,
+          site: '',
+          type: 'work_order',
+          month: new Date().getMonth() + 1,
+          year: new Date().getFullYear()
         });
       }
     }
   }
+  
   return issues;
 }
 
+// ============================================================
+// تصنيف تلقائي للفئة
+// ============================================================
 function detectCategory(text) {
   const t = text.toLowerCase();
   if (/(electric|light|socket|switch|wire|cable|كهر|لمب|مفتاح|سلك)/i.test(t)) return 'Electrical';

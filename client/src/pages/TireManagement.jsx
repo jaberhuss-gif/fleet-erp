@@ -167,7 +167,7 @@ export default function TireManagement({ user, driverMode=false }) {
     const win = window.open('', '_blank');
     try {
       if (!win) { setError('Please allow pop-ups to open the survey report.'); return; }
-      const r = await api.get('/tire/survey-report/all', { responseType: 'blob' });
+      const r = await api.get('/tire/survey-report/all', { responseType: 'blob', timeout: 120000 });
       const url = URL.createObjectURL(r.data);
       win.location.href = url;
       setTimeout(() => URL.revokeObjectURL(url), 60000);

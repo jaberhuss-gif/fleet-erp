@@ -44,13 +44,14 @@ const issueRows = openIssues.length
         <td>${i + 1}</td>
         <td>${esc(t.category || '-')}</td>
         <td>${esc(t.title || '-')}</td>
+        <td>${esc(t.description || '-')}</td>
         <td>${esc(t.priority || '-')}</td>
         <td>${statusDisplay}</td>
         <td>${esc(fmtDate(t.opened_at))}</td>
       </tr>
     `;
     }).join('')
-    : `<tr><td colspan="6" style="text-align:center;color:#15803d;padding:12px">No open issues at handover time</td></tr>`;
+    : `<tr><td colspan="7" style="text-align:center;color:#15803d;padding:12px">No open issues at handover time</td></tr>`;
 
   return `<!doctype html>
 <html lang="en">
@@ -144,10 +145,11 @@ const issueRows = openIssues.length
       <tr>
         <th style="width:5%">#</th>
         <th style="width:15%">Category</th>
-        <th style="width:35%">Title</th>
+        <th style="width:25%">Issue / Required Action</th>
+        <th style="width:25%">Description / Reason</th>
         <th style="width:10%">Priority</th>
         <th style="width:15%">Status</th>
-        <th style="width:20%">Opened</th>
+        <th style="width:15%">Opened</th>
       </tr>
     </thead>
     <tbody>

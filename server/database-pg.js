@@ -766,6 +766,40 @@ export async function ensureDriverHandoverSchema() {
   await query(`CREATE INDEX IF NOT EXISTS idx_driver_handovers_new_driver ON driver_handovers(new_driver_id)`);
 }
 
+
+// Keep the handover's open reason aligned with the live odometer and trusted oil-change
+// history. This is a computed issue (not a ticket), so it never creates duplicate tickets.
+async function refreshHandoverOilIssue(handover) {
+  if (!handover || !handover.vehicle_id) return handover;
+  const issues = Array.isArray(handover.open_issues) ? handover.open_issues : [];
+  // Remove the previously computed row, then rebuild it from current trusted data.
+  const remaining = issues.filter(issue => issue?.source !== "oil_change_due");
+  try {
+    const vehicle = await getVehicleById(handover.vehicle_id);
+    const currentKm = numberValue(vehicle?.current_km ?? vehicle?.currentKm, 0);
+    const lastOilKm = numberValue(vehicle?.last_oil_km ?? vehicle?.lastOilKm, 0);
+    const interval = Math.max(1, numberValue(vehicle?.oil_change_interval ?? vehicle?.oilChangeInterval, 5000));
+    const kmSinceOil = currentKm - lastOilKm;
+    if (currentKm > 0 && lastOilKm > 0 && kmSinceOil >= interval) {
+      remaining.push({
+        id: null,
+        source: "oil_change_due",
+        title: "Oil Change Overdue",
+        category: "Oil Change",
+        priority: "High",
+        status: "Open",
+        current_status: "Open",
+        opened_at: handover.handover_date || handover.created_at || new Date().toISOString(),
+        description: `Change engine oil. Current KM: ${currentKm.toLocaleString("en-US")}; last oil change: ${lastOilKm.toLocaleString("en-US")}; interval: ${interval.toLocaleString("en-US")} km; overdue by ${Math.max(0, kmSinceOil - interval).toLocaleString("en-US")} km.`
+      });
+    }
+  } catch (e) {
+    console.warn("[refreshHandoverOilIssue]", e.message);
+  }
+  handover.open_issues = remaining;
+  return handover;
+}
+
 export async function createDriverHandover(data = {}) {
   await ensureDriverHandoverSchema();
 
@@ -798,6 +832,25 @@ export async function createDriverHandover(data = {}) {
     opened_at: t.opened_at,
     description: String(t.description || '').slice(0, 500)
   }));
+  // Record an overdue oil change directly in the handover issues list.
+  const oilVehicle = await getVehicleById(data.vehicleId);
+  const oilCurrentKm = numberValue(oilVehicle?.current_km ?? oilVehicle?.currentKm, 0);
+  const oilLastKm = numberValue(oilVehicle?.last_oil_km ?? oilVehicle?.lastOilKm, 0);
+  const oilInterval = Math.max(1, numberValue(oilVehicle?.oil_change_interval ?? oilVehicle?.oilChangeInterval, 5000));
+  if (oilCurrentKm > 0 && oilLastKm > 0 && oilCurrentKm - oilLastKm >= oilInterval) {
+    const kmSinceOil = oilCurrentKm - oilLastKm;
+    openIssues.push({
+      id: null,
+      source: "oil_change_due",
+      title: "Oil Change Overdue",
+      category: "Oil Change",
+      priority: "High",
+      status: "Open",
+      current_status: "Open",
+      opened_at: data.handoverDate || new Date().toISOString(),
+      description: `Change engine oil. Current KM: ${oilCurrentKm.toLocaleString("en-US")}; last oil change: ${oilLastKm.toLocaleString("en-US")}; interval: ${oilInterval.toLocaleString("en-US")} km; overdue by ${Math.max(0, kmSinceOil - oilInterval).toLocaleString("en-US")} km.`
+    });
+  }
 
   const result = await query(`
     INSERT INTO driver_handovers
@@ -947,6 +1000,7 @@ export async function listDriverHandovers(filters = {}) {
         }
       } catch (e) { console.warn("[listDriverHandovers:currentStatus]", e.message); }
     }
+    await refreshHandoverOilIssue(h);
   }
   return rows;
 }
@@ -1011,6 +1065,7 @@ export async function getDriverHandover(id) {
     } catch (e) { console.warn("[getDriverHandover:currentStatus]", e.message); }
   }
 
+  await refreshHandoverOilIssue(h);
   return h;
 }
 

@@ -158,13 +158,13 @@ const issueRows = uniqueIssues.length
   <table>
     <thead>
       <tr>
-        <th style="width:5%">#</th>
-        <th style="width:15%">Category</th>
-        <th style="width:25%">Issue / Required Action</th>
-        <th style="width:25%">Description / Reason</th>
-        <th style="width:10%">Priority</th>
-        <th style="width:15%">Status</th>
-        <th style="width:15%">Opened</th>
+        <th style="width:4%">#</th>
+        <th style="width:12%">Category</th>
+        <th style="width:20%">Issue / Required Action</th>
+        <th style="width:32%">Description / Reason</th>
+        <th style="width:8%">Priority</th>
+        <th style="width:12%">Status</th>
+        <th style="width:12%">Opened</th>
       </tr>
     </thead>
     <tbody>

@@ -878,9 +878,9 @@ export async function createDriverHandover(data = {}) {
     data.newDriverName || '',
     data.newDriverPhone || '',
     data.handoverDate || null,
-    Number(vehicle.current_km || 0),
-    Number(vehicle.last_oil_km || 0),
-    vehicle.last_oil_change_date || null,
+    Number(oilVehicle?.current_km ?? oilVehicle?.currentKm ?? vehicle.current_km ?? 0),
+    Number(oilVehicle?.last_oil_km ?? oilVehicle?.lastOilKm ?? vehicle.last_oil_km ?? 0),
+    oilVehicle?.last_oil_change_date ?? oilVehicle?.lastOilChangeDate ?? vehicle.last_oil_change_date ?? null,
     JSON.stringify(openIssues),
     data.notes || ''
   ]);

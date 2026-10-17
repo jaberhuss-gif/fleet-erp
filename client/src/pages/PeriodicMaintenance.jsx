@@ -145,6 +145,8 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
   };
 
   const today = new Date().toISOString().slice(0, 10);
+  // Requested reporting cutoff: include expired inspections through 23-Oct-2026.
+  const annualInspectionReportCutoff = '2026-10-23';
 
   // Normalize saved inspection expiry dates. Vehicle Master may contain either
   // Gregorian dates (2026-10-23) or Umm al-Qura Hijri dates (1448-05-12).
@@ -247,7 +249,11 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     }, null);
   };
 
-  const activeVehicles = vehicles.filter(v => { const plate = String(v.plate || v.plate_number || '').trim().toLowerCase(); return plate !== 'test 123' || plate === 'test 123'; });
+  // Exclude test placeholder vehicles from operational compliance and print reports.
+  const activeVehicles = vehicles.filter(v => {
+    const plate = String(v.plate || v.plate_number || '').trim().toLowerCase();
+    return plate !== 'test 123' && plate !== '123';
+  });
   const vehicleById = activeVehicles.reduce((map, v) => { map[String(v.id)] = v; return map; }, {});
   const getInspectionExpiry = (vehicleId) => {
     const v = vehicleById[String(vehicleId)];
@@ -344,8 +350,8 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
         .filter(v => !v.annualDone && (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
         .map(v => ({ ...v, inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiry) || getInspectionExpiry(v.vehicle_id) }))
         .filter(v => {
-          const days = Math.ceil((new Date(v.inspectionExpiry + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000);
-          return days <= 30;
+          const expiry = String(v.inspectionExpiry || '').slice(0, 10);
+          return /^\\d{4}-\\d{2}-\\d{2}$/.test(expiry) && expiry <= annualInspectionReportCutoff;
         })
         .sort((a, b) => {
           const da = new Date(a.inspectionExpiry + 'T00:00:00Z').getTime();
@@ -1119,10 +1125,8 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
           .filter(v => !v.annualDone && (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
           .map(v => ({ ...v, inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiry) || getInspectionExpiry(v.vehicle_id) }))
           .filter(v => {
-            const days = Math.ceil(
-              (new Date(v.inspectionExpiry + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000
-            );
-            return days <= 30;
+            const expiry = String(v.inspectionExpiry || '').slice(0, 10);
+            return /^\\d{4}-\\d{2}-\\d{2}$/.test(expiry) && expiry <= annualInspectionReportCutoff;
           })
           .sort((a, b) => {
             const da = new Date(a.inspectionExpiry + 'T00:00:00Z').getTime();

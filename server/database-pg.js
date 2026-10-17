@@ -4268,47 +4268,47 @@ export async function listStockTransactionsByVehicle(vehicleId) {
    AUTO-CLOSE 6-MONTH FOR ANNUAL-CONFIRMED VEHICLES (one-time)
    ============================================================ */
 export async function autoCloseSixMonthCoveredByAnnual() {
-  // ابحث عن السيارات اللي:
-  //   - 6-month = Pending
-  //   - inspection = Completed + whatsapp_confirmed_at IS NOT NULL
   const result = await query(`
-    SELECT
-      six.id AS six_id,
-      six.vehicle_id,
-      annual.completed_date AS annual_completed_date,
-      annual.whatsapp_confirmed_at AS annual_confirmed_at
+    SELECT six.id AS six_id,
+           six.vehicle_id,
+           annual.completed_date AS annual_completed_date,
+           annual.whatsapp_confirmed_at AS annual_confirmed_at
     FROM periodic_maintenance six
-    JOIN periodic_maintenance annual
-      ON annual.vehicle_id = six.vehicle_id
-     AND annual.type = 'inspection'
-     AND annual.status = 'Completed'
+    JOIN LATERAL (
+      SELECT a.completed_date, a.whatsapp_confirmed_at
+      FROM periodic_maintenance a
+      WHERE a.vehicle_id = six.vehicle_id
+        AND a.type = 'inspection'
+        AND a.status = 'Completed'
+        AND a.whatsapp_confirmed_at IS NOT NULL
+      ORDER BY a.whatsapp_confirmed_at DESC,
+               a.completed_date DESC NULLS LAST,
+               a.id DESC
+      LIMIT 1
+    ) annual ON TRUE
     WHERE six.type = '6_months_general'
       AND six.status = 'Pending'
       AND COALESCE(six.notes, '') NOT LIKE '%Auto-closed%'
   `);
 
-  const toClose = result.rows;
-  if (!toClose.length) {
-    return { closed: 0, records: [] };
-  }
-
   let closedCount = 0;
   const closedRecords = [];
-  for (const row of toClose) {
-    const annualDate = row.annual_completed_date
-      ? String(row.annual_completed_date).slice(0, 10)
-      : String(row.annual_confirmed_at || new Date().toISOString()).slice(0, 10);
+  for (const row of result.rows) {
+    const annualDate = String(row.annual_completed_date || row.annual_confirmed_at).slice(0, 10);
     const autoNote = 'Auto-closed: Annual inspection confirmed by driver via WhatsApp on ' + annualDate;
-    await query(`
+    const updateResult = await query(`
       UPDATE periodic_maintenance
       SET status = 'Completed',
           completed_date = COALESCE(completed_date, $1::date),
           technician = 'Auto-closed (Annual Confirmed)',
-          notes = COALESCE(notes, '') || CASE WHEN COALESCE(notes, '') = '' THEN '' ELSE E'\n\n' END || $2
-      WHERE id = $3
-    `, [row.annual_completed_date || row.annual_confirmed_at || new Date(), autoNote, row.six_id]);
-    
-    // Update the linked ticket to Completed (for Maintenance Requests page)
+          notes = COALESCE(notes, '') ||
+            CASE WHEN COALESCE(notes, '') = '' THEN '' ELSE E'\\n\\n' END || $2
+      WHERE id = $3 AND status = 'Pending'
+      RETURNING id
+    `, [row.annual_completed_date || row.annual_confirmed_at, autoNote, row.six_id]);
+
+    if (!updateResult.rows.length) continue;
+
     await query(`
       UPDATE tickets
       SET status = 'Completed',
@@ -4319,7 +4319,7 @@ export async function autoCloseSixMonthCoveredByAnnual() {
           whatsapp_confirmation_token = NULL
       WHERE category = '6-Month Maintenance'
         AND COALESCE(resolution_notes, '') LIKE $2
-    `, [row.annual_confirmed_at || row.annual_completed_date, '[PM_REPAIR:' + row.six_id + ']%']);
+    `, [row.annual_confirmed_at, '[PM_REPAIR:' + row.six_id + ']%']);
 
     closedCount++;
     closedRecords.push({
@@ -4329,7 +4329,6 @@ export async function autoCloseSixMonthCoveredByAnnual() {
       annual_confirmed_at: row.annual_confirmed_at
     });
   }
-
   return { closed: closedCount, records: closedRecords };
 }
 

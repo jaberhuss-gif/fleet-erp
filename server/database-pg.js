@@ -4265,23 +4265,38 @@ export async function listStockTransactionsByVehicle(vehicleId) {
 }
 
 /* ============================================================
-   AUTO-CLOSE 6-MONTH FOR ANNUAL-CONFIRMED VEHICLES (one-time)
+   AUTO-CLOSE 6-MONTH ONLY WHEN ANNUAL INSPECTION COVERS SAME PERIOD
    ============================================================ */
 export async function autoCloseSixMonthCoveredByAnnual() {
-  // ابحث عن السيارات اللي:
-  //   - 6-month = Pending
-  //   - inspection = Completed + whatsapp_confirmed_at IS NOT NULL
+  // Only close a pending 6-month record when the annual inspection:
+  // - is Completed,
+  // - has a real WhatsApp confirmation timestamp,
+  // - was actually completed within 30 days of the 6-month scheduled date.
+  // A LATERAL lookup selects at most one matching annual record per vehicle.
   const result = await query(`
     SELECT
       six.id AS six_id,
       six.vehicle_id,
-      annual.completed_date AS annual_completed_date,
-      annual.whatsapp_confirmed_at AS annual_confirmed_at
+      annual.annual_completed_date,
+      annual.annual_confirmed_at
     FROM periodic_maintenance six
-    JOIN periodic_maintenance annual
-      ON annual.vehicle_id = six.vehicle_id
-     AND annual.type = 'inspection'
-     AND annual.status = 'Completed'
+    JOIN LATERAL (
+      SELECT
+        annual.completed_date AS annual_completed_date,
+        annual.whatsapp_confirmed_at AS annual_confirmed_at
+      FROM periodic_maintenance annual
+      WHERE annual.vehicle_id = six.vehicle_id
+        AND annual.type = 'inspection'
+        AND annual.status = 'Completed'
+        AND annual.whatsapp_confirmed_at IS NOT NULL
+        AND six.scheduled_date IS NOT NULL
+        AND ABS(
+          COALESCE(annual.completed_date, annual.whatsapp_confirmed_at::date) - six.scheduled_date
+        ) <= 30
+      ORDER BY COALESCE(annual.completed_date, annual.whatsapp_confirmed_at::date) DESC,
+               annual.id DESC
+      LIMIT 1
+    ) annual ON TRUE
     WHERE six.type = '6_months_general'
       AND six.status = 'Pending'
       AND COALESCE(six.notes, '') NOT LIKE '%Auto-closed%'
@@ -4297,18 +4312,19 @@ export async function autoCloseSixMonthCoveredByAnnual() {
   for (const row of toClose) {
     const annualDate = row.annual_completed_date
       ? String(row.annual_completed_date).slice(0, 10)
-      : String(row.annual_confirmed_at || new Date().toISOString()).slice(0, 10);
+      : String(row.annual_confirmed_at).slice(0, 10);
     const autoNote = 'Auto-closed: Annual inspection confirmed by driver via WhatsApp on ' + annualDate;
     await query(`
       UPDATE periodic_maintenance
       SET status = 'Completed',
           completed_date = COALESCE(completed_date, $1::date),
           technician = 'Auto-closed (Annual Confirmed)',
-          notes = COALESCE(notes, '') || CASE WHEN COALESCE(notes, '') = '' THEN '' ELSE E'\n\n' END || $2
+          notes = COALESCE(notes, '') || CASE WHEN COALESCE(notes, '') = '' THEN '' ELSE E'\\n\\n' END || $2
       WHERE id = $3
-    `, [row.annual_completed_date || row.annual_confirmed_at || new Date(), autoNote, row.six_id]);
-    
-    // Update the linked ticket to Completed (for Maintenance Requests page)
+        AND status = 'Pending'
+    `, [row.annual_completed_date || row.annual_confirmed_at, autoNote, row.six_id]);
+
+    // Update only the ticket linked to this exact 6-month maintenance record.
     await query(`
       UPDATE tickets
       SET status = 'Completed',

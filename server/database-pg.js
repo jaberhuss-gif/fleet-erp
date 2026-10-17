@@ -4268,11 +4268,10 @@ export async function listStockTransactionsByVehicle(vehicleId) {
    AUTO-CLOSE 6-MONTH ONLY WHEN ANNUAL INSPECTION COVERS SAME PERIOD
    ============================================================ */
 export async function autoCloseSixMonthCoveredByAnnual() {
-  // Only close a pending 6-month record when the annual inspection:
-  // - is Completed,
-  // - has a real WhatsApp confirmation timestamp,
-  // - was actually completed within 30 days of the 6-month scheduled date.
-  // A LATERAL lookup selects at most one matching annual record per vehicle.
+  // Close only when a completed annual inspection has an actual WhatsApp
+  // confirmation and its completion date is within 30 days of the scheduled
+  // 6-month maintenance date. Do not mark a record closed unless its UPDATE
+  // really changes a still-pending row.
   const result = await query(`
     SELECT
       six.id AS six_id,
@@ -4303,18 +4302,14 @@ export async function autoCloseSixMonthCoveredByAnnual() {
   `);
 
   const toClose = result.rows;
-  if (!toClose.length) {
-    return { closed: 0, records: [] };
-  }
-
-  let closedCount = 0;
   const closedRecords = [];
   for (const row of toClose) {
     const annualDate = row.annual_completed_date
       ? String(row.annual_completed_date).slice(0, 10)
       : String(row.annual_confirmed_at).slice(0, 10);
     const autoNote = 'Auto-closed: Annual inspection confirmed by driver via WhatsApp on ' + annualDate;
-    await query(`
+
+    const updated = await query(`
       UPDATE periodic_maintenance
       SET status = 'Completed',
           completed_date = COALESCE(completed_date, $1::date),
@@ -4322,9 +4317,14 @@ export async function autoCloseSixMonthCoveredByAnnual() {
           notes = COALESCE(notes, '') || CASE WHEN COALESCE(notes, '') = '' THEN '' ELSE E'\\n\\n' END || $2
       WHERE id = $3
         AND status = 'Pending'
+      RETURNING id
     `, [row.annual_completed_date || row.annual_confirmed_at, autoNote, row.six_id]);
 
-    // Update only the ticket linked to this exact 6-month maintenance record.
+    // A concurrent update may have changed this record after the SELECT.
+    // In that case, leave its ticket untouched and do not count it as closed.
+    if (!updated.rows || updated.rows.length === 0) continue;
+
+    // Update only a ticket carrying the exact maintenance record marker.
     await query(`
       UPDATE tickets
       SET status = 'Completed',
@@ -4337,7 +4337,6 @@ export async function autoCloseSixMonthCoveredByAnnual() {
         AND COALESCE(resolution_notes, '') LIKE $2
     `, [row.annual_confirmed_at || row.annual_completed_date, '[PM_REPAIR:' + row.six_id + ']%']);
 
-    closedCount++;
     closedRecords.push({
       six_id: row.six_id,
       vehicle_id: row.vehicle_id,
@@ -4346,7 +4345,7 @@ export async function autoCloseSixMonthCoveredByAnnual() {
     });
   }
 
-  return { closed: closedCount, records: closedRecords };
+  return { closed: closedRecords.length, records: closedRecords };
 }
 
 export async function listPeriodicMaintenance(filters = {}) {

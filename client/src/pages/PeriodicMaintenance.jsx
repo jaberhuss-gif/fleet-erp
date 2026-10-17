@@ -347,11 +347,11 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       title: 'Annual Inspection — Due Within 30 Days',
       color: '#dc2626',
       rows: vehicleSummary
-        .filter(v => !v.annualDone && (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
+        .filter(v => !v.annualDone && !['test 123', '123'].includes(String(v.plate || '').trim().toLowerCase()))
         .map(v => ({ ...v, inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiry) || getInspectionExpiry(v.vehicle_id) }))
         .filter(v => {
           const expiry = String(v.inspectionExpiry || '').slice(0, 10);
-          return /^\\d{4}-\\d{2}-\\d{2}$/.test(expiry) && expiry <= annualInspectionReportCutoff;
+          return /^\d{4}-\d{2}-\d{2}$/.test(expiry) && expiry <= annualInspectionReportCutoff;
         })
         .sort((a, b) => {
           const da = new Date(a.inspectionExpiry + 'T00:00:00Z').getTime();

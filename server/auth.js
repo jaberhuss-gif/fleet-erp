@@ -19,7 +19,7 @@ if (!JWT_SECRET) {
 }
 
 // ============================================================
-// AUTHENTICATION — PostgreSQL
+// AUTHENTICATION - PostgreSQL
 // ============================================================
 
 export async function login(username, password) {

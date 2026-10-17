@@ -2199,6 +2199,13 @@ app.post("/inspection-confirm/:token", async (req, res) => {
       [row.id, token]
     );
 
+    // Automatically close pending 6-month maintenance after annual YES confirmation.
+    try {
+      await db.autoCloseSixMonthCoveredByAnnual();
+    } catch (autoCloseError) {
+      console.error("[AutoCloseAnnualAfterWhatsApp]", autoCloseError);
+    }
+
     res.send("<!doctype html><html><body style='font-family:Arial;max-width:620px;margin:50px auto;padding:24px;text-align:center'><h2 style='color:#16a34a'>✓ Inspection Completed</h2><p>The inspection has been recorded in Fleet ERP.</p><p>Date: " + new Date().toISOString().slice(0,10) + "</p></body></html>");
   } catch (e) {
     res.status(500).send("<h2>Unable to process the inspection confirmation.</h2><p>" + String(e.message || "").replace(/[<>&]/g, "") + "</p>");

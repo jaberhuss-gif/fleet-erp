@@ -243,7 +243,7 @@ export async function listVehicles() {
            oh.oil_change_km AS canonical_last_oil_km,
            oh.oil_change_date AS canonical_last_oil_change_date
     FROM ranked r
-    LEFT JOIN drivers d ON d.id = r.driver_id
+    LEFT JOIN drivers d ON d.id::text = NULLIF(TRIM(r.driver_id::text), '')
     LEFT JOIN LATERAL (
       SELECT oil_change_km, oil_change_date
       FROM oil_changes

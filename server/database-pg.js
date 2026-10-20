@@ -247,7 +247,7 @@ export async function listVehicles() {
     LEFT JOIN LATERAL (
       SELECT oil_change_km, oil_change_date
       FROM oil_changes
-      WHERE vehicle_id = r.id
+      WHERE NULLIF(TRIM(vehicle_id::text), '') = r.id::text
         AND COALESCE(notes,'') NOT ILIKE '%Google Sheet%'
       ORDER BY oil_change_date DESC NULLS LAST, id DESC
       LIMIT 1

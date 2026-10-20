@@ -31,26 +31,42 @@ export function handoverReportHtml(handover) {
   const h = handover || {};
   const openIssues = Array.isArray(h.open_issues) ? h.open_issues : [];
 
-const issueRows = openIssues.length
-  ? openIssues.map((t, i) => {
-      const currentStatus = t.current_status || t.status || '-';
-      const wasOpen = t.status === 'Open' || t.status === 'IN_PROGRESS' || t.status === 'Acknowledged';
-      const isClosed = currentStatus === 'Closed' || currentStatus === 'Completed';
-      const statusDisplay = isClosed
-        ? '<span style="color:#16a34a;font-weight:700">✓ Closed</span>'
-        : '<span style="color:#dc2626;font-weight:700">' + esc(currentStatus) + '</span>';
+// Remove only exact duplicate rows that have no distinct description/reason.
+const uniqueIssues = openIssues.filter((issue, index, all) => {
+  const title = String(issue?.title || '').trim().toLowerCase();
+  const category = String(issue?.category || '').trim().toLowerCase();
+  const description = String(issue?.description || '').trim().toLowerCase();
+  const key = [category, title, description].join('|');
+  return all.findIndex(candidate =>
+    [String(candidate?.category || '').trim().toLowerCase(),
+     String(candidate?.title || '').trim().toLowerCase(),
+     String(candidate?.description || '').trim().toLowerCase()].join('|') === key
+  ) === index;
+});
+
+const issueRows = uniqueIssues.length
+  ? uniqueIssues.map((t, i) => {
+      const rawStatus = String(t.current_status || t.status || 'Open').trim();
+      const normalizedStatus = rawStatus.toLowerCase().replace(/[ _-]+/g, '');
+      const isCompleted = ['completed', 'closed', 'resolved', 'done'].includes(normalizedStatus);
+      const isInProgress = ['inprogress', 'acknowledged'].includes(normalizedStatus);
+      const label = isCompleted ? 'Completed' : isInProgress ? 'In Progress' : 'Open';
+      const statusColor = isCompleted ? '#15803d' : isInProgress ? '#b45309' : '#b91c1c';
+      const statusBg = isCompleted ? '#dcfce7' : isInProgress ? '#fef3c7' : '#fee2e2';
+      const statusDisplay = '<span style="display:inline-block;white-space:nowrap;padding:4px 8px;border-radius:999px;background:' + statusBg + ';color:' + statusColor + ';font-size:8pt;font-weight:700"> ' + (isCompleted ? '✓ ' : '') + label + '</span>';
       return `
       <tr>
         <td>${i + 1}</td>
         <td>${esc(t.category || '-')}</td>
-        <td>${esc(t.title || '-')}</td>
+        <td><strong>${esc(t.title || '-')}</strong></td>
+        <td>${esc(t.description || '-')}</td>
         <td>${esc(t.priority || '-')}</td>
         <td>${statusDisplay}</td>
         <td>${esc(fmtDate(t.opened_at))}</td>
       </tr>
     `;
     }).join('')
-    : `<tr><td colspan="6" style="text-align:center;color:#15803d;padding:12px">No open issues at handover time</td></tr>`;
+    : `<tr><td colspan="7" style="text-align:center;color:#15803d;padding:12px">No open issues at handover time</td></tr>`;
 
   return `<!doctype html>
 <html lang="en">
@@ -58,9 +74,9 @@ const issueRows = openIssues.length
   <meta charset="utf-8">
   <title>Vehicle Handover — ${esc(h.vehicle_plate)}</title>
   <style>
-    @page { size: A4 portrait; margin: 12mm; }
+    @page { size: A4 landscape; margin: 10mm; }
     * { box-sizing: border-box; }
-    body { font-family: Arial, Helvetica, sans-serif; color: #172033; margin: 0; padding: 20px; font-size: 10pt; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #172033; margin: 0; padding: 18px; font-size: 9.5pt; }
     .header { display: flex; align-items: center; gap: 16px; border-bottom: 3px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 18px; }
     .header img { width: 90px; height: 50px; object-fit: contain; }
     .header-text { flex: 1; }
@@ -74,9 +90,9 @@ const issueRows = openIssues.length
     .field { border: 1px solid #cbd5e1; padding: 8px; border-radius: 5px; }
     .field-label { font-size: 8pt; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; }
     .field-value { font-size: 11pt; margin-top: 3px; font-weight: 600; }
-    table { width: 100%; border-collapse: collapse; font-size: 9pt; margin-top: 3mm; }
-    th, td { border: 1px solid #94a3b8; padding: 5px 7px; text-align: left; vertical-align: top; }
-    th { background: #e9eef5; font-weight: 700; }
+    table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 8.5pt; margin-top: 3mm; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 7px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+    th { background: #e9eef5; color: #1e3a8a; font-weight: 700; }\n    tbody tr:nth-child(even) { background: #f8fafc; }\n    .field { break-inside: avoid; }
     .signature { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 15mm; }
     .sig-box { border-top: 2px solid #475569; padding-top: 5mm; text-align: center; font-size: 9pt; color: #475569; }
     .sig-line { border-bottom: 1px solid #94a3b8; height: 15mm; }
@@ -142,12 +158,13 @@ const issueRows = openIssues.length
   <table>
     <thead>
       <tr>
-        <th style="width:5%">#</th>
-        <th style="width:15%">Category</th>
-        <th style="width:35%">Title</th>
-        <th style="width:10%">Priority</th>
-        <th style="width:15%">Status</th>
-        <th style="width:20%">Opened</th>
+        <th style="width:4%">#</th>
+        <th style="width:12%">Category</th>
+        <th style="width:20%">Issue / Required Action</th>
+        <th style="width:32%">Description / Reason</th>
+        <th style="width:8%">Priority</th>
+        <th style="width:12%">Status</th>
+        <th style="width:12%">Opened</th>
       </tr>
     </thead>
     <tbody>

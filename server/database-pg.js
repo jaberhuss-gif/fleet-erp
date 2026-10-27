@@ -1721,7 +1721,7 @@ export async function createTicket(data = {}) {
        assigned_to_user_id, assigned_to_name, assigned_at,
        driver_id, driver_name)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_TIMESTAMP,$9,$10,$11,
-             CASE WHEN $10::bigint IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END,
+             CASE WHEN $10 IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END,
              $12,$13)
      RETURNING *`,
     [

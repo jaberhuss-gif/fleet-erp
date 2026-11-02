@@ -3660,10 +3660,15 @@ export async function stockIn(data = {}) {
     throw new Error("Quantity must be greater than zero");
   }
 
+  // Stock IN must always use the warehouse explicitly selected by the user.
+  // Never fall back to the item's legacy/default location.
   const toLocation =
     pgStr(data.toLocation ?? data.to_location) ||
-    item.location ||
-    "Main Warehouse";
+    pgStr(data.location);
+
+  if (!toLocation) {
+    throw new Error("Destination warehouse is required for IN. Please select a location.");
+  }
 
   const site = pgStr(data.site) || toLocation;
 

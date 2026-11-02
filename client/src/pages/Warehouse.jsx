@@ -115,7 +115,7 @@ export default function Warehouse({ user, access = {} }) {
     setActionModal(type);
     setSelectedItem(item);
     setActionForm({
-      quantity: 0, location: currentSite || item.location || 'Main Warehouse',
+      quantity: 0, location: currentSite || '',
       toLocation: '', referenceNo: '', notes: '',
       date: new Date().toISOString().slice(0, 10)
     });
@@ -123,20 +123,39 @@ export default function Warehouse({ user, access = {} }) {
 
   const handleActionSubmit = async () => {
     setMessage(''); setError('');
+
+    const quantity = Number(actionForm.quantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setError('Quantity must be greater than zero');
+      return;
+    }
+    if (!actionForm.location) {
+      setError(actionModal === 'in' ? 'Please select the destination warehouse' : 'Please select the source warehouse');
+      return;
+    }
+    if (actionModal === 'transfer' && !actionForm.toLocation) {
+      setError('Please select the destination warehouse');
+      return;
+    }
+    if (actionModal === 'transfer' && actionForm.location === actionForm.toLocation) {
+      setError('Source and destination warehouses must be different');
+      return;
+    }
+
     try {
       const payload = {
         itemCode: selectedItem.code,
-        quantity: Number(actionForm.quantity),
-        location: actionForm.location || currentSite,
+        quantity,
+        location: actionForm.location,
         toLocation: actionForm.toLocation,
-        fromLocation: actionForm.location || currentSite || selectedItem.location,
+        fromLocation: actionForm.location,
         referenceNo: actionForm.referenceNo,
         notes: actionForm.notes,
         date: actionForm.date,
         vehicleId: actionForm.vehicleId || null,
         vehiclePlate: actionForm.vehiclePlate || '',
         driverName: actionForm.driverName || '',
-        site: actionForm.location || currentSite || '',
+        site: actionModal === 'transfer' ? actionForm.toLocation : actionForm.location,
         odo: actionForm.odo ? Number(actionForm.odo) : null,
         odoDate: actionForm.odoDate || null
       };
@@ -494,15 +513,19 @@ export default function Warehouse({ user, access = {} }) {
 
             {actionModal === 'in' && (
               <div className="form-group">
-                <label>Location</label>
-                <input value={actionForm.location} onChange={e => setActionForm({ ...actionForm, location: e.target.value })} />
+                <label>Destination Warehouse *</label>
+                <select required value={actionForm.location || ''} onChange={e => setActionForm({ ...actionForm, location: e.target.value })}>
+                  <option value="">-- Select Destination Warehouse --</option>
+                  {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                  {!sites.some(s => s.name === 'Main Warehouse') && <option value="Main Warehouse">Main Warehouse</option>}
+                </select>
               </div>
             )}
 
             {actionModal === 'out' && (
               <>
                 <div className="form-group">
-                  <label>Site / Location *</label>
+                  <label>Source Warehouse *</label>
                   <select value={actionForm.location || ''} onChange={e => setActionForm({ ...actionForm, location: e.target.value })}>
                     <option value="">-- Select Site --</option>
                     {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
@@ -553,10 +576,24 @@ export default function Warehouse({ user, access = {} }) {
             )}
 
             {actionModal === 'transfer' && (
-              <div className="form-group">
-                <label>To Location *</label>
-                <input value={actionForm.toLocation} onChange={e => setActionForm({ ...actionForm, toLocation: e.target.value })} placeholder="Destination" />
-              </div>
+              <>
+                <div className="form-group">
+                  <label>Source Warehouse *</label>
+                  <select required value={actionForm.location || ''} onChange={e => setActionForm({ ...actionForm, location: e.target.value })}>
+                    <option value="">-- Select Source Warehouse --</option>
+                    {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                    {!sites.some(s => s.name === 'Main Warehouse') && <option value="Main Warehouse">Main Warehouse</option>}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Destination Warehouse *</label>
+                  <select required value={actionForm.toLocation || ''} onChange={e => setActionForm({ ...actionForm, toLocation: e.target.value })}>
+                    <option value="">-- Select Destination Warehouse --</option>
+                    {sites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                    {!sites.some(s => s.name === 'Main Warehouse') && <option value="Main Warehouse">Main Warehouse</option>}
+                  </select>
+                </div>
+              </>
             )}
 
             <div className="form-group"><label>Reference No.</label><input value={actionForm.referenceNo} onChange={e => setActionForm({ ...actionForm, referenceNo: e.target.value })} placeholder="WO#, PO#, etc." /></div>

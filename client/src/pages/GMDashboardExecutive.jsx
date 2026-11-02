@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import pptxgen from 'pptxgenjs';
 import api from '../api/client';
 
 const C = { navy: '10243A', blue: '1D4E89', teal: '0F9D91', gold: 'D7A84B', ink: '243447', muted: '64748B', pale: 'F3F6FA', white: 'FFFFFF', red: 'C84B4B' };
@@ -22,10 +21,10 @@ function text(slide, value, x, y, w, h, opts = {}) {
 function base(pptx, title, subtitle) {
   const s = pptx.addSlide();
   s.background = { color: C.white };
-  s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.333, h: 0.14, line: { color: C.teal, transparency: 100 }, fill: { color: C.teal } });
+  s.addShape('rect', { x: 0, y: 0, w: 13.333, h: 0.14, line: { color: C.teal, transparency: 100 }, fill: { color: C.teal } });
   text(s, title, 0.62, 0.4, 12, 0.42, { fontSize: 23, bold: true, color: C.navy });
   text(s, subtitle, 0.64, 0.88, 12, 0.24, { fontSize: 9, color: C.muted });
-  s.addShape(pptx.ShapeType.line, { x: 0.62, y: 7.12, w: 12.05, h: 0, line: { color: 'DCE4EC', width: 0.8 } });
+  s.addShape('line', { x: 0.62, y: 7.12, w: 12.05, h: 0, line: { color: 'DCE4EC', width: 0.8 } });
   text(s, 'MAADEN × IVANHOE ELECTRIC  |  FLEET ERP', 0.64, 7.18, 8.6, 0.16, { fontSize: 7, bold: true, color: C.muted, charSpacing: 1 });
   text(s, String(pptx._slides.length).padStart(2, '0'), 12.1, 7.16, 0.5, 0.18, { fontSize: 8, bold: true, color: C.teal, align: 'right' });
   return s;
@@ -100,7 +99,9 @@ export default function GMDashboardExecutive() {
   const generate = async () => {
     setGenerating(true); setError('');
     try {
-      const pptx = new pptxgen();
+      const pptxModule = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/pptxgenjs@4.0.1/+esm');
+      const PptxGenJS = pptxModule.default;
+      const pptx = new PptxGenJS();
       pptx.layout = 'LAYOUT_WIDE'; pptx.author = 'Maaden Ivanhoe Electric JV'; pptx.company = 'Maaden Ivanhoe Electric JV';
       pptx.subject = 'Executive Fleet ERP Performance Review'; pptx.title = 'Executive Fleet & Operations Performance Review';
       pptx.theme = { headFontFace: 'Aptos Display', bodyFontFace: 'Aptos', lang: 'en-US' };

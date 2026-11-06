@@ -41,3 +41,22 @@ test-*.mjs
 npm-debug.log*
 backup-*.txt
 backup-*.pdf
+
+# ===== Additional backup patterns (2026-11-07) =====
+*.bak
+*.bak2
+*.bad-*
+*.before-*
+*_before_*
+*_before_pg_*
+*_before_postgres_*
+*_before_login_*
+*_before_sites_*
+*_before_tickets_*
+*.before_full_pg_*
+*.before_full_pg_*.js
+*.before-intake
+fleet_backup_*.db
+*_before_cloud.db
+*_before_env_fix.*
+*_before_pg_main_switch.*

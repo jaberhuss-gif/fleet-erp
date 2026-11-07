@@ -1,19 +1,42 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import api from '../api/client';
 
 export default function DriverHandovers() {
   const [handovers, setHandovers] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [selectedVehicle, setSelectedVehicle] = useState('');
+  const [handoverData, setHandoverData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
-  const [search, setSearch] = useState('');
+  const [checklist, setChecklist] = useState({});
+  const [newDriver, setNewDriver] = useState('');
 
-  const load = async () => {
-    setLoading(true);
-    setError('');
+  const load = useCallback(async () => {
     try {
-      const res = await api.get('/driver-handovers');
-      setHandovers(res.data?.handovers || []);
+      const [hRes, vRes] = await Promise.all([
+        api.get('/driver-handovers'),
+        api.get('/vehicles/list')
+      ]);
+      setHandovers(hRes.data?.handovers || []);
+      setVehicles((vRes.data?.vehicles || vRes.data || []).filter(v => {
+        const plate = v.plate || ((v.plate_number || '') + ' ' + (v.plate_code || '')).trim();
+        return plate.toLowerCase() !== 'test 123';
+      }));
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const loadHandoverData = async (vehicleId) => {
+    if (!vehicleId) { setHandoverData(null); return; }
+    setLoading(true); setError('');
+    try {
+      const res = await api.get('/vehicle-handover-data/' + vehicleId);
+      setHandoverData(res.data);
+      setChecklist({});
+      setNewDriver(res.data?.vehicle?.driver || '');
     } catch (e) {
       setError(e.response?.data?.error || e.message);
     } finally {
@@ -21,123 +44,272 @@ export default function DriverHandovers() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  const printHandover = () => {
+    if (!handoverData) return;
+    const d = handoverData;
+    const esc = s => String(s ?? '-').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const today = new Date().toLocaleDateString();
 
-  const filtered = handovers.filter(h => {
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      String(h.vehicle_plate || '').toLowerCase().includes(q) ||
-      String(h.previous_driver_name || '').toLowerCase().includes(q) ||
-      String(h.new_driver_name || '').toLowerCase().includes(q)
-    );
-  });
+    const oilColor = d.oil.status === 'OVERDUE' ? '#dc2626' : d.oil.status === 'DUE SOON' ? '#d97706' : '#16a34a';
 
-  const openPdf = async (id) => {
-    try {
-      setMessage("");
-      setError("");
-      const res = await api.get("/driver-handovers/" + id + "/pdf", { responseType: "text" });
-      const html = typeof res.data === "string" ? res.data : JSON.stringify(res.data);
-      const blob = new Blob([html], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-    } catch (e) {
-      setError(e.response?.data?.error || e.message);
-    }
+    const tireRows = d.tires.map(t => `<tr><td>${esc(t.position)}</td><td>${esc(t.serial)}</td><td>${esc(t.brand)}</td><td>${esc(t.condition)}</td></tr>`).join('');
+    const maintRows = d.maintenance_history.map(m => `<tr><td>${esc(m.date)}</td><td>${esc(m.title)}</td><td>${esc(m.status)}</td></tr>`).join('');
+    const checklistRows = d.checklist.map(c => `<tr><td>${c.id}</td><td>${esc(c.name)} / ${esc(c.name_ar)}</td><td style="text-align:center;font-size:14pt">${checklist[c.id] ? '✓' : '☐'}</td></tr>`).join('');
+
+    const w = window.open('', '_blank', 'width=1000,height=900');
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Vehicle Handover — ${esc(d.vehicle.plate)}</title>
+    <style>@page{size:A4;margin:10mm}body{font-family:Arial,sans-serif;font-size:10pt;color:#172033}
+    h1{font-size:16pt;margin:0}h2{font-size:12pt;margin:14px 0 6px;border-bottom:2px solid #1e3a8a;padding-bottom:3px}
+    .header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #1e3a8a;padding-bottom:10px;margin-bottom:12px}
+    .info{display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;margin-bottom:10px}
+    .info div{padding:3px 0}.label{color:#64748b;font-size:8pt}.value{font-weight:bold}
+    table{width:100%;border-collapse:collapse;margin-bottom:10px}th{background:#e9eef5;padding:5px;text-align:left;font-size:9pt}
+    td{border:1px solid #cbd5e1;padding:4px;font-size:9pt}.oil-status{font-weight:bold;color:${oilColor}}
+    .sign{margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:30px}
+    .sign-box{border:1px solid #94a3b8;padding:15px;min-height:60px}.sign-label{font-size:8pt;color:#64748b;margin-bottom:4px}
+    .checklist td:nth-child(3){width:40px;text-align:center}</style></head><body>
+    <div class="header"><div><h1>Vehicle Handover Form</h1><div style="color:#64748b">نموذج تسليم واستلام المركبة</div></div>
+    <div style="text-align:right"><div style="font-weight:bold;font-size:14pt">${esc(d.vehicle.plate)}</div><div style="color:#64748b">${today}</div></div></div>
+    <div class="info">
+      <div><span class="label">Vehicle:</span> <span class="value">${esc(d.vehicle.make)} ${esc(d.vehicle.model)} ${esc(d.vehicle.year || '')}</span></div>
+      <div><span class="label">Location:</span> <span class="value">${esc(d.vehicle.location)}</span></div>
+      <div><span class="label">Current Driver:</span> <span class="value">${esc(d.vehicle.driver)}</span></div>
+      <div><span class="label">Phone:</span> <span class="value">${esc(d.vehicle.phone || '-')}</span></div>
+    </div>
+    <h2>🛢️ Engine Oil Status</h2>
+    <div class="info">
+      <div><span class="label">Current KM:</span> <span class="value">${d.oil.current_km.toLocaleString()}</span></div>
+      <div><span class="label">Last Oil Change KM:</span> <span class="value">${d.oil.last_oil_km.toLocaleString()}</span></div>
+      <div><span class="label">KM Since Oil:</span> <span class="value">${d.oil.km_since_oil.toLocaleString()}</span></div>
+      <div><span class="label">Remaining:</span> <span class="value">${d.oil.remaining_km.toLocaleString()} km</span></div>
+      <div><span class="label">Interval:</span> <span class="value">${d.oil.interval.toLocaleString()} km</span></div>
+      <div><span class="label">Status:</span> <span class="oil-status">${d.oil.status}</span></div>
+    </div>
+    <h2>🛞 Tire Serial Numbers</h2>
+    <table><thead><tr><th>Position</th><th>Serial Number</th><th>Brand</th><th>Condition</th></tr></thead><tbody>${tireRows}</tbody></table>
+    <h2>🔧 Last Maintenance Items</h2>
+    <table><thead><tr><th>Date</th><th>Item</th><th>Status</th></tr></thead><tbody>${maintRows || '<tr><td colspan="3">No maintenance records.</td></tr>'}</tbody></table>
+    <h2>📅 Inspection Status</h2>
+    <div class="info">
+      <div><span class="label">Annual Inspection:</span> <span class="value">${esc(d.annual_inspection.last_completed)}</span> → Next: <span class="value">${esc(d.annual_inspection.next_due)}</span></div>
+      <div><span class="label">6-Month Inspection:</span> <span class="value">${esc(d.six_month_inspection.last_completed)}</span> → Next: <span class="value">${esc(d.six_month_inspection.next_due)}</span></div>
+    </div>
+    <h2>📋 Handover Checklist — Items Received</h2>
+    <table class="checklist"><thead><tr><th>#</th><th>Item</th><th>Received</th></tr></thead><tbody>${checklistRows}</tbody></table>
+    <div class="sign">
+      <div class="sign-box"><div class="sign-label">Handed over by (Old Driver):</div><div style="margin-top:20px;border-top:1px solid #94a3b8;padding-top:4px;font-size:9pt">Signature / التوقيع</div></div>
+      <div class="sign-box"><div class="sign-label">Received by (New Driver):</div><div style="margin-top:20px;border-top:1px solid #94a3b8;padding-top:4px;font-size:9pt">Signature / التوقيع</div></div>
+    </div>
+    </body></html>`);
+    w.document.close(); w.focus(); setTimeout(() => w.print(), 350);
   };
 
-  const sendWhatsApp = async (h) => {
-    try {
-      setMessage('');
-      setError('');
-      // استخدام endpoint pdf (أو WhatsApp)
-      const res = await api.get('/driver-handovers/' + h.id + '/pdf');
-      setMessage('Opened handover PDF for ' + h.vehicle_plate);
-      // فتح PDF
-      openPdf(h.id);
-    } catch (e) {
-      setError(e.response?.data?.error || e.message);
-    }
-  };
-
-  const removeHandover = async (id) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذا التسليم؟')) return;
-    try {
-      await api.delete('/driver-handovers/' + id);
-      setMessage('تم الحذف');
-      load();
-    } catch (e) {
-      setError(e.response?.data?.error || e.message);
-    }
-  };
-
-  const fmtDate = (d) => d ? String(d).slice(0, 10) : '-';
-  const fmtNum = (n) => Number(n || 0).toLocaleString('en-US');
+  const fmt = n => Number(n || 0).toLocaleString();
 
   return (
-    <div className="page">
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <h1 style={{ margin: '0 0 6px' }}>📋 Driver Handovers</h1>
-        <div style={{ color: '#64748b' }}>
-          Vehicle handover records between drivers.
+    <div style={{ padding: '20px' }}>
+      <div style={{ marginBottom: '20px' }}>
+        <h1 style={{ margin: 0, fontSize: '24px', color: '#0f172a' }}>📋 Driver Handovers</h1>
+        <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '14px' }}>
+          Professional vehicle handover form with oil status, tires, maintenance history, inspections, and checklist.
+        </p>
+      </div>
+
+      {/* Vehicle selector */}
+      <div className="panel" style={{ marginBottom: '20px', padding: '16px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <label style={{ fontWeight: 600, fontSize: '14px' }}>Select Vehicle:</label>
+          <select value={selectedVehicle} onChange={e => { setSelectedVehicle(e.target.value); loadHandoverData(e.target.value); }} style={{ minWidth: '300px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }}>
+            <option value="">— Choose a vehicle —</option>
+            {vehicles.map(v => {
+              const plate = v.plate || ((v.plate_number || '') + ' ' + (v.plate_code || '')).trim();
+              return <option key={v.id} value={v.id}>{plate} — {v.driver || 'Unassigned'}</option>;
+            })}
+          </select>
+          {handoverData && (
+            <button className="btn btn-primary" onClick={printHandover} style={{ padding: '8px 20px', fontSize: '14px' }}>🖨️ Print Handover Form</button>
+          )}
         </div>
       </div>
 
-      {message && <div className="alert alert-success">{message}</div>}
       {error && <div className="alert alert-error">{error}</div>}
+      {loading && <div className="loading">Loading vehicle data...</div>}
 
-      <div className="panel">
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-          <input
-            type="text"
-            placeholder="Search vehicle / driver..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #cbd5e1', minWidth: 260 }}
-          />
-          <button className="btn btn-primary" onClick={load}>↻ Refresh</button>
-        </div>
+      {handoverData && !loading && (
+        <div>
+          {/* Vehicle Info */}
+          <div className="panel" style={{ marginBottom: '16px', padding: '16px' }}>
+            <h2 style={{ margin: '0 0 10px', fontSize: '18px', color: '#0f172a' }}>🚗 Vehicle Information</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px 24px', fontSize: '13px' }}>
+              <div><span style={{ color: '#64748b' }}>Plate:</span> <strong>{handoverData.vehicle.plate}</strong></div>
+              <div><span style={{ color: '#64748b' }}>Make/Model:</span> <strong>{handoverData.vehicle.make} {handoverData.vehicle.model} {handoverData.vehicle.year}</strong></div>
+              <div><span style={{ color: '#64748b' }}>Location:</span> <strong>{handoverData.vehicle.location}</strong></div>
+              <div><span style={{ color: '#64748b' }}>Current Driver:</span> <strong>{handoverData.vehicle.driver}</strong></div>
+              <div><span style={{ color: '#64748b' }}>Phone:</span> <strong>{handoverData.vehicle.phone || '—'}</strong></div>
+              <div><span style={{ color: '#64748b' }}>Status:</span> <strong>{handoverData.vehicle.status}</strong></div>
+            </div>
+          </div>
 
-        {loading ? (
-          <div className="loading">Loading...</div>
-        ) : (
-          <table className="data-table" style={{ width: '100%' }}>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Vehicle</th>
-                <th>Previous Driver</th>
-                <th>New Driver</th>
-                <th>KM at Handover</th>
-                <th>Notes</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(h => (
-                <tr key={h.id}>
-                  <td>{fmtDate(h.handover_date)}</td>
-                  <td><strong>{h.vehicle_plate || '-'}</strong></td>
-                  <td>{h.previous_driver_name || '-'}<br /><small>{h.previous_driver_phone || ''}</small></td>
-                  <td>{h.new_driver_name || '-'}<br /><small>{h.new_driver_phone || ''}</small></td>
-                  <td style={{ textAlign: 'right' }}>{fmtNum(h.km_at_handover)}</td>
-                  <td style={{ maxWidth: 260, whiteSpace: 'pre-wrap' }}>{h.notes || '-'}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      <button className="btn" style={{ padding: '6px 10px' }} onClick={() => openPdf(h.id)}>📄 PDF</button>
-                      <button className="btn btn-danger" style={{ padding: '6px 10px' }} onClick={() => removeHandover(h.id)}>🗑️</button>
-                    </div>
-                  </td>
-                </tr>
+          {/* Oil Status */}
+          <div className="panel" style={{ marginBottom: '16px', padding: '16px' }}>
+            <h2 style={{ margin: '0 0 10px', fontSize: '18px', color: '#0f172a' }}>🛢️ Engine Oil Status</h2>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+              <div style={{ background: '#f8fafc', padding: '10px 16px', borderRadius: '6px', minWidth: '140px' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Current KM</div>
+                <div style={{ fontSize: '20px', fontWeight: 700 }}>{fmt(handoverData.oil.current_km)}</div>
+              </div>
+              <div style={{ background: '#f8fafc', padding: '10px 16px', borderRadius: '6px', minWidth: '140px' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Last Oil KM</div>
+                <div style={{ fontSize: '20px', fontWeight: 700 }}>{fmt(handoverData.oil.last_oil_km)}</div>
+              </div>
+              <div style={{ background: '#f8fafc', padding: '10px 16px', borderRadius: '6px', minWidth: '140px' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>KM Since Oil</div>
+                <div style={{ fontSize: '20px', fontWeight: 700 }}>{fmt(handoverData.oil.km_since_oil)}</div>
+              </div>
+              <div style={{ background: '#f8fafc', padding: '10px 16px', borderRadius: '6px', minWidth: '140px' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Remaining</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: handoverData.oil.remaining_km <= 0 ? '#dc2626' : handoverData.oil.remaining_km <= 500 ? '#d97706' : '#16a34a' }}>{fmt(handoverData.oil.remaining_km)} km</div>
+              </div>
+              <div style={{ background: handoverData.oil.status === 'OVERDUE' ? '#fef2f2' : handoverData.oil.status === 'DUE SOON' ? '#fffbeb' : '#f0fdf4', padding: '10px 16px', borderRadius: '6px', minWidth: '120px', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Status</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: handoverData.oil.status === 'OVERDUE' ? '#dc2626' : handoverData.oil.status === 'DUE SOON' ? '#d97706' : '#16a34a' }}>{handoverData.oil.status}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Tires */}
+          <div className="panel" style={{ marginBottom: '16px', padding: '16px' }}>
+            <h2 style={{ margin: '0 0 10px', fontSize: '18px', color: '#0f172a' }}>🛞 Tire Serial Numbers</h2>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead><tr style={{ background: '#f1f5f9' }}>
+                  <th style={{ padding: '6px 10px', textAlign: 'left' }}>Position</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'left' }}>Serial Number</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'left' }}>Brand</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'left' }}>Condition</th>
+                </tr></thead>
+                <tbody>
+                  {handoverData.tires.map((t, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                      <td style={{ padding: '6px 10px', fontWeight: 600 }}>{t.position}</td>
+                      <td style={{ padding: '6px 10px', fontFamily: 'monospace' }}>{t.serial}</td>
+                      <td style={{ padding: '6px 10px' }}>{t.brand}</td>
+                      <td style={{ padding: '6px 10px' }}>{t.condition}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Maintenance History */}
+          <div className="panel" style={{ marginBottom: '16px', padding: '16px' }}>
+            <h2 style={{ margin: '0 0 10px', fontSize: '18px', color: '#0f172a' }}>🔧 Last Maintenance Items</h2>
+            {handoverData.maintenance_history.length === 0 ? (
+              <div style={{ color: '#64748b', fontSize: '13px' }}>No maintenance records found.</div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead><tr style={{ background: '#f1f5f9' }}>
+                    <th style={{ padding: '6px 10px', textAlign: 'left' }}>Date</th>
+                    <th style={{ padding: '6px 10px', textAlign: 'left' }}>Item</th>
+                    <th style={{ padding: '6px 10px', textAlign: 'left' }}>Status</th>
+                  </tr></thead>
+                  <tbody>
+                    {handoverData.maintenance_history.map((m, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '6px 10px', fontFamily: 'monospace' }}>{m.date}</td>
+                        <td style={{ padding: '6px 10px' }}>{m.title}</td>
+                        <td style={{ padding: '6px 10px' }}>
+                          <span style={{ background: m.status === 'Completed' ? '#bbf7d0' : '#fde68a', color: m.status === 'Completed' ? '#166534' : '#92400e', padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 600 }}>{m.status}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Inspection Dates */}
+          <div className="panel" style={{ marginBottom: '16px', padding: '16px' }}>
+            <h2 style={{ margin: '0 0 10px', fontSize: '18px', color: '#0f172a' }}>📅 Inspection Status</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: '8px' }}>
+                <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>📅 Annual Inspection</div>
+                <div style={{ fontSize: '14px' }}>Last: <strong>{handoverData.annual_inspection.last_completed}</strong></div>
+                <div style={{ fontSize: '14px' }}>Next Due: <strong style={{ color: '#16a34a' }}>{handoverData.annual_inspection.next_due}</strong></div>
+                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>{handoverData.annual_inspection.whatsapp_confirmed ? `WhatsApp ✓ ${handoverData.annual_inspection.whatsapp_confirmed}` : ''}</div>
+              </div>
+              <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: '8px' }}>
+                <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>🔍 6-Month Inspection</div>
+                <div style={{ fontSize: '14px' }}>Last: <strong>{handoverData.six_month_inspection.last_completed}</strong></div>
+                <div style={{ fontSize: '14px' }}>Next Due: <strong style={{ color: '#16a34a' }}>{handoverData.six_month_inspection.next_due}</strong></div>
+                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>{handoverData.six_month_inspection.whatsapp_confirmed ? `WhatsApp ✓ ${handoverData.six_month_inspection.whatsapp_confirmed}` : ''}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Checklist */}
+          <div className="panel" style={{ marginBottom: '16px', padding: '16px' }}>
+            <h2 style={{ margin: '0 0 10px', fontSize: '18px', color: '#0f172a' }}>📋 Handover Checklist</h2>
+            <p style={{ margin: '0 0 12px', color: '#64748b', fontSize: '13px' }}>
+              The new driver confirms receipt of the following items from the previous driver:
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {handoverData.checklist.map(item => (
+                <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: checklist[item.id] ? '#f0fdf4' : '#f8fafc', borderRadius: '6px', cursor: 'pointer', border: '1px solid #e2e8f0' }}>
+                  <input type="checkbox" checked={!!checklist[item.id]} onChange={e => setChecklist(prev => ({ ...prev, [item.id]: e.target.checked }))} style={{ width: '18px', height: '18px' }} />
+                  <span style={{ fontSize: '14px' }}><strong>{item.id}.</strong> {item.name} <span style={{ color: '#64748b' }}> / {item.name_ar}</span></span>
+                </label>
               ))}
-              {!filtered.length && (
-                <tr><td colSpan="7" style={{ textAlign: 'center', padding: 24, color: '#94a3b8' }}>No handovers recorded.</td></tr>
-              )}
-            </tbody>
-          </table>
-        )}
-      </div>
+            </div>
+            <div style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+              <div style={{ border: '1px solid #cbd5e1', padding: '12px', borderRadius: '6px', minHeight: '80px' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Handed over by (Old Driver):</div>
+                <div style={{ marginTop: '30px', borderTop: '1px solid #94a3b8', paddingTop: '4px', fontSize: '10px', color: '#64748b' }}>Signature / التوقيع</div>
+              </div>
+              <div style={{ border: '1px solid #cbd5e1', padding: '12px', borderRadius: '6px', minHeight: '80px' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Received by (New Driver):</div>
+                <div style={{ marginTop: '30px', borderTop: '1px solid #94a3b8', paddingTop: '4px', fontSize: '10px', color: '#64748b' }}>Signature / التوقيع</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recent handovers */}
+      {!handoverData && (
+        <div className="panel" style={{ padding: '16px' }}>
+          <h2 style={{ margin: '0 0 10px', fontSize: '18px', color: '#0f172a' }}>Recent Handovers</h2>
+          {handovers.length === 0 ? (
+            <div className="alert alert-info">No handover records yet. Select a vehicle above to create one.</div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead><tr style={{ background: '#f1f5f9' }}>
+                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>Vehicle</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>From Driver</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>To Driver</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>Date</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>Status</th>
+                </tr></thead>
+                <tbody>
+                  {handovers.map((h, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                      <td style={{ padding: '7px 10px', fontWeight: 700 }}>{h.vehicle_plate || '—'}</td>
+                      <td style={{ padding: '7px 10px' }}>{h.from_driver || '—'}</td>
+                      <td style={{ padding: '7px 10px' }}>{h.to_driver || '—'}</td>
+                      <td style={{ padding: '7px 10px', fontFamily: 'monospace' }}>{String(h.handover_date || h.created_at || '').slice(0, 10)}</td>
+                      <td style={{ padding: '7px 10px' }}>{h.status || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

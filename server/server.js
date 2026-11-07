@@ -511,6 +511,144 @@ app.get("/api/vehicles/:id/oil-changes", async (req, res) => {
 // DRIVER HANDOVERS (التسليم والاستلام)
 // ============================================================
 
+// Get comprehensive vehicle data for handover form
+app.get("/api/vehicle-handover-data/:vehicleId", async (req, res) => {
+  try {
+    const vid = Number(req.params.vehicleId);
+    if (!Number.isFinite(vid)) return res.status(400).json({ success: false, error: "Invalid vehicle ID." });
+
+    // 1. Vehicle basic info + oil data
+    const vRes = await pgQuery(`
+      SELECT id, plate_number, plate_code, make, model, year, driver, phone, location,
+             current_km, last_oil_km, oil_change_interval, last_oil_change_date, status
+      FROM vehicles WHERE id = $1 LIMIT 1
+    `, [vid]);
+    const vehicle = vRes.rows[0];
+    if (!vehicle) return res.status(404).json({ success: false, error: "Vehicle not found." });
+
+    const plate = [vehicle.plate_number, vehicle.plate_code].filter(Boolean).join(' ').trim();
+    const currentKm = Number(vehicle.current_km || 0);
+    const lastOilKm = Number(vehicle.last_oil_km || 0);
+    const interval = Number(vehicle.oil_change_interval || 5000);
+    const kmSinceOil = currentKm - lastOilKm;
+    const remainingKm = interval - kmSinceOil;
+    const oilStatus = remainingKm <= 0 ? 'OVERDUE' : remainingKm <= 500 ? 'DUE SOON' : 'OK';
+
+    // 2. Tire serials (6 positions)
+    const tireRes = await pgQuery(`
+      SELECT position, manufacturer_serial, brand, condition_status, tread_depth
+      FROM tire_assets WHERE vehicle_id = $1 ORDER BY position
+    `, [vid]);
+    const tirePositions = ['Front Left', 'Front Right', 'Rear Left', 'Rear Right', 'Spare', 'Sixth'];
+    const tires = tirePositions.map(pos => {
+      const t = tireRes.rows.find(r => r.position === pos);
+      return { position: pos, serial: t?.manufacturer_serial || '—', brand: t?.brand || '—', condition: t?.condition_status || '—' };
+    });
+
+    // 3. Last 3 maintenance items (from tickets, even if closed)
+    const maintRes = await pgQuery(`
+      SELECT id, title, category, description, status, opened_at, closed_at, priority
+      FROM tickets WHERE vehicle_id = $1
+      ORDER BY COALESCE(closed_at, opened_at) DESC
+      LIMIT 3
+    `, [vid]);
+    const maintenanceHistory = maintRes.rows.map(t => ({
+      id: t.id,
+      title: t.title || t.category || '—',
+      description: String(t.description || '').slice(0, 100),
+      status: t.status,
+      date: String(t.closed_at || t.opened_at || '').slice(0, 10),
+      priority: t.priority || '—'
+    }));
+
+    // 4. Annual inspection date
+    const annualRes = await pgQuery(`
+      SELECT completed_date, status, notes, whatsapp_confirmed_at
+      FROM periodic_maintenance
+      WHERE vehicle_id = $1 AND type = 'inspection' AND status = 'Completed'
+      ORDER BY completed_date DESC LIMIT 1
+    `, [vid]);
+    const annual = annualRes.rows[0];
+    let annualNextDue = '—';
+    if (annual?.completed_date) {
+      const d = new Date(String(annual.completed_date).slice(0, 10) + 'T00:00:00Z');
+      d.setUTCFullYear(d.getUTCFullYear() + 1);
+      annualNextDue = d.toISOString().slice(0, 10);
+    }
+
+    // 5. 6-month inspection date
+    const sixMonthRes = await pgQuery(`
+      SELECT completed_date, status, notes, whatsapp_confirmed_at
+      FROM periodic_maintenance
+      WHERE vehicle_id = $1 AND type = '6_months_general' AND status = 'Completed'
+      ORDER BY completed_date DESC LIMIT 1
+    `, [vid]);
+    const sixMonth = sixMonthRes.rows[0];
+    let sixMonthNextDue = '—';
+    if (sixMonth?.completed_date) {
+      const d = new Date(String(sixMonth.completed_date).slice(0, 10) + 'T00:00:00Z');
+      d.setUTCMonth(d.getUTCMonth() + 6);
+      sixMonthNextDue = d.toISOString().slice(0, 10);
+    }
+
+    // 6. Checklist items (hardcoded)
+    const checklist = [
+      { id: 1, name: 'Reflective Triangle', name_ar: 'مثلث عاكسة' },
+      { id: 2, name: 'Fire Extinguisher 3kg', name_ar: 'طفاية حريق 3 كيلو' },
+      { id: 3, name: 'Air Blower', name_ar: 'منفاخ الهواء' },
+      { id: 4, name: 'Tire Wrench', name_ar: 'مفتاح براغي الإطارات' },
+      { id: 5, name: 'Jack', name_ar: 'جك رافع السيارة' },
+      { id: 6, name: 'Wheel Chock', name_ar: 'وييل شوك' },
+      { id: 7, name: 'Sand Ladders', name_ar: 'Sand Ladders' },
+      { id: 8, name: 'Daily Checking of Vehicle Wheel Nuts', name_ar: 'Daily Checking of Vehicle Wheel Nuts' }
+    ];
+
+    res.json({
+      success: true,
+      vehicle: {
+        id: vehicle.id,
+        plate,
+        plate_number: vehicle.plate_number,
+        plate_code: vehicle.plate_code,
+        make: vehicle.make || '',
+        model: vehicle.model || '',
+        year: vehicle.year || '',
+        driver: vehicle.driver || '—',
+        phone: vehicle.phone || '',
+        location: vehicle.location || '—',
+        status: vehicle.status || 'Active'
+      },
+      oil: {
+        current_km: currentKm,
+        last_oil_km: lastOilKm,
+        interval,
+        km_since_oil: kmSinceOil,
+        remaining_km: remainingKm,
+        last_oil_change_date: vehicle.last_oil_change_date || '—',
+        status: oilStatus
+      },
+      tires,
+      maintenance_history: maintenanceHistory,
+      annual_inspection: {
+        last_completed: annual?.completed_date ? String(annual.completed_date).slice(0, 10) : '—',
+        next_due: annualNextDue,
+        status: annual ? 'Completed' : 'Not Inspected',
+        whatsapp_confirmed: annual?.whatsapp_confirmed_at ? String(annual.whatsapp_confirmed_at).slice(0, 10) : null
+      },
+      six_month_inspection: {
+        last_completed: sixMonth?.completed_date ? String(sixMonth.completed_date).slice(0, 10) : '—',
+        next_due: sixMonthNextDue,
+        status: sixMonth ? 'Completed' : 'Not Inspected',
+        whatsapp_confirmed: sixMonth?.whatsapp_confirmed_at ? String(sixMonth.whatsapp_confirmed_at).slice(0, 10) : null
+      },
+      checklist
+    });
+  } catch (e) {
+    console.error("[VehicleHandoverData]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.post("/api/vehicles/:id/handover", async (req, res) => {
   try {
     const vehicleId = Number(req.params.id);

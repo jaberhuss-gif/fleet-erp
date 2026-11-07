@@ -1828,6 +1828,82 @@ app.get("/api/inspection-reminders/due", async (req, res) => {
   }
 });
 
+// ===== INSPECTION TRACKER (expiring + expired) =====
+// Returns vehicles grouped by inspection status: expired, expiring within 60 days, valid
+app.get("/api/vehicles/inspection/tracker", async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const today = new Date(todayKey + 'T00:00:00Z');
+    const sixtyDaysLater = new Date(today.getTime() + 60 * 86400000);
+
+    const r = await pgQuery(`
+      SELECT id, plate_number, plate_code, driver, phone, location,
+             current_km, make, model, year,
+             inspection_last_date, inspection_due_date, inspection_expiry_date,
+             status
+      FROM vehicles
+      WHERE COALESCE(LOWER(TRIM(status)), '') NOT IN ('inactive','sold','disposed','disabled')
+        AND inspection_expiry_date IS NOT NULL
+        AND TRIM(inspection_expiry_date) != ''
+      ORDER BY inspection_expiry_date ASC, plate_number ASC
+    `);
+
+    const expired = [];
+    const expiring = [];
+    const valid = [];
+
+    for (const row of r.rows) {
+      const expiryStr = String(row.inspection_expiry_date).slice(0, 10);
+      const expiryDate = new Date(expiryStr + 'T00:00:00Z');
+      const daysRemaining = Math.ceil((expiryDate - today) / 86400000);
+
+      const vehicle = {
+        id: row.id,
+        plate_number: row.plate_number,
+        plate_code: row.plate_code,
+        plate: [row.plate_number, row.plate_code].filter(Boolean).join(' ').trim(),
+        driver: row.driver || 'Unassigned',
+        phone: row.phone || '',
+        location: canonicalInspectionSite(row.location) || '-',
+        current_km: row.current_km || 0,
+        make: row.make || '',
+        model: row.model || '',
+        year: row.year || null,
+        inspection_last_date: row.inspection_last_date || null,
+        inspection_expiry_date: expiryStr,
+        days_remaining: daysRemaining,
+        status: daysRemaining < 0 ? 'expired' : daysRemaining <= 60 ? 'expiring' : 'valid'
+      };
+
+      if (daysRemaining < 0) {
+        expired.push(vehicle);
+      } else if (daysRemaining <= 60) {
+        expiring.push(vehicle);
+      } else {
+        valid.push(vehicle);
+      }
+    }
+
+    res.json({
+      success: true,
+      today: todayKey,
+      summary: {
+        total: expired.length + expiring.length + valid.length,
+        expired: expired.length,
+        expiring: expiring.length,
+        valid: valid.length
+      },
+      expired,
+      expiring,
+      valid
+    });
+  } catch (e) {
+    console.error("[InspectionTracker]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.post("/api/inspection-reminders/send", requireRole("Owner"), async (req, res) => {
   try {
     const mode = String(req.body?.mode || 'all').toLowerCase();

@@ -536,7 +536,7 @@ app.get("/api/vehicle-handover-data/:vehicleId", async (req, res) => {
 
     // 2. Tire serials (6 positions)
     const tireRes = await pgQuery(`
-      SELECT position, manufacturer_serial, brand, condition_status, tread_depth
+      SELECT position, manufacturer_serial, brand, condition_status
       FROM tire_assets WHERE vehicle_id = $1 ORDER BY position
     `, [vid]);
     const tirePositions = ['Front Left', 'Front Right', 'Rear Left', 'Rear Right', 'Spare', 'Sixth'];

@@ -283,8 +283,13 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     const vehicleRecords = recordsByVehicle[String(v.id)] || [];
     const six = pickLatestControl(vehicleRecords, '6_months_general');
     const annual = pickLatestControl(vehicleRecords, 'inspection');
-    const sixDone = Boolean(six && isInspected(six));
     const annualDone = Boolean(annual && isInspected(annual));
+    // A completed annual inspection also satisfies/closes the current six-month
+    // inspection cycle. Use its actual completion date as the six-month baseline.
+    const sixDone = Boolean(six && isInspected(six)) || annualDone;
+    const sixReferenceDate = (six && isInspected(six) && six.completed_date)
+      ? String(six.completed_date).slice(0, 10)
+      : annualDone ? String(annual.completed_date || '').slice(0, 10) : '';
     const missing = [];
     if (!sixDone) missing.push('6-Month Maintenance');
     if (!annualDone) missing.push('Annual Inspection');
@@ -294,7 +299,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       location: v.location || v.site || '-',
       driver: v.driver || v.driver_name || '-',
       inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiryDate || v.inspection_expiry_date || ''),
-      six, annual, sixDone, annualDone,
+      six, annual, sixDone, annualDone, sixReferenceDate,
       fullyInspected: sixDone && annualDone,
       missing
     };
@@ -744,7 +749,7 @@ const openInspectionEmail = (group) => {
     const rows = report.rows.map(row => {
       const rec = type === '6_months_general' ? row.six : row.annual;
       const done = type === '6_months_general' ? row.sixDone : row.annualDone;
-      return '<tr><td>'+esc(row.plate)+'</td><td>'+esc(row.driver)+'</td><td>'+esc(done ? 'Inspected' : 'Not Inspected')+'</td><td>'+esc(type === 'inspection' ? getInspectionExpiry(row.vehicle_id) : rec?.scheduled_date)+'</td><td>'+esc(rec?.completed_date)+'</td><td>'+esc(rec?.notes)+'</td></tr>';
+      return '<tr><td>'+esc(row.plate)+'</td><td>'+esc(row.driver)+'</td><td>'+esc(done ? 'Inspected' : 'Not Inspected')+'</td><td>'+esc(type === 'inspection' ? getInspectionExpiry(row.vehicle_id) : rec?.scheduled_date)+'</td><td>'+esc(type === '6_months_general' ? (row.sixReferenceDate || rec?.completed_date) : rec?.completed_date)+'</td><td>'+esc(type === '6_months_general' && !row.six && row.annualDone ? 'Covered by completed annual inspection' : rec?.notes)+'</td></tr>';
     }).join('');
     const w=window.open('', '_blank', 'width=1200,height=800');
     if(!w){setError('Please allow pop-ups for the report.');return;}
@@ -944,8 +949,8 @@ const openInspectionEmail = (group) => {
                   <td>{row.driver || '-'}</td>
                   <td><span className="status-badge" style={{ background: done ? '#16a34a' : '#dc2626', color: '#fff' }}>{done ? 'Inspected' : 'Not Inspected'}</span></td>
                   <td>{type === 'inspection' ? getInspectionExpiry(row.vehicle_id) : (rec?.scheduled_date || '-')}</td>
-                  <td>{rec?.completed_date || '-'}</td>
-                  <td>{rec?.notes || '-'}</td>
+                  <td>{row.sixReferenceDate || rec?.completed_date || '-'}</td>
+                  <td>{rec?.notes || (row.annualDone && !row.six ? 'Covered by completed annual inspection. Six-month cycle starts from annual inspection date.' : '-') }</td>
                   <td>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <button className="btn" style={{ padding: '6px 10px', background: '#25D366', color: '#fff' }} onClick={() => reportWhatsApp(row, component, done)}>📱 WhatsApp</button>
@@ -1207,9 +1212,9 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
                     <td>{row.driver || '-'}</td>
                     {isSix ? (
                       <>
-                        <td>{rec?.completed_date || (done ? rec?.scheduled_date : '-') || '-'}</td>
+                        <td>{row.sixReferenceDate || rec?.completed_date || (done ? rec?.scheduled_date : '-') || '-'}</td>
                         <td><span className={done ? 'status-badge status-safe' : 'status-badge status-urgent'}>{done ? 'GREEN — Inspected' : 'RED — Not Inspected'}</span></td>
-                        <td>{rec?.technician || '-'}</td>
+                        <td>{rec?.technician || (row.annualDone && !row.six ? 'Annual Inspection' : '-') }</td>
                         <td style={{whiteSpace:'pre-wrap',minWidth:240}}>{rec?.notes || '-'}</td>
                       </>
                     ) : (

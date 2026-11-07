@@ -24,6 +24,7 @@ import DailyKmGate from './components/DailyKmGate';
 import Invoices from './pages/Invoices';
 import PdfUpload from './pages/PdfUpload';
 import EmailUpload from './pages/EmailUpload';
+import InspectionTracker from './pages/InspectionTracker';
 
 const OWNER_ONLY_TABS = new Set(['drivers', 'users', 'audit', 'backup', 'invoices', 'inventory-report']);
 
@@ -39,6 +40,7 @@ const TAB_MODULES = {
   reports: ['reports'],
   'advanced-reports': ['advanced_reports'],
   'driver-handovers': ['fleet'],
+  'inspection-tracker': ['fleet'],
   'intake-pdf': ['building'],
   'intake-email': ['building'],
 };
@@ -60,6 +62,7 @@ const TAB_LABELS = {
   backup: 'Backup',
   invoices: '📄 Invoices',
   'driver-handovers': '📋 Driver Handovers',
+  'inspection-tracker': '🔍 Inspection Tracker',
   'intake-pdf': '📄 PDF Intake',
   'intake-email': '📧 Email Intake',
   'inventory-report': '📊 Warehouse Report'
@@ -158,7 +161,7 @@ export default function App() {
   };
 
   const allowedTabs = useMemo(() => {
-    const allTabs = ['gm', 'support-service', 'operations', 'warehouse', 'fleet', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports', 'driver-handovers', 'intake-pdf', 'intake-email'];
+    const allTabs = ['gm', 'support-service', 'operations', 'warehouse', 'fleet', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports', 'driver-handovers', 'inspection-tracker', 'intake-pdf', 'intake-email'];
     const visible = allTabs.filter(canViewTab);
     if (user?.role === 'Owner') {
       return [...visible, 'drivers', 'users', 'audit', 'backup'];
@@ -257,6 +260,9 @@ export default function App() {
                 <button className={tab === 'driver-handovers' ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange('driver-handovers')}>
                   📋 Driver Handovers
                 </button>
+                <button className={tab === 'inspection-tracker' ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange('inspection-tracker')}>
+                  🔍 Inspection Tracker
+                </button>
               </>
             )}
           </div>
@@ -337,6 +343,7 @@ export default function App() {
           {tab === 'driver-handovers' && <DriverHandovers />}
           {tab === 'intake-pdf' && <PdfUpload />}
           {tab === 'intake-email' && <EmailUpload />}
+          {tab === 'inspection-tracker' && <InspectionTracker />}
           {tab === 'troubleshooter' && <Troubleshooter />}
           {tab === 'fleet-tickets' && <FleetTicketViewer user={user} />}
           {tab === 'tickets' && canViewModule('tickets') && <Tickets user={user} access={access || {}} />}

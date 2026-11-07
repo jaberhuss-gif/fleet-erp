@@ -1024,45 +1024,51 @@ app.get("/api/periodic-maintenance/:id/repair-whatsapp-info", async (req, res) =
     if (!Number.isFinite(pmId)) return res.status(400).json({ success:false, error:"Invalid maintenance record." });
 
     const pmResult = await pgQuery(`
-      SELECT pm.id, pm.vehicle_id, pm.type, pm.notes, pm.scheduled_date, pm.completed_date,
+      SELECT pm.id, pm.vehicle_id, pm.type, pm.status, pm.notes, pm.scheduled_date, pm.completed_date,
              v.plate_number, v.plate_code, v.driver, v.phone, v.location
       FROM periodic_maintenance pm
       LEFT JOIN vehicles v ON v.id = pm.vehicle_id
-      WHERE pm.id = $1 AND pm.type = '6_months_general'
+      WHERE pm.id = $1 AND pm.type IN ('6_months_general','inspection')
       LIMIT 1
     `, [pmId]);
     const pm = pmResult.rows[0];
-    if (!pm) return res.status(404).json({ success:false, error:"6-month maintenance record not found." });
-    if (!String(pm.notes || '').trim()) return res.status(400).json({ success:false, error:"No 6-month repair notes are available." });
+    if (!pm) return res.status(404).json({ success:false, error:"Maintenance record not found." });
+    const isAnnual = pm.type === 'inspection';
+    const category = isAnnual ? 'Annual Inspection' : '6-Month Maintenance';
+    const marker = isAnnual ? '[PM_INSPECTION:' + pmId + ']%' : '[PM_REPAIR:' + pmId + ']%';
+    const description = isAnnual
+      ? 'Please complete the annual vehicle inspection and confirm only after it has been carried out.'
+      : String(pm.notes || '').trim();
+    if (!isAnnual && !description) return res.status(400).json({ success:false, error:"No 6-month repair notes are available." });
     if (!String(pm.phone || '').trim()) return res.status(400).json({ success:false, error:"Driver phone number is not available." });
 
     const existing = await pgQuery(`
       SELECT id, status
       FROM tickets
-      WHERE category = '6-Month Maintenance'
-        AND vehicle_id = $1
-        AND COALESCE(resolution_notes, '') LIKE $2
+      WHERE category = $1 AND vehicle_id = $2
+        AND COALESCE(resolution_notes, '') LIKE $3
       ORDER BY id DESC
       LIMIT 1
-    `, [pm.vehicle_id, '[PM_REPAIR:' + pmId + ']%']);
+    `, [category, pm.vehicle_id, marker]);
 
     let ticket = existing.rows[0];
     if (!ticket) {
       ticket = (await pgQuery(`
         INSERT INTO tickets
           (vehicle_id, title, location, category, priority, status, description, reported_by, opened_at, department)
-        VALUES ($1,$2,$3,'6-Month Maintenance','Medium','Open',$4,'Fleet Management',CURRENT_TIMESTAMP,'Fleet')
+        VALUES ($1,$2,$3,$4,'Medium','Open',$5,'Fleet Management',CURRENT_TIMESTAMP,'Fleet')
         RETURNING id, status
       `, [
         pm.vehicle_id,
-        '6-Month Maintenance Repair',
+        isAnnual ? 'Annual Vehicle Inspection Confirmation' : '6-Month Maintenance Repair',
         pm.location || '',
-        String(pm.notes).trim()
+        category,
+        description
       ])).rows[0];
 
       await pgQuery(
         `UPDATE tickets SET resolution_notes=$1 WHERE id=$2`,
-        ['[PM_REPAIR:' + pmId + '] 6-month maintenance repair request', ticket.id]
+        [isAnnual ? '[PM_INSPECTION:' + pmId + '] Annual inspection confirmation' : '[PM_REPAIR:' + pmId + '] 6-month maintenance repair request', ticket.id]
       );
     }
 
@@ -1084,12 +1090,73 @@ app.get("/api/periodic-maintenance/:id/repair-whatsapp-info", async (req, res) =
       driverPhone:pm.phone || "",
       waMeNumber:toWaMeInternational(pm.phone),
       vehiclePlate:plate,
-      issueType:"6-Month Maintenance",
-      description:String(pm.notes).trim(),
+      issueType:category,
+      description,
       confirmationUrl:MAINTENANCE_CONFIRM_BASE_URL()+"/maintenance-confirm/"+token
     });
   } catch(e) {
     console.error("[SixMonthRepairWhatsAppInfo]", e);
+    res.status(500).json({success:false,error:e.message});
+  }
+});
+
+
+
+// Create/reuse the current annual inspection record and issue a trackable
+// driver confirmation link. Existing six-month workflow remains unchanged.
+app.get("/api/annual-inspection/vehicle/:vehicleId/confirmation-info", async (req,res)=>{
+  try {
+    const vehicleId = Number(req.params.vehicleId);
+    if (!Number.isSafeInteger(vehicleId) || vehicleId <= 0) return res.status(400).json({success:false,error:"Invalid vehicle."});
+    const vehicleResult = await pgQuery(`
+      SELECT id, plate_number, plate_code, driver, phone, location, status
+      FROM vehicles WHERE id=$1 LIMIT 1
+    `, [vehicleId]);
+    const vehicle = vehicleResult.rows[0];
+    if (!vehicle || ['inactive','sold','disposed','disabled'].includes(String(vehicle.status||'').toLowerCase().trim())) {
+      return res.status(404).json({success:false,error:"Active vehicle not found."});
+    }
+    if (!String(vehicle.phone||'').trim()) return res.status(400).json({success:false,error:"Driver phone number is not available."});
+
+    let pm = (await pgQuery(`
+      SELECT id, status FROM periodic_maintenance
+      WHERE vehicle_id=$1 AND type='inspection' AND status IN ('Pending','Open','Pending Driver Confirmation')
+      ORDER BY id DESC LIMIT 1
+    `, [vehicleId])).rows[0];
+    if (!pm) {
+      pm = (await pgQuery(`
+        INSERT INTO periodic_maintenance (vehicle_id,type,scheduled_date,status,notes)
+        VALUES ($1,'inspection',CURRENT_DATE,'Pending','Annual inspection awaiting driver confirmation')
+        RETURNING id,status
+      `, [vehicleId])).rows[0];
+    }
+    req.params.id = String(pm.id);
+    // Reuse the same implementation as the six-month/record-specific sender.
+    const info = await pgQuery(`
+      SELECT pm.id, pm.vehicle_id, pm.type, pm.notes, v.plate_number, v.plate_code, v.driver, v.phone, v.location
+      FROM periodic_maintenance pm JOIN vehicles v ON v.id=pm.vehicle_id
+      WHERE pm.id=$1 AND pm.type='inspection' LIMIT 1
+    `, [pm.id]);
+    const row=info.rows[0];
+    const category='Annual Inspection';
+    const marker='[PM_INSPECTION:'+pm.id+']%';
+    let ticket=(await pgQuery(`
+      SELECT id FROM tickets WHERE vehicle_id=$1 AND category=$2
+        AND COALESCE(resolution_notes,'') LIKE $3 ORDER BY id DESC LIMIT 1
+    `,[vehicleId,category,marker])).rows[0];
+    if(!ticket){
+      ticket=(await pgQuery(`
+        INSERT INTO tickets (vehicle_id,title,location,category,priority,status,description,reported_by,opened_at,department)
+        VALUES ($1,'Annual Vehicle Inspection Confirmation',$2,$3,'Medium','Open',$4,'Fleet Management',CURRENT_TIMESTAMP,'Fleet')
+        RETURNING id
+      `,[vehicleId,row.location||'',category,'Please complete the annual vehicle inspection and confirm only after it has been carried out.'])).rows[0];
+      await pgQuery(`UPDATE tickets SET resolution_notes=$1 WHERE id=$2`,['[PM_INSPECTION:'+pm.id+'] Annual inspection confirmation',ticket.id]);
+    }
+    const token=randomUUID();
+    await pgQuery(`UPDATE tickets SET whatsapp_confirmation_token=$1,whatsapp_confirmed_at=NULL,whatsapp_confirmation_source='Fleet Management - WhatsApp Pending',status='Pending Driver Confirmation' WHERE id=$2`,[token,ticket.id]);
+    res.json({success:true,ticketId:ticket.id,recordId:pm.id,driverName:row.driver||'',driverPhone:row.phone||'',waMeNumber:toWaMeInternational(row.phone),vehiclePlate:[row.plate_number,row.plate_code].filter(Boolean).join(' ').trim(),issueType:category,description:'Please complete the annual vehicle inspection and confirm only after it has been carried out.',confirmationUrl:MAINTENANCE_CONFIRM_BASE_URL()+'/maintenance-confirm/'+token});
+  } catch(e) {
+    console.error('[AnnualInspectionWhatsAppInfo]',e);
     res.status(500).json({success:false,error:e.message});
   }
 });
@@ -1120,16 +1187,63 @@ app.get("/maintenance-confirm/:token", async (req,res)=>{
     if(row.status==="Completed"||row.whatsapp_confirmed_at)return res.send("<h2>Maintenance Already Confirmed</h2><p>This maintenance issue has already been confirmed.</p>");
     const plate=[row.plate_number,row.plate_code].filter(Boolean).join(" ").trim();
     const esc=s=>String(s??"").replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-    res.send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Maintenance Confirmation</title></head><body style="font-family:Arial,sans-serif;max-width:560px;margin:40px auto;padding:20px"><h2>Vehicle Maintenance Confirmation</h2><p><b>Vehicle:</b> ${esc(plate)}</p><p><b>Issue:</b> ${esc(row.category||"Maintenance Issue")}</p><p>${esc(row.description||"")}</p><hr/><p>Has this maintenance issue been repaired?</p><p>هل تم إصلاح هذه المشكلة في المركبة؟</p><form method="POST" action="/maintenance-confirm/${encodeURIComponent(token)}?decision=yes"><button style="padding:14px 28px;background:#16a34a;color:white;border:0;border-radius:8px;font-size:18px">YES — Repaired</button></form><br/><form method="POST" action="/maintenance-confirm/${encodeURIComponent(token)}?decision=no"><button style="padding:14px 28px;background:#dc2626;color:white;border:0;border-radius:8px;font-size:18px">NO — Not Repaired</button></form></body></html>`);
+    const isAnnual = row.category === "Annual Inspection";
+    const heading = isAnnual ? "Annual Vehicle Inspection Confirmation" : "Vehicle Maintenance Confirmation";
+    const question = isAnnual ? "Has the annual vehicle inspection been completed?" : "Has this maintenance issue been repaired?";
+    const questionAr = isAnnual ? "هل تم إجراء الفحص الدوري السنوي للمركبة؟" : "هل تم إصلاح هذه المشكلة في المركبة؟";
+    const yesLabel = isAnnual ? "YES — Inspection Completed" : "YES — Repaired";
+    const noLabel = isAnnual ? "NO — Not Completed" : "NO — Not Repaired";
+    res.send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${heading}</title></head><body style="font-family:Arial,sans-serif;max-width:560px;margin:40px auto;padding:20px"><h2>${heading}</h2><p><b>Vehicle:</b> ${esc(plate)}</p><p><b>Type:</b> ${esc(row.category||"Maintenance Issue")}</p><p>${esc(row.description||"")}</p><hr/><p>${question}</p><p>${questionAr}</p><form method="POST" action="/maintenance-confirm/${encodeURIComponent(token)}?decision=yes"><button style="padding:14px 28px;background:#16a34a;color:white;border:0;border-radius:8px;font-size:18px">${yesLabel}</button></form><br/><form method="POST" action="/maintenance-confirm/${encodeURIComponent(token)}?decision=no"><button style="padding:14px 28px;background:#dc2626;color:white;border:0;border-radius:8px;font-size:18px">${noLabel}</button></form></body></html>`);
   }catch(e){res.status(500).send("Maintenance confirmation error.");}
 });
 app.post("/maintenance-confirm/:token", async(req,res)=>{
   try{
     const token=String(req.params.token||"").trim(),decision=String(req.query.decision||req.body?.decision||"").toLowerCase();
-    const result=await pgQuery(`SELECT id,status FROM tickets WHERE whatsapp_confirmation_token=$1 LIMIT 1`,[token]); const row=result.rows[0];
+    const result=await pgQuery(`SELECT id,status,category,vehicle_id,resolution_notes FROM tickets WHERE whatsapp_confirmation_token=$1 LIMIT 1`,[token]); const row=result.rows[0];
     if(!row)return res.status(404).send("<h2>Maintenance confirmation link is invalid or expired.</h2>");
-    if(row.status==="Completed")return res.send("<h2>Maintenance Already Confirmed</h2><p>This maintenance issue has already been confirmed.</p>");
-    if(decision==="yes"){await pgQuery(`UPDATE tickets SET status='Completed',closed_at=CURRENT_TIMESTAMP,closed_by='Driver - WhatsApp',resolution_notes=COALESCE(NULLIF(resolution_notes,''),'Driver confirmed repaired via WhatsApp'),whatsapp_confirmed_at=CURRENT_TIMESTAMP,whatsapp_confirmation_source='Fleet Management - WhatsApp YES',whatsapp_confirmation_token=NULL WHERE id=$1 AND whatsapp_confirmation_token=$2`,[row.id,token]);return res.send("<h2>✓ Maintenance Confirmed</h2><p>The repair has been confirmed and recorded in Fleet ERP.</p><p>Date: "+new Date().toISOString().slice(0,10)+"</p>");}
+    if(row.status==="Completed"||row.whatsapp_confirmed_at)return res.send("<h2>Already Confirmed</h2><p>This confirmation has already been recorded.</p>");
+    if(decision==="yes"){
+      if(row.category==="Annual Inspection"){
+        const done=await pgQuery(`
+          WITH eligible AS (
+            SELECT id,vehicle_id,substring(resolution_notes from '\\[PM_INSPECTION:([0-9]+)\\]') AS pm_id
+            FROM tickets WHERE id=$1 AND whatsapp_confirmation_token=$2
+          ),
+          completed_pm AS (
+            UPDATE periodic_maintenance pm
+            SET status='Completed',completed_date=CURRENT_DATE,
+                technician=COALESCE(NULLIF(pm.technician,''),'Driver - WhatsApp')
+            FROM eligible e
+            WHERE pm.id=e.pm_id::bigint AND pm.vehicle_id=e.vehicle_id AND pm.type='inspection'
+            RETURNING pm.vehicle_id,pm.completed_date
+          ),
+          updated_vehicle AS (
+            UPDATE vehicles v
+            SET inspection_last_date=cp.completed_date,
+                inspection_due_date=(cp.completed_date + INTERVAL '1 year')::date,
+                inspection_expiry_date=(cp.completed_date + INTERVAL '1 year')::date
+            FROM completed_pm cp WHERE v.id=cp.vehicle_id
+            RETURNING v.id
+          ),
+          closed_ticket AS (
+            UPDATE tickets t
+            SET status='Completed',closed_at=CURRENT_TIMESTAMP,closed_by='Driver - WhatsApp',
+                resolution_notes=COALESCE(NULLIF(t.resolution_notes,''),'') || E'\\nDriver confirmed annual inspection via WhatsApp',
+                whatsapp_confirmed_at=CURRENT_TIMESTAMP,
+                whatsapp_confirmation_source='Fleet Management - WhatsApp YES',
+                whatsapp_confirmation_token=NULL
+            FROM eligible e
+            WHERE t.id=e.id AND EXISTS (SELECT 1 FROM updated_vehicle uv WHERE uv.id=e.vehicle_id)
+            RETURNING t.id
+          )
+          SELECT id FROM closed_ticket
+        `,[row.id,token]);
+        if(!done.rows.length) return res.status(409).send("<h2>Inspection record could not be matched to this vehicle. Fleet Management must review it.</h2>");
+        return res.send("<h2>✓ Annual Inspection Confirmation Recorded</h2><p>The annual inspection record and vehicle expiry dates have been updated.</p><p>Date: "+new Date().toISOString().slice(0,10)+"</p>");
+      }
+      await pgQuery(`UPDATE tickets SET status='Completed',closed_at=CURRENT_TIMESTAMP,closed_by='Driver - WhatsApp',resolution_notes=COALESCE(NULLIF(resolution_notes,''),'Driver confirmed repaired via WhatsApp'),whatsapp_confirmed_at=CURRENT_TIMESTAMP,whatsapp_confirmation_source='Fleet Management - WhatsApp YES',whatsapp_confirmation_token=NULL WHERE id=$1 AND whatsapp_confirmation_token=$2`,[row.id,token]);
+      return res.send("<h2>✓ Maintenance Confirmed</h2><p>The repair has been confirmed and recorded in Fleet ERP.</p><p>Date: "+new Date().toISOString().slice(0,10)+"</p>");
+    }
     if(decision==="no"){await pgQuery(`UPDATE tickets SET status='Open',whatsapp_confirmation_source='Fleet Management - WhatsApp NO',whatsapp_confirmation_token=NULL WHERE id=$1 AND whatsapp_confirmation_token=$2`,[row.id,token]);return res.send("<h2>Maintenance Still Pending</h2><p>The ticket remains open. Fleet Management has been notified.</p>");}
     res.status(400).send("<h2>Please choose YES or NO.</h2>");
   }catch(e){console.error("[MaintenanceConfirm]",e);res.status(500).send("Maintenance confirmation error.");}

@@ -50,7 +50,7 @@ export default function AnnualInspection({ canWork = false }) {
   // countdown advances with the calendar even without a page reload.
   const getDaysRemaining = (expiryDate) => {
     const dateText = String(expiryDate || '').slice(0, 10);
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(dateText)) return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) return null;
     const [year, month, day] = dateText.split('-').map(Number);
     const expiryUtc = Date.UTC(year, month - 1, day);
     const now = new Date();

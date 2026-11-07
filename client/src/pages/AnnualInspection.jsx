@@ -39,6 +39,18 @@ export default function AnnualInspection({ canWork = false }) {
     return d.toISOString().slice(0, 10);
   };
 
+  // Calculate remaining days from the expiry date on the client so the
+  // countdown advances with the calendar even without a page reload.
+  const getDaysRemaining = (expiryDate) => {
+    const dateText = String(expiryDate || '').slice(0, 10);
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(dateText)) return null;
+    const [year, month, day] = dateText.split('-').map(Number);
+    const expiryUtc = Date.UTC(year, month - 1, day);
+    const now = new Date();
+    const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.ceil((expiryUtc - todayUtc) / 86400000);
+  };
+
   // Prefer the actual WhatsApp timestamp. If the historic record has no
   // WhatsApp timestamp, show the official annual inspection date stored in
   // the database as the confirmation/reference date without inventing a WA event.
@@ -123,9 +135,11 @@ export default function AnnualInspection({ canWork = false }) {
     }).join('');
 
     const dueRows = (reminders?.reminders || []).map(r => {
-      const status = r.days_remaining < 0 ? 'EXPIRED' : r.days_remaining <= 30 ? 'DUE' : 'OK';
-      const color = r.days_remaining < 0 ? '#dc2626' : '#d97706';
-      return `<tr><td>${esc(r.plate)}</td><td>${esc(r.driver)}</td><td>${esc(r.location)}</td><td>${esc(r.inspection_expiry_date)}</td><td style="color:${color};font-weight:bold">${r.days_remaining < 0 ? Math.abs(r.days_remaining) + 'd ago' : r.days_remaining + 'd'}</td><td style="color:${color};font-weight:bold">${status}</td></tr>`;
+      const daysRemaining = getDaysRemaining(r.inspection_expiry_date);
+      const status = daysRemaining === null ? '—' : daysRemaining < 0 ? 'EXPIRED' : daysRemaining <= 30 ? 'DUE' : 'OK';
+      const color = daysRemaining !== null && daysRemaining < 0 ? '#dc2626' : '#d97706';
+      const daysLabel = daysRemaining === null ? '—' : daysRemaining < 0 ? Math.abs(daysRemaining) + 'd ago' : daysRemaining + 'd';
+      return `<tr><td>${esc(r.plate)}</td><td>${esc(r.driver)}</td><td>${esc(r.location)}</td><td>${esc(r.inspection_expiry_date)}</td><td style="color:${color};font-weight:bold">${daysLabel}</td><td style="color:${color};font-weight:bold">${status}</td></tr>`;
     }).join('');
 
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Annual Inspection Report</title>
@@ -314,7 +328,12 @@ Annual inspection status — completed vehicles and vehicles due for inspection.
                   <td style={{ padding: '7px 10px' }}>{r.driver}</td>
                   <td style={{ padding: '7px 10px' }}>{r.location}</td>
                   <td style={{ padding: '7px 10px', textAlign: 'center' }}>{r.next_due_date}</td>
-                  <td style={{ padding: '7px 10px', textAlign: 'center', color: '#2563eb', fontWeight: 700 }}>{r.days_remaining}d</td>
+                  <td style={{ padding: '7px 10px', textAlign: 'center', color: '#2563eb', fontWeight: 700 }}>
+                    {(() => {
+                      const days = getDaysRemaining(r.inspection_expiry_date);
+                      return days === null ? '—' : days < 0 ? `${Math.abs(days)}d ago` : `${days}d`;
+                    })()}
+                  </td>
                   <td style={{ padding: '7px 10px', textAlign: 'center' }}>
                     {(() => {
                       const confirmation = getConfirmationDate(r);
@@ -381,7 +400,10 @@ Annual inspection status — completed vehicles and vehicles due for inspection.
                       <td style={{ padding: '7px 10px', color: '#64748b' }}>{r.location}</td>
                       <td style={{ padding: '7px 10px', textAlign: 'center', fontFamily: 'monospace' }}>{r.inspection_expiry_date}</td>
                       <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: 700, color: daysColor }}>
-                        {r.days_remaining < 0 ? `${Math.abs(r.days_remaining)}d ago` : `${r.days_remaining}d`}
+                        {(() => {
+                          const days = getDaysRemaining(r.inspection_expiry_date);
+                          return days === null ? '—' : days < 0 ? `${Math.abs(days)}d ago` : `${days}d`;
+                        })()}
                       </td>
                       <td style={{ padding: '7px 10px', textAlign: 'center' }}>
                         <span style={{

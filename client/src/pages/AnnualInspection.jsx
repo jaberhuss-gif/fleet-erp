@@ -38,6 +38,8 @@ export default function AnnualInspection({ canWork = false }) {
   useEffect(() => { load(); }, [load]);
 
   const getNextDueDate = (rec) => {
+    const officialExpiry = String(rec?.inspection_expiry_date || rec?.next_due_date || '').slice(0, 10);
+    if (/^\\d{4}-\\d{2}-\\d{2}$/.test(officialExpiry)) return officialExpiry;
     const completed = String(rec?.completed_date || '').slice(0, 10);
     if (!completed) return '—';
     const d = new Date(completed + 'T00:00:00Z');

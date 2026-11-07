@@ -1203,9 +1203,7 @@ export function mountInvoiceRoutes(app) {
 
 <script>
   // Auto-open print dialog when loaded
-  window.addEventListener("load", () => {
-    setTimeout(() => window.print(), 300);
-  });
+  window.addEventListener("load", async () => { const imgs = Array.from(document.images); await Promise.all(imgs.map(img => img.decode ? img.decode().catch(() => {}) : new Promise(resolve => { if (img.complete) return resolve(); img.onload = img.onerror = resolve; setTimeout(resolve, 8000); }))); window.print(); });
 </script>
 
 </body>

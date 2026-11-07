@@ -1980,6 +1980,155 @@ app.post("/api/annual-inspection/remind", async (req, res) => {
   }
 });
 
+// ===== 6-MONTH INSPECTION — status + WhatsApp reminders =====
+app.post("/api/six-month-inspection/status", async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const today = new Date(todayKey + 'T00:00:00Z');
+
+    // Get all 6-month maintenance records
+    const pmRes = await pgQuery(`
+      SELECT pm.id, pm.vehicle_id, pm.type, pm.status, pm.completed_date,
+             pm.scheduled_date, pm.notes, pm.whatsapp_confirmed_at,
+             v.plate_number, v.plate_code, v.driver, v.phone, v.location,
+             v.current_km, v.make, v.model, v.status AS vehicle_status
+      FROM periodic_maintenance pm
+      LEFT JOIN vehicles v ON v.id = pm.vehicle_id
+      WHERE pm.type = '6_months_general'
+      ORDER BY pm.completed_date DESC NULLS LAST
+    `);
+
+    // Get all active vehicles (to find vehicles with NO 6-month record)
+    const vehiclesRes = await pgQuery(`
+      SELECT id, plate_number, plate_code, driver, phone, location, current_km
+      FROM vehicles
+      WHERE COALESCE(LOWER(TRIM(status)), '') NOT IN ('inactive','sold','disposed','disabled')
+      ORDER BY plate_number ASC
+    `);
+
+    // Group 6-month records by vehicle_id — keep latest completed
+    const latestByVehicle = new Map();
+    for (const row of pmRes.rows) {
+      const vid = String(row.vehicle_id);
+      if (!latestByVehicle.has(vid)) {
+        latestByVehicle.set(vid, row);
+      } else {
+        const existing = latestByVehicle.get(vid);
+        const existingDate = String(existing.completed_date || existing.scheduled_date || '').slice(0, 10);
+        const rowDate = String(row.completed_date || row.scheduled_date || '').slice(0, 10);
+        if (rowDate > existingDate) {
+          latestByVehicle.set(vid, row);
+        }
+      }
+    }
+
+    const completed = [];
+    const due = [];
+
+    // Process vehicles with completed 6-month records
+    for (const [vid, rec] of latestByVehicle) {
+      if (!rec.vehicle_status || ['inactive','sold','disposed','disabled'].includes(rec.vehicle_status.toLowerCase().trim())) continue;
+
+      const plate = [rec.plate_number, rec.plate_code].filter(Boolean).join(' ').trim();
+      const completedDate = String(rec.completed_date || '').slice(0, 10);
+
+      if (completedDate && rec.status === 'Completed') {
+        // Calculate next due = completed + 6 months
+        const d = new Date(completedDate + 'T00:00:00Z');
+        d.setUTCMonth(d.getUTCMonth() + 6);
+        const nextDue = d.toISOString().slice(0, 10);
+        const daysRemaining = Math.ceil((d - today) / 86400000);
+
+        const entry = {
+          recordId: rec.id,
+          vehicleId: vid,
+          plate,
+          driver: rec.driver || 'Unassigned',
+          phone: rec.phone || '',
+          location: canonicalInspectionSite(rec.location) || '-',
+          completed_date: completedDate,
+          next_due_date: nextDue,
+          days_remaining: daysRemaining,
+          whatsapp_confirmed_at: rec.whatsapp_confirmed_at ? String(rec.whatsapp_confirmed_at).slice(0, 10) : null,
+          notes: rec.notes || ''
+        };
+
+        if (daysRemaining <= 30) {
+          // Due within 30 days or expired
+          let phone = String(rec.phone || '').replace(/[^0-9]/g, '');
+          if (phone.startsWith('00')) phone = phone.slice(2);
+          if (phone.length === 10 && phone.startsWith('05')) phone = '966' + phone.slice(1);
+          if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
+          entry.status = daysRemaining < 0 ? 'expired' : 'due';
+          entry.whatsappUrl = phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(
+            'Hello ' + (rec.driver || 'Driver') + ',\n\n' +
+            'Vehicle ' + plate + ' — 6-Month Maintenance Due\n' +
+            'تذكير: صيانة الـ 6 أشهر للمركبة ' + plate + '\n\n' +
+            'Last completed: ' + completedDate + '\n' +
+            'Next due: ' + nextDue + '\n' +
+            'Days remaining: ' + daysRemaining + '\n\n' +
+            'Please schedule your 6-month maintenance.\n\n' +
+            'Fleet Management'
+          ) : null;
+          due.push(entry);
+        } else {
+          entry.status = 'valid';
+          completed.push(entry);
+        }
+      }
+    }
+
+    // Process vehicles with NO 6-month record → overdue
+    for (const v of vehiclesRes.rows) {
+      if (latestByVehicle.has(String(v.id))) continue; // has a record already
+      const plate = [v.plate_number, v.plate_code].filter(Boolean).join(' ').trim();
+      let phone = String(v.phone || '').replace(/[^0-9]/g, '');
+      if (phone.startsWith('00')) phone = phone.slice(2);
+      if (phone.length === 10 && phone.startsWith('05')) phone = '966' + phone.slice(1);
+      if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
+      due.push({
+        recordId: null,
+        vehicleId: v.id,
+        plate,
+        driver: v.driver || 'Unassigned',
+        phone,
+        location: canonicalInspectionSite(v.location) || '-',
+        completed_date: null,
+        next_due_date: '—',
+        days_remaining: -999,
+        whatsapp_confirmed_at: null,
+        status: 'not_inspected',
+        whatsappUrl: phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(
+          'Hello ' + (v.driver || 'Driver') + ',\n\n' +
+          'Vehicle ' + plate + ' — 6-Month Maintenance Required\n' +
+          'مطلوب: صيانة الـ 6 أشهر للمركبة ' + plate + '\n\n' +
+          'No 6-month maintenance record found.\n' +
+          'Please schedule your 6-month maintenance.\n\n' +
+          'Fleet Management'
+        ) : null
+      });
+    }
+
+    res.json({
+      success: true,
+      today: todayKey,
+      summary: {
+        completed: completed.length,
+        due: due.filter(d => d.status === 'due').length,
+        expired: due.filter(d => d.status === 'expired').length,
+        not_inspected: due.filter(d => d.status === 'not_inspected').length,
+        total: completed.length + due.length
+      },
+      completed,
+      due
+    });
+  } catch (e) {
+    console.error("[SixMonthInspection]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.post("/api/inspection-reminders/send", requireRole("Owner"), async (req, res) => {
   try {
     const mode = String(req.body?.mode || 'all').toLowerCase();

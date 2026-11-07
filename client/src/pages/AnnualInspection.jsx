@@ -3,6 +3,7 @@ import api from '../api/client';
 
 export default function AnnualInspection({ canWork = false }) {
   const [completed, setCompleted] = useState([]);
+  const [approaching, setApproaching] = useState([]);
   const [reminders, setReminders] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -18,6 +19,7 @@ export default function AnnualInspection({ canWork = false }) {
       const completedRecords = data.completed || [];
       completedRecords.sort((a, b) => String(b.completed_date || '').localeCompare(String(a.completed_date || '')));
       setCompleted(completedRecords);
+      setApproaching(data.approaching || []);
       setReminders({ reminders: data.due || [], total: data.due?.length || 0, expired: data.summary?.expired || 0, due: data.summary?.due || 0 });
     } catch (e) {
       setError(e.response?.data?.error || e.message);
@@ -37,54 +39,60 @@ export default function AnnualInspection({ canWork = false }) {
     return d.toISOString().slice(0, 10);
   };
 
+  const openAnnualConfirmation = async (vehicleId, recordId = null) => {
+    const endpoint = recordId
+      ? '/periodic-maintenance/' + recordId + '/repair-whatsapp-info'
+      : '/annual-inspection/vehicle/' + vehicleId + '/confirmation-info';
+    const info = (await api.get(endpoint)).data || {};
+    const phone = String(info.driverPhone || '').replace(/[^0-9]/g, '');
+    const url = String(info.confirmationUrl || '').trim();
+    if (!phone || !url) throw new Error('No driver phone or confirmation link available.');
+    const plate = info.vehiclePlate || '';
+    const message = [
+      'Hello ' + (info.driverName || 'Driver') + ',',
+      '',
+      'Annual vehicle inspection reminder — ' + plate,
+      'تذكير بالفحص الدوري السنوي للمركبة ' + plate,
+      '',
+      'Please complete the annual inspection. If it has already been completed, confirm using the link below. Select NO if it is not completed.',
+      'يرجى إجراء الفحص السنوي. إذا تم الفحص بالفعل، يرجى التأكيد عبر الرابط أدناه. اختر NO إذا لم يتم الفحص.',
+      '',
+      'Confirmation link / رابط التأكيد:',
+      url,
+      '',
+      'Fleet Management'
+    ].join('\\n');
+    window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(message), '_blank');
+  };
+
   const sendWhatsApp = async (record) => {
     try {
-      const info = (await api.get('/periodic-maintenance/' + record.id + '/repair-whatsapp-info')).data || {};
-      const phone = String(info.driverPhone || '').replace(/[^0-9]/g, '');
-      const url = String(info.confirmationUrl || '').trim();
-      if (!phone || !url) {
-        alert('No driver phone or confirmation link available.');
-        return;
-      }
-      const plate = info.vehiclePlate || '';
-      const message = [
-        'Hello ' + (info.driverName || 'Driver') + ',',
-        '',
-        'Vehicle ' + plate + ' — Annual Inspection Completed?',
-        'هل تم إجراء الفحص الدوري السنوي للمركبة ' + plate + '؟',
-        '',
-        'If the annual inspection is done, please confirm by opening the link below.',
-        'إذا تم الفحص، يرجى تأكيد ذلك عبر فتح الرابط أدناه.',
-        '',
-        'Confirmation link / رابط التأكيد:',
-        url,
-        '',
-        'Fleet Management'
-      ].join('\n');
-      window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(message), '_blank');
+      await openAnnualConfirmation(record.vehicleId, record.recordId ?? record.id ?? null);
     } catch (e) {
       alert(e.response?.data?.error || e.message);
     }
   };
 
   const sendReminder = async (reminder) => {
-    if (!reminder.whatsappUrl) {
-      alert('No WhatsApp number for ' + reminder.plate);
-      return;
+    try {
+      await openAnnualConfirmation(reminder.vehicleId, reminder.recordId ?? null);
+      setSentList(prev => [...prev, reminder.vehicleId]);
+    } catch (e) {
+      alert(e.response?.data?.error || e.message);
     }
-    window.open(reminder.whatsappUrl, '_blank');
-    setSentList(prev => [...prev, reminder.vehicleId]);
   };
 
   const sendAllReminders = async () => {
     if (!reminders?.reminders?.length) return;
-    if (!confirm('Send WhatsApp reminders to ' + reminders.reminders.length + ' drivers?')) return;
+    if (!confirm('Prepare tracked WhatsApp confirmations for ' + reminders.reminders.length + ' drivers?')) return;
     setSending(true);
     for (const r of reminders.reminders) {
-      if (r.whatsappUrl) {
-        window.open(r.whatsappUrl, '_blank');
+      try {
+        await openAnnualConfirmation(r.vehicleId, r.recordId ?? null);
         setSentList(prev => [...prev, r.vehicleId]);
         await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (e) {
+        console.error('Annual inspection reminder failed:', r.vehicleId, e);
       }
     }
     setSending(false);
@@ -157,7 +165,7 @@ Annual inspection status — completed vehicles and vehicles due for inspection.
           <div style={{ fontSize: '11px', fontWeight: 600, color: '#166534', textTransform: 'uppercase' }}>Inspected</div>
           <div style={{ fontSize: '28px', fontWeight: 700, color: '#16a34a' }}>{completed.length}</div>
         </div>
-        <div style={{ background: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '160px', textAlign: 'center' }}>
+        <div style={{ background: '#eff6ff', borderLeft: '4px solid #3b82f6', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '160px', textAlign: 'center' }}>\n          <div style={{ fontSize: '11px', fontWeight: 600, color: '#1d4ed8', textTransform: 'uppercase' }}>Approaching ≤60d</div>\n          <div style={{ fontSize: '28px', fontWeight: 700, color: '#2563eb' }}>{approaching.length}</div>\n        </div>\n        <div style={{ background: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '160px', textAlign: 'center' }}>
           <div style={{ fontSize: '11px', fontWeight: 600, color: '#991b1b', textTransform: 'uppercase' }}>Expired</div>
           <div style={{ fontSize: '28px', fontWeight: 700, color: '#dc2626' }}>{expiredCount}</div>
         </div>
@@ -225,6 +233,38 @@ Annual inspection status — completed vehicles and vehicles due for inspection.
                   );
                 })}
               </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Section 2: Approaching Inspections */}
+      <div className="panel" style={{ marginBottom: '24px' }}>
+        <h2 style={{ margin: '0 0 8px', fontSize: '18px', color: '#1d4ed8' }}>⏳ Approaching Annual Inspections ({approaching.length})</h2>
+        <p style={{ margin: '0 0 12px', color: '#64748b', fontSize: '13px' }}>Inspections expiring within 31–60 days.</p>
+        {approaching.length === 0 ? <div className="alert alert-info">No approaching inspections.</div> : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead><tr style={{ background: '#eff6ff' }}>
+                <th style={{ padding: '8px 10px', textAlign: 'left' }}>Vehicle</th>
+                <th style={{ padding: '8px 10px', textAlign: 'left' }}>Driver</th>
+                <th style={{ padding: '8px 10px', textAlign: 'left' }}>Location</th>
+                <th style={{ padding: '8px 10px', textAlign: 'center' }}>Expiry</th>
+                <th style={{ padding: '8px 10px', textAlign: 'center' }}>Days Left</th>
+                {canWork && <th style={{ padding: '8px 10px', textAlign: 'center' }}>Action</th>}
+              </tr></thead>
+              <tbody>{approaching.map((r,i) => (
+                <tr key={r.vehicleId || i} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                  <td style={{ padding: '7px 10px', fontWeight: 700 }}>{r.plate}</td>
+                  <td style={{ padding: '7px 10px' }}>{r.driver}</td>
+                  <td style={{ padding: '7px 10px' }}>{r.location}</td>
+                  <td style={{ padding: '7px 10px', textAlign: 'center' }}>{r.next_due_date}</td>
+                  <td style={{ padding: '7px 10px', textAlign: 'center', color: '#2563eb', fontWeight: 700 }}>{r.days_remaining}d</td>
+                  {canWork && <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                    <button className="btn btn-success" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => sendReminder(r)}>📱 Send</button>
+                  </td>}
+                </tr>
+              ))}</tbody>
             </table>
           </div>
         )}

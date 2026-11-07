@@ -517,10 +517,11 @@ app.get("/api/vehicle-handover-data/:vehicleId", async (req, res) => {
     const vid = Number(req.params.vehicleId);
     if (!Number.isFinite(vid)) return res.status(400).json({ success: false, error: "Invalid vehicle ID." });
 
-    // 1. Vehicle basic info + oil data
+    // 1. Vehicle basic info + oil data + inspection dates from vehicles table
     const vRes = await pgQuery(`
       SELECT id, plate_number, plate_code, make, model, year, driver, phone, location,
-             current_km, last_oil_km, oil_change_interval, last_oil_change_date, status
+             current_km, last_oil_km, oil_change_interval, last_oil_change_date, status,
+             inspection_last_date, inspection_due_date, inspection_expiry_date
       FROM vehicles WHERE id = $1 LIMIT 1
     `, [vid]);
     const vehicle = vRes.rows[0];
@@ -572,6 +573,7 @@ app.get("/api/vehicle-handover-data/:vehicleId", async (req, res) => {
     const annual = annualRes.rows[0];
     let annualNextDue = '—';
     let annualCompletedDate = '—';
+    // Try periodic_maintenance first, then fall back to vehicles table
     if (annual?.completed_date) {
       const parsed = new Date(annual.completed_date);
       if (!Number.isNaN(parsed.getTime())) {
@@ -579,6 +581,24 @@ app.get("/api/vehicle-handover-data/:vehicleId", async (req, res) => {
         const d = new Date(annualCompletedDate + 'T00:00:00Z');
         d.setUTCFullYear(d.getUTCFullYear() + 1);
         annualNextDue = d.toISOString().slice(0, 10);
+      }
+    } else if (vehicle.inspection_last_date) {
+      // Fallback: use vehicles.inspection_last_date
+      const parsed = new Date(vehicle.inspection_last_date);
+      if (!Number.isNaN(parsed.getTime())) {
+        annualCompletedDate = parsed.toISOString().slice(0, 10);
+        const d = new Date(annualCompletedDate + 'T00:00:00Z');
+        d.setUTCFullYear(d.getUTCFullYear() + 1);
+        annualNextDue = d.toISOString().slice(0, 10);
+      }
+    } else if (vehicle.inspection_expiry_date) {
+      // Fallback: use vehicles.inspection_expiry_date (calculate last = expiry - 1 year)
+      const parsedExpiry = new Date(vehicle.inspection_expiry_date);
+      if (!Number.isNaN(parsedExpiry.getTime())) {
+        annualNextDue = parsedExpiry.toISOString().slice(0, 10);
+        const d = new Date(parsedExpiry);
+        d.setUTCFullYear(d.getUTCFullYear() - 1);
+        annualCompletedDate = d.toISOString().slice(0, 10);
       }
     }
 
@@ -600,6 +620,31 @@ app.get("/api/vehicle-handover-data/:vehicleId", async (req, res) => {
         const d = new Date(sixMonthCompletedDate + 'T00:00:00Z');
         d.setUTCMonth(d.getUTCMonth() + 6);
         sixMonthNextDue = d.toISOString().slice(0, 10);
+      }
+    } else {
+      // Fallback: check tickets for 6-Month Maintenance with WhatsApp confirmation
+      const sixMonthTicketRes = await pgQuery(`
+        SELECT closed_at::text AS closed_at, opened_at::text AS opened_at,
+               status, whatsapp_confirmed_at::text AS whatsapp_confirmed_at
+        FROM tickets
+        WHERE vehicle_id = $1
+          AND (category ILIKE '%6-Month%' OR title ILIKE '%6-Month%' OR category ILIKE '%6 Month%')
+          AND status IN ('Completed', 'Closed')
+        ORDER BY COALESCE(closed_at, opened_at) DESC
+        LIMIT 1
+      `, [vid]);
+      const sixMonthTicket = sixMonthTicketRes.rows[0];
+      if (sixMonthTicket) {
+        const dateStr = sixMonthTicket.closed_at || sixMonthTicket.opened_at;
+        if (dateStr) {
+          const parsed = new Date(dateStr);
+          if (!Number.isNaN(parsed.getTime())) {
+            sixMonthCompletedDate = parsed.toISOString().slice(0, 10);
+            const d = new Date(sixMonthCompletedDate + 'T00:00:00Z');
+            d.setUTCMonth(d.getUTCMonth() + 6);
+            sixMonthNextDue = d.toISOString().slice(0, 10);
+          }
+        }
       }
     }
 

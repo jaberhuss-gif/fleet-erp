@@ -15,8 +15,6 @@ import Backup from './pages/Backup';
 import Troubleshooter from './pages/Troubleshooter';
 import FleetTicketViewer from './pages/FleetTicketViewer';
 import AdvancedReports from './pages/AdvancedReports';
-import OperationsHub from './pages/OperationsHub';
-import BuildingMaintenancePage from './pages/BuildingMaintenance';
 import WarehouseHub from './pages/WarehouseHub';
 import WarehouseReport from './pages/WarehouseReport';
 import api from './api/client';
@@ -30,7 +28,6 @@ const OWNER_ONLY_TABS = new Set(['drivers', 'users', 'audit', 'backup', 'invoice
 const TAB_MODULES = {
   gm: ['gm'],
   'support-service': ['support', 'building', 'projects', 'warehouse', 'purchase_requests'],
-  operations: ['building'],
   warehouse: ['warehouse', 'purchase_requests'],
   fleet: ['fleet'],
   troubleshooter: ['troubleshooter'],
@@ -51,9 +48,7 @@ const TAB_LABELS = {
   'fleet-tickets': '🚗 Vehicle Tickets',
   'advanced-reports': '📊 Advanced Reports',
   'support-service': '🛠️ Support & Service',
-  operations: '🏢 Operations',
   warehouse: '📦 Warehouse',
-  'building-maintenance': '📊 Building Maintenance Monthly Report',
   drivers: '👨‍🔧 Driver',
   users: 'Users',
   audit: 'Audit Log',
@@ -158,7 +153,7 @@ export default function App() {
   };
 
   const allowedTabs = useMemo(() => {
-    const allTabs = ['gm', 'support-service', 'operations', 'warehouse', 'fleet', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports', 'driver-handovers', 'intake-pdf', 'intake-email'];
+    const allTabs = ['gm', 'support-service', 'warehouse', 'fleet', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports', 'driver-handovers', 'intake-pdf', 'intake-email'];
     const visible = allTabs.filter(canViewTab);
     if (user?.role === 'Owner') {
       return [...visible, 'drivers', 'users', 'audit', 'backup'];
@@ -261,15 +256,6 @@ export default function App() {
             )}
           </div>
 
-          {allowedTabs.includes('operations') && (
-            <div className="erp-nav-group">
-              <div className="erp-nav-heading">Operations</div>
-              <button className={tab === 'operations' ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange('operations')}>
-                🏢 Operations
-              </button>
-            </div>
-          )}
-
           {['support-service','tickets','troubleshooter'].some(t => allowedTabs.includes(t)) && (
             <div className="erp-nav-group">
               <div className="erp-nav-heading">Support & Service</div>
@@ -327,9 +313,7 @@ export default function App() {
         <main className="main" key={vehicleDataVersion}>
           {tab === 'gm' && <GMDashboard />}
           {tab === 'support-service' && <SupportServiceHub user={user} access={access || {}} />}
-          {tab === 'operations' && <OperationsHub user={user} access={access || {}} />}
           {tab === 'warehouse' && <WarehouseHub user={user} access={access || {}} />}
-          {tab === 'building-maintenance' && canViewModule('building') && <BuildingMaintenancePage user={user} access={access || {}} />}
           {tab === 'fleet' && canViewModule('fleet') && (
             <FleetHub user={user} access={access || {}} onViewVehicle={handleViewVehicle} initialOwnerGroup={fleetGroup} />
           )}

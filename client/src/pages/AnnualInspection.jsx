@@ -20,7 +20,7 @@ export default function AnnualInspection({ canWork = false }) {
       completedRecords.sort((a, b) => String(b.completed_date || '').localeCompare(String(a.completed_date || '')));
       setCompleted(completedRecords);
       setApproaching(data.approaching || []);
-      setReminders({ reminders: data.due || [], total: data.due?.length || 0, expired: data.summary?.expired || 0, due: data.summary?.due || 0 });
+      setReminders({ reminders: data.due || [], total: data.due?.length || 0, expired: data.summary?.expired || 0, due: data.summary?.due || 0, exempt: data.exempt || [] });
     } catch (e) {
       setError(e.response?.data?.error || e.message);
     } finally {
@@ -61,7 +61,7 @@ export default function AnnualInspection({ canWork = false }) {
       url,
       '',
       'Fleet Management'
-    ].join('\\n');
+    ].join('\n');
     window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(message), '_blank');
   };
 
@@ -105,7 +105,7 @@ export default function AnnualInspection({ canWork = false }) {
     const today = new Date().toLocaleDateString();
 
     const completedRows = completed.map(r => {
-      const plate = [r.plate_number, r.plate_code].filter(Boolean).join(' ');
+      const plate = r.plate || [r.plate_number, r.plate_code].filter(Boolean).join(' ');
       const next = getNextDueDate(r);
       const confirmed = r.whatsapp_confirmed_at ? String(r.whatsapp_confirmed_at).slice(0, 10) : '—';
       return `<tr><td>${esc(plate)}</td><td>${esc(r.driver_name || r.driver || '-')}</td><td>${esc(r.location || '-')}</td><td>${esc(String(r.completed_date || '').slice(0, 10))}</td><td>${esc(next)}</td><td>${esc(confirmed)}</td></tr>`;
@@ -143,6 +143,8 @@ export default function AnnualInspection({ canWork = false }) {
   const dueReminders = reminders?.reminders || [];
   const expiredCount = reminders?.expired || 0;
   const dueCount = reminders?.due || 0;
+  const exempt = Array.isArray(reminders?.exempt) ? reminders.exempt : [];
+  const notInspectedCount = dueReminders.filter(r => r.status === 'not_inspected').length;
 
   return (
     <div style={{ padding: '20px' }}>
@@ -172,6 +174,17 @@ Annual inspection status — completed vehicles and vehicles due for inspection.
         <div style={{ background: '#fffbeb', borderLeft: '4px solid #f59e0b', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '160px', textAlign: 'center' }}>
           <div style={{ fontSize: '11px', fontWeight: 600, color: '#92400e', textTransform: 'uppercase' }}>Due ≤30d</div>
           <div style={{ fontSize: '28px', fontWeight: 700, color: '#f59e0b' }}>{dueCount}</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        <div style={{ background: '#f8fafc', borderLeft: '4px solid #64748b', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '160px', textAlign: 'center' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: '#475569', textTransform: 'uppercase' }}>Not Inspected</div>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: '#475569' }}>{notInspectedCount}</div>
+        </div>
+        <div style={{ background: '#f5f3ff', borderLeft: '4px solid #7c3aed', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '160px', textAlign: 'center' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: '#6d28d9', textTransform: 'uppercase' }}>Exempt</div>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: '#7c3aed' }}>{exempt.length}</div>
         </div>
       </div>
 
@@ -233,6 +246,31 @@ Annual inspection status — completed vehicles and vehicles due for inspection.
                   );
                 })}
               </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="panel" style={{ marginBottom: '24px' }}>
+        <h2 style={{ margin: '0 0 12px', fontSize: '18px', color: '#6d28d9' }}>Exempt from Annual Inspection ({exempt.length})</h2>
+        <p style={{ margin: '0 0 12px', color: '#64748b', fontSize: '13px' }}>Vehicles exempt under the 2024 government decision. These vehicles are excluded from due and overdue counts.</p>
+        {exempt.length === 0 ? <div className="alert alert-info">No exempt vehicles recorded.</div> : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead><tr style={{ background: '#f5f3ff' }}>
+                <th style={{ padding: '8px 10px', textAlign: 'left' }}>Vehicle</th>
+                <th style={{ padding: '8px 10px', textAlign: 'left' }}>Driver</th>
+                <th style={{ padding: '8px 10px', textAlign: 'left' }}>Location</th>
+                <th style={{ padding: '8px 10px', textAlign: 'left' }}>Exemption</th>
+              </tr></thead>
+              <tbody>{exempt.map((r,i) => (
+                <tr key={r.vehicleId || i} style={{ borderBottom: '1px solid #e2e8f0', background: i % 2 ? '#fff' : '#faf5ff' }}>
+                  <td style={{ padding: '7px 10px', fontWeight: 700 }}>{r.plate}</td>
+                  <td style={{ padding: '7px 10px' }}>{r.driver}</td>
+                  <td style={{ padding: '7px 10px' }}>{r.location}</td>
+                  <td style={{ padding: '7px 10px', color: '#6d28d9', fontWeight: 700 }}>Government decision (2024) — Exempt</td>
+                </tr>
+              ))}</tbody>
             </table>
           </div>
         )}

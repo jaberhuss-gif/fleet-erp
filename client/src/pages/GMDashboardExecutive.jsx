@@ -111,7 +111,17 @@ export default function GMDashboardExecutive() {
       const generatedAt = (refreshedAt || new Date()).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
       const d = snapshot.dashboard || {};
       const financialMonths = (snapshot.financial?.rows || []).filter(row => String(row.month || '') >= String(snapshot.year) + '-07' && String(row.month || '') <= String(snapshot.year) + '-12' && row.active);
-      const topContractors = Object.entries(snapshot.financial?.grand?.contractorBreakdown || {}).sort((a,b) => Number(b[1]?.woCost || 0) + Number(b[1]?.projectCost || 0) - Number(a[1]?.woCost || 0) - Number(a[1]?.projectCost || 0)).slice(0,3);
+      const contractorTotals = {};
+      financialMonths.forEach(row => {
+        Object.entries(row.contractorBreakdown || {}).forEach(([name, value]) => {
+          if (!contractorTotals[name]) contractorTotals[name] = { woCost: 0, projectCost: 0 };
+          contractorTotals[name].woCost += Number(value?.woCost || 0);
+          contractorTotals[name].projectCost += Number(value?.projectCost || 0);
+        });
+      });
+      const topContractors = Object.entries(contractorTotals)
+        .sort((a, b) => (Number(b[1].woCost) + Number(b[1].projectCost)) - (Number(a[1].woCost) + Number(a[1].projectCost)))
+        .slice(0, 3);
       const source = 'ERP PostgreSQL via /dashboard, /reports/monthly (Jul–Dec window) and /reports/financial';
 
       buildSlide(pptx, 'Executive Fleet Overview', 'Management snapshot | ' + snapshot.year + ' | Live operational records', [

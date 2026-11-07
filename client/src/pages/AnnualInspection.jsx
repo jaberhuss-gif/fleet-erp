@@ -167,7 +167,10 @@ Annual inspection status — completed vehicles and vehicles due for inspection.
           <div style={{ fontSize: '11px', fontWeight: 600, color: '#166534', textTransform: 'uppercase' }}>Inspected</div>
           <div style={{ fontSize: '28px', fontWeight: 700, color: '#16a34a' }}>{completed.length}</div>
         </div>
-        <div style={{ background: '#eff6ff', borderLeft: '4px solid #3b82f6', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '160px', textAlign: 'center' }}>\n          <div style={{ fontSize: '11px', fontWeight: 600, color: '#1d4ed8', textTransform: 'uppercase' }}>Approaching ≤60d</div>\n          <div style={{ fontSize: '28px', fontWeight: 700, color: '#2563eb' }}>{approaching.length}</div>\n        </div>\n        <div style={{ background: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '160px', textAlign: 'center' }}>
+        <div style={{ background: '#eff6ff', borderLeft: '4px solid #3b82f6', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '160px', textAlign: 'center' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: '#1d4ed8', textTransform: 'uppercase' }}>Approaching ≤60d</div>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: '#2563eb' }}>{approaching.length}</div>\n        </div>
+        <div style={{ background: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '160px', textAlign: 'center' }}>
           <div style={{ fontSize: '11px', fontWeight: 600, color: '#991b1b', textTransform: 'uppercase' }}>Expired</div>
           <div style={{ fontSize: '28px', fontWeight: 700, color: '#dc2626' }}>{expiredCount}</div>
         </div>

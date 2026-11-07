@@ -1046,8 +1046,7 @@ app.get("/api/periodic-maintenance/:id/repair-whatsapp-info", async (req, res) =
     const marker = isAnnual ? '[PM_INSPECTION:' + pmId + ']%' : '[PM_REPAIR:' + pmId + ']%';
     const description = isAnnual
       ? 'Please complete the annual vehicle inspection and confirm only after it has been carried out.'
-      : String(pm.notes || '').trim();
-    if (!isAnnual && !description) return res.status(400).json({ success:false, error:"No 6-month repair notes are available." });
+      : (String(pm.notes || '').trim() || 'Please complete the six-month vehicle maintenance inspection and confirm only after it has been carried out.');
     if (!String(pm.phone || '').trim()) return res.status(400).json({ success:false, error:"Driver phone number is not available." });
 
     const existing = await pgQuery(`

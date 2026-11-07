@@ -212,7 +212,7 @@ Annual inspection status — completed vehicles and vehicles due for inspection.
               </thead>
               <tbody>
                 {completed.map((r, i) => {
-                  const plate = [r.plate_number, r.plate_code].filter(Boolean).join(' ');
+                  const plate = r.plate || [r.plate_number, r.plate_code].filter(Boolean).join(' ');
                   const next = getNextDueDate(r);
                   const confirmed = r.whatsapp_confirmed_at ? String(r.whatsapp_confirmed_at).slice(0, 10) : null;
                   return (

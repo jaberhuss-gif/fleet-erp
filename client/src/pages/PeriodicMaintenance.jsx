@@ -247,7 +247,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     }, null);
   };
 
-  const activeVehicles = vehicles.filter(v => { const plate = String(v.plate || v.plate_number || '').trim().toLowerCase(); return plate !== 'test 123' || plate === 'test 123'; });
+  const activeVehicles = vehicles.filter(v => { const plate = String(v.plate || v.plate_number || '').trim().toLowerCase(); return plate !== 'test 123'; });
   const vehicleById = activeVehicles.reduce((map, v) => { map[String(v.id)] = v; return map; }, {});
   const getInspectionExpiry = (vehicleId) => {
     const v = vehicleById[String(vehicleId)];
@@ -290,7 +290,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     const sixCycleDates = [
       six && isInspected(six) ? String(six.completed_date || '').slice(0, 10) : '',
       annualDone ? String(annual.completed_date || '').slice(0, 10) : ''
-    ].filter(value => /^\\d{4}-\\d{2}-\\d{2}$/.test(value)).sort();
+    ].filter(value => /^\d{4}-\d{2}-\d{2}$/.test(value)).sort();
     const sixReferenceDate = sixCycleDates[sixCycleDates.length - 1] || '';
     const missing = [];
     if (!sixDone) missing.push('6-Month Maintenance');

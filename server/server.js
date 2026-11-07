@@ -2374,6 +2374,7 @@ app.post("/api/annual-inspection/status", async (req, res) => {
       FROM periodic_maintenance pm
       LEFT JOIN vehicles v ON v.id = pm.vehicle_id
       WHERE pm.type = 'inspection'
+         AND COALESCE(LOWER(TRIM(v.plate_number)), '') <> 'test 123'
       ORDER BY pm.completed_date DESC NULLS LAST
     `);
 
@@ -2382,6 +2383,7 @@ app.post("/api/annual-inspection/status", async (req, res) => {
       SELECT t.vehicle_id, MAX(t.whatsapp_confirmed_at::text) AS whatsapp_confirmed_at
       FROM tickets t
       WHERE t.whatsapp_confirmed_at IS NOT NULL
+        AND t.category = 'Annual Inspection'
       GROUP BY t.vehicle_id
     `);
     const waMap = new Map();
@@ -2411,6 +2413,7 @@ app.post("/api/annual-inspection/status", async (req, res) => {
              inspection_last_date, inspection_expiry_date
       FROM vehicles
       WHERE COALESCE(LOWER(TRIM(status)), '') NOT IN ('inactive','sold','disposed','disabled')
+        AND COALESCE(LOWER(TRIM(plate_number)), '') <> 'test 123'
       ORDER BY plate_number ASC
     `);
 
@@ -2580,6 +2583,7 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
       SELECT id, plate_number, plate_code, driver, phone, location, current_km
       FROM vehicles
       WHERE COALESCE(LOWER(TRIM(status)), '') NOT IN ('inactive','sold','disposed','disabled')
+        AND COALESCE(LOWER(TRIM(plate_number)), '') <> 'test 123'
       ORDER BY plate_number ASC
     `);
 

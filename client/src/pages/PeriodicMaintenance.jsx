@@ -287,9 +287,11 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     // A completed annual inspection also satisfies/closes the current six-month
     // inspection cycle. Use its actual completion date as the six-month baseline.
     const sixDone = Boolean(six && isInspected(six)) || annualDone;
-    const sixReferenceDate = (six && isInspected(six) && six.completed_date)
-      ? String(six.completed_date).slice(0, 10)
-      : annualDone ? String(annual.completed_date || '').slice(0, 10) : '';
+    const sixCycleDates = [
+      six && isInspected(six) ? String(six.completed_date || '').slice(0, 10) : '',
+      annualDone ? String(annual.completed_date || '').slice(0, 10) : ''
+    ].filter(value => /^\\d{4}-\\d{2}-\\d{2}$/.test(value)).sort();
+    const sixReferenceDate = sixCycleDates[sixCycleDates.length - 1] || '';
     const missing = [];
     if (!sixDone) missing.push('6-Month Maintenance');
     if (!annualDone) missing.push('Annual Inspection');
@@ -386,7 +388,32 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
 
   const reportWhatsApp = async (row, component, inspectedState) => {
     try {
-      const info = (await api.get('/vehicles/' + row.vehicle_id + '/whatsapp-info')).data || {};
+      setError('');
+      const isSixMonth = component === '6-Month Maintenance';
+      let rec = isSixMonth ? row.six : row.annual;
+      let info = {};
+      if (!inspectedState) {
+        if (isSixMonth) {
+          if (!rec?.id) {
+            const created = await api.post('/periodic-maintenance', {
+              vehicleId: Number(row.vehicle_id),
+              type: '6_months_general',
+              scheduledDate: new Date().toISOString().slice(0, 10),
+              status: 'Pending'
+            });
+            rec = created.data?.record;
+          }
+          if (!rec?.id) throw new Error('Could not prepare the six-month maintenance record.');
+          info = (await api.get('/periodic-maintenance/' + rec.id + '/repair-whatsapp-info')).data || {};
+        } else if (rec?.id) {
+          info = (await api.get('/periodic-maintenance/' + rec.id + '/repair-whatsapp-info')).data || {};
+        } else {
+          info = (await api.get('/annual-inspection/vehicle/' + row.vehicle_id + '/confirmation-info')).data || {};
+        }
+      } else {
+        const vehicle = vehicles.find(v => String(v.id) === String(row.vehicle_id)) || {};
+        info = { driverPhone: vehicle.phone || vehicle.driver_phone, driverName: vehicle.driver || row.driver, vehiclePlate: vehicle.plate || row.plate };
+      }
       const phone = normalizeWaPhone(info.driverPhone);
       const driver = info.driverName || row.driver || 'Driver';
       const plate = info.vehiclePlate || row.plate || '';
@@ -394,10 +421,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
         setError('No driver WhatsApp number found for vehicle ' + plate);
         return;
       }
-
       const confirmationUrl = String(info.confirmationUrl || '').trim();
-      const cleanUrl = confirmationUrl.match(/^https:\/\/fleet-erp-kn0c\.onrender\.com\/inspection-confirm\/[0-9a-f-]+$/i)?.[0] || '';
-
       const message = inspectedState
         ? [
             'Hello ' + driver + ',',
@@ -424,11 +448,10 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
             'اگر معائنہ ابھی مکمل نہیں ہوا تو YES نہ دبائیں۔ پہلے معائنہ مکمل کریں، پھر اس پیغام پر واپس آکر YES دبائیں۔',
             '',
             'Inspection confirmation link / معائنہ کی تصدیق کا لنک:',
-            cleanUrl || 'The inspection confirmation link is not available yet.\nمعائنہ کی تصدیق کا لنک ابھی دستیاب نہیں ہے۔',
+            confirmationUrl || 'Confirmation link unavailable.',
             '',
             'Fleet Management'
           ].join('\n');
-
       window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(message), '_blank');
     } catch (e) {
       setError(e.response?.data?.error || e.message);

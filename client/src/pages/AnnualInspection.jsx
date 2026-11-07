@@ -13,15 +13,12 @@ export default function AnnualInspection({ canWork = false }) {
     setLoading(true);
     setError('');
     try {
-      const [pmRes, remindRes] = await Promise.all([
-        api.get('/periodic-maintenance?type=inspection'),
-        api.post('/annual-inspection/remind')
-      ]);
-      const records = pmRes.data?.records || [];
-      const completedRecords = records.filter(r => r.status === 'Completed' || r.completed_date);
+      const res = await api.post('/annual-inspection/status');
+      const data = res.data;
+      const completedRecords = data.completed || [];
       completedRecords.sort((a, b) => String(b.completed_date || '').localeCompare(String(a.completed_date || '')));
       setCompleted(completedRecords);
-      setReminders(remindRes.data);
+      setReminders({ reminders: data.due || [], total: data.due?.length || 0, expired: data.summary?.expired || 0, due: data.summary?.due || 0 });
     } catch (e) {
       setError(e.response?.data?.error || e.message);
     } finally {

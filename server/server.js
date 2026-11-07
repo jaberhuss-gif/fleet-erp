@@ -2175,6 +2175,158 @@ app.post("/api/annual-inspection/remind", async (req, res) => {
   }
 });
 
+// ===== ANNUAL INSPECTION — comprehensive status (JOIN vehicles + tickets) =====
+app.post("/api/annual-inspection/status", async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const today = new Date(todayKey + 'T00:00:00Z');
+
+    // Get ALL annual inspection records with vehicle info (JOIN)
+    const pmRes = await pgQuery(`
+      SELECT pm.id, pm.vehicle_id, pm.status, pm.completed_date::text AS completed_date,
+             pm.scheduled_date::text AS scheduled_date, pm.notes,
+             v.plate_number, v.plate_code, v.driver, v.phone, v.location,
+             v.current_km, v.make, v.model, v.status AS vehicle_status,
+             v.inspection_last_date, v.inspection_expiry_date
+      FROM periodic_maintenance pm
+      LEFT JOIN vehicles v ON v.id = pm.vehicle_id
+      WHERE pm.type = 'inspection'
+      ORDER BY pm.completed_date DESC NULLS LAST
+    `);
+
+    // Get WhatsApp confirmations from ALL tickets for each vehicle
+    const waRes = await pgQuery(`
+      SELECT t.vehicle_id, MAX(t.whatsapp_confirmed_at::text) AS whatsapp_confirmed_at
+      FROM tickets t
+      WHERE t.whatsapp_confirmed_at IS NOT NULL
+      GROUP BY t.vehicle_id
+    `);
+    const waMap = new Map();
+    for (const row of waRes.rows) {
+      const parsed = new Date(row.whatsapp_confirmed_at);
+      if (!Number.isNaN(parsed.getTime())) waMap.set(String(row.vehicle_id), parsed.toISOString().slice(0, 10));
+    }
+
+    // Group by vehicle — keep latest completed
+    const latestByVehicle = new Map();
+    for (const row of pmRes.rows) {
+      if (!row.vehicle_id) continue;
+      const vid = String(row.vehicle_id);
+      if (!latestByVehicle.has(vid)) {
+        latestByVehicle.set(vid, row);
+      } else {
+        const existing = latestByVehicle.get(vid);
+        const existingDate = existing.completed_date || existing.scheduled_date || '';
+        const rowDate = row.completed_date || row.scheduled_date || '';
+        if (rowDate > existingDate) latestByVehicle.set(vid, row);
+      }
+    }
+
+    // Also get vehicles with NO pm record but have inspection data in vehicles table
+    const allVehiclesRes = await pgQuery(`
+      SELECT id, plate_number, plate_code, driver, phone, location,
+             inspection_last_date, inspection_expiry_date
+      FROM vehicles
+      WHERE COALESCE(LOWER(TRIM(status)), '') NOT IN ('inactive','sold','disposed','disabled')
+      ORDER BY plate_number ASC
+    `);
+
+    // Add vehicles not in latestByVehicle but have inspection data
+    for (const v of allVehiclesRes.rows) {
+      const vid = String(v.id);
+      if (latestByVehicle.has(vid)) continue;
+      if (v.inspection_last_date || v.inspection_expiry_date) {
+        latestByVehicle.set(vid, {
+          id: null, vehicle_id: v.id, status: 'Completed',
+          completed_date: v.inspection_last_date || null,
+          scheduled_date: null, notes: '',
+          plate_number: v.plate_number, plate_code: v.plate_code,
+          driver: v.driver, phone: v.phone, location: v.location,
+          vehicle_status: 'Active',
+          inspection_last_date: v.inspection_last_date,
+          inspection_expiry_date: v.inspection_expiry_date
+        });
+      }
+    }
+
+    const completed = [];
+    const due = [];
+
+    for (const [vid, rec] of latestByVehicle) {
+      if (!rec.vehicle_status || ['inactive','sold','disposed','disabled'].includes(rec.vehicle_status.toLowerCase().trim())) continue;
+
+      const plate = [rec.plate_number, rec.plate_code].filter(Boolean).join(' ').trim();
+
+      // Get completion date — try pm first, then vehicles table
+      let completedDate = null;
+      if (rec.completed_date) {
+        const parsed = new Date(rec.completed_date);
+        if (!Number.isNaN(parsed.getTime())) completedDate = parsed.toISOString().slice(0, 10);
+      }
+      if (!completedDate && rec.inspection_last_date) {
+        const parsed = new Date(rec.inspection_last_date);
+        if (!Number.isNaN(parsed.getTime())) completedDate = parsed.toISOString().slice(0, 10);
+      }
+      if (!completedDate && rec.inspection_expiry_date) {
+        // Calculate from expiry (expiry - 1 year = completion)
+        const parsed = new Date(rec.inspection_expiry_date);
+        if (!Number.isNaN(parsed.getTime())) {
+          const d = new Date(parsed);
+          d.setUTCFullYear(d.getUTCFullYear() - 1);
+          completedDate = d.toISOString().slice(0, 10);
+        }
+      }
+
+      if (completedDate) {
+        const d = new Date(completedDate + 'T00:00:00Z');
+        d.setUTCFullYear(d.getUTCFullYear() + 1);
+        const nextDue = d.toISOString().slice(0, 10);
+        const daysRemaining = Math.ceil((d - today) / 86400000);
+        const waConfirmed = waMap.get(vid) || null;
+
+        const entry = {
+          recordId: rec.id, vehicleId: vid, plate,
+          driver: rec.driver || 'Unassigned', phone: rec.phone || '',
+          location: canonicalInspectionSite(rec.location) || '-',
+          completed_date: completedDate, next_due_date: nextDue,
+          days_remaining: daysRemaining, whatsapp_confirmed_at: waConfirmed,
+          notes: rec.notes || ''
+        };
+
+        if (daysRemaining <= 30) {
+          entry.status = daysRemaining < 0 ? 'expired' : 'due';
+          let phone = String(rec.phone || '').replace(/[^0-9]/g, '');
+          if (phone.startsWith('00')) phone = phone.slice(2);
+          if (phone.length === 10 && phone.startsWith('05')) phone = '966' + phone.slice(1);
+          if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
+          entry.whatsappUrl = phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(
+            'Hello ' + (rec.driver || 'Driver') + ',\n\nVehicle ' + plate + ' — Annual Inspection Reminder\nتذكير: الفحص الدوري السنوي للمركبة ' + plate + '\n\nExpires: ' + nextDue + '\nDays: ' + daysRemaining + '\n\nFleet Management'
+          ) : null;
+          due.push(entry);
+        } else {
+          entry.status = 'valid';
+          completed.push(entry);
+        }
+      }
+    }
+
+    res.json({
+      success: true, today: todayKey,
+      summary: {
+        completed: completed.length,
+        due: due.filter(d => d.status === 'due').length,
+        expired: due.filter(d => d.status === 'expired').length,
+        total: completed.length + due.length
+      },
+      completed, due
+    });
+  } catch (e) {
+    console.error("[AnnualInspectionStatus]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // ===== 6-MONTH INSPECTION — status + WhatsApp reminders =====
 app.post("/api/six-month-inspection/status", async (req, res) => {
   try {
@@ -2224,12 +2376,11 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
     const completed = [];
     const due = [];
 
-    // Get WhatsApp confirmations from tickets table (6-Month maintenance tickets)
+    // Get WhatsApp confirmations from ALL tickets (not just 6-Month)
     const whatsappRes = await pgQuery(`
       SELECT t.vehicle_id, MAX(t.whatsapp_confirmed_at::text) AS whatsapp_confirmed_at
       FROM tickets t
-      WHERE (t.category ILIKE '%6-Month%' OR t.title ILIKE '%6-Month%')
-        AND t.whatsapp_confirmed_at IS NOT NULL
+      WHERE t.whatsapp_confirmed_at IS NOT NULL
       GROUP BY t.vehicle_id
     `);
     const whatsappMap = new Map();
@@ -2306,20 +2457,37 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
       if (phone.length === 10 && phone.startsWith('05')) phone = '966' + phone.slice(1);
       if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
 
-      // Check if this vehicle has a completed ANNUAL inspection
+      // Check if this vehicle has a completed ANNUAL inspection (pm + vehicles table)
       const annualCheck = await pgQuery(`
-        SELECT completed_date::text AS completed_date
-        FROM periodic_maintenance
-        WHERE vehicle_id = $1 AND type = 'inspection' AND status = 'Completed'
-          AND completed_date IS NOT NULL
-        ORDER BY completed_date DESC LIMIT 1
+        SELECT pm.completed_date::text AS pm_completed,
+               v.inspection_last_date AS v_last,
+               v.inspection_expiry_date AS v_expiry
+        FROM vehicles v
+        LEFT JOIN LATERAL (
+          SELECT completed_date::text FROM periodic_maintenance
+          WHERE vehicle_id = v.id AND type = 'inspection' AND status = 'Completed'
+            AND completed_date IS NOT NULL
+          ORDER BY completed_date DESC LIMIT 1
+        ) pm ON true
+        WHERE v.id = $1 LIMIT 1
       `, [v.id]);
 
-      // Also check vehicles.inspection_expiry_date as fallback
       let annualDate = null;
-      if (annualCheck.rows[0]?.completed_date) {
-        const parsed = new Date(annualCheck.rows[0].completed_date);
+      if (annualCheck.rows[0]?.pm_completed) {
+        const parsed = new Date(annualCheck.rows[0].pm_completed);
         if (!Number.isNaN(parsed.getTime())) annualDate = parsed.toISOString().slice(0, 10);
+      }
+      if (!annualDate && annualCheck.rows[0]?.v_last) {
+        const parsed = new Date(annualCheck.rows[0].v_last);
+        if (!Number.isNaN(parsed.getTime())) annualDate = parsed.toISOString().slice(0, 10);
+      }
+      if (!annualDate && annualCheck.rows[0]?.v_expiry) {
+        const parsed = new Date(annualCheck.rows[0].v_expiry);
+        if (!Number.isNaN(parsed.getTime())) {
+          const d = new Date(parsed);
+          d.setUTCFullYear(d.getUTCFullYear() - 1);
+          annualDate = d.toISOString().slice(0, 10);
+        }
       }
 
       if (annualDate) {

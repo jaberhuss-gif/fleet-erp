@@ -262,6 +262,8 @@ export async function ensureUserAccessTable() {
     can_work BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE(user_id, module)
   )`);
+  // Ensure unique index exists (handles tables created before UNIQUE was added)
+  await query(`CREATE UNIQUE INDEX IF NOT EXISTS user_access_user_id_module_key ON user_access(user_id, module)`);
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
 }
 
@@ -323,6 +325,8 @@ async function handlePushRoute(req, res) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`);
     await query(`CREATE INDEX IF NOT EXISTS idx_push_tokens_user_id ON push_tokens(user_id)`);
+    // Ensure unique index exists (handles tables created before UNIQUE was added)
+    await query(`CREATE UNIQUE INDEX IF NOT EXISTS push_tokens_token_key ON push_tokens(token)`);
     const result = await query(`
       INSERT INTO push_tokens (user_id, token, platform, user_agent, last_seen_at)
       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)

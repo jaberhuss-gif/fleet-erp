@@ -563,7 +563,8 @@ app.get("/api/vehicle-handover-data/:vehicleId", async (req, res) => {
 
     // 4. Annual inspection date
     const annualRes = await pgQuery(`
-      SELECT completed_date, status, notes, whatsapp_confirmed_at
+      SELECT completed_date::text AS completed_date, status::text AS status, notes,
+             whatsapp_confirmed_at::text AS whatsapp_confirmed_at
       FROM periodic_maintenance
       WHERE vehicle_id = $1 AND type = 'inspection' AND status = 'Completed'
       ORDER BY completed_date DESC LIMIT 1
@@ -583,7 +584,8 @@ app.get("/api/vehicle-handover-data/:vehicleId", async (req, res) => {
 
     // 5. 6-month inspection date
     const sixMonthRes = await pgQuery(`
-      SELECT completed_date, status, notes, whatsapp_confirmed_at
+      SELECT completed_date::text AS completed_date, status::text AS status, notes,
+             whatsapp_confirmed_at::text AS whatsapp_confirmed_at
       FROM periodic_maintenance
       WHERE vehicle_id = $1 AND type = '6_months_general' AND status = 'Completed'
       ORDER BY completed_date DESC LIMIT 1
@@ -2137,8 +2139,11 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
 
     // Get all 6-month maintenance records
     const pmRes = await pgQuery(`
-      SELECT pm.id, pm.vehicle_id, pm.type, pm.status, pm.completed_date,
-             pm.scheduled_date, pm.notes, pm.whatsapp_confirmed_at,
+      SELECT pm.id, pm.vehicle_id, pm.type, pm.status,
+             pm.completed_date::text AS completed_date,
+             pm.scheduled_date::text AS scheduled_date,
+             pm.notes,
+             pm.whatsapp_confirmed_at::text AS whatsapp_confirmed_at,
              v.plate_number, v.plate_code, v.driver, v.phone, v.location,
              v.current_km, v.make, v.model, v.status AS vehicle_status
       FROM periodic_maintenance pm

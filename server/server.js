@@ -1228,7 +1228,7 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
           auto_closed_six AS (
             UPDATE periodic_maintenance six
             SET status='Completed',
-                completed_date=COALESCE(six.completed_date, cp.completed_date),
+                completed_date=cp.completed_date,
                 technician='Auto-closed (Annual Confirmed)',
                 notes=COALESCE(six.notes,'') || CASE WHEN COALESCE(six.notes,'')='' THEN '' ELSE E'\\n\\n' END || 'Auto-closed: annual inspection confirmed via WhatsApp'
             FROM completed_pm cp

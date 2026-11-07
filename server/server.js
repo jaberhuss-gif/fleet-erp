@@ -570,10 +570,15 @@ app.get("/api/vehicle-handover-data/:vehicleId", async (req, res) => {
     `, [vid]);
     const annual = annualRes.rows[0];
     let annualNextDue = '—';
+    let annualCompletedDate = '—';
     if (annual?.completed_date) {
-      const d = new Date(String(annual.completed_date).slice(0, 10) + 'T00:00:00Z');
-      d.setUTCFullYear(d.getUTCFullYear() + 1);
-      annualNextDue = d.toISOString().slice(0, 10);
+      const parsed = new Date(annual.completed_date);
+      if (!Number.isNaN(parsed.getTime())) {
+        annualCompletedDate = parsed.toISOString().slice(0, 10);
+        const d = new Date(annualCompletedDate + 'T00:00:00Z');
+        d.setUTCFullYear(d.getUTCFullYear() + 1);
+        annualNextDue = d.toISOString().slice(0, 10);
+      }
     }
 
     // 5. 6-month inspection date
@@ -585,10 +590,15 @@ app.get("/api/vehicle-handover-data/:vehicleId", async (req, res) => {
     `, [vid]);
     const sixMonth = sixMonthRes.rows[0];
     let sixMonthNextDue = '—';
+    let sixMonthCompletedDate = '—';
     if (sixMonth?.completed_date) {
-      const d = new Date(String(sixMonth.completed_date).slice(0, 10) + 'T00:00:00Z');
-      d.setUTCMonth(d.getUTCMonth() + 6);
-      sixMonthNextDue = d.toISOString().slice(0, 10);
+      const parsed = new Date(sixMonth.completed_date);
+      if (!Number.isNaN(parsed.getTime())) {
+        sixMonthCompletedDate = parsed.toISOString().slice(0, 10);
+        const d = new Date(sixMonthCompletedDate + 'T00:00:00Z');
+        d.setUTCMonth(d.getUTCMonth() + 6);
+        sixMonthNextDue = d.toISOString().slice(0, 10);
+      }
     }
 
     // 6. Checklist items (hardcoded)
@@ -630,13 +640,13 @@ app.get("/api/vehicle-handover-data/:vehicleId", async (req, res) => {
       tires,
       maintenance_history: maintenanceHistory,
       annual_inspection: {
-        last_completed: annual?.completed_date ? String(annual.completed_date).slice(0, 10) : '—',
+        last_completed: annualCompletedDate,
         next_due: annualNextDue,
         status: annual ? 'Completed' : 'Not Inspected',
         whatsapp_confirmed: annual?.whatsapp_confirmed_at ? String(annual.whatsapp_confirmed_at).slice(0, 10) : null
       },
       six_month_inspection: {
-        last_completed: sixMonth?.completed_date ? String(sixMonth.completed_date).slice(0, 10) : '—',
+        last_completed: sixMonthCompletedDate,
         next_due: sixMonthNextDue,
         status: sixMonth ? 'Completed' : 'Not Inspected',
         whatsapp_confirmed: sixMonth?.whatsapp_confirmed_at ? String(sixMonth.whatsapp_confirmed_at).slice(0, 10) : null
@@ -2169,11 +2179,17 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
       if (!rec.vehicle_status || ['inactive','sold','disposed','disabled'].includes(rec.vehicle_status.toLowerCase().trim())) continue;
 
       const plate = [rec.plate_number, rec.plate_code].filter(Boolean).join(' ').trim();
-      const completedDate = String(rec.completed_date || '').slice(0, 10);
+      // Parse completed_date safely — handles Date objects, strings, null
+      let completedDate = null;
+      if (rec.completed_date) {
+        const parsed = new Date(rec.completed_date);
+        if (!Number.isNaN(parsed.getTime())) completedDate = parsed.toISOString().slice(0, 10);
+      }
 
       if (completedDate && rec.status === 'Completed') {
         // Calculate next due = completed + 6 months
         const d = new Date(completedDate + 'T00:00:00Z');
+        if (Number.isNaN(d.getTime())) continue;
         d.setUTCMonth(d.getUTCMonth() + 6);
         const nextDue = d.toISOString().slice(0, 10);
         const daysRemaining = Math.ceil((d - today) / 86400000);

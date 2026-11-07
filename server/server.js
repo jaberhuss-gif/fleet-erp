@@ -2383,6 +2383,7 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
           'Fleet Management'
         ) : null
       });
+      }
     }
 
     res.json({

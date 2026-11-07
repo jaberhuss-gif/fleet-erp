@@ -618,7 +618,11 @@ app.get("/api/vehicle-handover-data/:vehicleId", async (req, res) => {
       if (!Number.isNaN(parsed.getTime())) {
         sixMonthCompletedDate = parsed.toISOString().slice(0, 10);
         const d = new Date(sixMonthCompletedDate + 'T00:00:00Z');
+        const originalDay = d.getUTCDate();
+        d.setUTCDate(1);
         d.setUTCMonth(d.getUTCMonth() + 6);
+        const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+        d.setUTCDate(Math.min(originalDay, lastDay));
         sixMonthNextDue = d.toISOString().slice(0, 10);
       }
     } else {
@@ -641,7 +645,11 @@ app.get("/api/vehicle-handover-data/:vehicleId", async (req, res) => {
           if (!Number.isNaN(parsed.getTime())) {
             sixMonthCompletedDate = parsed.toISOString().slice(0, 10);
             const d = new Date(sixMonthCompletedDate + 'T00:00:00Z');
-            d.setUTCMonth(d.getUTCMonth() + 6);
+            const originalDay = d.getUTCDate();
+        d.setUTCDate(1);
+        d.setUTCMonth(d.getUTCMonth() + 6);
+        const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+        d.setUTCDate(Math.min(originalDay, lastDay));
             sixMonthNextDue = d.toISOString().slice(0, 10);
           }
         }
@@ -1211,7 +1219,7 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
           ),
           completed_pm AS (
             UPDATE periodic_maintenance pm
-            SET status='Completed',completed_date=CURRENT_DATE,
+            SET status='Completed',completed_date=((CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date),
                 technician=COALESCE(NULLIF(pm.technician,''),'Driver - WhatsApp')
             FROM eligible e
             WHERE pm.id=e.pm_id::bigint AND pm.vehicle_id=e.vehicle_id AND pm.type='inspection'
@@ -1282,7 +1290,7 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
         ),
         completed_pm AS (
           UPDATE periodic_maintenance pm
-          SET status='Completed',completed_date=CURRENT_DATE,
+          SET status='Completed',completed_date=((CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date),
               technician=COALESCE(NULLIF(pm.technician,''),'Driver - WhatsApp')
           FROM eligible e
           WHERE pm.id=e.pm_id::bigint AND pm.vehicle_id=e.vehicle_id AND pm.type='6_months_general'
@@ -2624,7 +2632,11 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
         // Calculate next due = completed + 6 months
         const d = new Date(completedDate + 'T00:00:00Z');
         if (Number.isNaN(d.getTime())) continue;
+        const originalDay = d.getUTCDate();
+        d.setUTCDate(1);
         d.setUTCMonth(d.getUTCMonth() + 6);
+        const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+        d.setUTCDate(Math.min(originalDay, lastDay));
         const nextDue = d.toISOString().slice(0, 10);
         const daysRemaining = Math.ceil((d - today) / 86400000);
 
@@ -2719,7 +2731,11 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
       if (annualDate) {
         // Annual inspection covers 6-month — treat as completed
         const d = new Date(annualDate + 'T00:00:00Z');
+        const originalDay = d.getUTCDate();
+        d.setUTCDate(1);
         d.setUTCMonth(d.getUTCMonth() + 6);
+        const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+        d.setUTCDate(Math.min(originalDay, lastDay));
         const nextDue = d.toISOString().slice(0, 10);
         const daysRemaining = Math.ceil((d - today) / 86400000);
         const waConfirmed = whatsappMap.get(String(v.id)) || null;

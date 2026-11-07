@@ -2373,7 +2373,7 @@ app.post("/api/annual-inspection/status", async (req, res) => {
       FROM periodic_maintenance pm
       LEFT JOIN vehicles v ON v.id = pm.vehicle_id
       WHERE pm.type = 'inspection'
-         AND COALESCE(LOWER(TRIM(v.plate_number)), '') <> 'test 123'
+         AND COALESCE(LOWER(TRIM(v.plate_number)), '') NOT IN ('test 123', '123')
       ORDER BY pm.completed_date DESC NULLS LAST
     `);
 

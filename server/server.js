@@ -1230,19 +1230,30 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
             SET status='Completed',
                 completed_date=cp.completed_date,
                 technician='Auto-closed (Annual Confirmed)',
-                notes=COALESCE(six.notes,'') || CASE WHEN COALESCE(six.notes,'')='' THEN '' ELSE E'\\n\\n' END || 'Auto-closed: annual inspection confirmed via WhatsApp'
+                notes=COALESCE(six.notes,'') || CASE WHEN COALESCE(six.notes,'')='' THEN '' ELSE E'\\n\\n' END || 'Covered by annual inspection confirmed via WhatsApp'
             FROM completed_pm cp
             WHERE six.vehicle_id=cp.vehicle_id
               AND six.type='6_months_general'
               AND six.status IN ('Pending','Open','Pending Driver Confirmation')
-              AND COALESCE(six.notes,'') NOT LIKE '%Auto-closed%'
-            RETURNING six.id
+            RETURNING six.id, six.vehicle_id
+          ),
+          created_six AS (
+            INSERT INTO periodic_maintenance (vehicle_id,type,scheduled_date,status,completed_date,technician,notes)
+            SELECT cp.vehicle_id,'6_months_general',cp.completed_date,'Completed',cp.completed_date,
+                   'Auto-created (Annual Confirmed)','Six-month cycle covered by annual inspection confirmed via WhatsApp'
+            FROM completed_pm cp
+            WHERE NOT EXISTS (SELECT 1 FROM auto_closed_six x WHERE x.vehicle_id=cp.vehicle_id)
+              AND NOT EXISTS (
+                SELECT 1 FROM periodic_maintenance old
+                WHERE old.vehicle_id=cp.vehicle_id AND old.type='6_months_general'
+                  AND old.status='Completed' AND old.completed_date=cp.completed_date
+              )
+            RETURNING id,vehicle_id
           ),
           closed_six_tickets AS (
             UPDATE tickets st
             SET status='Completed',closed_at=CURRENT_TIMESTAMP,closed_by='Auto-closed (Annual Confirmed)',
-                whatsapp_confirmed_at=CURRENT_TIMESTAMP,
-                whatsapp_confirmation_source='Fleet Management - Auto-closed (Annual)',
+                whatsapp_confirmation_source='Annual Inspection - WhatsApp Confirmation',
                 whatsapp_confirmation_token=NULL
             WHERE st.category='6-Month Maintenance'
               AND EXISTS (SELECT 1 FROM auto_closed_six x WHERE st.resolution_notes LIKE ('[PM_REPAIR:' || x.id || ']%'))
@@ -1264,8 +1275,34 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
         if(!done.rows.length) return res.status(409).send("<h2>Inspection record could not be matched to this vehicle. Fleet Management must review it.</h2>");
         return res.send("<h2>✓ Annual Inspection Confirmation Recorded</h2><p>The annual inspection record and vehicle expiry dates have been updated.</p><p>Date: "+new Date().toISOString().slice(0,10)+"</p>");
       }
-      await pgQuery(`UPDATE tickets SET status='Completed',closed_at=CURRENT_TIMESTAMP,closed_by='Driver - WhatsApp',resolution_notes=COALESCE(NULLIF(resolution_notes,''),'Driver confirmed repaired via WhatsApp'),whatsapp_confirmed_at=CURRENT_TIMESTAMP,whatsapp_confirmation_source='Fleet Management - WhatsApp YES',whatsapp_confirmation_token=NULL WHERE id=$1 AND whatsapp_confirmation_token=$2`,[row.id,token]);
-      return res.send("<h2>✓ Maintenance Confirmed</h2><p>The repair has been confirmed and recorded in Fleet ERP.</p><p>Date: "+new Date().toISOString().slice(0,10)+"</p>");
+      const done = await pgQuery(`
+        WITH eligible AS (
+          SELECT id,vehicle_id,substring(resolution_notes from '\\[PM_REPAIR:([0-9]+)\\]') AS pm_id
+          FROM tickets WHERE id=$1 AND whatsapp_confirmation_token=$2 AND category='6-Month Maintenance'
+        ),
+        completed_pm AS (
+          UPDATE periodic_maintenance pm
+          SET status='Completed',completed_date=CURRENT_DATE,
+              technician=COALESCE(NULLIF(pm.technician,''),'Driver - WhatsApp')
+          FROM eligible e
+          WHERE pm.id=e.pm_id::bigint AND pm.vehicle_id=e.vehicle_id AND pm.type='6_months_general'
+          RETURNING pm.id,pm.vehicle_id,pm.completed_date
+        ),
+        closed_ticket AS (
+          UPDATE tickets t
+          SET status='Completed',closed_at=CURRENT_TIMESTAMP,closed_by='Driver - WhatsApp',
+              resolution_notes=COALESCE(NULLIF(t.resolution_notes,''),'') || E'\\nDriver confirmed 6-month maintenance via WhatsApp',
+              whatsapp_confirmed_at=CURRENT_TIMESTAMP,
+              whatsapp_confirmation_source='Fleet Management - WhatsApp YES',
+              whatsapp_confirmation_token=NULL
+          FROM eligible e
+          WHERE t.id=e.id AND EXISTS (SELECT 1 FROM completed_pm cp WHERE cp.vehicle_id=e.vehicle_id)
+          RETURNING t.id
+        )
+        SELECT id FROM closed_ticket
+      `,[row.id,token]);
+      if(!done.rows.length) return res.status(409).send("<h2>Maintenance record could not be matched. Fleet Management must review it.</h2>");
+      return res.send("<h2>✓ 6-Month Maintenance Confirmed</h2><p>The maintenance record is closed and its next six-month cycle is calculated from the confirmation date.</p><p>Date: "+new Date().toISOString().slice(0,10)+"</p>");
     }
     if(decision==="no"){await pgQuery(`UPDATE tickets SET status='Open',whatsapp_confirmation_source='Fleet Management - WhatsApp NO',whatsapp_confirmation_token=NULL WHERE id=$1 AND whatsapp_confirmation_token=$2`,[row.id,token]);return res.send("<h2>Maintenance Still Pending</h2><p>The ticket remains open. Fleet Management has been notified.</p>");}
     res.status(400).send("<h2>Please choose YES or NO.</h2>");
@@ -2563,6 +2600,7 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
       SELECT t.vehicle_id, MAX(t.whatsapp_confirmed_at::text) AS whatsapp_confirmed_at
       FROM tickets t
       WHERE t.whatsapp_confirmed_at IS NOT NULL
+        AND t.category IN ('Annual Inspection','6-Month Maintenance')
       GROUP BY t.vehicle_id
     `);
     const whatsappMap = new Map();
@@ -2635,7 +2673,10 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
     // Process vehicles with NO 6-month record
     // Check if they have ANNUAL inspection — if so, annual covers 6-month too
     for (const v of vehiclesRes.rows) {
-      if (latestByVehicle.has(String(v.id))) continue; // has a 6-month record already
+      const latestSix = latestByVehicle.get(String(v.id));
+      // A pending 6-month row must not hide a later completed annual inspection.
+      // Completed six-month records were already processed above.
+      if (latestSix && latestSix.status === 'Completed' && latestSix.completed_date) continue;
       const plate = [v.plate_number, v.plate_code].filter(Boolean).join(' ').trim();
       let phone = String(v.phone || '').replace(/[^0-9]/g, '');
       if (phone.startsWith('00')) phone = phone.slice(2);

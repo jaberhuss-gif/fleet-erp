@@ -2224,6 +2224,19 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
     const completed = [];
     const due = [];
 
+    // Get WhatsApp confirmations from tickets table (6-Month maintenance tickets)
+    const whatsappRes = await pgQuery(`
+      SELECT t.vehicle_id, MAX(t.whatsapp_confirmed_at::text) AS whatsapp_confirmed_at
+      FROM tickets t
+      WHERE (t.category ILIKE '%6-Month%' OR t.title ILIKE '%6-Month%')
+        AND t.whatsapp_confirmed_at IS NOT NULL
+      GROUP BY t.vehicle_id
+    `);
+    const whatsappMap = new Map();
+    for (const row of whatsappRes.rows) {
+      whatsappMap.set(String(row.vehicle_id), String(row.whatsapp_confirmed_at).slice(0, 10));
+    }
+
     // Process vehicles with completed 6-month records
     for (const [vid, rec] of latestByVehicle) {
       if (!rec.vehicle_status || ['inactive','sold','disposed','disabled'].includes(rec.vehicle_status.toLowerCase().trim())) continue;
@@ -2254,7 +2267,7 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
           completed_date: completedDate,
           next_due_date: nextDue,
           days_remaining: daysRemaining,
-          whatsapp_confirmed_at: rec.whatsapp_confirmed_at ? String(rec.whatsapp_confirmed_at).slice(0, 10) : null,
+          whatsapp_confirmed_at: whatsappMap.get(vid) || (rec.whatsapp_confirmed_at ? String(rec.whatsapp_confirmed_at).slice(0, 10) : null),
           notes: rec.notes || ''
         };
 

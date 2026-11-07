@@ -2736,6 +2736,13 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
         ? String(latestSix.completed_date || '').slice(0, 10)
         : '';
       if (latestSixDate && (!annualDate || annualDate <= latestSixDate)) continue;
+      if (latestSixDate && annualDate > latestSixDate) {
+        // Replace the older six-month baseline with the newer annual inspection.
+        for (const bucket of [completed, approaching, due]) {
+          const index = bucket.findIndex(item => String(item.vehicleId) === String(v.id));
+          if (index >= 0) bucket.splice(index, 1);
+        }
+      }
 
       if (annualDate) {
         // Annual inspection covers 6-month — treat as completed

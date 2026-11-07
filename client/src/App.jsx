@@ -7,7 +7,11 @@ import Tickets from './pages/Tickets';
 import Reports from './pages/Reports';
 import SupportServiceHub from './pages/SupportServiceHub';
 import Login from './pages/Login';
+import Users from './pages/Users';
+import Drivers from './pages/Drivers';
 import Notifications from './pages/Notifications';
+import AuditLog from './pages/AuditLog';
+import Backup from './pages/Backup';
 import Troubleshooter from './pages/Troubleshooter';
 import FleetTicketViewer from './pages/FleetTicketViewer';
 import AdvancedReports from './pages/AdvancedReports';
@@ -15,11 +19,10 @@ import WarehouseHub from './pages/WarehouseHub';
 import WarehouseReport from './pages/WarehouseReport';
 import api from './api/client';
 import DailyKmGate from './components/DailyKmGate';
-import Invoices from './pages/Invoices';
 import PdfUpload from './pages/PdfUpload';
 import EmailUpload from './pages/EmailUpload';
 
-const OWNER_ONLY_TABS = new Set(['invoices', 'inventory-report']);
+const OWNER_ONLY_TABS = new Set(['drivers', 'users', 'audit', 'backup', 'inventory-report']);
 
 const TAB_MODULES = {
   gm: ['gm'],
@@ -152,7 +155,7 @@ export default function App() {
     const allTabs = ['gm', 'support-service', 'warehouse', 'fleet', 'troubleshooter', 'fleet-tickets', 'tickets', 'reports', 'advanced-reports', 'driver-handovers', 'intake-pdf', 'intake-email'];
     const visible = allTabs.filter(canViewTab);
     if (user?.role === 'Owner') {
-      return [...visible, 'invoices'];
+      return [...visible, 'drivers', 'users', 'audit', 'backup'];
     }
     return visible;
   }, [user, access]);
@@ -293,9 +296,10 @@ export default function App() {
           {user.role === 'Owner' && (
             <div className="erp-nav-group">
               <div className="erp-nav-heading">Administration</div>
-              <button className={tab === 'invoices' ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange('invoices')}>
-                📄 Invoices
-              </button>
+              <button className={tab === 'drivers' ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange('drivers')}>👨‍🔧 Driver</button>
+              <button className={tab === 'users' ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange('users')}>Users</button>
+              <button className={tab === 'audit' ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange('audit')}>Audit Log</button>
+              <button className={tab === 'backup' ? 'erp-nav-btn active' : 'erp-nav-btn'} onClick={() => handleTabChange('backup')}>Backup</button>
             </div>
           )}
 
@@ -325,7 +329,10 @@ export default function App() {
           {tab === 'tickets' && canViewModule('tickets') && <Tickets user={user} access={access || {}} />}
           {tab === 'advanced-reports' && <AdvancedReports />}
           {tab === 'reports' && <Reports />}
-          {tab === 'invoices' && user.role === 'Owner' && <Invoices user={user} />}
+          {tab === 'drivers' && user.role === 'Owner' && <Drivers />}
+          {tab === 'users' && user.role === 'Owner' && <Users />}
+          {tab === 'audit' && user.role === 'Owner' && <AuditLog />}
+          {tab === 'backup' && user.role === 'Owner' && <Backup />}
           {tab === 'inventory-report' && user.role === 'Owner' && <WarehouseReport user={user} />}
         </main>
       </div>

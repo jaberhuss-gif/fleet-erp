@@ -89,7 +89,7 @@ export default function SixMonthInspection({ canWork = false }) {
     h1{font-size:18pt;margin:0 0 4px}h2{font-size:13pt;margin:18px 0 8px;border-bottom:2px solid #1e3a8a;padding-bottom:4px}
     .meta{color:#475569;margin:0 0 14px}table{width:100%;border-collapse:collapse}th{background:#e9eef5;padding:6px;text-align:left}
     td{border:1px solid #cbd5e1;padding:5px}tr:nth-child(even){background:#f8fafc}</style></head><body>
-    <h1>6-Month Maintenance Report</h1>
+    <div style="display:flex;align-items:center;gap:16px;border-bottom:2px solid #b7a46a;padding-bottom:10px;margin-bottom:14px"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Maaden and Ivanhoe Electric JV" style="width:150px;height:92px;object-fit:contain"><div><strong>Maaden Ivanhoe Electric Exploration and Development Limited Company</strong><br/>Exploration Phase — Arabian Shield<br/>Hussein Anwar — Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div><h1>6-Month Maintenance Report</h1>
     <div class="meta">Generated: ${today} · Completed: ${completed.length} · Due/Expired: ${due.length}</div>
     <h2>✓ Completed 6-Month Maintenance (${completed.length})</h2>
     <table><thead><tr><th>Vehicle</th><th>Driver</th><th>Location</th><th>Completed Date</th><th>Next Due</th><th>WhatsApp Confirmed</th></tr></thead>
@@ -98,7 +98,28 @@ export default function SixMonthInspection({ canWork = false }) {
     <table><thead><tr><th>Vehicle</th><th>Driver</th><th>Location</th><th>Last Completed</th><th>Next Due</th><th>Days</th><th>Status</th></tr></thead>
     <tbody>${dueRows || '<tr><td colspan="7">No vehicles due.</td></tr>'}</tbody></table>
     </body></html>`);
-    w.document.close(); w.focus(); setTimeout(() => w.print(), 350);
+    w.document.close();
+    // Keep the six-month report consistent with annual inspection printing:
+    // wait for the JV logo and all report images before opening the print dialog.
+    const printAfterImagesLoad = () => {
+      const images = Array.from(w.document.images || []);
+      Promise.all(images.map(img => {
+        if (img.complete) {
+          return typeof img.decode === 'function' ? img.decode().catch(() => undefined) : Promise.resolve();
+        }
+        return new Promise(resolve => {
+          const finish = () => resolve();
+          img.addEventListener('load', finish, { once: true });
+          img.addEventListener('error', finish, { once: true });
+          setTimeout(finish, 8000);
+        });
+      })).then(() => {
+        w.focus();
+        w.print();
+      });
+    };
+    if (w.document.readyState === 'complete') printAfterImagesLoad();
+    else w.addEventListener('load', printAfterImagesLoad, { once: true });
   };
 
   if (loading) return <div className="loading">Loading 6-month inspection data...</div>;

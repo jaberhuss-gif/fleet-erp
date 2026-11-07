@@ -777,7 +777,7 @@ const openInspectionEmail = (group) => {
     const w=window.open('', '_blank', 'width=1200,height=800');
     if(!w){setError('Please allow pop-ups for the report.');return;}
     w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>'+esc(report.title)+'</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial;font-size:9pt}h1{margin-bottom:4mm}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:5px;text-align:left;vertical-align:top}th{background:#e9eef5}</style></head><body>'+ '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:3px solid #1e3a8a;padding:0 0 12px;margin:0 0 16px;page-break-inside:avoid"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Ivanhoe Electric and Maaden" style="width:175px;max-height:78px;object-fit:contain"><div style="flex:1;text-align:right;font-family:Arial,sans-serif"><div style="font-size:15px;font-weight:700;color:#1e3a8a">Maaden Ivanhoe Electric Exploration and Development Limited Company</div><div style="font-size:10px;color:#475569;margin-top:3px">Exploration Phase — Arabian Shield</div><div style="font-size:12px;font-weight:700;margin-top:7px;color:#111827">Hussein Anwar</div><div style="font-size:10px;color:#475569;margin-top:2px">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div></div>' + '<h1>'+esc(report.title)+'</h1><div>Generated: '+esc(new Date().toLocaleString())+' · Records: '+report.rows.length+'</div><table><thead><tr><th>Vehicle</th><th>Driver</th><th>Status</th><th>Scheduled</th><th>Completed</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table></body></html>');
-    w.document.close();w.focus();setTimeout(()=>w.print(),250);
+    w.document.close();w.focus();Promise.all(Array.from(w.document.images).map(img=>img.decode?img.decode().catch(()=>{}):new Promise(resolve=>{if(img.complete)return resolve();img.onload=img.onerror=resolve;setTimeout(resolve,8000)}))).then(()=>w.print());
   };
 
   if (inspectionUpcomingOnly) {
@@ -1045,7 +1045,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
 <table><thead><tr>${headers.map(h => '<th>'+esc(h)+'</th>').join('')}</tr></thead><tbody>${rows}</tbody></table>
 </body></html>`);
     printWindow.document.close(); printWindow.focus();
-    setTimeout(() => printWindow.print(), 250);
+    Promise.all(Array.from(printWindow.document.images).map(img => img.decode ? img.decode().catch(() => {}) : new Promise(resolve => { if (img.complete) return resolve(); img.onload = img.onerror = resolve; setTimeout(resolve, 8000); }))).then(() => { printWindow.focus(); printWindow.print(); });
   };
 
   // For 6-month maintenance, a note is the evidence that the vehicle was inspected.
@@ -1123,7 +1123,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
       '</tbody></table><footer>Fleet Manager / General Maintenance Supervisor — Hussein Anwar</footer></body></html>');
     w.document.close();
     w.focus();
-    setTimeout(() => w.print(), 300);
+    Promise.all(Array.from(w.document.images).map(img => img.decode ? img.decode().catch(() => {}) : new Promise(resolve => { if (img.complete) return resolve(); img.onload = img.onerror = resolve; setTimeout(resolve, 8000); }))).then(() => w.print());
   };
 
   const reopenInspection = async (rec) => {

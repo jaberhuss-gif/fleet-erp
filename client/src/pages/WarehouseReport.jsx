@@ -195,7 +195,7 @@ export default function WarehouseReport({ user }) {
 
     + "<div class='no-print'><button onclick='window.print()'>Print / Save PDF</button></div>"
 
-    + "<script>window.addEventListener('load',function(){setTimeout(function(){window.print();},300);});</script>"
+    + "<script>window.addEventListener('load',async function(){var imgs=Array.from(document.images);await Promise.all(imgs.map(function(img){return img.decode?img.decode().catch(function(){}):new Promise(function(resolve){if(img.complete)return resolve();img.onload=img.onerror=resolve;setTimeout(resolve,8000);});}));window.print();});</script>"
 
     + "</body></html>";
 

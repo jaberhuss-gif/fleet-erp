@@ -247,7 +247,7 @@ export default function TireServiceRequests({ driverMode=false }) {
       + '<p>Generated: ' + new Date().toLocaleString() + ' | Total: ' + filteredRows.length + '</p>'
       + '<table><thead><tr><th>Date</th><th>Vehicle</th><th>Request</th><th>Position</th><th>Serial</th><th>Mfg. Year</th><th>Size</th><th>PSI</th><th>Driver</th><th>Notes</th><th>Status</th></tr></thead>'
       + '<tbody>' + body + '</tbody></table>'
-      + '<script>window.onload=function(){setTimeout(function(){window.print();},500);}</script>'
+      + '<script>window.onload=async function(){var imgs=Array.from(document.images);await Promise.all(imgs.map(function(img){return img.decode?img.decode().catch(function(){}):new Promise(function(resolve){if(img.complete)return resolve();img.onload=img.onerror=resolve;setTimeout(resolve,8000);});}));window.print();}</script>'
       + '</body></html>');
     win.document.close();
   };

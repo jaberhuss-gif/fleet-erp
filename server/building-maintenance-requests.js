@@ -452,9 +452,7 @@ ${row.closing_notes ? '<h3>Closing Notes</h3><p style="font-size:13px;background
 </div>
 
 <script>
-  window.addEventListener("load", () => {
-    setTimeout(() => window.print(), 300);
-  });
+  window.addEventListener("load", async () => { const imgs = Array.from(document.images); await Promise.all(imgs.map(img => img.decode ? img.decode().catch(() => {}) : new Promise(resolve => { if (img.complete) return resolve(); img.onload = img.onerror = resolve; setTimeout(resolve, 8000); }))); window.print(); });
 </script>
 
 </body>

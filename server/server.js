@@ -1225,6 +1225,29 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
             FROM completed_pm cp WHERE v.id=cp.vehicle_id
             RETURNING v.id
           ),
+          auto_closed_six AS (
+            UPDATE periodic_maintenance six
+            SET status='Completed',
+                completed_date=COALESCE(six.completed_date, cp.completed_date),
+                technician='Auto-closed (Annual Confirmed)',
+                notes=COALESCE(six.notes,'') || CASE WHEN COALESCE(six.notes,'')='' THEN '' ELSE E'\\n\\n' END || 'Auto-closed: annual inspection confirmed via WhatsApp'
+            FROM completed_pm cp
+            WHERE six.vehicle_id=cp.vehicle_id
+              AND six.type='6_months_general'
+              AND six.status IN ('Pending','Open','Pending Driver Confirmation')
+              AND COALESCE(six.notes,'') NOT LIKE '%Auto-closed%'
+            RETURNING six.id
+          ),
+          closed_six_tickets AS (
+            UPDATE tickets st
+            SET status='Completed',closed_at=CURRENT_TIMESTAMP,closed_by='Auto-closed (Annual Confirmed)',
+                whatsapp_confirmed_at=CURRENT_TIMESTAMP,
+                whatsapp_confirmation_source='Fleet Management - Auto-closed (Annual)',
+                whatsapp_confirmation_token=NULL
+            WHERE st.category='6-Month Maintenance'
+              AND EXISTS (SELECT 1 FROM auto_closed_six x WHERE st.resolution_notes LIKE ('[PM_REPAIR:' || x.id || ']%'))
+            RETURNING st.id
+          ),
           closed_ticket AS (
             UPDATE tickets t
             SET status='Completed',closed_at=CURRENT_TIMESTAMP,closed_by='Driver - WhatsApp',
@@ -2339,7 +2362,7 @@ app.post("/api/annual-inspection/status", async (req, res) => {
 
     // Also get vehicles with NO pm record but have inspection data in vehicles table
     const allVehiclesRes = await pgQuery(`
-      SELECT id, plate_number, plate_code, driver, phone, location,
+      SELECT id, plate_number, plate_code, driver, phone, location, make, model, year,
              inspection_last_date, inspection_expiry_date
       FROM vehicles
       WHERE COALESCE(LOWER(TRIM(status)), '') NOT IN ('inactive','sold','disposed','disabled')
@@ -2367,9 +2390,18 @@ app.post("/api/annual-inspection/status", async (req, res) => {
     const completed = [];
     const approaching = [];
     const due = [];
+    const exemptPlateNumbers = new Set(['1369', '1357', '3296', '1560', '8571']);
+    const exempt = allVehiclesRes.rows.filter(v => exemptPlateNumbers.has(String(v.plate_number || '').trim())).map(v => ({
+      vehicleId: v.id,
+      plate: [v.plate_number, v.plate_code].filter(Boolean).join(' ').trim(),
+      driver: v.driver || 'Unassigned',
+      location: canonicalInspectionSite(v.location) || '-',
+      exemption: 'Government decision (2024)'
+    }));
 
     for (const [vid, rec] of latestByVehicle) {
       if (!rec.vehicle_status || ['inactive','sold','disposed','disabled'].includes(rec.vehicle_status.toLowerCase().trim())) continue;
+      if (exemptPlateNumbers.has(String(rec.plate_number || '').trim())) continue;
 
       const plate = [rec.plate_number, rec.plate_code].filter(Boolean).join(' ').trim();
 
@@ -2429,14 +2461,30 @@ app.post("/api/annual-inspection/status", async (req, res) => {
       }
     }
 
+    // Include active non-exempt vehicles that have no inspection date at all.
+    for (const v of allVehiclesRes.rows) {
+      if (exemptPlateNumbers.has(String(v.plate_number || '').trim())) continue;
+      if (latestByVehicle.has(String(v.id))) continue;
+      if (v.inspection_last_date || v.inspection_expiry_date) continue;
+      const plate = [v.plate_number, v.plate_code].filter(Boolean).join(' ').trim();
+      let phone = String(v.phone || '').replace(/[^0-9]/g, '');
+      if (phone.startsWith('00')) phone = phone.slice(2);
+      if (phone.length === 10 && phone.startsWith('05')) phone = '966' + phone.slice(1);
+      if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
+      due.push({ vehicleId: v.id, plate, driver: v.driver || 'Unassigned', phone, location: canonicalInspectionSite(v.location) || '-', inspection_expiry_date: null, days_remaining: null, status: 'not_inspected', whatsappUrl: phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent('Annual inspection required for vehicle ' + plate + '. Please arrange the inspection.') : null });
+    }
+
     res.json({
       success: true, today: todayKey,
+      exempt,
       summary: {
         completed: completed.length,
         approaching: approaching.length,
         due: due.filter(d => d.status === 'due').length,
         expired: due.filter(d => d.status === 'expired').length,
-        total: completed.length + approaching.length + due.length
+        not_inspected: due.filter(d => d.status === 'not_inspected').length,
+        exempt: exempt.length,
+        total: completed.length + approaching.length + due.length + exempt.length
       },
       completed, approaching, due
     });

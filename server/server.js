@@ -2251,6 +2251,7 @@ app.post("/api/annual-inspection/status", async (req, res) => {
     }
 
     const completed = [];
+    const approaching = [];
     const due = [];
 
     for (const [vid, rec] of latestByVehicle) {

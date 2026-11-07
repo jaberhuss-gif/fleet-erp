@@ -2296,27 +2296,85 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
       }
     }
 
-    // Process vehicles with NO 6-month record → overdue
+    // Process vehicles with NO 6-month record
+    // Check if they have ANNUAL inspection — if so, annual covers 6-month too
     for (const v of vehiclesRes.rows) {
-      if (latestByVehicle.has(String(v.id))) continue; // has a record already
+      if (latestByVehicle.has(String(v.id))) continue; // has a 6-month record already
       const plate = [v.plate_number, v.plate_code].filter(Boolean).join(' ').trim();
       let phone = String(v.phone || '').replace(/[^0-9]/g, '');
       if (phone.startsWith('00')) phone = phone.slice(2);
       if (phone.length === 10 && phone.startsWith('05')) phone = '966' + phone.slice(1);
       if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
-      due.push({
-        recordId: null,
-        vehicleId: v.id,
-        plate,
-        driver: v.driver || 'Unassigned',
-        phone,
-        location: canonicalInspectionSite(v.location) || '-',
-        completed_date: null,
-        next_due_date: '—',
-        days_remaining: -999,
-        whatsapp_confirmed_at: null,
-        status: 'not_inspected',
-        whatsappUrl: phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(
+
+      // Check if this vehicle has a completed ANNUAL inspection
+      const annualCheck = await pgQuery(`
+        SELECT completed_date::text AS completed_date
+        FROM periodic_maintenance
+        WHERE vehicle_id = $1 AND type = 'inspection' AND status = 'Completed'
+          AND completed_date IS NOT NULL
+        ORDER BY completed_date DESC LIMIT 1
+      `, [v.id]);
+
+      // Also check vehicles.inspection_expiry_date as fallback
+      let annualDate = null;
+      if (annualCheck.rows[0]?.completed_date) {
+        const parsed = new Date(annualCheck.rows[0].completed_date);
+        if (!Number.isNaN(parsed.getTime())) annualDate = parsed.toISOString().slice(0, 10);
+      }
+
+      if (annualDate) {
+        // Annual inspection covers 6-month — treat as completed
+        const d = new Date(annualDate + 'T00:00:00Z');
+        d.setUTCMonth(d.getUTCMonth() + 6);
+        const nextDue = d.toISOString().slice(0, 10);
+        const daysRemaining = Math.ceil((d - today) / 86400000);
+        const waConfirmed = whatsappMap.get(String(v.id)) || null;
+
+        const entry = {
+          recordId: null,
+          vehicleId: v.id,
+          plate,
+          driver: v.driver || 'Unassigned',
+          phone,
+          location: canonicalInspectionSite(v.location) || '-',
+          completed_date: annualDate + ' (Annual)',
+          next_due_date: nextDue,
+          days_remaining: daysRemaining,
+          whatsapp_confirmed_at: waConfirmed,
+          notes: 'Covered by annual inspection',
+          status: daysRemaining <= 30 ? (daysRemaining < 0 ? 'expired' : 'due') : 'valid'
+        };
+
+        if (entry.status === 'valid') {
+          completed.push(entry);
+        } else {
+          entry.whatsappUrl = phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(
+            'Hello ' + (v.driver || 'Driver') + ',\n\n' +
+            'Vehicle ' + plate + ' — 6-Month Maintenance Due\n' +
+            'تذكير: صيانة الـ 6 أشهر للمركبة ' + plate + '\n\n' +
+            'Last completed (annual): ' + annualDate + '\n' +
+            'Next due: ' + nextDue + '\n' +
+            'Days remaining: ' + daysRemaining + '\n\n' +
+            'Please schedule your 6-month maintenance.\n\n' +
+            'Fleet Management'
+          ) : null;
+          due.push(entry);
+        }
+      } else {
+        // No annual inspection either → genuinely not inspected
+        due.push({
+          recordId: null,
+          vehicleId: v.id,
+          plate,
+          driver: v.driver || 'Unassigned',
+          phone,
+          location: canonicalInspectionSite(v.location) || '-',
+          completed_date: null,
+          next_due_date: '—',
+          days_remaining: -999,
+          whatsapp_confirmed_at: null,
+          status: 'not_inspected',
+          whatsappUrl: phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(
           'Hello ' + (v.driver || 'Driver') + ',\n\n' +
           'Vehicle ' + plate + ' — 6-Month Maintenance Required\n' +
           'مطلوب: صيانة الـ 6 أشهر للمركبة ' + plate + '\n\n' +

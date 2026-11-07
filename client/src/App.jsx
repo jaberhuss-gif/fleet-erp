@@ -52,7 +52,6 @@ const TAB_LABELS = {
   users: 'Users',
   audit: 'Audit Log',
   backup: 'Backup',
-  invoices: '📄 Invoices',
   'driver-handovers': '📋 Driver Handovers',
   'intake-pdf': '📄 PDF Intake',
   'intake-email': '📧 Email Intake',

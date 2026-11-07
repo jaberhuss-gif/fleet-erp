@@ -2401,9 +2401,13 @@ app.post("/api/annual-inspection/status", async (req, res) => {
         latestByVehicle.set(vid, row);
       } else {
         const existing = latestByVehicle.get(vid);
-        const existingDate = existing.completed_date || existing.scheduled_date || '';
-        const rowDate = row.completed_date || row.scheduled_date || '';
-        if (rowDate > existingDate) latestByVehicle.set(vid, row);
+        const existingCompleted = existing.status === 'Completed' && Boolean(existing.completed_date);
+        const rowCompleted = row.status === 'Completed' && Boolean(row.completed_date);
+        const existingDate = String(existing.completed_date || existing.scheduled_date || '').slice(0, 10);
+        const rowDate = String(row.completed_date || row.scheduled_date || '').slice(0, 10);
+        if ((rowCompleted && !existingCompleted) || (rowCompleted === existingCompleted && rowDate > existingDate)) {
+          latestByVehicle.set(vid, row);
+        }
       }
     }
 
@@ -2463,16 +2467,6 @@ app.post("/api/annual-inspection/status", async (req, res) => {
         const parsed = new Date(rec.inspection_last_date);
         if (!Number.isNaN(parsed.getTime())) completedDate = parsed.toISOString().slice(0, 10);
       }
-      if (!completedDate && rec.inspection_expiry_date) {
-        // Calculate from expiry (expiry - 1 year = completion)
-        const parsed = new Date(rec.inspection_expiry_date);
-        if (!Number.isNaN(parsed.getTime())) {
-          const d = new Date(parsed);
-          d.setUTCFullYear(d.getUTCFullYear() - 1);
-          completedDate = d.toISOString().slice(0, 10);
-        }
-      }
-
       if (!completedDate) {
         let phone = String(rec.phone || '').replace(/[^0-9]/g, '');
         if (phone.startsWith('00')) phone = phone.slice(2);
@@ -2723,15 +2717,6 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
         const parsed = new Date(annualCheck.rows[0].v_last);
         if (!Number.isNaN(parsed.getTime())) annualDate = parsed.toISOString().slice(0, 10);
       }
-      if (!annualDate && annualCheck.rows[0]?.v_expiry) {
-        const parsed = new Date(annualCheck.rows[0].v_expiry);
-        if (!Number.isNaN(parsed.getTime())) {
-          const d = new Date(parsed);
-          d.setUTCFullYear(d.getUTCFullYear() - 1);
-          annualDate = d.toISOString().slice(0, 10);
-        }
-      }
-
       const latestSixDate = latestSix && latestSix.status === 'Completed'
         ? String(latestSix.completed_date || '').slice(0, 10)
         : '';

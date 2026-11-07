@@ -58,47 +58,55 @@ export default function DriverHandovers() {
 
     const w = window.open('', '_blank', 'width=1000,height=900');
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Vehicle Handover — ${esc(d.vehicle.plate)}</title>
-    <style>@page{size:A4;margin:10mm}body{font-family:Arial,sans-serif;font-size:10pt;color:#172033}
-    h1{font-size:16pt;margin:0}h2{font-size:12pt;margin:14px 0 6px;border-bottom:2px solid #1e3a8a;padding-bottom:3px}
-    .header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #1e3a8a;padding-bottom:10px;margin-bottom:12px}
-    .info{display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;margin-bottom:10px}
-    .info div{padding:3px 0}.label{color:#64748b;font-size:8pt}.value{font-weight:bold}
-    table{width:100%;border-collapse:collapse;margin-bottom:10px}th{background:#e9eef5;padding:5px;text-align:left;font-size:9pt}
-    td{border:1px solid #cbd5e1;padding:4px;font-size:9pt}.oil-status{font-weight:bold;color:${oilColor}}
-    .sign{margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:30px}
-    .sign-box{border:1px solid #94a3b8;padding:15px;min-height:60px}.sign-label{font-size:8pt;color:#64748b;margin-bottom:4px}
-    .checklist td:nth-child(3){width:40px;text-align:center}</style></head><body>
-    <div class="header"><div><h1>Vehicle Handover Form</h1><div style="color:#64748b">نموذج تسليم واستلام المركبة</div></div>
-    <div style="text-align:right"><div style="font-weight:bold;font-size:14pt">${esc(d.vehicle.plate)}</div><div style="color:#64748b">${today}</div></div></div>
+    <style>@page{size:A4;margin:6mm}body{font-family:Arial,sans-serif;font-size:8pt;color:#172033;margin:0}
+    h1{font-size:13pt;margin:0}h2{font-size:9pt;margin:6px 0 3px;border-bottom:1.5px solid #1e3a8a;padding-bottom:2px}
+    .header{display:flex;justify-content:space-between;align-items:center;border-bottom:2.5px solid #1e3a8a;padding-bottom:6px;margin-bottom:6px}
+    .info{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:2px 12px;margin-bottom:4px}
+    .info div{padding:1px 0}.label{color:#64748b;font-size:7pt}.value{font-weight:bold;font-size:8pt}
+    table{width:100%;border-collapse:collapse;margin-bottom:4px}th{background:#e9eef5;padding:3px 5px;text-align:left;font-size:7.5pt}
+    td{border:1px solid #cbd5e1;padding:2px 5px;font-size:8pt}.oil-status{font-weight:bold;color:${oilColor}}
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .sign{margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
+    .sign-box{border:1px solid #94a3b8;padding:8px;min-height:35px}.sign-label{font-size:7pt;color:#64748b;margin-bottom:2px}
+    .checklist td:nth-child(3){width:30px;text-align:center;font-size:10pt}
+    .compact-section{margin-bottom:3px}</style></head><body>
+    <div class="header"><div><h1>Vehicle Handover Form</h1><div style="color:#64748b;font-size:8pt">نموذج تسليم واستلام المركبة</div></div>
+    <div style="text-align:right"><div style="font-weight:bold;font-size:12pt">${esc(d.vehicle.plate)}</div><div style="color:#64748b;font-size:7pt">${today}</div></div></div>
     <div class="info">
       <div><span class="label">Vehicle:</span> <span class="value">${esc(d.vehicle.make)} ${esc(d.vehicle.model)} ${esc(d.vehicle.year || '')}</span></div>
       <div><span class="label">Location:</span> <span class="value">${esc(d.vehicle.location)}</span></div>
-      <div><span class="label">Current Driver:</span> <span class="value">${esc(d.vehicle.driver)}</span></div>
+      <div><span class="label">Driver:</span> <span class="value">${esc(d.vehicle.driver)}</span></div>
       <div><span class="label">Phone:</span> <span class="value">${esc(d.vehicle.phone || '-')}</span></div>
     </div>
     <h2>🛢️ Engine Oil Status</h2>
     <div class="info">
       <div><span class="label">Current KM:</span> <span class="value">${d.oil.current_km.toLocaleString()}</span></div>
-      <div><span class="label">Last Oil Change KM:</span> <span class="value">${d.oil.last_oil_km.toLocaleString()}</span></div>
-      <div><span class="label">KM Since Oil:</span> <span class="value">${d.oil.km_since_oil.toLocaleString()}</span></div>
+      <div><span class="label">Last Oil KM:</span> <span class="value">${d.oil.last_oil_km.toLocaleString()}</span></div>
+      <div><span class="label">Since Oil:</span> <span class="value">${d.oil.km_since_oil.toLocaleString()}</span></div>
       <div><span class="label">Remaining:</span> <span class="value">${d.oil.remaining_km.toLocaleString()} km</span></div>
       <div><span class="label">Interval:</span> <span class="value">${d.oil.interval.toLocaleString()} km</span></div>
       <div><span class="label">Status:</span> <span class="oil-status">${d.oil.status}</span></div>
     </div>
-    <h2>🛞 Tire Serial Numbers</h2>
-    <table><thead><tr><th>Position</th><th>Serial Number</th><th>Brand</th><th>Condition</th></tr></thead><tbody>${tireRows}</tbody></table>
-    <h2>🔧 Last Maintenance Items</h2>
-    <table><thead><tr><th>Date</th><th>Item</th><th>Status</th></tr></thead><tbody>${maintRows || '<tr><td colspan="3">No maintenance records.</td></tr>'}</tbody></table>
+    <div class="two-col">
+      <div>
+        <h2>🛞 Tire Serial Numbers</h2>
+        <table><thead><tr><th>Position</th><th>Serial</th><th>Brand</th></tr></thead><tbody>${tireRows.replace(/<tr>/g, '<tr>').replace(/<td style="padding:6px 10px">/g, '<td>')}</tbody></table>
+      </div>
+      <div>
+        <h2>🔧 Last Maintenance</h2>
+        <table><thead><tr><th>Date</th><th>Item</th><th>Status</th></tr></thead><tbody>${maintRows || '<tr><td colspan="3">No records.</td></tr>'}</tbody></table>
+      </div>
+    </div>
     <h2>📅 Inspection Status</h2>
     <div class="info">
-      <div><span class="label">Annual Inspection:</span> <span class="value">${esc(d.annual_inspection.last_completed)}</span> → Next: <span class="value">${esc(d.annual_inspection.next_due)}</span></div>
-      <div><span class="label">6-Month Inspection:</span> <span class="value">${esc(d.six_month_inspection.last_completed)}</span> → Next: <span class="value">${esc(d.six_month_inspection.next_due)}</span></div>
+      <div><span class="label">Annual:</span> <span class="value">${esc(d.annual_inspection.last_completed)}</span> → <span class="label">Next:</span> <span class="value">${esc(d.annual_inspection.next_due)}</span></div>
+      <div><span class="label">6-Month:</span> <span class="value">${esc(d.six_month_inspection.last_completed)}</span> → <span class="label">Next:</span> <span class="value">${esc(d.six_month_inspection.next_due)}</span></div>
     </div>
     <h2>📋 Handover Checklist — Items Received</h2>
-    <table class="checklist"><thead><tr><th>#</th><th>Item</th><th>Received</th></tr></thead><tbody>${checklistRows}</tbody></table>
+    <table class="checklist"><thead><tr><th style="width:20px">#</th><th>Item</th><th style="width:30px">✓</th></tr></thead><tbody>${checklistRows}</tbody></table>
     <div class="sign">
-      <div class="sign-box"><div class="sign-label">Handed over by (Old Driver):</div><div style="margin-top:20px;border-top:1px solid #94a3b8;padding-top:4px;font-size:9pt">Signature / التوقيع</div></div>
-      <div class="sign-box"><div class="sign-label">Received by (New Driver):</div><div style="margin-top:20px;border-top:1px solid #94a3b8;padding-top:4px;font-size:9pt">Signature / التوقيع</div></div>
+      <div class="sign-box"><div class="sign-label">Handed over by (Old Driver):</div><div style="margin-top:15px;border-top:1px solid #94a3b8;padding-top:3px;font-size:7pt">Signature / التوقيع</div></div>
+      <div class="sign-box"><div class="sign-label">Received by (New Driver):</div><div style="margin-top:15px;border-top:1px solid #94a3b8;padding-top:3px;font-size:7pt">Signature / التوقيع</div></div>
     </div>
     </body></html>`);
     w.document.close(); w.focus(); setTimeout(() => w.print(), 350);

@@ -132,37 +132,85 @@ export default function AnnualInspection({ canWork = false }) {
     if (!w) { alert('Please allow pop-ups to print.'); return; }
     const esc = s => String(s ?? '-').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const today = new Date().toLocaleDateString();
+    const dueRowsData = reminders?.reminders || [];
+    const exemptRowsData = reminders?.exempt || [];
+    const dueWithin60 = new Set([...approaching, ...dueRowsData]
+      .filter(r => { const d = getDaysRemaining(r.inspection_expiry_date); return d !== null && d >= 0 && d <= 60; })
+      .map(r => r.vehicleId || r.vehicle_id || r.plate)).size;
+    const dueWithin30 = dueRowsData.filter(r => {
+      const d = getDaysRemaining(r.inspection_expiry_date);
+      return d !== null && d >= 0 && d <= 30;
+    }).length;
+    const notInspected = dueRowsData.filter(r => r.status === 'not_inspected').length;
 
     const completedRows = completed.map(r => {
       const plate = r.plate || [r.plate_number, r.plate_code].filter(Boolean).join(' ');
-      const next = getNextDueDate(r);
       const confirmation = getConfirmationDate(r);
-      const confirmed = confirmation ? confirmation.date : '—';
-      return `<tr><td>${esc(plate)}</td><td>${esc(r.driver_name || r.driver || '-')}</td><td>${esc(r.location || '-')}</td><td>${esc(String(r.completed_date || '').slice(0, 10))}</td><td>${esc(next)}</td><td>${esc(confirmed)}</td></tr>`;
+      return `<tr><td>${esc(plate)}</td><td>${esc(r.driver_name || r.driver || '-')}</td><td>${esc(r.location || '-')}</td><td>${esc(String(r.completed_date || '').slice(0, 10) || '-')}</td><td>${esc(getNextDueDate(r))}</td><td>${esc(confirmation?.date || '—')}</td><td>${esc(confirmation?.source === 'whatsapp' ? 'WhatsApp' : confirmation ? 'Database record' : 'Not confirmed')}</td></tr>`;
     }).join('');
 
-    const dueRows = (reminders?.reminders || []).map(r => {
-      const daysRemaining = getDaysRemaining(r.inspection_expiry_date);
-      const status = daysRemaining === null ? '—' : daysRemaining < 0 ? 'EXPIRED' : daysRemaining <= 30 ? 'DUE' : 'OK';
-      const color = daysRemaining !== null && daysRemaining < 0 ? '#dc2626' : '#d97706';
-      const daysLabel = daysRemaining === null ? '—' : daysRemaining < 0 ? Math.abs(daysRemaining) + 'd ago' : daysRemaining + 'd';
-      return `<tr><td>${esc(r.plate)}</td><td>${esc(r.driver)}</td><td>${esc(r.location)}</td><td>${esc(r.inspection_expiry_date)}</td><td style="color:${color};font-weight:bold">${daysLabel}</td><td style="color:${color};font-weight:bold">${status}</td></tr>`;
+    const approachingRows = approaching.map(r => {
+      const days = getDaysRemaining(r.inspection_expiry_date);
+      const confirmation = getConfirmationDate(r);
+      return `<tr><td>${esc(r.plate)}</td><td>${esc(r.driver)}</td><td>${esc(r.location)}</td><td>${esc(r.inspection_expiry_date || r.next_due_date)}</td><td>${days === null ? '—' : days + ' days'}</td><td>${esc(confirmation?.date || 'Not confirmed')}</td><td>${esc(confirmation?.source === 'whatsapp' ? 'WhatsApp' : confirmation ? 'Database record' : 'Not confirmed')}</td></tr>`;
     }).join('');
 
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Annual Inspection Report</title>
-    <style>@page{size:A4 landscape;margin:12mm}body{font-family:Arial,sans-serif;font-size:9pt;color:#172033}
-    h1{font-size:18pt;margin:0 0 4px}h2{font-size:13pt;margin:18px 0 8px;border-bottom:2px solid #1e3a8a;padding-bottom:4px}
-    .meta{color:#475569;margin:0 0 14px}table{width:100%;border-collapse:collapse}th{background:#e9eef5;padding:6px;text-align:left}
-    td{border:1px solid #cbd5e1;padding:5px}tr:nth-child(even){background:#f8fafc}.exp{color:#dc2626;font-weight:bold}
-    .due{color:#d97706;font-weight:bold}</style></head><body>
-    <h1>Annual Vehicle Inspection Report</h1>
-    <div class="meta">Generated: ${today} · Total Inspected: ${completed.length} · Due/Expired: ${reminders?.total || 0}</div>
+    const dueRows = dueRowsData.map(r => {
+      const days = getDaysRemaining(r.inspection_expiry_date);
+      const status = days === null ? (r.status || '—') : days < 0 ? 'EXPIRED' : 'DUE';
+      const daysLabel = days === null ? '—' : days < 0 ? Math.abs(days) + ' days overdue' : days + ' days';
+      return `<tr><td>${esc(r.plate)}</td><td>${esc(r.driver)}</td><td>${esc(r.location)}</td><td>${esc(r.inspection_expiry_date || 'Not recorded')}</td><td>${esc(daysLabel)}</td><td>${esc(status)}</td><td>${esc(r.status || '-')}</td></tr>`;
+    }).join('');
+
+    const exemptRows = exemptRowsData.map(r =>
+      `<tr><td>${esc(r.plate)}</td><td>${esc(r.driver)}</td><td>${esc(r.location)}</td><td>${esc(r.exemption || 'Government decision (2024) — Exempt')}</td></tr>`
+    ).join('');
+
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Annual Inspection Full Report</title>
+    <style>
+      @page{size:A4 landscape;margin:10mm}
+      body{font-family:Arial,sans-serif;font-size:9pt;color:#172033}
+      h1{font-size:20pt;margin:0 0 5px}h2{font-size:13pt;margin:18px 0 8px;border-bottom:2px solid #1e3a8a;padding-bottom:4px}
+      .meta{color:#475569;margin:0 0 12px}.cards{display:grid;grid-template-columns:repeat(6,1fr);gap:7px;margin:12px 0 18px}
+      .card{border:1px solid #cbd5e1;border-radius:6px;padding:9px;text-align:center;background:#f8fafc}
+      .label{font-size:8pt;color:#475569;font-weight:bold}.value{font-size:19pt;font-weight:bold;margin-top:4px}
+      table{width:100%;border-collapse:collapse;margin-bottom:12px}th{background:#e9eef5;padding:6px;text-align:left}
+      td{border:1px solid #cbd5e1;padding:5px}tr:nth-child(even){background:#f8fafc}
+      .empty{padding:10px;text-align:center;color:#64748b;border:1px solid #cbd5e1}
+      .note{font-size:8pt;color:#64748b;margin-top:-4px;margin-bottom:8px}
+    </style></head><body>
+    <h1>Annual Vehicle Inspection — Full Report</h1>
+    <div class="meta">Generated: ${esc(today)} · Fleet inspection overview and full vehicle details</div>
+    <div class="cards">
+      <div class="card"><div class="label">Inspected</div><div class="value">${completed.length}</div></div>
+      <div class="card"><div class="label">Approaching 31–60d</div><div class="value">${approaching.length}</div></div>
+      <div class="card"><div class="label">Due 0–30d</div><div class="value">${dueWithin30}</div></div>
+      <div class="card"><div class="label">Due within 60d</div><div class="value">${dueWithin60}</div></div>
+      <div class="card"><div class="label">Expired / Due list</div><div class="value">${dueRowsData.length}</div></div>
+      <div class="card"><div class="label">Not Inspected</div><div class="value">${notInspected}</div></div>
+    </div>
+    <div class="cards" style="grid-template-columns:repeat(3,1fr)">
+      <div class="card"><div class="label">Expired (summary)</div><div class="value">${reminders?.expired || 0}</div></div>
+      <div class="card"><div class="label">Exempt from Annual</div><div class="value">${exemptRowsData.length}</div></div>
+      <div class="card"><div class="label">Completed Annual</div><div class="value">${completed.length}</div></div>
+    </div>
+
     <h2>✓ Completed Annual Inspections (${completed.length})</h2>
-    <table><thead><tr><th>Vehicle</th><th>Driver</th><th>Location</th><th>Completed Date</th><th>Next Due Date</th><th>WhatsApp Confirmed</th></tr></thead>
-    <tbody>${completedRows || '<tr><td colspan="6">No completed inspections.</td></tr>'}</tbody></table>
-    <h2>⚠️ Due / Expired (${reminders?.total || 0})</h2>
-    <table><thead><tr><th>Vehicle</th><th>Driver</th><th>Location</th><th>Expiry Date</th><th>Days Remaining</th><th>Status</th></tr></thead>
-    <tbody>${dueRows || '<tr><td colspan="6">No vehicles due.</td></tr>'}</tbody></table>
+    <table><thead><tr><th>Vehicle</th><th>Driver</th><th>Location</th><th>Completed Date</th><th>Next Due Date</th><th>Confirmation Date</th><th>Confirmation Source</th></tr></thead>
+    <tbody>${completedRows || '<tr><td colspan="7" class="empty">No completed inspections.</td></tr>'}</tbody></table>
+
+    <h2>⏳ Approaching Annual Inspections — 31–60 Days (${approaching.length})</h2>
+    <table><thead><tr><th>Vehicle</th><th>Driver</th><th>Location</th><th>Expiry Date</th><th>Days Left</th><th>Confirmation Date</th><th>Confirmation Source</th></tr></thead>
+    <tbody>${approachingRows || '<tr><td colspan="7" class="empty">No approaching inspections.</td></tr>'}</tbody></table>
+
+    <h2>⚠️ Due / Expired / Not Inspected (${dueRowsData.length})</h2>
+    <table><thead><tr><th>Vehicle</th><th>Driver</th><th>Location</th><th>Expiry Date</th><th>Days Left</th><th>Calculated Status</th><th>Record Status</th></tr></thead>
+    <tbody>${dueRows || '<tr><td colspan="7" class="empty">No vehicles due or expired.</td></tr>'}</tbody></table>
+
+    <h2>Exempt from Annual Inspection (${exemptRowsData.length})</h2>
+    <p class="note">These vehicles are exempt from annual inspection only; this does not exempt them from six-month maintenance.</p>
+    <table><thead><tr><th>Vehicle</th><th>Driver</th><th>Location</th><th>Exemption Details</th></tr></thead>
+    <tbody>${exemptRows || '<tr><td colspan="4" class="empty">No exempt vehicles recorded.</td></tr>'}</tbody></table>
     </body></html>`);
     w.document.close();
     w.focus();

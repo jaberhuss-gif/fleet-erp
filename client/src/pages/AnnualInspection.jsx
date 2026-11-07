@@ -142,6 +142,7 @@ export default function AnnualInspection({ canWork = false }) {
       return d !== null && d >= 0 && d <= 30;
     }).length;
     const notInspected = dueRowsData.filter(r => r.status === 'not_inspected').length;
+    const brandHtml = '<div class="brand"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Maaden Ivanhoe Electric JV logo"><div class="brand-copy"><div class="company">Maaden Ivanhoe Electric Exploration and Development Limited Company</div><div class="phase">Exploration Phase — Arabian Shield</div><div class="person">Hussein Anwar</div><div class="role">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div></div>';
 
     const completedRows = completed.map(r => {
       const plate = r.plate || [r.plate_number, r.plate_code].filter(Boolean).join(' ');
@@ -170,6 +171,9 @@ export default function AnnualInspection({ canWork = false }) {
     <style>
       @page{size:A4 landscape;margin:10mm}
       body{font-family:Arial,sans-serif;font-size:9pt;color:#172033}
+      .brand{display:flex;align-items:center;gap:16px;border-bottom:3px solid #1e3a8a;padding:0 0 10px;margin:0 0 14px;page-break-inside:avoid}
+      .brand img{width:175px;height:78px;object-fit:contain}
+      .brand-copy{flex:1;text-align:right}.company{font-size:15px;font-weight:700;color:#1e3a8a}.phase{font-size:10px;color:#475569;margin-top:3px}.person{font-size:12px;font-weight:700;color:#111827;margin-top:7px}.role{font-size:10px;color:#475569;margin-top:2px}
       h1{font-size:20pt;margin:0 0 5px}h2{font-size:13pt;margin:18px 0 8px;border-bottom:2px solid #1e3a8a;padding-bottom:4px}
       .meta{color:#475569;margin:0 0 12px}.cards{display:grid;grid-template-columns:repeat(6,1fr);gap:7px;margin:12px 0 18px}
       .card{border:1px solid #cbd5e1;border-radius:6px;padding:9px;text-align:center;background:#f8fafc}
@@ -179,6 +183,7 @@ export default function AnnualInspection({ canWork = false }) {
       .empty{padding:10px;text-align:center;color:#64748b;border:1px solid #cbd5e1}
       .note{font-size:8pt;color:#64748b;margin-top:-4px;margin-bottom:8px}
     </style></head><body>
+    ${brandHtml}
     <h1>Annual Vehicle Inspection — Full Report</h1>
     <div class="meta">Generated: ${esc(today)} · Fleet inspection overview and full vehicle details</div>
     <div class="cards">

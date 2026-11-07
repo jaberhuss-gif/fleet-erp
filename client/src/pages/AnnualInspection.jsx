@@ -39,6 +39,16 @@ export default function AnnualInspection({ canWork = false }) {
     return d.toISOString().slice(0, 10);
   };
 
+  // Prefer the actual WhatsApp timestamp. If the historic record has no
+  // WhatsApp timestamp, show the official annual inspection date stored in
+  // the database as the confirmation/reference date without inventing a WA event.
+  const getConfirmationDate = (rec) => {
+    const whatsappDate = String(rec?.whatsapp_confirmed_at || '').slice(0, 10);
+    if (whatsappDate) return { date: whatsappDate, source: 'whatsapp' };
+    const recordedDate = String(rec?.completed_date || '').slice(0, 10);
+    return recordedDate ? { date: recordedDate, source: 'inspection-record' } : null;
+  };
+
   const openAnnualConfirmation = async (vehicleId, recordId = null) => {
     const endpoint = recordId
       ? '/periodic-maintenance/' + recordId + '/repair-whatsapp-info'
@@ -107,7 +117,8 @@ export default function AnnualInspection({ canWork = false }) {
     const completedRows = completed.map(r => {
       const plate = r.plate || [r.plate_number, r.plate_code].filter(Boolean).join(' ');
       const next = getNextDueDate(r);
-      const confirmed = r.whatsapp_confirmed_at ? String(r.whatsapp_confirmed_at).slice(0, 10) : '—';
+      const confirmation = getConfirmationDate(r);
+      const confirmed = confirmation ? confirmation.date : '—';
       return `<tr><td>${esc(plate)}</td><td>${esc(r.driver_name || r.driver || '-')}</td><td>${esc(r.location || '-')}</td><td>${esc(String(r.completed_date || '').slice(0, 10))}</td><td>${esc(next)}</td><td>${esc(confirmed)}</td></tr>`;
     }).join('');
 
@@ -162,30 +173,28 @@ Annual inspection status — completed vehicles and vehicles due for inspection.
       </div>
 
       {/* Summary cards */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
-        <div style={{ background: '#f0fdf4', borderLeft: '4px solid #16a34a', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '160px', textAlign: 'center' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+        <div style={{ background: '#f0fdf4', borderLeft: '4px solid #16a34a', borderRadius: '8px', padding: '14px 16px', textAlign: 'center' }}>
           <div style={{ fontSize: '11px', fontWeight: 600, color: '#166534', textTransform: 'uppercase' }}>Inspected</div>
           <div style={{ fontSize: '28px', fontWeight: 700, color: '#16a34a' }}>{completed.length}</div>
         </div>
-        <div style={{ background: '#eff6ff', borderLeft: '4px solid #3b82f6', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '160px', textAlign: 'center' }}>
+        <div style={{ background: '#eff6ff', borderLeft: '4px solid #3b82f6', borderRadius: '8px', padding: '14px 16px', textAlign: 'center' }}>
           <div style={{ fontSize: '11px', fontWeight: 600, color: '#1d4ed8', textTransform: 'uppercase' }}>Approaching ≤60d</div>
-          <div style={{ fontSize: '28px', fontWeight: 700, color: '#2563eb' }}>{approaching.length}</div>\n        </div>
-        <div style={{ background: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '160px', textAlign: 'center' }}>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: '#2563eb' }}>{approaching.length}</div>
+        </div>
+        <div style={{ background: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '8px', padding: '14px 16px', textAlign: 'center' }}>
           <div style={{ fontSize: '11px', fontWeight: 600, color: '#991b1b', textTransform: 'uppercase' }}>Expired</div>
           <div style={{ fontSize: '28px', fontWeight: 700, color: '#dc2626' }}>{expiredCount}</div>
         </div>
-        <div style={{ background: '#fffbeb', borderLeft: '4px solid #f59e0b', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '160px', textAlign: 'center' }}>
+        <div style={{ background: '#fffbeb', borderLeft: '4px solid #f59e0b', borderRadius: '8px', padding: '14px 16px', textAlign: 'center' }}>
           <div style={{ fontSize: '11px', fontWeight: 600, color: '#92400e', textTransform: 'uppercase' }}>Due ≤30d</div>
           <div style={{ fontSize: '28px', fontWeight: 700, color: '#f59e0b' }}>{dueCount}</div>
         </div>
-      </div>
-
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
-        <div style={{ background: '#f8fafc', borderLeft: '4px solid #64748b', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '160px', textAlign: 'center' }}>
+        <div style={{ background: '#f8fafc', borderLeft: '4px solid #64748b', borderRadius: '8px', padding: '14px 16px', textAlign: 'center' }}>
           <div style={{ fontSize: '11px', fontWeight: 600, color: '#475569', textTransform: 'uppercase' }}>Not Inspected</div>
           <div style={{ fontSize: '28px', fontWeight: 700, color: '#475569' }}>{notInspectedCount}</div>
         </div>
-        <div style={{ background: '#f5f3ff', borderLeft: '4px solid #7c3aed', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '160px', textAlign: 'center' }}>
+        <div style={{ background: '#f5f3ff', borderLeft: '4px solid #7c3aed', borderRadius: '8px', padding: '14px 16px', textAlign: 'center' }}>
           <div style={{ fontSize: '11px', fontWeight: 600, color: '#6d28d9', textTransform: 'uppercase' }}>Exempt</div>
           <div style={{ fontSize: '28px', fontWeight: 700, color: '#7c3aed' }}>{exempt.length}</div>
         </div>
@@ -217,7 +226,8 @@ Annual inspection status — completed vehicles and vehicles due for inspection.
                 {completed.map((r, i) => {
                   const plate = r.plate || [r.plate_number, r.plate_code].filter(Boolean).join(' ');
                   const next = getNextDueDate(r);
-                  const confirmed = r.whatsapp_confirmed_at ? String(r.whatsapp_confirmed_at).slice(0, 10) : null;
+                  const confirmation = getConfirmationDate(r);
+                  const confirmed = confirmation?.date || null;
                   return (
                     <tr key={r.id || i} style={{ background: i % 2 ? '#fff' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                       <td style={{ padding: '7px 10px', fontWeight: 700 }}>{plate}</td>
@@ -227,8 +237,11 @@ Annual inspection status — completed vehicles and vehicles due for inspection.
                       <td style={{ padding: '7px 10px', textAlign: 'center', fontFamily: 'monospace', fontWeight: 600, color: '#16a34a' }}>{next}</td>
                       <td style={{ padding: '7px 10px', textAlign: 'center' }}>
                         {confirmed ? (
-                          <span style={{ background: '#bbf7d0', color: '#166534', padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 600 }}>
-                            ✓ {confirmed}
+                          <span
+                            title={confirmation?.source === 'whatsapp' ? 'Confirmed through WhatsApp' : 'Annual inspection date from the vehicle database; no separate WhatsApp timestamp is stored'}
+                            style={{ background: '#bbf7d0', color: '#166534', padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 600 }}
+                          >
+                            ✓ Confirmed · {confirmed}
                           </span>
                         ) : (
                           <span style={{ background: '#f1f5f9', color: '#64748b', padding: '2px 8px', borderRadius: '10px', fontSize: '10px' }}>
@@ -292,6 +305,7 @@ Annual inspection status — completed vehicles and vehicles due for inspection.
                 <th style={{ padding: '8px 10px', textAlign: 'left' }}>Location</th>
                 <th style={{ padding: '8px 10px', textAlign: 'center' }}>Expiry</th>
                 <th style={{ padding: '8px 10px', textAlign: 'center' }}>Days Left</th>
+                <th style={{ padding: '8px 10px', textAlign: 'center' }}>WhatsApp / Confirmation</th>
                 {canWork && <th style={{ padding: '8px 10px', textAlign: 'center' }}>Action</th>}
               </tr></thead>
               <tbody>{approaching.map((r,i) => (
@@ -301,6 +315,19 @@ Annual inspection status — completed vehicles and vehicles due for inspection.
                   <td style={{ padding: '7px 10px' }}>{r.location}</td>
                   <td style={{ padding: '7px 10px', textAlign: 'center' }}>{r.next_due_date}</td>
                   <td style={{ padding: '7px 10px', textAlign: 'center', color: '#2563eb', fontWeight: 700 }}>{r.days_remaining}d</td>
+                  <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                    {(() => {
+                      const confirmation = getConfirmationDate(r);
+                      return confirmation ? (
+                        <span
+                          title={confirmation.source === 'whatsapp' ? 'Confirmed through WhatsApp' : 'Annual inspection date from the vehicle database; no separate WhatsApp timestamp is stored'}
+                          style={{ background: '#bbf7d0', color: '#166534', padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 600 }}
+                        >
+                          ✓ Confirmed · {confirmation.date}
+                        </span>
+                      ) : <span style={{ color: '#64748b' }}>Not Confirmed</span>;
+                    })()}
+                  </td>
                   {canWork && <td style={{ padding: '7px 10px', textAlign: 'center' }}>
                     <button className="btn btn-success" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => sendReminder(r)}>📱 Send</button>
                   </td>}

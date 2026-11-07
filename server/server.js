@@ -2691,8 +2691,8 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
     for (const v of vehiclesRes.rows) {
       const latestSix = latestByVehicle.get(String(v.id));
       // A pending 6-month row must not hide a later completed annual inspection.
-      // Completed six-month records were already processed above.
-      if (latestSix && latestSix.status === 'Completed' && latestSix.completed_date) continue;
+      // If the annual date is newer than the latest completed six-month date,
+      // it becomes the new baseline for the next six-month cycle.
       const plate = [v.plate_number, v.plate_code].filter(Boolean).join(' ').trim();
       let phone = String(v.phone || '').replace(/[^0-9]/g, '');
       if (phone.startsWith('00')) phone = phone.slice(2);
@@ -2731,6 +2731,11 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
           annualDate = d.toISOString().slice(0, 10);
         }
       }
+
+      const latestSixDate = latestSix && latestSix.status === 'Completed'
+        ? String(latestSix.completed_date || '').slice(0, 10)
+        : '';
+      if (latestSixDate && (!annualDate || annualDate <= latestSixDate)) continue;
 
       if (annualDate) {
         // Annual inspection covers 6-month — treat as completed

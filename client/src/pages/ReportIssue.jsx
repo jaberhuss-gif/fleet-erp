@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getVehiclesList, getIssueTypes, reportIssue } from '../api/client';
 
 export default function ReportIssue({ canWork = false, user = null }) {
@@ -14,49 +14,6 @@ export default function ReportIssue({ canWork = false, user = null }) {
   const recognitionRef = useRef(null);
 
   useEffect(() => { loadData(); }, []);
-  useEffect(() => { if (canWork) loadTickets(); }, [canWork]);
-  const loadTickets = async () => {
-    setLoadingTickets(true);
-    try {
-      const res = await getMaintenanceTickets();
-      // Only requests created from the Driver Report an Issue form belong here.
-      // Filter strictly by the Issue Type values used by that form — not by Note/Description.
-      const maintenanceIssueTypes = ['Tires','Engine','A/C','Lights','Brakes','Battery','Door','Wipers','Oil Engine','Other'];
-      setTickets((res.tickets || []).filter(t => maintenanceIssueTypes.includes(String(t.category || '').trim())));
-    } catch(e) {
-      setError(e.response?.data?.error || e.message);
-    } finally {
-      setLoadingTickets(false);
-    }
-  };
-  const sendRepairConfirmation = async (ticket) => {
-    try {
-      const info=await getMaintenanceWhatsAppInfo(ticket.id);
-      const phone=String(info.driverPhone||'').replace(/\D/g,''); const url=String(info.confirmationUrl||'').trim();
-      const message = [
-        'Hello ' + (info.driverName || 'Driver') + ',',
-        '',
-        'Vehicle ' + info.vehiclePlate + ' — Maintenance Request: ' + info.issueType,
-        'Maintenance request: ' + info.issueType,
-        'طلب الصيانة: ' + info.issueType,
-        '',
-        'Has this maintenance issue been repaired?',
-        'هل تم إصلاح طلب الصيانة هذا؟',
-        '',
-        'Please open the link below and select YES if the repair is complete.',
-        'يرجى فتح الرابط أدناه واختيار YES إذا تم الإصلاح.',
-        'If the repair is NOT complete, select NO. The ticket will remain open.',
-        'إذا لم يتم الإصلاح، اختر NO وسيبقى الطلب مفتوحاً.',
-        '',
-        'Maintenance confirmation link / رابط تأكيد الإصلاح:',
-        url,
-        '',
-        'Fleet Management'
-      ].join('\n');
-      if (!phone || !url) throw new Error('Driver phone or confirmation link is not available.');
-      window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(message),'_blank'); await loadTickets();
-    } catch(e){ setError(e.response?.data?.error||e.message); }
-  };
 
   const loadData = async () => {
     try {

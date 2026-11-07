@@ -2456,7 +2456,8 @@ app.post("/api/annual-inspection/status", async (req, res) => {
 
       const plate = [rec.plate_number, rec.plate_code].filter(Boolean).join(' ').trim();
 
-      // Get completion date — try pm first, then vehicles table
+      // Official expiry date from the 39-vehicle fleet register is authoritative.
+      // Do not let a Pending PM row override an existing official expiry date.
       let completedDate = null;
       if (rec.completed_date) {
         const parsed = new Date(rec.completed_date);
@@ -2466,53 +2467,68 @@ app.post("/api/annual-inspection/status", async (req, res) => {
         const parsed = new Date(rec.inspection_last_date);
         if (!Number.isNaN(parsed.getTime())) completedDate = parsed.toISOString().slice(0, 10);
       }
-      if (!completedDate) {
+
+      let expiryDate = null;
+      if (rec.inspection_expiry_date) {
+        const parsed = new Date(String(rec.inspection_expiry_date).slice(0, 10) + 'T00:00:00Z');
+        if (!Number.isNaN(parsed.getTime())) expiryDate = parsed.toISOString().slice(0, 10);
+      }
+      // Use completed date + one year only for legacy records with no official expiry.
+      if (!expiryDate && completedDate) {
+        const d = new Date(completedDate + 'T00:00:00Z');
+        d.setUTCFullYear(d.getUTCFullYear() + 1);
+        expiryDate = d.toISOString().slice(0, 10);
+      }
+
+      if (!expiryDate) {
         let phone = String(rec.phone || '').replace(/[^0-9]/g, '');
         if (phone.startsWith('00')) phone = phone.slice(2);
         if (phone.length === 10 && phone.startsWith('05')) phone = '966' + phone.slice(1);
         if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
         due.push({
-          vehicleId: vid, plate, driver: rec.driver || 'Unassigned', phone,
+          recordId: rec.id, vehicleId: vid, plate, driver: rec.driver || 'Unassigned', phone,
           location: canonicalInspectionSite(rec.location) || '-',
-          inspection_expiry_date: null, days_remaining: null, status: 'not_inspected',
+          completed_date: completedDate, inspection_expiry_date: null,
+          days_remaining: null, status: 'not_inspected',
+          whatsapp_confirmed_at: waMap.get(vid) || null,
           whatsappUrl: phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent('Annual inspection required for vehicle ' + plate + '. Please arrange the inspection.') : null
         });
         continue;
       }
 
-      if (completedDate) {
-        const d = new Date(completedDate + 'T00:00:00Z');
-        d.setUTCFullYear(d.getUTCFullYear() + 1);
-        const nextDue = d.toISOString().slice(0, 10);
-        const daysRemaining = Math.ceil((d - today) / 86400000);
-        const waConfirmed = waMap.get(vid) || null;
+      const expiry = new Date(expiryDate + 'T00:00:00Z');
+      const daysRemaining = Math.ceil((expiry - today) / 86400000);
+      const entry = {
+        recordId: rec.id, vehicleId: vid, plate,
+        driver: rec.driver || 'Unassigned', phone: rec.phone || '',
+        location: canonicalInspectionSite(rec.location) || '-',
+        completed_date: completedDate,
+        inspection_expiry_date: expiryDate,
+        next_due_date: expiryDate,
+        days_remaining: daysRemaining,
+        whatsapp_confirmed_at: waMap.get(vid) || null,
+        notes: rec.notes || ''
+      };
 
-        const entry = {
-          recordId: rec.id, vehicleId: vid, plate,
-          driver: rec.driver || 'Unassigned', phone: rec.phone || '',
-          location: canonicalInspectionSite(rec.location) || '-',
-          completed_date: completedDate, next_due_date: nextDue,
-          days_remaining: daysRemaining, whatsapp_confirmed_at: waConfirmed,
-          notes: rec.notes || ''
-        };
-
-        if (daysRemaining <= 30) {
-          entry.status = daysRemaining < 0 ? 'expired' : 'due';
-          let phone = String(rec.phone || '').replace(/[^0-9]/g, '');
-          if (phone.startsWith('00')) phone = phone.slice(2);
-          if (phone.length === 10 && phone.startsWith('05')) phone = '966' + phone.slice(1);
-          if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
-          entry.whatsappUrl = phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(
-            'Hello ' + (rec.driver || 'Driver') + ',\n\nVehicle ' + plate + ' — Annual Inspection Reminder\nتذكير: الفحص الدوري السنوي للمركبة ' + plate + '\n\nExpires: ' + nextDue + '\nDays: ' + daysRemaining + '\n\nFleet Management'
-          ) : null;
-          due.push(entry);
-        } else if (daysRemaining <= 60) {
-          entry.status = 'approaching';
-          approaching.push(entry);
-        } else {
-          entry.status = 'valid';
-          completed.push(entry);
-        }
+      if (daysRemaining < 0) {
+        entry.status = 'expired';
+        due.push(entry);
+      } else if (daysRemaining <= 30) {
+        entry.status = 'due';
+        let phone = String(rec.phone || '').replace(/[^0-9]/g, '');
+        if (phone.startsWith('00')) phone = phone.slice(2);
+        if (phone.length === 10 && phone.startsWith('05')) phone = '966' + phone.slice(1);
+        if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
+        entry.whatsappUrl = phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(
+          'Hello ' + (rec.driver || 'Driver') + ',\\n\\nVehicle ' + plate + ' — Annual Inspection Reminder\\nتذكير: الفحص الدوري السنوي للمركبة ' + plate + '\\n\\nExpires: ' + expiryDate + '\\nDays: ' + daysRemaining + '\\n\\nFleet Management'
+        ) : null;
+        due.push(entry);
+      } else if (daysRemaining <= 60) {
+        entry.status = 'approaching';
+        approaching.push(entry);
+      } else {
+        entry.status = 'valid';
+        completed.push(entry);
       }
     }
 

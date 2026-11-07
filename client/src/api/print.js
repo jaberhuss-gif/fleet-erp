@@ -170,8 +170,16 @@ export function printContent(title, subtitle) {
   
   printWindow.document.close();
   
-  setTimeout(() => {
+  const images = Array.from(printWindow.document.images);
+  Promise.all(images.map(img => img.decode
+    ? img.decode().catch(() => {})
+    : new Promise(resolve => {
+        if (img.complete) return resolve();
+        img.onload = img.onerror = resolve;
+        setTimeout(resolve, 8000);
+      })
+  )).then(() => {
     printWindow.focus();
     printWindow.print();
-  }, 300);
+  });
 }

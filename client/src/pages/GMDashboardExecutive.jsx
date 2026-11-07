@@ -76,7 +76,7 @@ export default function GMDashboardExecutive() {
     const t = d.tickets || {};
     const monthlyRows = snapshot.monthly?.months || [];
     const activeRows = monthlyRows.filter(row => Number(row.woCount || 0) + Number(row.projCount || 0) + Number(row.purCount || 0) > 0);
-    const fRows = (snapshot.financial?.rows || []).filter(row => String(row.month || '').startsWith(String(snapshot.year)));
+    const fRows = (snapshot.financial?.rows || []).filter(row => String(row.month || '') >= String(snapshot.year) + '-07' && String(row.month || '') <= String(snapshot.year) + '-12');
     const baseline = sumRows(fRows, 'active') ? fRows.filter(r => r.active).length * (Number(snapshot.financial?.grand?.maintenanceBaseline || 20577) + Number(snapshot.financial?.grand?.developmentBaseline || 132551)) : 0;
     const actual = sumRows(fRows, 'totalCost');
     const savings = baseline - actual;
@@ -110,9 +110,9 @@ export default function GMDashboardExecutive() {
       pptx.theme = { headFontFace: 'Aptos Display', bodyFontFace: 'Aptos', lang: 'en-US' };
       const generatedAt = (refreshedAt || new Date()).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
       const d = snapshot.dashboard || {};
-      const financialMonths = (snapshot.financial?.rows || []).filter(row => String(row.month || '').startsWith(String(snapshot.year)) && row.active);
+      const financialMonths = (snapshot.financial?.rows || []).filter(row => String(row.month || '') >= String(snapshot.year) + '-07' && String(row.month || '') <= String(snapshot.year) + '-12' && row.active);
       const topContractors = Object.entries(snapshot.financial?.grand?.contractorBreakdown || {}).sort((a,b) => Number(b[1]?.woCost || 0) + Number(b[1]?.projectCost || 0) - Number(a[1]?.woCost || 0) - Number(a[1]?.projectCost || 0)).slice(0,3);
-      const source = 'ERP PostgreSQL via /dashboard, /reports/monthly and /reports/financial';
+      const source = 'ERP PostgreSQL via /dashboard, /reports/monthly (Jul–Dec window) and /reports/financial';
 
       buildSlide(pptx, 'Executive Fleet Overview', 'Management snapshot | ' + snapshot.year + ' | Live operational records', [
         { label: 'Vehicles in Fleet', value: metrics.vehicles },
@@ -126,7 +126,7 @@ export default function GMDashboardExecutive() {
         'This slide is a point-in-time snapshot; refresh the GM Dashboard before exporting to capture the latest changes.'
       ], source, generatedAt);
 
-      buildSlide(pptx, 'Maintenance & Operational Delivery', 'Recorded work orders, projects and purchases | ' + snapshot.year, [
+      buildSlide(pptx, 'Maintenance & Operational Delivery', 'Recorded work orders, projects and purchases | Jul–Dec ' + snapshot.year, [
         { label: 'Work Orders', value: fmt(metrics.woCount) },
         { label: 'Work Order Cost', value: sar(metrics.woCost) },
         { label: 'Projects', value: fmt(metrics.projectCount) },
@@ -138,8 +138,8 @@ export default function GMDashboardExecutive() {
         'Open ticket count is ' + fmt(metrics.openTickets) + '; use the ticket register for assignment and closure follow-up.'
       ], '/reports/monthly?year=' + snapshot.year, generatedAt);
 
-      buildSlide(pptx, 'Financial Performance & Cost Control', 'Actuals compared with the configured monthly baseline | ' + snapshot.year, [
-        { label: 'Active Finance Months', value: metrics.financeMonths },
+      buildSlide(pptx, 'Financial Performance & Cost Control', 'Actuals compared with the configured monthly baseline | Jul–Dec ' + snapshot.year, [
+        { label: 'Active Finance Months (Jul–Dec)', value: metrics.financeMonths },
         { label: 'Baseline', value: sar(metrics.baseline) },
         { label: 'Recorded Actual Cost', value: sar(metrics.actual) },
         { label: 'Variance / Savings*', value: sar(metrics.savings), color: metrics.savings >= 0 ? '16835D' : 'B42318' }
@@ -197,9 +197,9 @@ export default function GMDashboardExecutive() {
           ))}
         </div>
         <div className="cards-grid">
-          <div className="card"><h3>{snapshot.year} Work Orders</h3><div className="big-number">{fmt(metrics.woCount)}</div><div className="sub">{sar(metrics.woCost)}</div></div>
-          <div className="card"><h3>{snapshot.year} Project Spend</h3><div className="big-number">{sar(metrics.projectCost)}</div><div className="sub">{fmt(metrics.projectCount)} projects</div></div>
-          <div className="card"><h3>{snapshot.year} Purchases</h3><div className="big-number">{sar(metrics.purchaseCost)}</div><div className="sub">{fmt(metrics.purchaseCount)} transactions</div></div>
+          <div className="card"><h3>Jul–Dec {snapshot.year} Work Orders</h3><div className="big-number">{fmt(metrics.woCount)}</div><div className="sub">{sar(metrics.woCost)}</div></div>
+          <div className="card"><h3>Jul–Dec {snapshot.year} Project Spend</h3><div className="big-number">{sar(metrics.projectCost)}</div><div className="sub">{fmt(metrics.projectCount)} projects</div></div>
+          <div className="card"><h3>Jul–Dec {snapshot.year} Purchases</h3><div className="big-number">{sar(metrics.purchaseCost)}</div><div className="sub">{fmt(metrics.purchaseCount)} transactions</div></div>
           <div className="card"><h3>Financial Variance*</h3><div className="big-number">{sar(metrics.savings)}</div><div className="sub">{pct(metrics.savingsPct)} vs baseline · {metrics.financeMonths} active months</div></div>
         </div>
         <p style={{ color: '#98a2b3', fontSize: 11, marginTop: 18 }}>*Financial variance is calculated from the ERP financial report baseline and recorded actuals. Verify supporting transactions before external circulation.</p>

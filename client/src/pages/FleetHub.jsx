@@ -9,6 +9,7 @@ import TireManagement, { TireControlCenter } from './TireManagement';
 import TireServiceRequests from './TireServiceRequests';
 import DailyKmSubmitted from './DailyKmSubmitted';
 import DailyKmMissing from './DailyKmMissing';
+import AnnualInspection from './AnnualInspection';
 import MaintenanceReport from './MaintenanceReport';
 import MaintenanceRequests from './MaintenanceRequests';
 import FleetHistory from './FleetHistory';
@@ -80,7 +81,7 @@ export default function FleetHub({ user, access, initialOwnerGroup='maintenance-
     {section==='km'&&<DailyKmControl onMissing={()=>setSection('km-missing')}/>}
     {section==='km-missing'&&<DailyKmMissingControl user={user} onSubmitted={()=>setSection('km')}/>}
     {section==='tires'&&<TireManagement user={user} driverMode={false}/>}
-    {section==='annual'&&<PeriodicMaintenance canWork={fleetWork} fixedType="inspection"/>}
+    {section==='annual'&&<AnnualInspection canWork={fleetWork}/>}
     {section==='six-month'&&<PeriodicMaintenance canWork={fleetWork} fixedType="6_months_general"/>}
     {section==='oil'&&<OilControl onViewVehicle={onViewVehicle}/>}
   </div>;

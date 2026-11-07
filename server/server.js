@@ -1904,6 +1904,82 @@ app.get("/api/vehicles/inspection/tracker", async (req, res) => {
   }
 });
 
+// ===== ANNUAL INSPECTION — WhatsApp REMINDERS for vehicles due within 30 days =====
+app.post("/api/annual-inspection/remind", async (req, res) => {
+  try {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const today = new Date(todayKey + 'T00:00:00Z');
+
+    const r = await pgQuery(`
+      SELECT id, plate_number, plate_code, driver, phone, location,
+             inspection_expiry_date, inspection_last_date,
+             current_km, make, model
+      FROM vehicles
+      WHERE COALESCE(LOWER(TRIM(status)), '') NOT IN ('inactive','sold','disposed','disabled')
+        AND inspection_expiry_date IS NOT NULL
+        AND TRIM(inspection_expiry_date) != ''
+      ORDER BY inspection_expiry_date ASC
+    `);
+
+    const reminders = [];
+    for (const row of r.rows) {
+      const expiryStr = String(row.inspection_expiry_date).slice(0, 10);
+      const expiryDate = new Date(expiryStr + 'T00:00:00Z');
+      const daysRemaining = Math.ceil((expiryDate - today) / 86400000);
+
+      if (daysRemaining <= 30) {
+        const plate = [row.plate_number, row.plate_code].filter(Boolean).join(' ').trim();
+        let phone = String(row.phone || '').replace(/[^0-9]/g, '');
+        if (phone.startsWith('00')) phone = phone.slice(2);
+        if (phone.length === 10 && phone.startsWith('05')) phone = '966' + phone.slice(1);
+        if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
+
+        const message = [
+          'Hello ' + (row.driver || 'Driver') + ',',
+          '',
+          'Vehicle ' + plate + ' — Annual Inspection Reminder',
+          'تذكير: الفحص الدوري السنوي للمركبة ' + plate,
+          '',
+          'Inspection expires on: ' + expiryStr,
+          'تاريخ انتهاء الفحص: ' + expiryStr,
+          'Days remaining: ' + daysRemaining,
+          'الأيام المتبقية: ' + daysRemaining,
+          '',
+          daysRemaining < 0
+            ? 'Your inspection has EXPIRED. Please schedule immediately.'
+            : 'Please schedule your annual inspection before the expiry date.',
+          '',
+          'Fleet Management'
+        ].join('\n');
+
+        reminders.push({
+          vehicleId: row.id,
+          plate,
+          driver: row.driver || 'Unassigned',
+          phone,
+          location: canonicalInspectionSite(row.location) || '-',
+          inspection_expiry_date: expiryStr,
+          days_remaining: daysRemaining,
+          status: daysRemaining < 0 ? 'expired' : 'due',
+          whatsappUrl: phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(message) : null
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      today: todayKey,
+      total: reminders.length,
+      expired: reminders.filter(r => r.days_remaining < 0).length,
+      due: reminders.filter(r => r.days_remaining >= 0).length,
+      reminders
+    });
+  } catch (e) {
+    console.error("[AnnualInspectionRemind]", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.post("/api/inspection-reminders/send", requireRole("Owner"), async (req, res) => {
   try {
     const mode = String(req.body?.mode || 'all').toLowerCase();

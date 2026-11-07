@@ -2304,6 +2304,9 @@ app.post("/api/annual-inspection/status", async (req, res) => {
             'Hello ' + (rec.driver || 'Driver') + ',\n\nVehicle ' + plate + ' — Annual Inspection Reminder\nتذكير: الفحص الدوري السنوي للمركبة ' + plate + '\n\nExpires: ' + nextDue + '\nDays: ' + daysRemaining + '\n\nFleet Management'
           ) : null;
           due.push(entry);
+        } else if (daysRemaining <= 60) {
+          entry.status = 'approaching';
+          approaching.push(entry);
         } else {
           entry.status = 'valid';
           completed.push(entry);
@@ -2315,11 +2318,12 @@ app.post("/api/annual-inspection/status", async (req, res) => {
       success: true, today: todayKey,
       summary: {
         completed: completed.length,
+        approaching: approaching.length,
         due: due.filter(d => d.status === 'due').length,
         expired: due.filter(d => d.status === 'expired').length,
-        total: completed.length + due.length
+        total: completed.length + approaching.length + due.length
       },
-      completed, due
+      completed, approaching, due
     });
   } catch (e) {
     console.error("[AnnualInspectionStatus]", e);
@@ -2374,6 +2378,7 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
     }
 
     const completed = [];
+    const approaching = [];
     const due = [];
 
     // Get WhatsApp confirmations from ALL tickets (not just 6-Month)
@@ -2440,6 +2445,9 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
             'Fleet Management'
           ) : null;
           due.push(entry);
+        } else if (daysRemaining <= 60) {
+          entry.status = 'approaching';
+          approaching.push(entry);
         } else {
           entry.status = 'valid';
           completed.push(entry);
@@ -2510,11 +2518,13 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
           days_remaining: daysRemaining,
           whatsapp_confirmed_at: waConfirmed,
           notes: 'Covered by annual inspection',
-          status: daysRemaining <= 30 ? (daysRemaining < 0 ? 'expired' : 'due') : 'valid'
+          status: daysRemaining < 0 ? 'expired' : daysRemaining <= 30 ? 'due' : daysRemaining <= 60 ? 'approaching' : 'valid'
         };
 
         if (entry.status === 'valid') {
           completed.push(entry);
+        } else if (entry.status === 'approaching') {
+          approaching.push(entry);
         } else {
           entry.whatsappUrl = phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(
             'Hello ' + (v.driver || 'Driver') + ',\n\n' +
@@ -2559,13 +2569,13 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
       today: todayKey,
       summary: {
         completed: completed.length,
+        approaching: approaching.length,
         due: due.filter(d => d.status === 'due').length,
         expired: due.filter(d => d.status === 'expired').length,
         not_inspected: due.filter(d => d.status === 'not_inspected').length,
-        total: completed.length + due.length
+        total: completed.length + approaching.length + due.length
       },
-      completed,
-      due
+      completed, approaching, due
     });
   } catch (e) {
     console.error("[SixMonthInspection]", e);

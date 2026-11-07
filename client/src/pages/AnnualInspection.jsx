@@ -177,6 +177,15 @@ export default function AnnualInspection({ canWork = false }) {
   const dueCount = reminders?.due || 0;
   const exempt = Array.isArray(reminders?.exempt) ? reminders.exempt : [];
   const notInspectedCount = dueReminders.filter(r => r.status === 'not_inspected').length;
+  // Count each vehicle once when its annual expiry is between today and 60 days ahead.
+  const dueWithin60Count = new Set(
+    [...approaching, ...dueReminders]
+      .filter(r => {
+        const days = getDaysRemaining(r.inspection_expiry_date);
+        return days !== null && days >= 0 && days <= 60;
+      })
+      .map(r => r.vehicleId || r.vehicle_id || r.plate)
+  ).size;
 
   return (
     <div style={{ padding: '20px' }}>
@@ -208,8 +217,8 @@ Annual inspection status — completed vehicles and vehicles due for inspection.
           <div style={{ fontSize: '28px', fontWeight: 700, color: '#dc2626' }}>{expiredCount}</div>
         </div>
         <div style={{ background: '#fffbeb', borderLeft: '4px solid #f59e0b', borderRadius: '8px', padding: '14px 16px', textAlign: 'center' }}>
-          <div style={{ fontSize: '11px', fontWeight: 600, color: '#92400e', textTransform: 'uppercase' }}>Due ≤30d</div>
-          <div style={{ fontSize: '28px', fontWeight: 700, color: '#f59e0b' }}>{dueCount}</div>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: '#92400e', textTransform: 'uppercase' }}>Due ≤60d</div>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: '#f59e0b' }}>{dueWithin60Count}</div>
         </div>
         <div style={{ background: '#f8fafc', borderLeft: '4px solid #64748b', borderRadius: '8px', padding: '14px 16px', textAlign: 'center' }}>
           <div style={{ fontSize: '11px', fontWeight: 600, color: '#475569', textTransform: 'uppercase' }}>Not Inspected</div>

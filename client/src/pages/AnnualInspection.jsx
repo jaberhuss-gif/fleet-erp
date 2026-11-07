@@ -220,8 +220,27 @@ export default function AnnualInspection({ canWork = false }) {
     <tbody>${exemptRows || '<tr><td colspan="4" class="empty">No exempt vehicles recorded.</td></tr>'}</tbody></table>
     </body></html>`);
     w.document.close();
-    w.focus();
-    setTimeout(() => w.print(), 350);
+    // Wait for the company logo and all report images before opening print preview.
+    // A fixed 350ms delay was printing before the remote JV logo finished loading.
+    const printAfterImagesLoad = () => {
+      const images = Array.from(w.document.images || []);
+      Promise.all(images.map(img => {
+        if (img.complete) {
+          return typeof img.decode === 'function' ? img.decode().catch(() => undefined) : Promise.resolve();
+        }
+        return new Promise(resolve => {
+          const finish = () => resolve();
+          img.addEventListener('load', finish, { once: true });
+          img.addEventListener('error', finish, { once: true });
+          setTimeout(finish, 8000);
+        });
+      })).then(() => {
+        w.focus();
+        w.print();
+      });
+    };
+    if (w.document.readyState === 'complete') printAfterImagesLoad();
+    else w.addEventListener('load', printAfterImagesLoad, { once: true });
   };
 
   if (loading) return <div className="loading">Loading annual inspection data...</div>;

@@ -9,6 +9,13 @@ export default function AnnualInspection({ canWork = false }) {
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
   const [sentList, setSentList] = useState([]);
+  const [, setCalendarDayTick] = useState(0);
+
+  // Keep the displayed countdown current while the page remains open.
+  useEffect(() => {
+    const timer = setInterval(() => setCalendarDayTick(value => value + 1), 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);

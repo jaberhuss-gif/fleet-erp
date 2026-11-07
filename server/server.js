@@ -2425,6 +2425,20 @@ app.post("/api/annual-inspection/status", async (req, res) => {
         }
       }
 
+      if (!completedDate) {
+        let phone = String(rec.phone || '').replace(/[^0-9]/g, '');
+        if (phone.startsWith('00')) phone = phone.slice(2);
+        if (phone.length === 10 && phone.startsWith('05')) phone = '966' + phone.slice(1);
+        if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
+        due.push({
+          vehicleId: vid, plate, driver: rec.driver || 'Unassigned', phone,
+          location: canonicalInspectionSite(rec.location) || '-',
+          inspection_expiry_date: null, days_remaining: null, status: 'not_inspected',
+          whatsappUrl: phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent('Annual inspection required for vehicle ' + plate + '. Please arrange the inspection.') : null
+        });
+        continue;
+      }
+
       if (completedDate) {
         const d = new Date(completedDate + 'T00:00:00Z');
         d.setUTCFullYear(d.getUTCFullYear() + 1);

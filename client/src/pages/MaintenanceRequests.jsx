@@ -114,7 +114,7 @@ export default function MaintenanceRequests() {
       '<table><thead><tr>' +
       ['Vehicle','Location','Driver','Issue Type','Description','Priority','Status','Opened Date','Driver Confirmed'].map(k => '<th>'+k+'</th>').join('') +
       '</tr></thead><tbody>' + body + '</tbody></table>' +
-      '<script>window.onload=function(){window.print();}</script></body></html>');
+      '<script>window.onload=async function(){var imgs=Array.from(document.images);await Promise.all(imgs.map(function(img){return img.decode?img.decode().catch(function(){}):new Promise(function(resolve){if(img.complete)return resolve();img.onload=img.onerror=resolve;setTimeout(resolve,8000);});}));window.print();}</script></body></html>');
     win.document.close();
   };
 

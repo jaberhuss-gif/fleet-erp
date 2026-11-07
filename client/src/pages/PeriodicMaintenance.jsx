@@ -1045,7 +1045,7 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
 <table><thead><tr>${headers.map(h => '<th>'+esc(h)+'</th>').join('')}</tr></thead><tbody>${rows}</tbody></table>
 </body></html>`);
     printWindow.document.close(); printWindow.focus();
-    setTimeout(() => printWindow.print(), 250);
+    Promise.all(Array.from(printWindow.document.images).map(img => img.decode ? img.decode().catch(() => {}) : new Promise(resolve => { if (img.complete) return resolve(); img.onload = img.onerror = resolve; setTimeout(resolve, 8000); }))).then(() => { printWindow.focus(); printWindow.print(); });
   };
 
   // For 6-month maintenance, a note is the evidence that the vehicle was inspected.

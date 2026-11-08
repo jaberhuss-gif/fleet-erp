@@ -24,7 +24,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
   const [search, setSearch] = useState('');
   const [reportTab, setReportTab] = useState('original');
   const [reminderVehicle, setReminderVehicle] = useState(null);
-  const [reminderForm, setReminderForm] = useState({ inspectionExpiryDate: '', reminderDays: 30, managerEmail: '', ccEmails: '' });
+  const [reminderForm, setReminderForm] = useState({ inspectionExpiryDate: '', reminderDays: 60, managerEmail: '', ccEmails: '' });
   const [hijriExpiryDate, setHijriExpiryDate] = useState('');
   const [showReminderSend, setShowReminderSend] = useState(false);
   const [reminderSendMode, setReminderSendMode] = useState('all');
@@ -215,22 +215,28 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
   const filledRecords = filtered.filter(hasActionData);
   const untouchedRecords = filtered.filter((r) => !hasActionData(r));
 
-  // Inspection control matrix: use ALL fleet vehicles so a missing PM record is
-  // explicitly RED, while preserving the old ERP rule that 6-month notes prove
-  // the maintenance was actually performed.
-  const isInspected = (r) => {
-    if (!r) return false;
-    if (r.type === '6_months_general') {
-      return r.status === 'Completed' ||
-        Boolean(String(r.completed_date || '').trim()) ||
-        Boolean(String(r.notes || '').trim());
-    }
-    if (r.type === 'inspection') {
-      return r.status === 'Completed' ||
-        Boolean(String(r.completed_date || '').trim());
-    }
-    return false;
+  // Compliance requires direct, dated evidence.
+  const validIsoDate = (value) => {
+    const raw = String(value || '').trim().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return '';
+    const d = new Date(raw + 'T00:00:00Z');
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === raw ? raw : '';
   };
+
+  const hasAnnualEvidence = (r) =>
+    Boolean(r && r.type === 'inspection' && r.status === 'Completed' &&
+      validIsoDate(r.completed_date));
+
+  const hasSixMonthEvidence = (r) => {
+    if (!r || r.type !== '6_months_general') return false;
+    if (validIsoDate(r.whatsapp_confirmed_at)) return true;
+    const match = String(r.notes || '').match(/Confirmed via 6-month WhatsApp on (\d{4}-\d{2}-\d{2})/i);
+    return Boolean(match && validIsoDate(match[1]));
+  };
+
+  const isInspected = (r) =>
+    r?.type === 'inspection' ? hasAnnualEvidence(r) :
+    r?.type === '6_months_general' ? hasSixMonthEvidence(r) : false;
 
   const pickLatestControl = (list, type) => {
     const typed = list.filter(r => r.type === type);
@@ -254,10 +260,6 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     const value = v?.inspectionExpiryDate || v?.inspection_expiry_date || '';
     const normalized = normalizeInspectionExpiry(value);
     if (normalized) return normalized;
-    const plate = String(v?.plate || v?.plate_number || '').trim().toLowerCase();
-    if (plate === 'test 123' || plate === '123') {
-      const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 10);
-    }
     return '—';
   };
 
@@ -283,14 +285,18 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     const vehicleRecords = recordsByVehicle[String(v.id)] || [];
     const six = pickLatestControl(vehicleRecords, '6_months_general');
     const annual = pickLatestControl(vehicleRecords, 'inspection');
-    const annualDone = Boolean(annual && isInspected(annual));
-    // A completed annual inspection also satisfies/closes the current six-month
-    // inspection cycle. Use its actual completion date as the six-month baseline.
-    const sixDone = Boolean(six && isInspected(six)) || annualDone;
+    const annualDone = hasAnnualEvidence(annual);
+    const annualDate = annualDone ? validIsoDate(annual.completed_date) : '';
+    const sixScheduledDate = validIsoDate(six?.scheduled_date);
+    const annualCoversSix = Boolean(annualDate && sixScheduledDate && annualDate <= sixScheduledDate);
+    const sixDone = hasSixMonthEvidence(six) || annualCoversSix;
     const sixCycleDates = [
-      six && isInspected(six) ? String(six.completed_date || '').slice(0, 10) : '',
-      annualDone ? String(annual.completed_date || '').slice(0, 10) : ''
-    ].filter(value => /^\d{4}-\d{2}-\d{2}$/.test(value)).sort();
+      hasSixMonthEvidence(six) ? (
+        validIsoDate(six.whatsapp_confirmed_at) ||
+        validIsoDate(String(six.notes || '').match(/Confirmed via 6-month WhatsApp on (\d{4}-\d{2}-\d{2})/i)?.[1])
+      ) : '',
+      annualCoversSix ? annualDate : ''
+    ].filter(Boolean).sort();
     const sixReferenceDate = sixCycleDates[sixCycleDates.length - 1] || '';
     const missing = [];
     if (!sixDone) missing.push('6-Month Maintenance');
@@ -345,15 +351,11 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       rows: vehicleSummary.filter(v => !v.sixDone)
     },
     annualNotInspected: {
-      title: 'Annual Inspection — Due Within 30 Days',
+      title: 'Annual Inspection — All Vehicles Missing Evidence',
       color: '#dc2626',
       rows: vehicleSummary
-        .filter(v => !v.annualDone && (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
+        .filter(v => !v.annualDone)
         .map(v => ({ ...v, inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiry) || getInspectionExpiry(v.vehicle_id) }))
-        .filter(v => {
-          const days = Math.ceil((new Date(v.inspectionExpiry + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000);
-          return days <= 30;
-        })
         .sort((a, b) => {
           const da = new Date(a.inspectionExpiry + 'T00:00:00Z').getTime();
           const db = new Date(b.inspectionExpiry + 'T00:00:00Z').getTime();
@@ -587,7 +589,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     setReminderVehicle(vehicle);
     setReminderForm({
       inspectionExpiryDate: '',
-      reminderDays: 30,
+      reminderDays: 60,
       managerEmail: '',
       ccEmails: ''
     });
@@ -596,7 +598,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       const r = res.data?.reminder || {};
       setReminderForm({
         inspectionExpiryDate: r.inspection_expiry_date ? String(r.inspection_expiry_date).slice(0,10) : '',
-        reminderDays: Number(r.inspection_reminder_days || 30),
+        reminderDays: Number(r.inspection_reminder_days || 60),
         managerEmail: r.inspection_manager_email || '',
         ccEmails: r.inspection_cc_emails || ''
       });
@@ -651,7 +653,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
       setReminderSendResult(res.data);
       const sent = (res.data.results || []).filter(x => x.sent);
       const skipped = (res.data.results || []).filter(x => !x.sent);
-      setMessage('Inspection reminders processed: ' + sent.length + ' email(s) sent for ' + (res.data.dueVehicles || 0) + ' eligible vehicle(s). Vehicles beyond 31 days were not emailed.');
+      setMessage('Inspection reminders processed: ' + sent.length + ' email(s) sent for ' + (res.data.dueVehicles || 0) + ' eligible vehicle(s). Vehicles beyond 60 days were not emailed.');
       if (skipped.length) setError(skipped.map(x => x.site + ': ' + x.reason).join(' | '));
     } catch (e) {
       setError(e.response?.data?.error || e.message);
@@ -662,7 +664,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
 
   const inspectionEmailGroups = () => {
     const selected = reminderDueVehicles
-      .filter(v => Number(v.days) <= 31)
+      .filter(v => Number(v.days) <= 60)
       .filter(v => reminderSendMode === 'all' || selectedReminderSites.includes(v.location));
 
     const groups = {};
@@ -782,15 +784,15 @@ const openInspectionEmail = (group) => {
 
   if (inspectionUpcomingOnly) {
     const upcoming = reminderDueVehicles
-      .filter(v => Number(v.days) > 31)
+      .filter(v => Number(v.days) > 60)
       .sort((a,b) => Number(a.days) - Number(b.days));
     return (
       <div className="periodic-maintenance-print-root">
         <div className="panel" style={{marginBottom:16}}>
           <h1 style={{margin:0}}>📅 Future Annual Inspection Schedule</h1>
           <p style={{margin:'6px 0 0',color:'#64748b'}}>
-            Vehicles more than 31 days from annual inspection. These vehicles are for monitoring only and are not included in email sending.
-            When a vehicle reaches 31 days or less, it automatically moves to the Annual Inspection Email page.
+            Vehicles more than 60 days from annual inspection. These vehicles are for monitoring only and are not included in email sending.
+            When a vehicle reaches 60 days or less, it automatically moves to the Annual Inspection Email page.
           </p>
         </div>
         {error && <div className="alert alert-error" style={{marginBottom:12}}>{error}</div>}
@@ -798,12 +800,12 @@ const openInspectionEmail = (group) => {
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap'}}>
             <div>
               <h2 style={{marginTop:0,marginBottom:4}}>Future Vehicles — Nearest Expiry First</h2>
-              <div style={{fontSize:13,color:'#64748b'}}>More than 31 days remaining · No email is sent from this page</div>
+              <div style={{fontSize:13,color:'#64748b'}}>More than 60 days remaining · No email is sent from this page</div>
             </div>
             <button className="btn" onClick={openReminderSend}>↻ Refresh</button>
           </div>
           {upcoming.length===0 ? (
-            <div style={{marginTop:14,color:'#64748b'}}>No future annual inspections beyond 31 days.</div>
+            <div style={{marginTop:14,color:'#64748b'}}>No future annual inspections beyond 60 days.</div>
           ) : (
             <table style={{marginTop:14}}>
               <thead><tr><th>Vehicle</th><th>Driver</th><th>Site</th><th>Expiry</th><th>Days Left</th><th>Status</th></tr></thead>
@@ -832,7 +834,7 @@ const openInspectionEmail = (group) => {
   if (inspectionEmailOnly) {
     const emailGroups = inspectionEmailGroups();
     const eligibleRows = reminderDueVehicles
-      .filter(v => Number(v.days) <= 31)
+      .filter(v => Number(v.days) <= 60)
       .filter(v => reminderSendMode === 'all' || selectedReminderSites.includes(v.location))
       .sort((a,b) => Number(a.days) - Number(b.days));
 
@@ -841,7 +843,7 @@ const openInspectionEmail = (group) => {
         <div className="panel" style={{marginBottom:16}}>
           <h1 style={{margin:0}}>📧 Annual Vehicle Inspection — Email Control</h1>
           <p style={{margin:'6px 0 0',color:'#64748b'}}>
-            Prepare Outlook emails for expired vehicles and vehicles expiring within the next 31 days.
+            Prepare Outlook emails for expired vehicles and vehicles expiring within the next 60 days.
             The system does not send the email automatically — you review it and press Send in Outlook.
           </p>
         </div>
@@ -877,7 +879,7 @@ const openInspectionEmail = (group) => {
             <div>
               <h2 style={{marginTop:0,marginBottom:4}}>2. Eligible Vehicles — Nearest Expiry First ({eligibleRows.length})</h2>
               <div style={{fontSize:13,color:'#64748b'}}>
-                Expired + next 31 days only. Vehicles beyond 31 days are not included.
+                Expired + next 60 days only. Vehicles beyond 60 days are not included.
               </div>
             </div>
           </div>
@@ -1144,14 +1146,8 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
     const pendingRows = isSix
       ? vehicleSummary.filter(v => !v.sixDone)
       : vehicleSummary
-          .filter(v => !v.annualDone && (v.inspectionExpiry || String(v.plate).trim().toLowerCase() === 'test 123' || String(v.plate).trim() === '123'))
+          .filter(v => !v.annualDone)
           .map(v => ({ ...v, inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiry) || getInspectionExpiry(v.vehicle_id) }))
-          .filter(v => {
-            const days = Math.ceil(
-              (new Date(v.inspectionExpiry + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000
-            );
-            return days <= 30;
-          })
           .sort((a, b) => {
             const da = new Date(a.inspectionExpiry + 'T00:00:00Z').getTime();
             const db = new Date(b.inspectionExpiry + 'T00:00:00Z').getTime();
@@ -1198,10 +1194,10 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
         return db - da || Number(b.id || 0) - Number(a.id || 0);
       });
 
-    const title = isSix ? '6-Month Mechanical Inspection' : 'Annual Periodic Inspection — Due Within 30 Days';
+    const title = isSix ? '6-Month Mechanical Inspection' : 'Annual Periodic Inspection — All Vehicles Missing Evidence';
     const description = isSix
       ? 'Mechanical 6-month inspection control. GREEN means inspection evidence is recorded; RED means no inspection evidence is recorded.'
-      : 'Pending section shows expired vehicles and vehicles expiring within the next 30 days. Completed inspections remain listed below with completion date and next due date.';
+      : 'Pending section shows expired vehicles and vehicles expiring within the next 60 days. Completed inspections remain listed below with completion date and next due date.';
     return (
       <>
         <div className="panel" style={{ marginBottom: 18, overflowX: 'auto' }}>

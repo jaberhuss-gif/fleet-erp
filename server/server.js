@@ -1219,6 +1219,9 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
           completed_pm AS (
             UPDATE periodic_maintenance pm
             SET status='Completed',completed_date=((CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date),
+                whatsapp_confirmed_at=CURRENT_TIMESTAMP,
+                whatsapp_confirmation_source='WhatsApp - YES',
+                whatsapp_confirmation_token=NULL,
                 technician=COALESCE(NULLIF(pm.technician,''),'Driver - WhatsApp')
             FROM eligible e
             WHERE pm.id=e.pm_id::bigint AND pm.vehicle_id=e.vehicle_id AND pm.type='inspection'
@@ -1263,6 +1266,8 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
           closed_six_tickets AS (
             UPDATE tickets st
             SET status='Completed',closed_at=CURRENT_TIMESTAMP,closed_by='Auto-closed (Annual Confirmed)',
+                 whatsapp_confirmed_at=(SELECT cp.whatsapp_confirmed_at FROM completed_pm cp WHERE cp.vehicle_id=st.vehicle_id),
+                 whatsapp_confirmation_source='Covered by Annual Inspection',
                 whatsapp_confirmation_source='Annual Inspection - WhatsApp Confirmation',
                 whatsapp_confirmation_token=NULL
             WHERE st.category='6-Month Maintenance'

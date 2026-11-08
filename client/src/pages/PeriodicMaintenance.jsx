@@ -978,8 +978,8 @@ const openInspectionEmail = (group) => {
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <button className="btn" style={{ padding: '6px 10px', background: '#25D366', color: '#fff' }} onClick={() => reportWhatsApp(row, component, done)}>📱 WhatsApp</button>
                       {canWork && (done
-                        ? <button className="btn btn-success" style={{ padding: '6px 10px' }} disabled>✓ Closed</button>
-                        : <button className="btn btn-danger" style={{ padding: '6px 10px' }} onClick={() => closeComplianceReport(row, component, type)}>Close</button>
+                        ? <button className="btn btn-success" style={{ padding: '6px 10px' }} disabled>✓ Confirmed YES</button>
+                        : <span className="status-badge status-warning">Awaiting WhatsApp YES</span>
                       )}
                     </div>
                   </td>
@@ -1202,8 +1202,8 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
                       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                         <button className="btn" style={{padding:'6px 10px',background:'#25D366',color:'#fff'}} onClick={() => reportWhatsApp(row, title, done)}>📱 WhatsApp</button>
                         {canWork && (done
-                          ? <button className="btn btn-success" style={{padding:'6px 10px'}} disabled>✓ Inspected</button>
-                          : <button className="btn btn-danger" style={{padding:'6px 10px'}} onClick={() => closeComplianceReport(row, title, isSix ? '6_months_general' : 'inspection')}>Close Inspection</button>
+                          ? <button className="btn btn-success" style={{padding:'6px 10px'}} disabled>✓ Confirmed YES</button>
+                          : <span className="status-badge status-warning">Awaiting WhatsApp YES</span>
                         )}
                       </div>
                     </td>

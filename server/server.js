@@ -2985,13 +2985,29 @@ app.post("/api/periodic-maintenance", async (req, res) => {
 });
 
 app.put("/api/periodic-maintenance/:id", async (req, res) => {
-  try { res.json({ success: true, record: await updatePeriodicMaintenancePG(req.params.id, req.body) }); }
-  catch (e) { res.status(400).json({ success: false, error: e.message }); }
+  try {
+    const requestedStatus = String(req.body?.status || "").toLowerCase();
+    if (requestedStatus === "completed") {
+      const current = await pgQuery("SELECT type, whatsapp_confirmed_at FROM periodic_maintenance WHERE id=$1 LIMIT 1", [req.params.id]);
+      const row = current.rows[0];
+      if (row && ["inspection", "6_months_general"].includes(String(row.type || "")) && !row.whatsapp_confirmed_at) {
+        return res.status(409).json({ success: false, error: "Annual and six-month inspections can only be completed through the driver's WhatsApp YES confirmation." });
+      }
+    }
+    res.json({ success: true, record: await updatePeriodicMaintenancePG(req.params.id, req.body) });
+  } catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
 app.put("/api/periodic-maintenance/:id/complete", async (req, res) => {
-  try { res.json({ success: true, record: await completePeriodicMaintenancePG(req.params.id, req.body) }); }
-  catch (e) { res.status(400).json({ success: false, error: e.message }); }
+  try {
+    const current = await pgQuery("SELECT type, whatsapp_confirmed_at FROM periodic_maintenance WHERE id=$1 LIMIT 1", [req.params.id]);
+    const row = current.rows[0];
+    if (!row) return res.status(404).json({ success: false, error: "Periodic maintenance record not found." });
+    if (["inspection", "6_months_general"].includes(String(row.type || "")) && !row.whatsapp_confirmed_at) {
+      return res.status(409).json({ success: false, error: "Annual and six-month inspections can only be completed through the driver's WhatsApp YES confirmation." });
+    }
+    res.json({ success: true, record: await completePeriodicMaintenancePG(req.params.id, req.body) });
+  } catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
 app.put("/api/periodic-maintenance/:id/reopen", async (req, res) => {

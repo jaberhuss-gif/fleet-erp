@@ -289,8 +289,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     const sixDone = hasSixMonthEvidence(six) || annualCoversSix;
     const sixCycleDates = [
       hasSixMonthEvidence(six) ? (
-        validIsoDate(six.whatsapp_confirmed_at) ||
-        validIsoDate(String(six.notes || '').match(/Confirmed via 6-month WhatsApp on (\d{4}-\d{2}-\d{2})/i)?.[1])
+        validIsoDate(six.whatsapp_confirmed_at)
       ) : '',
       annualCoversSix ? annualDate : ''
     ].filter(Boolean).sort();

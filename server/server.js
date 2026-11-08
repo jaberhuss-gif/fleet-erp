@@ -1268,7 +1268,6 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
             SET status='Completed',closed_at=CURRENT_TIMESTAMP,closed_by='Auto-closed (Annual Confirmed)',
                  whatsapp_confirmed_at=(SELECT cp.whatsapp_confirmed_at FROM completed_pm cp WHERE cp.vehicle_id=st.vehicle_id),
                  whatsapp_confirmation_source='Covered by Annual Inspection',
-                whatsapp_confirmation_source='Annual Inspection - WhatsApp Confirmation',
                 whatsapp_confirmation_token=NULL
             WHERE st.category='6-Month Maintenance'
               AND EXISTS (SELECT 1 FROM auto_closed_six x WHERE st.resolution_notes LIKE ('[PM_REPAIR:' || x.id || ']%'))

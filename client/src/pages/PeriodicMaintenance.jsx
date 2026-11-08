@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import api from '../api/client';
 import { exportToExcel } from '../api/export';
 
+const EXEMPTED_PLATES = new Set(['1357JER', '1369JER', '1560EHR', '3296DER', '8571LHR']);
+
 const TYPE_LABELS = {
   '6_months_general': '6-Month General Maintenance',
   'inspection': 'Periodic Inspection'
@@ -296,9 +298,11 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     const missing = [];
     if (!sixDone) missing.push('6-Month Maintenance');
     if (!annualDone) missing.push('Annual Inspection');
+    const plateIdentity = String((v.plate || v.plate_number || '') + (v.plate_code || '')).toUpperCase().replace(/[^A-Z0-9]/g, '');
     return {
       vehicle_id: v.id,
-      plate: v.plate || v.plate_number || '-',
+      exempted: EXEMPTED_PLATES.has(plateIdentity),
+      plate: v.plate || [v.plate_number, v.plate_code].filter(Boolean).join(' ') || '-',
       location: v.location || v.site || '-',
       driver: v.driver || v.driver_name || '-',
       inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiryDate || v.inspection_expiry_date || ''),
@@ -308,9 +312,11 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     };
   });
 
-  const partiallyInspectedVehicles = vehicleSummary.filter(v => v.sixDone !== v.annualDone);
-  const notInspectedVehicles = vehicleSummary.filter(v => !v.sixDone && !v.annualDone);
-  const fullyInspectedVehicles = vehicleSummary.filter(v => v.fullyInspected);
+  const exemptedVehicles = vehicleSummary.filter(v => v.exempted);
+  const eligibleVehicleSummary = vehicleSummary.filter(v => !v.exempted);
+  const partiallyInspectedVehicles = eligibleVehicleSummary.filter(v => v.sixDone !== v.annualDone);
+  const notInspectedVehicles = eligibleVehicleSummary.filter(v => !v.sixDone && !v.annualDone);
+  const fullyInspectedVehicles = eligibleVehicleSummary.filter(v => v.fullyInspected);
 
   const exportColumns = [
     { key: 'vehicle_plate', label: 'Vehicle' },
@@ -997,19 +1003,22 @@ const openInspectionEmail = (group) => {
 
     const brandHtml = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5mm;padding-bottom:3mm;border-bottom:2px solid #1e3a8a"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Maaden Ivanhoe Electric JV logo" style="width:90px;height:50px;object-fit:contain"><div><div style="font-size:10pt;font-weight:700;line-height:1.2">Maaden Ivanhoe Electric Exploration and Development Limited Company</div><div style="font-size:8pt;color:#555;margin-top:2px">Exploration Phase — Arabian Shield</div><div style="font-size:9pt;font-weight:700;margin-top:3px">Hussein Anwar</div><div style="font-size:8pt;color:#555">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div></div>';
 
-    const inspectionMode = ['partial', 'none', 'fully'].includes(subTab);
+    const inspectionMode = ['partial', 'none', 'fully', 'exempted'].includes(subTab);
     let title = 'Vehicle Maintenance';
     let headers = [];
     let rows = '';
 
     if (inspectionMode) {
       const list = subTab === 'partial' ? partiallyInspectedVehicles
-        : subTab === 'none' ? notInspectedVehicles : fullyInspectedVehicles;
+        : subTab === 'none' ? notInspectedVehicles
+        : subTab === 'exempted' ? exemptedVehicles : fullyInspectedVehicles;
       title = subTab === 'partial' ? 'Partially Inspected Vehicles'
-        : subTab === 'none' ? 'Not Inspected Vehicles' : 'Fully Inspected Vehicles';
+        : subTab === 'none' ? 'Not Inspected Vehicles'
+        : subTab === 'exempted' ? 'Exempted Vehicles' : 'Fully Inspected Vehicles';
       headers = ['Vehicle','Driver','6-Month','Annual Inspection','Overall','Missing'];
       rows = list.map(v => {
-        const overall = subTab === 'fully' ? 'GREEN — Fully Inspected'
+        const overall = subTab === 'exempted' ? 'EXEMPTED'
+          : subTab === 'fully' ? 'GREEN — Fully Inspected'
           : subTab === 'none' ? 'RED — Not Inspected' : 'YELLOW — Partially Inspected';
         return '<tr><td>'+esc(v.plate)+'</td><td>'+esc(v.driver)+'</td><td>'+
           esc(v.sixDone ? 'Inspected' : 'Not Inspected')+'</td><td>'+
@@ -1316,19 +1325,21 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
 
       <div className="sub-nav print-hide" style={{marginBottom:16}}>
         <button className={reportTab==='six' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('six')}>
-          🔧 6-Month Mechanical ({vehicleSummary.filter(v=>!v.sixDone).length})
+          🔧 6-Month Mechanical ({eligibleVehicleSummary.filter(v=>!v.sixDone).length})
         </button>
         <button className={reportTab==='annual' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('annual')}>
-          📋 Annual Inspection ({vehicleSummary.filter(v=>!v.annualDone).length})
+          📋 Annual Inspection ({eligibleVehicleSummary.filter(v=>!v.annualDone).length})
         </button>
         <button className={reportTab==='original' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('original')}>
           📚 Original Maintenance Records ({records.length})
         </button>
+        <button className={reportTab==='exempted' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('exempted')}>Exempted Vehicles ({exemptedVehicles.length})</button>
         {canWork && <button className="sub-btn" style={{background:'#7c3aed',color:'#fff'}} onClick={handleAutoClose}>Auto-Close (Annual Covered)</button>}
       </div>
 
       {reportTab === 'six' && renderControlTable('six')}
       {reportTab === 'annual' && renderControlTable('annual')}
+      {reportTab === 'exempted' && <div className="panel" style={{overflowX:'auto'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap'}}><h2>Exempted Vehicles ({exemptedVehicles.length})</h2><button className="btn btn-primary" onClick={printPdfReport}>Print / Save PDF</button></div><table><thead><tr><th>Vehicle</th><th>Driver</th><th>Location</th><th>Status</th></tr></thead><tbody>{exemptedVehicles.map(v=><tr key={v.vehicle_id}><td>{v.plate}</td><td>{v.driver}</td><td>{v.location}</td><td>Exempted</td></tr>)}</tbody></table></div>}
 
       {reportTab === 'original' && (
         <>

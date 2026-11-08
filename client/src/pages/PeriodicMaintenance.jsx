@@ -298,7 +298,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     const missing = [];
     if (!sixDone) missing.push('6-Month Maintenance');
     if (!annualDone) missing.push('Annual Inspection');
-    const plateIdentity = String((v.plate || v.plate_number || '') + (v.plate_code || '')).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const plateIdentity = String(v.plate || [v.plate_number, v.plate_code].filter(Boolean).join(' ')).toUpperCase().replace(/[^A-Z0-9]/g, '');
     return {
       vehicle_id: v.id,
       exempted: EXEMPTED_PLATES.has(plateIdentity),

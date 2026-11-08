@@ -1222,7 +1222,7 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
                 technician=COALESCE(NULLIF(pm.technician,''),'Driver - WhatsApp')
             FROM eligible e
             WHERE pm.id=e.pm_id::bigint AND pm.vehicle_id=e.vehicle_id AND pm.type='inspection'
-            RETURNING pm.vehicle_id,pm.completed_date
+            RETURNING pm.vehicle_id,pm.completed_date,pm.whatsapp_confirmed_at
           ),
           updated_vehicle AS (
             UPDATE vehicles v
@@ -1248,9 +1248,9 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
             RETURNING six.id, six.vehicle_id
           ),
           created_six AS (
-            INSERT INTO periodic_maintenance (vehicle_id,type,scheduled_date,status,completed_date,technician,notes)
-            SELECT cp.vehicle_id,'6_months_general',cp.completed_date,'Completed',cp.completed_date,
-                   'Auto-created (Annual Confirmed)','Six-month cycle covered by annual inspection confirmed via WhatsApp'
+            INSERT INTO periodic_maintenance (vehicle_id,type,scheduled_date,status,completed_date,whatsapp_confirmed_at,whatsapp_confirmation_source,technician,notes)
+            SELECT cp.vehicle_id,'6_months_general',cp.completed_date,'Completed',cp.completed_date,cp.whatsapp_confirmed_at,'Covered by Annual Inspection',
+                   'Covered by Annual Inspection','Six-month cycle covered by annual inspection confirmed via WhatsApp'
             FROM completed_pm cp
             WHERE NOT EXISTS (SELECT 1 FROM auto_closed_six x WHERE x.vehicle_id=cp.vehicle_id)
               AND NOT EXISTS (

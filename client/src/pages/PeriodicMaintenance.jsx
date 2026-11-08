@@ -288,10 +288,7 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     const annualCoversSix = Boolean(annualDate && sixScheduledDate && annualDate <= sixScheduledDate);
     const sixDone = hasSixMonthEvidence(six) || annualCoversSix;
     const sixCycleDates = [
-      hasSixMonthEvidence(six) ? (
-        validIsoDate(six.whatsapp_confirmed_at) ||
-        validIsoDate(String(six.notes || '').match(/Confirmed via 6-month WhatsApp on (\d{4}-\d{2}-\d{2})/i)?.[1])
-      ) : '',
+      hasSixMonthEvidence(six) ? validIsoDate(six.whatsapp_confirmed_at) : '',
       annualCoversSix ? annualDate : ''
     ].filter(Boolean).sort();
     const sixReferenceDate = sixCycleDates[sixCycleDates.length - 1] || '';
@@ -1047,7 +1044,7 @@ const openInspectionEmail = (group) => {
 .brand img{width:90px;height:50px;object-fit:contain}
 table{width:100%;border-collapse:collapse;table-layout:fixed}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}
 th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:top;line-height:1.2;overflow-wrap:anywhere}th{background:#e9eef5;font-weight:700}</style>
-</head><body>${brandHtml}<div class="title">${esc(title)}</div><div class="meta">Generated: ${esc(new Date().toLocaleString())} · Records: ${inspectionMode ? (subTab === 'partial' ? partiallyInspectedVehicles.length : subTab === 'none' ? notInspectedVehicles.length : fullyInspectedVehicles.length) : currentList.length}</div>
+</head><body>${brandHtml}<div class="title">${esc(title)}</div><div class="meta">Generated: ${esc(new Date().toLocaleString())} · Records: ${inspectionMode ? ((reportTab === 'exempted' || subTab === 'exempted') ? exemptedVehicles.length : subTab === 'partial' ? partiallyInspectedVehicles.length : subTab === 'none' ? notInspectedVehicles.length : fullyInspectedVehicles.length) : currentList.length}</div>
 <table><thead><tr>${headers.map(h => '<th>'+esc(h)+'</th>').join('')}</tr></thead><tbody>${rows}</tbody></table>
 </body></html>`);
     printWindow.document.close(); printWindow.focus();
@@ -1056,13 +1053,14 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
 
   // For 6-month maintenance, a note is the evidence that the vehicle was inspected.
   // Notes may describe findings; they still mean the inspection was performed.
-  const isSixMonthInspected = (r) => r.type === '6_months_general' && (
-    r.status === 'Completed' || Boolean(String(r.notes || '').trim())
-  );
+  const isSixMonthInspected = (r) => hasSixMonthEvidence(r);
 
   const getStatusBadge = (r) => {
-    if (isSixMonthInspected(r)) return <span className="status-badge status-safe">GREEN — Inspected</span>;
-    if (r.type === '6_months_general') return <span className="status-badge status-urgent">RED — Not Inspected</span>;
+    if (['inspection', '6_months_general'].includes(r.type)) {
+      return isInspected(r)
+        ? <span className="status-badge status-safe">Confirmed YES</span>
+        : <span className="status-badge status-warning">Pending WhatsApp YES</span>;
+    }
     if (r.status === 'Completed') return <span className="status-badge status-safe">Completed</span>;
     if (r.scheduled_date < today) return <span className="status-badge status-urgent">Overdue</span>;
     return <span className="status-badge status-warning">Pending</span>;

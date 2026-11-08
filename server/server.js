@@ -1196,13 +1196,48 @@ app.get("/maintenance-confirm/:token", async (req,res)=>{
     res.send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${heading}</title></head><body style="font-family:Arial,sans-serif;max-width:560px;margin:40px auto;padding:20px"><h2>${heading}</h2><p><b>Vehicle:</b> ${esc(plate)}</p><p><b>Type:</b> ${esc(row.category||"Maintenance Issue")}</p><p>${esc(row.description||"")}</p><hr/><p>${question}</p><p>${questionAr}</p><form method="POST" action="/maintenance-confirm/${encodeURIComponent(token)}?decision=yes"><button style="padding:14px 28px;background:#16a34a;color:white;border:0;border-radius:8px;font-size:18px">${yesLabel}</button></form><br/><form method="POST" action="/maintenance-confirm/${encodeURIComponent(token)}?decision=no"><button style="padding:14px 28px;background:#dc2626;color:white;border:0;border-radius:8px;font-size:18px">${noLabel}</button></form></body></html>`);
   }catch(e){res.status(500).send("Maintenance confirmation error.");}
 });
+// ---------------------------------------------------------------------------
+// Special vehicles — preserve manually approved inspection expiry dates.
+// These vehicles have a government-approved or manually verified inspection
+// expiry date that must NOT be overwritten by an automated WhatsApp YES.
+// Per user directive: 1712 BUA keeps approved expiry 2027-09-23.
+// The WhatsApp confirmation date is still recorded in periodic_maintenance
+// and tickets, but vehicles.inspection_expiry_date is left untouched.
+// ---------------------------------------------------------------------------
+const PRESERVE_INSPECTION_EXPIRY_PLATES = new Set(['1712 BUA']);
+
 app.post("/maintenance-confirm/:token", async(req,res)=>{
   try{
-    const token=String(req.params.token||"").trim(),decision=String(req.query.decision||req.body?.decision||"").toLowerCase();
-    const result=await pgQuery(`SELECT id,status,category,vehicle_id,resolution_notes FROM tickets WHERE whatsapp_confirmation_token=$1 LIMIT 1`,[token]); const row=result.rows[0];
+    const token=String(req.params.token||"").trim(),
+          decision=String(req.query.decision||req.body?.decision||"").toLowerCase();
+    // Join with vehicles so we can branch on plate for preserved expiry dates.
+    const result=await pgQuery(
+      `SELECT t.id, t.status, t.category, t.vehicle_id, t.resolution_notes,
+              v.plate_number, v.plate_code
+       FROM tickets t
+       LEFT JOIN vehicles v ON v.id=t.vehicle_id
+       WHERE t.whatsapp_confirmation_token=$1 LIMIT 1`,
+      [token]);
+    const row=result.rows[0];
     if(!row)return res.status(404).send("<h2>Maintenance confirmation link is invalid or expired.</h2>");
-    if(row.status==="Completed"||row.whatsapp_confirmed_at)return res.send("<h2>Already Confirmed</h2><p>This confirmation has already been recorded.</p>");
+
+    // Idempotency guard — once YES is recorded, do not duplicate the cycle.
+    if(row.status==="Completed"||row.whatsapp_confirmed_at){
+      return res.send("<h2>✓ Already Confirmed</h2><p>This confirmation has already been recorded and the inspection cycle is closed. No further action is needed.</p>");
+    }
+
+    const plateKey=[row.plate_number,row.plate_code].filter(Boolean).join(' ').trim();
+    const preserveExpiry=PRESERVE_INSPECTION_EXPIRY_PLATES.has(plateKey);
+
     if(decision==="yes"){
+      // ====================================================================
+      // Annual Inspection YES — full cycle:
+      //   1. periodic_maintenance (inspection) → Completed + whatsapp_confirmed_at
+      //   2. vehicles → inspection_last_date + (expiry preserved for special plates)
+      //   3. periodic_maintenance (6_months_general Pending) → auto-close "Covered by Annual"
+      //   4. tickets (6-Month Maintenance linked) → Completed + auto-closed source
+      //   5. ticket (Annual Inspection) → Completed + WhatsApp YES
+      // ====================================================================
       if(row.category==="Annual Inspection"){
         const done=await pgQuery(`
           WITH eligible AS (
@@ -1212,7 +1247,10 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
           completed_pm AS (
             UPDATE periodic_maintenance pm
             SET status='Completed',completed_date=CURRENT_DATE,
-                technician=COALESCE(NULLIF(pm.technician,''),'Driver - WhatsApp')
+                technician=COALESCE(NULLIF(pm.technician,''),'Driver - WhatsApp'),
+                whatsapp_confirmed_at=CURRENT_TIMESTAMP,
+                whatsapp_confirmation_source='Fleet Management - WhatsApp YES',
+                whatsapp_confirmation_token=NULL
             FROM eligible e
             WHERE pm.id=e.pm_id::bigint AND pm.vehicle_id=e.vehicle_id AND pm.type='inspection'
             RETURNING pm.vehicle_id,pm.completed_date
@@ -1220,8 +1258,10 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
           updated_vehicle AS (
             UPDATE vehicles v
             SET inspection_last_date=cp.completed_date,
-                inspection_due_date=(cp.completed_date + INTERVAL '1 year')::date,
-                inspection_expiry_date=(cp.completed_date + INTERVAL '1 year')::date
+                inspection_due_date=CASE WHEN $3 THEN v.inspection_due_date
+                                          ELSE (cp.completed_date + INTERVAL '1 year')::date END,
+                inspection_expiry_date=CASE WHEN $3 THEN v.inspection_expiry_date
+                                             ELSE (cp.completed_date + INTERVAL '1 year')::date END
             FROM completed_pm cp WHERE v.id=cp.vehicle_id
             RETURNING v.id
           ),
@@ -1230,12 +1270,17 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
             SET status='Completed',
                 completed_date=COALESCE(six.completed_date, cp.completed_date),
                 technician='Auto-closed (Annual Confirmed)',
-                notes=COALESCE(six.notes,'') || CASE WHEN COALESCE(six.notes,'')='' THEN '' ELSE E'\\n\\n' END || 'Auto-closed: annual inspection confirmed via WhatsApp'
+                whatsapp_confirmed_at=CURRENT_TIMESTAMP,
+                whatsapp_confirmation_source='Fleet Management - Auto-closed (Annual)',
+                notes=COALESCE(six.notes,'') ||
+                      CASE WHEN COALESCE(six.notes,'')='' THEN '' ELSE E'\\n\\n' END ||
+                      'Covered by Annual Inspection — confirmed via WhatsApp on ' || cp.completed_date::text
             FROM completed_pm cp
             WHERE six.vehicle_id=cp.vehicle_id
               AND six.type='6_months_general'
               AND six.status IN ('Pending','Open','Pending Driver Confirmation')
               AND COALESCE(six.notes,'') NOT LIKE '%Auto-closed%'
+              AND COALESCE(six.notes,'') NOT LIKE '%Covered by Annual Inspection%'
             RETURNING six.id
           ),
           closed_six_tickets AS (
@@ -1251,7 +1296,9 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
           closed_ticket AS (
             UPDATE tickets t
             SET status='Completed',closed_at=CURRENT_TIMESTAMP,closed_by='Driver - WhatsApp',
-                resolution_notes=COALESCE(NULLIF(t.resolution_notes,''),'') || E'\\nDriver confirmed annual inspection via WhatsApp',
+                resolution_notes=COALESCE(NULLIF(t.resolution_notes,''),'') ||
+                  E'\\nDriver confirmed annual inspection via WhatsApp on ' || CURRENT_DATE::text ||
+                  CASE WHEN $3 THEN E'\\n(Preserved inspection_expiry_date per manual approval for ' || $4::text || E')' ELSE '' END,
                 whatsapp_confirmed_at=CURRENT_TIMESTAMP,
                 whatsapp_confirmation_source='Fleet Management - WhatsApp YES',
                 whatsapp_confirmation_token=NULL
@@ -1260,14 +1307,94 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
             RETURNING t.id
           )
           SELECT id FROM closed_ticket
-        `,[row.id,token]);
+        `,[row.id,token,preserveExpiry,plateKey]);
         if(!done.rows.length) return res.status(409).send("<h2>Inspection record could not be matched to this vehicle. Fleet Management must review it.</h2>");
-        return res.send("<h2>✓ Annual Inspection Confirmation Recorded</h2><p>The annual inspection record and vehicle expiry dates have been updated.</p><p>Date: "+new Date().toISOString().slice(0,10)+"</p>");
+        const msg=preserveExpiry
+          ? "<h2>✓ Annual Inspection Confirmation Recorded</h2><p>The annual inspection record has been updated with WhatsApp confirmation.</p><p style='color:#0284c7'><b>Note:</b> This vehicle ("+plateKey+") has a manually approved inspection expiry date — the original expiry has been preserved per policy.</p><p>WhatsApp confirmation date: "+new Date().toISOString().slice(0,10)+"</p>"
+          : "<h2>✓ Annual Inspection Confirmation Recorded</h2><p>The annual inspection record and vehicle expiry dates have been updated.</p><p>Date: "+new Date().toISOString().slice(0,10)+"</p>";
+        return res.send(msg);
       }
-      await pgQuery(`UPDATE tickets SET status='Completed',closed_at=CURRENT_TIMESTAMP,closed_by='Driver - WhatsApp',resolution_notes=COALESCE(NULLIF(resolution_notes,''),'Driver confirmed repaired via WhatsApp'),whatsapp_confirmed_at=CURRENT_TIMESTAMP,whatsapp_confirmation_source='Fleet Management - WhatsApp YES',whatsapp_confirmation_token=NULL WHERE id=$1 AND whatsapp_confirmation_token=$2`,[row.id,token]);
+
+      // ====================================================================
+      // 6-Month Maintenance YES — full cycle:
+      //   1. periodic_maintenance (6_months_general) → Completed + whatsapp_confirmed_at
+      //   2. ticket (6-Month Maintenance) → Completed + WhatsApp YES
+      // (No vehicles update — 6-month inspection does not change annual expiry.)
+      // ====================================================================
+      if(row.category==="6-Month Maintenance"){
+        const done=await pgQuery(`
+          WITH eligible AS (
+            SELECT id,vehicle_id,substring(resolution_notes from '\\[PM_REPAIR:([0-9]+)\\]') AS pm_id
+            FROM tickets WHERE id=$1 AND whatsapp_confirmation_token=$2
+          ),
+          completed_pm AS (
+            UPDATE periodic_maintenance pm
+            SET status='Completed',completed_date=CURRENT_DATE,
+                technician=COALESCE(NULLIF(pm.technician,''),'Driver - WhatsApp'),
+                whatsapp_confirmed_at=CURRENT_TIMESTAMP,
+                whatsapp_confirmation_source='Fleet Management - WhatsApp YES',
+                whatsapp_confirmation_token=NULL
+            FROM eligible e
+            WHERE pm.id=e.pm_id::bigint AND pm.vehicle_id=e.vehicle_id AND pm.type='6_months_general'
+            RETURNING pm.vehicle_id,pm.completed_date
+          ),
+          closed_ticket AS (
+            UPDATE tickets t
+            SET status='Completed',closed_at=CURRENT_TIMESTAMP,closed_by='Driver - WhatsApp',
+                resolution_notes=COALESCE(NULLIF(t.resolution_notes,''),'') ||
+                  E'\\nDriver confirmed 6-month maintenance via WhatsApp on ' || CURRENT_DATE::text,
+                whatsapp_confirmed_at=CURRENT_TIMESTAMP,
+                whatsapp_confirmation_source='Fleet Management - WhatsApp YES',
+                whatsapp_confirmation_token=NULL
+            FROM eligible e
+            WHERE t.id=e.id
+              AND EXISTS (SELECT 1 FROM completed_pm cp WHERE cp.vehicle_id=e.vehicle_id)
+            RETURNING t.id
+          )
+          SELECT id FROM closed_ticket
+        `,[row.id,token]);
+        if(!done.rows.length) return res.status(409).send("<h2>6-Month maintenance record could not be matched to this vehicle. Fleet Management must review it.</h2>");
+        return res.send("<h2>✓ 6-Month Maintenance Confirmed</h2><p>The 6-month maintenance record has been updated with WhatsApp confirmation.</p><p>Date: "+new Date().toISOString().slice(0,10)+"</p>");
+      }
+
+      // ====================================================================
+      // Generic maintenance issue YES (existing behaviour — non-inspection
+      // repair tickets). Kept for backwards compatibility.
+      // ====================================================================
+      await pgQuery(
+        `UPDATE tickets SET status='Completed',closed_at=CURRENT_TIMESTAMP,closed_by='Driver - WhatsApp',
+            resolution_notes=COALESCE(NULLIF(resolution_notes,''),'Driver confirmed repaired via WhatsApp'),
+            whatsapp_confirmed_at=CURRENT_TIMESTAMP,
+            whatsapp_confirmation_source='Fleet Management - WhatsApp YES',
+            whatsapp_confirmation_token=NULL
+         WHERE id=$1 AND whatsapp_confirmation_token=$2`,
+        [row.id,token]);
       return res.send("<h2>✓ Maintenance Confirmed</h2><p>The repair has been confirmed and recorded in Fleet ERP.</p><p>Date: "+new Date().toISOString().slice(0,10)+"</p>");
     }
-    if(decision==="no"){await pgQuery(`UPDATE tickets SET status='Open',whatsapp_confirmation_source='Fleet Management - WhatsApp NO',whatsapp_confirmation_token=NULL WHERE id=$1 AND whatsapp_confirmation_token=$2`,[row.id,token]);return res.send("<h2>Maintenance Still Pending</h2><p>The ticket remains open. Fleet Management has been notified.</p>");}
+
+    // ====================================================================
+    // NO — keep the link valid for retry; do NOT mark as confirmed.
+    // Audit trail: append a WA_NO_ATTEMPT record to resolution_notes.
+    // Status stays 'Pending Driver Confirmation' so the driver can press YES
+    // later once the inspection has actually been carried out.
+    // ====================================================================
+    if(decision==="no"){
+      await pgQuery(
+        `UPDATE tickets
+            SET whatsapp_confirmation_source='Fleet Management - WhatsApp NO (retry allowed)',
+                resolution_notes=COALESCE(NULLIF(resolution_notes,''),'') ||
+                  E'\\n[WA_NO_ATTEMPT:' || CURRENT_TIMESTAMP::text ||
+                  E'] Driver clicked NO. Status remains Pending Driver Confirmation; link stays valid for retry.'
+         WHERE id=$1 AND whatsapp_confirmation_token=$2
+           AND status='Pending Driver Confirmation'`,
+        [row.id,token]);
+      return res.send(
+        "<h2>Marked as Not Completed</h2>"+
+        "<p>The inspection has NOT been confirmed. The ticket remains open.</p>"+
+        "<p style='color:#0284c7'>You can re-open this link later and press YES once the inspection has been carried out.</p>"+
+        "<p>Date: "+new Date().toISOString().slice(0,10)+"</p>"
+      );
+    }
     res.status(400).send("<h2>Please choose YES or NO.</h2>");
   }catch(e){console.error("[MaintenanceConfirm]",e);res.status(500).send("Maintenance confirmation error.");}
 });

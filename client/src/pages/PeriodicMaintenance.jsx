@@ -1003,18 +1003,18 @@ const openInspectionEmail = (group) => {
 
     const brandHtml = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5mm;padding-bottom:3mm;border-bottom:2px solid #1e3a8a"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Maaden Ivanhoe Electric JV logo" style="width:90px;height:50px;object-fit:contain"><div><div style="font-size:10pt;font-weight:700;line-height:1.2">Maaden Ivanhoe Electric Exploration and Development Limited Company</div><div style="font-size:8pt;color:#555;margin-top:2px">Exploration Phase — Arabian Shield</div><div style="font-size:9pt;font-weight:700;margin-top:3px">Hussein Anwar</div><div style="font-size:8pt;color:#555">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div></div>';
 
-    const inspectionMode = ['partial', 'none', 'fully', 'exempted'].includes(subTab);
+    const inspectionMode = ['partial', 'none', 'fully', 'exempted'].includes(subTab) || reportTab === 'exempted';
     let title = 'Vehicle Maintenance';
     let headers = [];
     let rows = '';
 
     if (inspectionMode) {
-      const list = subTab === 'partial' ? partiallyInspectedVehicles
-        : subTab === 'none' ? notInspectedVehicles
-        : subTab === 'exempted' ? exemptedVehicles : fullyInspectedVehicles;
-      title = subTab === 'partial' ? 'Partially Inspected Vehicles'
-        : subTab === 'none' ? 'Not Inspected Vehicles'
-        : subTab === 'exempted' ? 'Exempted Vehicles' : 'Fully Inspected Vehicles';
+      const list = reportTab === 'exempted' || subTab === 'exempted' ? exemptedVehicles
+        : subTab === 'partial' ? partiallyInspectedVehicles
+        : subTab === 'none' ? notInspectedVehicles : fullyInspectedVehicles;
+      title = reportTab === 'exempted' || subTab === 'exempted' ? 'Exempted Vehicles'
+        : subTab === 'partial' ? 'Partially Inspected Vehicles'
+        : subTab === 'none' ? 'Not Inspected Vehicles' : 'Fully Inspected Vehicles';
       headers = ['Vehicle','Driver','6-Month','Annual Inspection','Overall','Missing'];
       rows = list.map(v => {
         const overall = subTab === 'exempted' ? 'EXEMPTED'

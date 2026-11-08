@@ -1226,7 +1226,7 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
           ),
           updated_vehicle AS (
             UPDATE vehicles v
-            SET inspection_last_date=COALESCE(v.inspection_last_date, cp.completed_date),
+            SET inspection_last_date=cp.completed_date,
                 inspection_due_date=COALESCE(v.inspection_due_date, (cp.completed_date + INTERVAL '1 year')::date),
                 inspection_expiry_date=COALESCE(v.inspection_expiry_date, (cp.completed_date + INTERVAL '1 year')::date)
             FROM completed_pm cp WHERE v.id=cp.vehicle_id

@@ -1072,130 +1072,16 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     const recordedCompletedRows = records
-      .filter(r => r.type === 'inspection' && r.status === 'Completed' && r.completed_date)
-      .sort((a, b) => {
-        const da = new Date(a.completed_date).getTime();
-        const db = new Date(b.completed_date).getTime();
-        return db - da || Number(b.id || 0) - Number(a.id || 0);
-      });
-    const vehicle1712 = activeVehicles.find(v => /1712/.test(String(v.plate || v.plate_number || '')));
-    const expiry1712 = vehicle1712
-      ? normalizeInspectionExpiry(vehicle1712.inspectionExpiryDate || vehicle1712.inspection_expiry_date || '')
-      : '';
-    const hasCurrent1712Pass = vehicle1712 && recordedCompletedRows.some(r =>
-      String(r.vehicle_id) === String(vehicle1712.id) && getNextAnnualDueDate(r) === '2027-09-23'
-    );
-    const completedRows = [...recordedCompletedRows, ...(
-      vehicle1712 && expiry1712 === '2027-09-23' && !hasCurrent1712Pass
-        ? [{
-            vehicle_id: vehicle1712.id,
-            vehicle_plate: vehicle1712.plate || vehicle1712.plate_number || '1712',
-            vehicle_location: vehicle1712.location || vehicle1712.site || '-',
-            driver_name: vehicle1712.driver || vehicle1712.driver_name || '-',
-            completed_date: '',
-            inspection_expiry_date: '2027-09-23',
-            technician: 'Fleet Management — passed (confirmed)',
-            notes: 'Inspection passed; next expiry confirmed as 2027-09-23. Original inspection history retained.',
-            isMasterExpiryConfirmation: true
-          }]
-        : []
-    )];
-    const rows = completedRows.map(rec => {
-      const v = vehicleById[String(rec.vehicle_id)] || {};
-      const plate = rec.vehicle_plate || v.plate || v.plate_number || '-';
-      const due = rec.isMasterExpiryConfirmation ? rec.inspection_expiry_date : getNextAnnualDueDate(rec);
-      return '<tr><td>' + esc(plate) + '</td><td>' + esc(rec.vehicle_location || v.location || '-') +
-        '</td><td>' + esc(rec.driver_name || v.driver || '-') +
-        '</td><td>' + esc(rec.isMasterExpiryConfirmation ? 'Passed — date not recorded' : String(rec.completed_date).slice(0, 10)) +
-        '</td><td>' + esc(due || '—') + '</td><td>' + esc(rec.technician || '-') +
-        '</td><td>' + esc(rec.notes || '-') + '</td></tr>';
-    }).join('');
-    const w = window.open('', '_blank', 'width=1200,height=800');
-    if (!w) { setError('Please allow pop-ups to print the completed annual inspections PDF.'); return; }
-    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Completed Annual Inspections</title><style>' +
-      '@page{size:A4 landscape;margin:12mm}body{font-family:Arial,sans-serif;color:#172033;font-size:9pt}' +
-      '.brand{display:flex;align-items:center;gap:14px;border-bottom:2px solid #1e3a8a;padding-bottom:10px;margin-bottom:14px}' +
-      '.brand img{max-height:58px;max-width:150px;object-fit:contain}h1{font-size:18pt;margin:0 0 5px}' +
-      '.sub{color:#475569;font-size:9pt}.meta{margin:10px 0 14px;color:#475569}' +
-      'table{width:100%;border-collapse:collapse;table-layout:fixed}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}' +
-      'th,td{border:1px solid #94a3b8;padding:6px;text-align:left;vertical-align:top;overflow-wrap:anywhere;line-height:1.25}' +
-      'th{background:#e9eef5;font-weight:700}footer{margin-top:20px;border-top:1px solid #cbd5e1;padding-top:8px;color:#475569}' +
-      '</style></head><body>'+ '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:3px solid #1e3a8a;padding:0 0 12px;margin:0 0 16px;page-break-inside:avoid"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Ivanhoe Electric and Maaden" style="width:175px;max-height:78px;object-fit:contain"><div style="flex:1;text-align:right;font-family:Arial,sans-serif"><div style="font-size:15px;font-weight:700;color:#1e3a8a">Maaden Ivanhoe Electric Exploration and Development Limited Company</div><div style="font-size:10px;color:#475569;margin-top:3px">Exploration Phase — Arabian Shield</div><div style="font-size:12px;font-weight:700;margin-top:7px;color:#111827">Hussein Anwar</div><div style="font-size:10px;color:#475569;margin-top:2px">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div></div>' + '<div class="brand"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Company logo"><div><h1>Completed Annual Inspections</h1>' +
-      '<div class="sub">Maaden Ivanhoe Electric Exploration and Development Limited Company</div></div></div>' +
-      '<div class="meta">Generated: ' + esc(new Date().toLocaleString()) + ' · Total completed inspections: ' + completedRows.length + '</div>' +
-      '<table><thead><tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Completed Date</th><th>Next Due Date</th><th>Technician</th><th>Notes</th></tr></thead><tbody>' +
-      (rows || '<tr><td colspan="7">No completed annual inspections recorded.</td></tr>') +
-      '</tbody></table><footer>Fleet Manager / General Maintenance Supervisor — Hussein Anwar</footer></body></html>');
-    w.document.close();
-    w.focus();
-    Promise.all(Array.from(w.document.images).map(img => img.decode ? img.decode().catch(() => {}) : new Promise(resolve => { if (img.complete) return resolve(); img.onload = img.onerror = resolve; setTimeout(resolve, 8000); }))).then(() => w.print());
-  };
-
-  const reopenInspection = async (rec) => {
-    if (!canWork || !rec?.id) return;
-    if (!confirm('Reopen this annual inspection and return it to Not Inspected?')) return;
-    setError(''); setMessage('');
-    try {
-      await api.put('/periodic-maintenance/' + rec.id + '/reopen');
-      setMessage('Annual inspection reopened and returned to the Not Inspected list.');
-      await load();
-    } catch (e) {
-      setError(e.response?.data?.error || e.message);
-    }
-  };
-
-  const renderControlTable = (kind) => {
-    const isSix = kind === 'six';
-    const pendingRows = isSix
-      ? vehicleSummary.filter(v => !v.sixDone)
-      : vehicleSummary
-          .filter(v => !v.annualDone)
-          .map(v => ({ ...v, inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiry) || getInspectionExpiry(v.vehicle_id) }))
-          .sort((a, b) => {
-            const da = new Date(a.inspectionExpiry + 'T00:00:00Z').getTime();
-            const db = new Date(b.inspectionExpiry + 'T00:00:00Z').getTime();
-            return da - db || String(a.plate).localeCompare(String(b.plate));
-          });
-
-    const recordedCompletedRows = records
-      .filter(r => r.type === 'inspection' && r.status === 'Completed' && r.completed_date)
+      .filter(r => r.type === 'inspection' && r.status === 'Completed' &&
+        r.completed_date && validIsoDate(r.whatsapp_confirmed_at) &&
+        !vehicleSummary.some(v => String(v.vehicle_id) === String(r.vehicle_id) && v.exempted))
       .sort((a, b) => {
         const da = new Date(a.completed_date).getTime();
         const db = new Date(b.completed_date).getTime();
         return db - da || Number(b.id || 0) - Number(a.id || 0);
       });
 
-    // Vehicle 1712 has been confirmed by Fleet Management as passed, with the
-    // next expiry date stored in Vehicle Master. Keep the original history and
-    // show the new pass in this results list even if its new PM record is absent.
-    const vehicle1712 = activeVehicles.find(v => /1712/.test(String(v.plate || v.plate_number || '')));
-    const expiry1712 = vehicle1712
-      ? normalizeInspectionExpiry(vehicle1712.inspectionExpiryDate || vehicle1712.inspection_expiry_date || '')
-      : '';
-    const hasCurrent1712Pass = vehicle1712 && recordedCompletedRows.some(r =>
-      String(r.vehicle_id) === String(vehicle1712.id) &&
-      getNextAnnualDueDate(r) === '2027-09-23'
-    );
-    const confirmed1712Pass = !isSix && vehicle1712 && expiry1712 === '2027-09-23' && !hasCurrent1712Pass
-      ? [{
-          id: 'master-expiry-confirmation-1712',
-          vehicle_id: vehicle1712.id,
-          vehicle_plate: vehicle1712.plate || vehicle1712.plate_number || '1712',
-          vehicle_location: vehicle1712.location || vehicle1712.site || '-',
-          driver_name: vehicle1712.driver || vehicle1712.driver_name || '-',
-          completed_date: '',
-          inspection_expiry_date: '2027-09-23',
-          technician: 'Fleet Management — passed (confirmed)',
-          notes: 'Inspection passed; next expiry confirmed as 2027-09-23. Original inspection history retained.',
-          isMasterExpiryConfirmation: true
-        }]
-      : [];
-    const completedRows = isSix ? [] : [...recordedCompletedRows, ...confirmed1712Pass]
-      .sort((a, b) => {
-        const da = new Date(a.completed_date || 0).getTime();
-        const db = new Date(b.completed_date || 0).getTime();
-        return db - da || Number(b.id || 0) - Number(a.id || 0);
-      });
+    const completedRows = isSix ? [] : recordedCompletedRows;
 
     const title = isSix ? '6-Month Mechanical Inspection' : 'Annual Periodic Inspection — All Vehicles Missing Evidence';
     const description = isSix

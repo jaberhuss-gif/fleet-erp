@@ -224,15 +224,10 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
   };
 
   const hasAnnualEvidence = (r) =>
-    Boolean(r && r.type === 'inspection' && r.status === 'Completed' &&
-      validIsoDate(r.completed_date));
+    Boolean(r && r.type === 'inspection' && validIsoDate(r.whatsapp_confirmed_at));
 
-  const hasSixMonthEvidence = (r) => {
-    if (!r || r.type !== '6_months_general') return false;
-    if (validIsoDate(r.whatsapp_confirmed_at)) return true;
-    const match = String(r.notes || '').match(/Confirmed via 6-month WhatsApp on (\d{4}-\d{2}-\d{2})/i);
-    return Boolean(match && validIsoDate(match[1]));
-  };
+  const hasSixMonthEvidence = (r) =>
+    Boolean(r && r.type === '6_months_general' && validIsoDate(r.whatsapp_confirmed_at));
 
   const isInspected = (r) =>
     r?.type === 'inspection' ? hasAnnualEvidence(r) :

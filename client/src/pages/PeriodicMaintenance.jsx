@@ -7,6 +7,37 @@ const TYPE_LABELS = {
   'inspection': 'Periodic Inspection'
 };
 
+// ---------------------------------------------------------------------------
+// Exempted vehicles (5) — per government decision 2024.
+// Excluded from Fully / Partially / Not Inspected sections.
+// Displayed in a dedicated Exempted Vehicles tab for auditability.
+// Source: user directive — do NOT alter exemption status without review.
+// ---------------------------------------------------------------------------
+const EXEMPTED_PLATE_NUMBERS = new Set(['1357', '1369', '1560', '3296', '8571']);
+const EXEMPTED_REASON = 'Government decision (2024)';
+
+// Test / demo vehicles — excluded from all inspection reports.
+const TEST_PLATE_NUMBERS = new Set(['test 123', '123']);
+
+// Build the canonical plate key (e.g. "1712 BUA") from a vehicle record.
+const vehiclePlateKey = (v) => {
+  const num = String(v?.plate_number || v?.plate || '').trim();
+  const code = String(v?.plate_code || '').trim();
+  return [num, code].filter(Boolean).join(' ').trim();
+};
+
+// Classify a periodic_maintenance record's WhatsApp confirmation state.
+// Returns one of: 'YES' | 'COVERED' | 'PENDING' | 'NONE'
+const whatsappConfirmationStatus = (r) => {
+  if (!r) return 'NONE';
+  const source = String(r.whatsapp_confirmation_source || '').toLowerCase();
+  const confirmedAt = String(r.whatsapp_confirmed_at || '').trim();
+  if (confirmedAt && source.includes('whatsapp yes')) return 'YES';
+  if (confirmedAt && source.includes('auto-closed')) return 'COVERED';
+  if (String(r.status || '') === 'Pending Driver Confirmation') return 'PENDING';
+  return 'NONE';
+};
+
 export default function PeriodicMaintenance({ canWork = false, inspectionEmailOnly = false, inspectionUpcomingOnly = false, onOpenInspectionEmail = null, onOpenInspectionUpcoming = null, fixedType = null }) {
   const [subTab, setSubTab] = useState('all');
   const [records, setRecords] = useState([]);
@@ -215,21 +246,26 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
   const filledRecords = filtered.filter(hasActionData);
   const untouchedRecords = filtered.filter((r) => !hasActionData(r));
 
-  // Inspection control matrix: use ALL fleet vehicles so a missing PM record is
-  // explicitly RED, while preserving the old ERP rule that 6-month notes prove
-  // the maintenance was actually performed.
+  // ---------------------------------------------------------------------------
+  // Inspection control matrix — a record is considered completed ONLY when:
+  //   1. type is correct (inspection | 6_months_general)
+  //   2. status === 'Completed'
+  //   3. completed_date is a valid non-empty string
+  //   4. whatsapp_confirmed_at is non-null (driver pressed YES, OR auto-closed
+  //      by a confirmed annual inspection)
+  //   5. whatsapp_confirmation_source clearly identifies the confirmation origin
+  //
+  // Notes alone, or completed_date alone, do NOT count as a confirmed inspection.
+  // They are preserved for historical reference but do not satisfy the cycle.
+  // ---------------------------------------------------------------------------
   const isInspected = (r) => {
     if (!r) return false;
-    if (r.type === '6_months_general') {
-      return r.status === 'Completed' ||
-        Boolean(String(r.completed_date || '').trim()) ||
-        Boolean(String(r.notes || '').trim());
-    }
-    if (r.type === 'inspection') {
-      return r.status === 'Completed' ||
-        Boolean(String(r.completed_date || '').trim());
-    }
-    return false;
+    if (r.type !== '6_months_general' && r.type !== 'inspection') return false;
+    const hasCompleted = String(r.status || '') === 'Completed';
+    const hasDate = Boolean(String(r.completed_date || '').trim());
+    const waStatus = whatsappConfirmationStatus(r);
+    const hasWhatsApp = waStatus === 'YES' || waStatus === 'COVERED';
+    return hasCompleted && hasDate && hasWhatsApp;
   };
 
   const pickLatestControl = (list, type) => {
@@ -247,7 +283,30 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     }, null);
   };
 
-  const activeVehicles = vehicles.filter(v => { const plate = String(v.plate || v.plate_number || '').trim().toLowerCase(); return plate !== 'test 123' || plate === 'test 123'; });
+  // ---------------------------------------------------------------------------
+  // Vehicle partitioning — three disjoint sets:
+  //   activeVehicles       — real fleet vehicles, exclude test plates
+  //   exemptedVehicles     — 5 government-exempted vehicles (kept for review)
+  //   testVehicles         — test / demo plates (excluded from reports)
+  // ---------------------------------------------------------------------------
+  const normalizePlate = (v) => {
+    const num = String(v?.plate_number || v?.plate || '').trim().toLowerCase();
+    return num;
+  };
+  const activeVehicles = vehicles.filter(v => {
+    const plate = normalizePlate(v);
+    if (TEST_PLATE_NUMBERS.has(plate)) return false;
+    if (EXEMPTED_PLATE_NUMBERS.has(plate)) return false;
+    return true;
+  });
+  const exemptedVehicles = vehicles.filter(v => {
+    const plate = normalizePlate(v);
+    return EXEMPTED_PLATE_NUMBERS.has(plate);
+  });
+  const testVehicles = vehicles.filter(v => {
+    const plate = normalizePlate(v);
+    return TEST_PLATE_NUMBERS.has(plate);
+  });
   const vehicleById = activeVehicles.reduce((map, v) => { map[String(v.id)] = v; return map; }, {});
   const getInspectionExpiry = (vehicleId) => {
     const v = vehicleById[String(vehicleId)];
@@ -290,11 +349,15 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     if (!annualDone) missing.push('Annual Inspection');
     return {
       vehicle_id: v.id,
-      plate: v.plate || v.plate_number || '-',
+      plate: vehiclePlateKey(v) || (v.plate || v.plate_number || '-'),
       location: v.location || v.site || '-',
       driver: v.driver || v.driver_name || '-',
       inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiryDate || v.inspection_expiry_date || ''),
       six, annual, sixDone, annualDone,
+      sixWaStatus: six ? whatsappConfirmationStatus(six) : 'NONE',
+      annualWaStatus: annual ? whatsappConfirmationStatus(annual) : 'NONE',
+      sixWaDate: six?.whatsapp_confirmed_at ? String(six.whatsapp_confirmed_at).slice(0, 10) : null,
+      annualWaDate: annual?.whatsapp_confirmed_at ? String(annual.whatsapp_confirmed_at).slice(0, 10) : null,
       fullyInspected: sixDone && annualDone,
       missing
     };
@@ -303,6 +366,16 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
   const partiallyInspectedVehicles = vehicleSummary.filter(v => v.sixDone !== v.annualDone);
   const notInspectedVehicles = vehicleSummary.filter(v => !v.sixDone && !v.annualDone);
   const fullyInspectedVehicles = vehicleSummary.filter(v => v.fullyInspected);
+
+  // Exempted vehicles summary (kept separate — never counted as due/overdue).
+  const exemptedSummary = exemptedVehicles.map(v => ({
+    vehicle_id: v.id,
+    plate: vehiclePlateKey(v),
+    location: v.location || v.site || '-',
+    driver: v.driver || v.driver_name || '-',
+    inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiryDate || v.inspection_expiry_date || ''),
+    exemption: EXEMPTED_REASON
+  }));
 
   const exportColumns = [
     { key: 'vehicle_plate', label: 'Vehicle' },
@@ -1111,6 +1184,140 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // WhatsApp Confirmation Status badge for table rendering.
+  // Returns a colored <span> describing the confirmation state.
+  // ---------------------------------------------------------------------------
+  const renderWhatsAppBadge = (waStatus, waDate) => {
+    if (waStatus === 'YES') {
+      return <span className="status-badge status-safe" title={waDate ? `Confirmed on ${waDate}` : ''}>
+        ✓ Confirmed — YES{waDate ? ` · ${waDate}` : ''}
+      </span>;
+    }
+    if (waStatus === 'COVERED') {
+      return <span className="status-badge" style={{background:'#0ea5e9',color:'#fff'}} title="Auto-closed by confirmed annual inspection">
+        ⚑ Covered by Annual Inspection
+      </span>;
+    }
+    if (waStatus === 'PENDING') {
+      return <span className="status-badge status-warning">⏳ Pending</span>;
+    }
+    if (waStatus === 'EXEMPTED') {
+      return <span className="status-badge" style={{background:'#6b7280',color:'#fff'}}>Exempted</span>;
+    }
+    return <span className="status-badge status-urgent">✗ Not Confirmed</span>;
+  };
+
+  // ---------------------------------------------------------------------------
+  // Print / Save PDF for a classification section (fully | partial | none |
+  // exempted). Independent button per section as required by the user.
+  // ---------------------------------------------------------------------------
+  const printClassificationReport = (kind) => {
+    const cfg = {
+      fully:    { title: 'Fully Inspected Vehicles',                       color: '#16a34a', rows: fullyInspectedVehicles },
+      partial:  { title: 'Partially Inspected Vehicles',                   color: '#d97706', rows: partiallyInspectedVehicles },
+      none:     { title: 'Not Inspected Vehicles',                         color: '#dc2626', rows: notInspectedVehicles },
+      exempted: { title: 'Exempted Vehicles — Government Decision (2024)', color: '#6b7280', rows: exemptedSummary }
+    }[kind];
+    if (!cfg) return;
+    const esc = (v) => String(v ?? '-')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    const waLabel = (s) => s === 'YES' ? '✓ Confirmed' : s === 'COVERED' ? 'Covered by Annual' : s === 'PENDING' ? 'Pending' : s === 'EXEMPTED' ? 'Exempted' : 'Not Confirmed';
+    const rows = cfg.rows.map(row => {
+      if (kind === 'exempted') {
+        return '<tr><td>'+esc(row.plate)+'</td><td>'+esc(row.location)+'</td><td>'+esc(row.driver)+'</td><td>'+esc(row.inspectionExpiry || '—')+'</td><td>'+esc(row.exemption)+'</td></tr>';
+      }
+      const annualWa = waLabel(row.annualWaStatus);
+      const sixWa = waLabel(row.sixWaStatus);
+      const missing = row.missing.length ? row.missing.join(' + ') : 'None';
+      return '<tr><td>'+esc(row.plate)+'</td><td>'+esc(row.location)+'</td><td>'+esc(row.driver)+'</td>'+
+        '<td>'+esc(row.annualWaStatus === 'YES' || row.annualWaStatus === 'COVERED' ? 'Inspected' : 'Not Inspected')+' ('+esc(annualWa)+')</td>'+
+        '<td>'+esc(row.sixWaStatus === 'YES' || row.sixWaStatus === 'COVERED' ? 'Inspected' : 'Not Inspected')+' ('+esc(sixWa)+')</td>'+
+        '<td>'+esc(missing)+'</td></tr>';
+    }).join('');
+    const w = window.open('', '_blank', 'width=1200,height=800');
+    if (!w) { setError('Please allow pop-ups for the report.'); return; }
+    const header = '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:3px solid #1e3a8a;padding:0 0 12px;margin:0 0 16px;page-break-inside:avoid"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Ivanhoe Electric and Maaden" style="width:175px;max-height:78px;object-fit:contain"><div style="flex:1;text-align:right;font-family:Arial,sans-serif"><div style="font-size:15px;font-weight:700;color:#1e3a8a">Maaden Ivanhoe Electric Exploration and Development Limited Company</div><div style="font-size:10px;color:#475569;margin-top:3px">Exploration Phase — Arabian Shield</div><div style="font-size:12px;font-weight:700;margin-top:7px;color:#111827">Hussein Anwar</div><div style="font-size:10px;color:#475569;margin-top:2px">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div></div>';
+    const columns = kind === 'exempted'
+      ? '<tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Inspection Expiry</th><th>Exemption</th></tr>'
+      : '<tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Annual Inspection</th><th>6-Month Maintenance</th><th>Missing</th></tr>';
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>'+esc(cfg.title)+'</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial;font-size:9pt}h1{margin-bottom:4mm;color:'+cfg.color+'}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:5px;text-align:left;vertical-align:top}th{background:#e9eef5}</style></head><body>'+header+'<h1>'+esc(cfg.title)+'</h1><div>Generated: '+esc(new Date().toLocaleString())+' · Records: '+cfg.rows.length+'</div><table><thead>'+columns+'</thead><tbody>'+rows+'</tbody></table></body></html>');
+    w.document.close(); w.focus(); setTimeout(() => w.print(), 250);
+  };
+
+  // ---------------------------------------------------------------------------
+  // Classification table renderer — one independent table per section with
+  // its own Print / Save PDF / Export Excel buttons.
+  // ---------------------------------------------------------------------------
+  const renderClassificationTable = (kind) => {
+    const cfg = {
+      fully:    { title: 'Fully Inspected',                       subtitle: 'Vehicles with BOTH annual and 6-month inspections completed and WhatsApp-confirmed (or covered by annual).', color: '#16a34a', rows: fullyInspectedVehicles,    bg: '#dcfce7' },
+      partial:  { title: 'Partially Inspected',                   subtitle: 'Vehicles that completed only ONE of the two inspections. The missing type is shown.',                      color: '#d97706', rows: partiallyInspectedVehicles,  bg: '#fef3c7' },
+      none:     { title: 'Not Inspected',                         subtitle: 'Vehicles with NO confirmed inspection of either type.',                                                  color: '#dc2626', rows: notInspectedVehicles,       bg: '#fee2e2' },
+      exempted: { title: 'Exempted Vehicles',                     subtitle: '5 vehicles exempted by government decision (2024). Kept for audit — NOT counted as due or overdue.',     color: '#6b7280', rows: exemptedSummary,            bg: '#f3f4f6' }
+    }[kind];
+    if (!cfg) return null;
+    const exportCols = kind === 'exempted'
+      ? [{ key: 'plate', label: 'Vehicle' }, { key: 'location', label: 'Location' }, { key: 'driver', label: 'Driver' }, { key: 'inspectionExpiry', label: 'Inspection Expiry' }, { key: 'exemption', label: 'Exemption' }]
+      : [{ key: 'plate', label: 'Vehicle' }, { key: 'location', label: 'Location' }, { key: 'driver', label: 'Driver' },
+          { key: 'annualWaStatus', label: 'Annual WA' }, { key: 'annualWaDate', label: 'Annual WA Date' },
+          { key: 'sixWaStatus', label: '6-Month WA' }, { key: 'sixWaDate', label: '6-Month WA Date' },
+          { key: 'missing', label: 'Missing' }];
+    return (
+      <div className="panel" style={{ marginBottom: 18, overflowX: 'auto', borderTop: `4px solid ${cfg.color}` }}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:12,background:cfg.bg,padding:12,borderRadius:6}}>
+          <div>
+            <h2 style={{margin:0,color:cfg.color}}>{cfg.title} ({cfg.rows.length})</h2>
+            <div style={{marginTop:5,color:'#475569',fontSize:13}}>{cfg.subtitle}</div>
+          </div>
+          <div className="btn-row print-hide">
+            <button className="btn btn-primary" onClick={() => printClassificationReport(kind)}>🖨️ Print / Save PDF</button>
+            <button className="btn btn-success" onClick={() => exportToExcel(cfg.rows, `${cfg.title.replace(/\s+/g,'_')}_report`, exportCols, cfg.title)}>📊 Excel</button>
+          </div>
+        </div>
+        <table className="periodic-maintenance-screen-table">
+          <thead>
+            {kind === 'exempted' ? (
+              <tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Inspection Expiry</th><th>Exemption</th><th>WhatsApp Status</th></tr>
+            ) : (
+              <tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Annual Inspection</th><th>Annual WhatsApp</th><th>6-Month Maintenance</th><th>6-Month WhatsApp</th><th>Missing Type</th></tr>
+            )}
+          </thead>
+          <tbody>
+            {cfg.rows.length === 0 ? (
+              <tr><td colSpan={kind === 'exempted' ? 6 : 8} style={{textAlign:'center',padding:18,color:'#94a3b8'}}>No vehicles in this section.</td></tr>
+            ) : kind === 'exempted' ? (
+              cfg.rows.map(row => (
+                <tr key={'exempted-' + row.vehicle_id}>
+                  <td><strong>{row.plate}</strong></td>
+                  <td>{row.location}</td>
+                  <td>{row.driver}</td>
+                  <td>{row.inspectionExpiry || '—'}</td>
+                  <td>{row.exemption}</td>
+                  <td>{renderWhatsAppBadge('EXEMPTED')}</td>
+                </tr>
+              ))
+            ) : (
+              cfg.rows.map(row => (
+                <tr key={kind + '-' + row.vehicle_id}>
+                  <td><strong>{row.plate}</strong></td>
+                  <td>{row.location}</td>
+                  <td>{row.driver}</td>
+                  <td>{row.annualDone ? <span className="status-badge status-safe">Inspected</span> : <span className="status-badge status-urgent">Not Inspected</span>}</td>
+                  <td>{renderWhatsAppBadge(row.annualWaStatus, row.annualWaDate)}</td>
+                  <td>{row.sixDone ? <span className="status-badge status-safe">Inspected</span> : <span className="status-badge status-urgent">Not Inspected</span>}</td>
+                  <td>{renderWhatsAppBadge(row.sixWaStatus, row.sixWaDate)}</td>
+                  <td style={{fontWeight:600,color:cfg.color}}>{row.missing.length ? row.missing.join(' + ') : '—'}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   const renderControlTable = (kind) => {
     const isSix = kind === 'six';
     const pendingRows = isSix
@@ -1295,7 +1502,20 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
       {message && <div className="alert alert-success print-hide">{message}</div>}
       {error && <div className="alert alert-error print-hide">{error}</div>}
 
-      <div className="sub-nav print-hide" style={{marginBottom:16}}>
+      <div className="sub-nav print-hide" style={{marginBottom:16,flexWrap:'wrap',gap:6}}>
+        <button className={reportTab==='fully' ? 'sub-btn active' : 'sub-btn'} style={reportTab==='fully'?{background:'#16a34a',color:'#fff'}:{}} onClick={()=>setReportTab('fully')}>
+          ✅ Fully Inspected ({fullyInspectedVehicles.length})
+        </button>
+        <button className={reportTab==='partial' ? 'sub-btn active' : 'sub-btn'} style={reportTab==='partial'?{background:'#d97706',color:'#fff'}:{}} onClick={()=>setReportTab('partial')}>
+          ⚠️ Partially Inspected ({partiallyInspectedVehicles.length})
+        </button>
+        <button className={reportTab==='none' ? 'sub-btn active' : 'sub-btn'} style={reportTab==='none'?{background:'#dc2626',color:'#fff'}:{}} onClick={()=>setReportTab('none')}>
+          ❌ Not Inspected ({notInspectedVehicles.length})
+        </button>
+        <button className={reportTab==='exempted' ? 'sub-btn active' : 'sub-btn'} style={reportTab==='exempted'?{background:'#6b7280',color:'#fff'}:{}} onClick={()=>setReportTab('exempted')}>
+          🚫 Exempted Vehicles ({exemptedSummary.length})
+        </button>
+        <span style={{flex:1}} />
         <button className={reportTab==='six' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('six')}>
           🔧 6-Month Mechanical ({vehicleSummary.filter(v=>!v.sixDone).length})
         </button>
@@ -1303,11 +1523,15 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
           📋 Annual Inspection ({vehicleSummary.filter(v=>!v.annualDone).length})
         </button>
         <button className={reportTab==='original' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('original')}>
-          📚 Original Maintenance Records ({records.length})
+          📚 Periodic Maintenance ({records.length})
         </button>
         {canWork && <button className="sub-btn" style={{background:'#7c3aed',color:'#fff'}} onClick={handleAutoClose}>Auto-Close (Annual Covered)</button>}
       </div>
 
+      {reportTab === 'fully' && renderClassificationTable('fully')}
+      {reportTab === 'partial' && renderClassificationTable('partial')}
+      {reportTab === 'none' && renderClassificationTable('none')}
+      {reportTab === 'exempted' && renderClassificationTable('exempted')}
       {reportTab === 'six' && renderControlTable('six')}
       {reportTab === 'annual' && renderControlTable('annual')}
 
@@ -1381,13 +1605,13 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
 
             {loading ? <div className="loading">Loading...</div> : (
               <table className="periodic-maintenance-screen-table" style={{marginTop:14}}>
-                <thead><tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Inspection Expiry</th><th>Completed</th><th>Status</th><th>Driver Confirmed</th><th>Technician</th><th>Cost</th><th>Notes</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Vehicle</th><th>Location</th><th>Driver</th><th>Type</th><th>Scheduled</th><th>Inspection Expiry</th><th>Completed</th><th>Status</th><th>WhatsApp Confirmation</th><th>Technician</th><th>Cost</th><th>Notes</th><th>Actions</th></tr></thead>
                 <tbody>
                   {currentList.map(r=>(
                     <tr key={r.id}>
                       <td><strong>{r.vehicle_plate||'-'}</strong></td><td>{r.vehicle_location||'-'}</td><td>{r.driver_name||'-'}</td>
                       <td>{TYPE_LABELS[r.type]||r.type}</td><td>{r.scheduled_date||'-'}</td><td><strong>{getInspectionExpiry(r.vehicle_id)}</strong></td>
-                      <td>{r.completed_date||'-'}</td><td>{getStatusBadge(r)}</td><td>{r.whatsapp_confirmed_at ? <span className="status-badge status-safe">✓ {new Date(r.whatsapp_confirmed_at).toLocaleDateString()}</span> : r.status === 'Pending Driver Confirmation' ? <span className="status-badge status-warning">⏳ Pending</span> : <span>-</span>}</td><td>{r.technician||'-'}</td><td>{Number(r.cost||0).toLocaleString()}</td>
+                      <td>{r.completed_date||'-'}</td><td>{getStatusBadge(r)}</td><td>{renderWhatsAppBadge(whatsappConfirmationStatus(r), r.whatsapp_confirmed_at ? String(r.whatsapp_confirmed_at).slice(0,10) : null)}</td><td>{r.technician||'-'}</td><td>{Number(r.cost||0).toLocaleString()}</td>
                       <td style={{whiteSpace:'pre-wrap',minWidth:220}}>{r.notes||'-'}</td>
                       <td>
                         <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>

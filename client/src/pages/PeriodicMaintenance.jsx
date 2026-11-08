@@ -1016,7 +1016,7 @@ const openInspectionEmail = (group) => {
         : subTab === 'none' ? 'Not Inspected Vehicles' : 'Fully Inspected Vehicles';
       headers = ['Vehicle','Driver','6-Month','Annual Inspection','Overall','Missing'];
       rows = list.map(v => {
-        const overall = subTab === 'exempted' ? 'EXEMPTED'
+        const overall = (reportTab === 'exempted' || subTab === 'exempted') ? 'EXEMPTED'
           : subTab === 'fully' ? 'GREEN — Fully Inspected'
           : subTab === 'none' ? 'RED — Not Inspected' : 'YELLOW — Partially Inspected';
         return '<tr><td>'+esc(v.plate)+'</td><td>'+esc(v.driver)+'</td><td>'+

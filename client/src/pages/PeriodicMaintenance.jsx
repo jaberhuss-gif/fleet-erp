@@ -295,10 +295,11 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     const missing = [];
     if (!sixDone) missing.push('6-Month Maintenance');
     if (!annualDone) missing.push('Annual Inspection');
-    const plateIdentity = String(v.plate || [v.plate_number, v.plate_code].filter(Boolean).join(' ')).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const plateIdentityCandidates = [v.plate, [v.plate_number, v.plate_code].filter(Boolean).join(' ')]
+      .map(value => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, ''));
     return {
       vehicle_id: v.id,
-      exempted: EXEMPTED_PLATES.has(plateIdentity),
+      exempted: plateIdentityCandidates.some(value => EXEMPTED_PLATES.has(value)),
       plate: v.plate || [v.plate_number, v.plate_code].filter(Boolean).join(' ') || '-',
       location: v.location || v.site || '-',
       driver: v.driver || v.driver_name || '-',

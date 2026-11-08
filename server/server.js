@@ -1206,7 +1206,7 @@ app.get("/maintenance-confirm/:token", async (req,res)=>{
 app.post("/maintenance-confirm/:token", async(req,res)=>{
   try{
     const token=String(req.params.token||"").trim(),decision=String(req.query.decision||req.body?.decision||"").toLowerCase();
-    const result=await pgQuery(`SELECT id,status,category,vehicle_id,resolution_notes FROM tickets WHERE whatsapp_confirmation_token=$1 LIMIT 1`,[token]); const row=result.rows[0];
+    const result=await pgQuery(`SELECT id,status,category,vehicle_id,resolution_notes,whatsapp_confirmed_at FROM tickets WHERE whatsapp_confirmation_token=$1 LIMIT 1`,[token]); const row=result.rows[0];
     if(!row)return res.status(404).send("<h2>Maintenance confirmation link is invalid or expired.</h2>");
     if(row.status==="Completed"||row.whatsapp_confirmed_at)return res.send("<h2>Already Confirmed</h2><p>This confirmation has already been recorded.</p>");
     if(decision==="yes"){
@@ -1219,16 +1219,19 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
           completed_pm AS (
             UPDATE periodic_maintenance pm
             SET status='Completed',completed_date=((CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date),
+                whatsapp_confirmed_at=CURRENT_TIMESTAMP,
+                whatsapp_confirmation_source='WhatsApp - YES',
+                whatsapp_confirmation_token=NULL,
                 technician=COALESCE(NULLIF(pm.technician,''),'Driver - WhatsApp')
             FROM eligible e
             WHERE pm.id=e.pm_id::bigint AND pm.vehicle_id=e.vehicle_id AND pm.type='inspection'
-            RETURNING pm.vehicle_id,pm.completed_date
+            RETURNING pm.vehicle_id,pm.completed_date,pm.whatsapp_confirmed_at
           ),
           updated_vehicle AS (
             UPDATE vehicles v
             SET inspection_last_date=cp.completed_date,
-                inspection_due_date=(cp.completed_date + INTERVAL '1 year')::date,
-                inspection_expiry_date=(cp.completed_date + INTERVAL '1 year')::date
+                inspection_due_date=COALESCE(v.inspection_due_date, (cp.completed_date + INTERVAL '1 year')::date),
+                inspection_expiry_date=COALESCE(v.inspection_expiry_date, (cp.completed_date + INTERVAL '1 year')::date)
             FROM completed_pm cp WHERE v.id=cp.vehicle_id
             RETURNING v.id
           ),
@@ -1236,7 +1239,10 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
             UPDATE periodic_maintenance six
             SET status='Completed',
                 completed_date=cp.completed_date,
-                technician='Auto-closed (Annual Confirmed)',
+                whatsapp_confirmed_at=cp.whatsapp_confirmed_at,
+                whatsapp_confirmation_source='Covered by Annual Inspection',
+                whatsapp_confirmation_token=NULL,
+                technician='Covered by Annual Inspection',
                 notes=COALESCE(six.notes,'') || CASE WHEN COALESCE(six.notes,'')='' THEN '' ELSE E'\\n\\n' END || 'Covered by annual inspection confirmed via WhatsApp'
             FROM completed_pm cp
             WHERE six.vehicle_id=cp.vehicle_id
@@ -1245,9 +1251,9 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
             RETURNING six.id, six.vehicle_id
           ),
           created_six AS (
-            INSERT INTO periodic_maintenance (vehicle_id,type,scheduled_date,status,completed_date,technician,notes)
-            SELECT cp.vehicle_id,'6_months_general',cp.completed_date,'Completed',cp.completed_date,
-                   'Auto-created (Annual Confirmed)','Six-month cycle covered by annual inspection confirmed via WhatsApp'
+            INSERT INTO periodic_maintenance (vehicle_id,type,scheduled_date,status,completed_date,whatsapp_confirmed_at,whatsapp_confirmation_source,technician,notes)
+            SELECT cp.vehicle_id,'6_months_general',cp.completed_date,'Completed',cp.completed_date,cp.whatsapp_confirmed_at,'Covered by Annual Inspection',
+                   'Covered by Annual Inspection','Six-month cycle covered by annual inspection confirmed via WhatsApp'
             FROM completed_pm cp
             WHERE NOT EXISTS (SELECT 1 FROM auto_closed_six x WHERE x.vehicle_id=cp.vehicle_id)
               AND NOT EXISTS (
@@ -1260,7 +1266,8 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
           closed_six_tickets AS (
             UPDATE tickets st
             SET status='Completed',closed_at=CURRENT_TIMESTAMP,closed_by='Auto-closed (Annual Confirmed)',
-                whatsapp_confirmation_source='Annual Inspection - WhatsApp Confirmation',
+                 whatsapp_confirmed_at=(SELECT cp.whatsapp_confirmed_at FROM completed_pm cp WHERE cp.vehicle_id=st.vehicle_id),
+                 whatsapp_confirmation_source='Covered by Annual Inspection',
                 whatsapp_confirmation_token=NULL
             WHERE st.category='6-Month Maintenance'
               AND EXISTS (SELECT 1 FROM auto_closed_six x WHERE st.resolution_notes LIKE ('[PM_REPAIR:' || x.id || ']%'))
@@ -1290,6 +1297,9 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
         completed_pm AS (
           UPDATE periodic_maintenance pm
           SET status='Completed',completed_date=((CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date),
+              whatsapp_confirmed_at=CURRENT_TIMESTAMP,
+              whatsapp_confirmation_source='WhatsApp - YES',
+              whatsapp_confirmation_token=NULL,
               technician=COALESCE(NULLIF(pm.technician,''),'Driver - WhatsApp')
           FROM eligible e
           WHERE pm.id=e.pm_id::bigint AND pm.vehicle_id=e.vehicle_id AND pm.type='6_months_general'
@@ -1311,7 +1321,7 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
       if(!done.rows.length) return res.status(409).send("<h2>Maintenance record could not be matched. Fleet Management must review it.</h2>");
       return res.send("<h2>✓ 6-Month Maintenance Confirmed</h2><p>The maintenance record is closed and its next six-month cycle is calculated from the confirmation date.</p><p>Date: "+new Date().toISOString().slice(0,10)+"</p>");
     }
-    if(decision==="no"){await pgQuery(`UPDATE tickets SET status='Open',whatsapp_confirmation_source='Fleet Management - WhatsApp NO',whatsapp_confirmation_token=NULL WHERE id=$1 AND whatsapp_confirmation_token=$2`,[row.id,token]);return res.send("<h2>Maintenance Still Pending</h2><p>The ticket remains open. Fleet Management has been notified.</p>");}
+    if(decision==="no"){await pgQuery(`UPDATE tickets SET status='Pending Driver Confirmation',whatsapp_confirmation_source='WhatsApp - NO',resolution_notes=COALESCE(NULLIF(resolution_notes,''),'') || E'\\nDriver selected NO via WhatsApp at ' || CURRENT_TIMESTAMP::text WHERE id=$1 AND whatsapp_confirmation_token=$2`,[row.id,token]);return res.send("<h2>Maintenance Still Pending</h2><p>The request remains pending. This same link can be used again after the work is completed.</p>");}
     res.status(400).send("<h2>Please choose YES or NO.</h2>");
   }catch(e){console.error("[MaintenanceConfirm]",e);res.status(500).send("Maintenance confirmation error.");}
 });
@@ -2974,13 +2984,29 @@ app.post("/api/periodic-maintenance", async (req, res) => {
 });
 
 app.put("/api/periodic-maintenance/:id", async (req, res) => {
-  try { res.json({ success: true, record: await updatePeriodicMaintenancePG(req.params.id, req.body) }); }
-  catch (e) { res.status(400).json({ success: false, error: e.message }); }
+  try {
+    const requestedStatus = String(req.body?.status || "").toLowerCase();
+    if (requestedStatus === "completed") {
+      const current = await pgQuery("SELECT type, whatsapp_confirmed_at FROM periodic_maintenance WHERE id=$1 LIMIT 1", [req.params.id]);
+      const row = current.rows[0];
+      if (row && ["inspection", "6_months_general"].includes(String(row.type || "")) && !row.whatsapp_confirmed_at) {
+        return res.status(409).json({ success: false, error: "Annual and six-month inspections can only be completed through the driver's WhatsApp YES confirmation." });
+      }
+    }
+    res.json({ success: true, record: await updatePeriodicMaintenancePG(req.params.id, req.body) });
+  } catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
 app.put("/api/periodic-maintenance/:id/complete", async (req, res) => {
-  try { res.json({ success: true, record: await completePeriodicMaintenancePG(req.params.id, req.body) }); }
-  catch (e) { res.status(400).json({ success: false, error: e.message }); }
+  try {
+    const current = await pgQuery("SELECT type, whatsapp_confirmed_at FROM periodic_maintenance WHERE id=$1 LIMIT 1", [req.params.id]);
+    const row = current.rows[0];
+    if (!row) return res.status(404).json({ success: false, error: "Periodic maintenance record not found." });
+    if (["inspection", "6_months_general"].includes(String(row.type || "")) && !row.whatsapp_confirmed_at) {
+      return res.status(409).json({ success: false, error: "Annual and six-month inspections can only be completed through the driver's WhatsApp YES confirmation." });
+    }
+    res.json({ success: true, record: await completePeriodicMaintenancePG(req.params.id, req.body) });
+  } catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
 
 app.put("/api/periodic-maintenance/:id/reopen", async (req, res) => {

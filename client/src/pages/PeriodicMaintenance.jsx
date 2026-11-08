@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import api from '../api/client';
 import { exportToExcel } from '../api/export';
 
+const EXEMPTED_PLATES = new Set(['1357JER', '1369JER', '1560EHR', '3296DER', '8571LHR']);
+
 const TYPE_LABELS = {
   '6_months_general': '6-Month General Maintenance',
   'inspection': 'Periodic Inspection'
@@ -224,15 +226,10 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
   };
 
   const hasAnnualEvidence = (r) =>
-    Boolean(r && r.type === 'inspection' && r.status === 'Completed' &&
-      validIsoDate(r.completed_date));
+    Boolean(r && r.type === 'inspection' && validIsoDate(r.whatsapp_confirmed_at));
 
-  const hasSixMonthEvidence = (r) => {
-    if (!r || r.type !== '6_months_general') return false;
-    if (validIsoDate(r.whatsapp_confirmed_at)) return true;
-    const match = String(r.notes || '').match(/Confirmed via 6-month WhatsApp on (\d{4}-\d{2}-\d{2})/i);
-    return Boolean(match && validIsoDate(match[1]));
-  };
+  const hasSixMonthEvidence = (r) =>
+    Boolean(r && r.type === '6_months_general' && validIsoDate(r.whatsapp_confirmed_at));
 
   const isInspected = (r) =>
     r?.type === 'inspection' ? hasAnnualEvidence(r) :
@@ -291,19 +288,19 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     const annualCoversSix = Boolean(annualDate && sixScheduledDate && annualDate <= sixScheduledDate);
     const sixDone = hasSixMonthEvidence(six) || annualCoversSix;
     const sixCycleDates = [
-      hasSixMonthEvidence(six) ? (
-        validIsoDate(six.whatsapp_confirmed_at) ||
-        validIsoDate(String(six.notes || '').match(/Confirmed via 6-month WhatsApp on (\d{4}-\d{2}-\d{2})/i)?.[1])
-      ) : '',
+      hasSixMonthEvidence(six) ? validIsoDate(six.whatsapp_confirmed_at) : '',
       annualCoversSix ? annualDate : ''
     ].filter(Boolean).sort();
     const sixReferenceDate = sixCycleDates[sixCycleDates.length - 1] || '';
     const missing = [];
     if (!sixDone) missing.push('6-Month Maintenance');
     if (!annualDone) missing.push('Annual Inspection');
+    const plateIdentityCandidates = [v.plate, [v.plate_number, v.plate_code].filter(Boolean).join(' ')]
+      .map(value => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, ''));
     return {
       vehicle_id: v.id,
-      plate: v.plate || v.plate_number || '-',
+      exempted: plateIdentityCandidates.some(value => EXEMPTED_PLATES.has(value)),
+      plate: v.plate || [v.plate_number, v.plate_code].filter(Boolean).join(' ') || '-',
       location: v.location || v.site || '-',
       driver: v.driver || v.driver_name || '-',
       inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiryDate || v.inspection_expiry_date || ''),
@@ -313,9 +310,11 @@ export default function PeriodicMaintenance({ canWork = false, inspectionEmailOn
     };
   });
 
-  const partiallyInspectedVehicles = vehicleSummary.filter(v => v.sixDone !== v.annualDone);
-  const notInspectedVehicles = vehicleSummary.filter(v => !v.sixDone && !v.annualDone);
-  const fullyInspectedVehicles = vehicleSummary.filter(v => v.fullyInspected);
+  const exemptedVehicles = vehicleSummary.filter(v => v.exempted);
+  const eligibleVehicleSummary = vehicleSummary.filter(v => !v.exempted);
+  const partiallyInspectedVehicles = eligibleVehicleSummary.filter(v => v.sixDone !== v.annualDone);
+  const notInspectedVehicles = eligibleVehicleSummary.filter(v => !v.sixDone && !v.annualDone);
+  const fullyInspectedVehicles = eligibleVehicleSummary.filter(v => v.fullyInspected);
 
   const exportColumns = [
     { key: 'vehicle_plate', label: 'Vehicle' },
@@ -980,8 +979,8 @@ const openInspectionEmail = (group) => {
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <button className="btn" style={{ padding: '6px 10px', background: '#25D366', color: '#fff' }} onClick={() => reportWhatsApp(row, component, done)}>📱 WhatsApp</button>
                       {canWork && (done
-                        ? <button className="btn btn-success" style={{ padding: '6px 10px' }} disabled>✓ Closed</button>
-                        : <button className="btn btn-danger" style={{ padding: '6px 10px' }} onClick={() => closeComplianceReport(row, component, type)}>Close</button>
+                        ? <button className="btn btn-success" style={{ padding: '6px 10px' }} disabled>✓ Confirmed YES</button>
+                        : <span className="status-badge status-warning">Awaiting WhatsApp YES</span>
                       )}
                     </div>
                   </td>
@@ -1002,19 +1001,22 @@ const openInspectionEmail = (group) => {
 
     const brandHtml = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5mm;padding-bottom:3mm;border-bottom:2px solid #1e3a8a"><img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Maaden Ivanhoe Electric JV logo" style="width:90px;height:50px;object-fit:contain"><div><div style="font-size:10pt;font-weight:700;line-height:1.2">Maaden Ivanhoe Electric Exploration and Development Limited Company</div><div style="font-size:8pt;color:#555;margin-top:2px">Exploration Phase — Arabian Shield</div><div style="font-size:9pt;font-weight:700;margin-top:3px">Hussein Anwar</div><div style="font-size:8pt;color:#555">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div></div></div>';
 
-    const inspectionMode = ['partial', 'none', 'fully'].includes(subTab);
+    const inspectionMode = ['partial', 'none', 'fully', 'exempted'].includes(subTab) || reportTab === 'exempted';
     let title = 'Vehicle Maintenance';
     let headers = [];
     let rows = '';
 
     if (inspectionMode) {
-      const list = subTab === 'partial' ? partiallyInspectedVehicles
+      const list = reportTab === 'exempted' || subTab === 'exempted' ? exemptedVehicles
+        : subTab === 'partial' ? partiallyInspectedVehicles
         : subTab === 'none' ? notInspectedVehicles : fullyInspectedVehicles;
-      title = subTab === 'partial' ? 'Partially Inspected Vehicles'
+      title = reportTab === 'exempted' || subTab === 'exempted' ? 'Exempted Vehicles'
+        : subTab === 'partial' ? 'Partially Inspected Vehicles'
         : subTab === 'none' ? 'Not Inspected Vehicles' : 'Fully Inspected Vehicles';
       headers = ['Vehicle','Driver','6-Month','Annual Inspection','Overall','Missing'];
       rows = list.map(v => {
-        const overall = subTab === 'fully' ? 'GREEN — Fully Inspected'
+        const overall = (reportTab === 'exempted' || subTab === 'exempted') ? 'EXEMPTED'
+          : subTab === 'fully' ? 'GREEN — Fully Inspected'
           : subTab === 'none' ? 'RED — Not Inspected' : 'YELLOW — Partially Inspected';
         return '<tr><td>'+esc(v.plate)+'</td><td>'+esc(v.driver)+'</td><td>'+
           esc(v.sixDone ? 'Inspected' : 'Not Inspected')+'</td><td>'+
@@ -1043,7 +1045,7 @@ const openInspectionEmail = (group) => {
 .brand img{width:90px;height:50px;object-fit:contain}
 table{width:100%;border-collapse:collapse;table-layout:fixed}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}
 th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:top;line-height:1.2;overflow-wrap:anywhere}th{background:#e9eef5;font-weight:700}</style>
-</head><body>${brandHtml}<div class="title">${esc(title)}</div><div class="meta">Generated: ${esc(new Date().toLocaleString())} · Records: ${inspectionMode ? (subTab === 'partial' ? partiallyInspectedVehicles.length : subTab === 'none' ? notInspectedVehicles.length : fullyInspectedVehicles.length) : currentList.length}</div>
+</head><body>${brandHtml}<div class="title">${esc(title)}</div><div class="meta">Generated: ${esc(new Date().toLocaleString())} · Records: ${inspectionMode ? ((reportTab === 'exempted' || subTab === 'exempted') ? exemptedVehicles.length : subTab === 'partial' ? partiallyInspectedVehicles.length : subTab === 'none' ? notInspectedVehicles.length : fullyInspectedVehicles.length) : currentList.length}</div>
 <table><thead><tr>${headers.map(h => '<th>'+esc(h)+'</th>').join('')}</tr></thead><tbody>${rows}</tbody></table>
 </body></html>`);
     printWindow.document.close(); printWindow.focus();
@@ -1052,13 +1054,14 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
 
   // For 6-month maintenance, a note is the evidence that the vehicle was inspected.
   // Notes may describe findings; they still mean the inspection was performed.
-  const isSixMonthInspected = (r) => r.type === '6_months_general' && (
-    r.status === 'Completed' || Boolean(String(r.notes || '').trim())
-  );
+  const isSixMonthInspected = (r) => hasSixMonthEvidence(r);
 
   const getStatusBadge = (r) => {
-    if (isSixMonthInspected(r)) return <span className="status-badge status-safe">GREEN — Inspected</span>;
-    if (r.type === '6_months_general') return <span className="status-badge status-urgent">RED — Not Inspected</span>;
+    if (['inspection', '6_months_general'].includes(r.type)) {
+      return isInspected(r)
+        ? <span className="status-badge status-safe">Confirmed YES</span>
+        : <span className="status-badge status-warning">Pending WhatsApp YES</span>;
+    }
     if (r.status === 'Completed') return <span className="status-badge status-safe">Completed</span>;
     if (r.scheduled_date < today) return <span className="status-badge status-urgent">Overdue</span>;
     return <span className="status-badge status-warning">Pending</span>;
@@ -1069,41 +1072,22 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     const recordedCompletedRows = records
-      .filter(r => r.type === 'inspection' && r.status === 'Completed' && r.completed_date)
+      .filter(r => r.type === 'inspection' && r.status === 'Completed' && r.completed_date &&
+        validIsoDate(r.whatsapp_confirmed_at) &&
+        !vehicleSummary.some(v => String(v.vehicle_id) === String(r.vehicle_id) && v.exempted))
       .sort((a, b) => {
         const da = new Date(a.completed_date).getTime();
         const db = new Date(b.completed_date).getTime();
         return db - da || Number(b.id || 0) - Number(a.id || 0);
       });
-    const vehicle1712 = activeVehicles.find(v => /1712/.test(String(v.plate || v.plate_number || '')));
-    const expiry1712 = vehicle1712
-      ? normalizeInspectionExpiry(vehicle1712.inspectionExpiryDate || vehicle1712.inspection_expiry_date || '')
-      : '';
-    const hasCurrent1712Pass = vehicle1712 && recordedCompletedRows.some(r =>
-      String(r.vehicle_id) === String(vehicle1712.id) && getNextAnnualDueDate(r) === '2027-09-23'
-    );
-    const completedRows = [...recordedCompletedRows, ...(
-      vehicle1712 && expiry1712 === '2027-09-23' && !hasCurrent1712Pass
-        ? [{
-            vehicle_id: vehicle1712.id,
-            vehicle_plate: vehicle1712.plate || vehicle1712.plate_number || '1712',
-            vehicle_location: vehicle1712.location || vehicle1712.site || '-',
-            driver_name: vehicle1712.driver || vehicle1712.driver_name || '-',
-            completed_date: '',
-            inspection_expiry_date: '2027-09-23',
-            technician: 'Fleet Management — passed (confirmed)',
-            notes: 'Inspection passed; next expiry confirmed as 2027-09-23. Original inspection history retained.',
-            isMasterExpiryConfirmation: true
-          }]
-        : []
-    )];
+    const completedRows = recordedCompletedRows;
     const rows = completedRows.map(rec => {
       const v = vehicleById[String(rec.vehicle_id)] || {};
       const plate = rec.vehicle_plate || v.plate || v.plate_number || '-';
-      const due = rec.isMasterExpiryConfirmation ? rec.inspection_expiry_date : getNextAnnualDueDate(rec);
+      const due = getNextAnnualDueDate(rec);
       return '<tr><td>' + esc(plate) + '</td><td>' + esc(rec.vehicle_location || v.location || '-') +
         '</td><td>' + esc(rec.driver_name || v.driver || '-') +
-        '</td><td>' + esc(rec.isMasterExpiryConfirmation ? 'Passed — date not recorded' : String(rec.completed_date).slice(0, 10)) +
+        '</td><td>' + esc(String(rec.completed_date).slice(0, 10)) +
         '</td><td>' + esc(due || '—') + '</td><td>' + esc(rec.technician || '-') +
         '</td><td>' + esc(rec.notes || '-') + '</td></tr>';
     }).join('');
@@ -1144,9 +1128,9 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
   const renderControlTable = (kind) => {
     const isSix = kind === 'six';
     const pendingRows = isSix
-      ? vehicleSummary.filter(v => !v.sixDone)
+      ? vehicleSummary.filter(v => !v.exempted && !v.sixDone)
       : vehicleSummary
-          .filter(v => !v.annualDone)
+          .filter(v => !v.exempted && !v.annualDone)
           .map(v => ({ ...v, inspectionExpiry: normalizeInspectionExpiry(v.inspectionExpiry) || getInspectionExpiry(v.vehicle_id) }))
           .sort((a, b) => {
             const da = new Date(a.inspectionExpiry + 'T00:00:00Z').getTime();
@@ -1155,49 +1139,20 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
           });
 
     const recordedCompletedRows = records
-      .filter(r => r.type === 'inspection' && r.status === 'Completed' && r.completed_date)
+      .filter(r => r.type === 'inspection' && r.status === 'Completed' && r.completed_date &&
+        validIsoDate(r.whatsapp_confirmed_at) &&
+        !vehicleSummary.some(v => String(v.vehicle_id) === String(r.vehicle_id) && v.exempted))
       .sort((a, b) => {
         const da = new Date(a.completed_date).getTime();
         const db = new Date(b.completed_date).getTime();
         return db - da || Number(b.id || 0) - Number(a.id || 0);
       });
-
-    // Vehicle 1712 has been confirmed by Fleet Management as passed, with the
-    // next expiry date stored in Vehicle Master. Keep the original history and
-    // show the new pass in this results list even if its new PM record is absent.
-    const vehicle1712 = activeVehicles.find(v => /1712/.test(String(v.plate || v.plate_number || '')));
-    const expiry1712 = vehicle1712
-      ? normalizeInspectionExpiry(vehicle1712.inspectionExpiryDate || vehicle1712.inspection_expiry_date || '')
-      : '';
-    const hasCurrent1712Pass = vehicle1712 && recordedCompletedRows.some(r =>
-      String(r.vehicle_id) === String(vehicle1712.id) &&
-      getNextAnnualDueDate(r) === '2027-09-23'
-    );
-    const confirmed1712Pass = !isSix && vehicle1712 && expiry1712 === '2027-09-23' && !hasCurrent1712Pass
-      ? [{
-          id: 'master-expiry-confirmation-1712',
-          vehicle_id: vehicle1712.id,
-          vehicle_plate: vehicle1712.plate || vehicle1712.plate_number || '1712',
-          vehicle_location: vehicle1712.location || vehicle1712.site || '-',
-          driver_name: vehicle1712.driver || vehicle1712.driver_name || '-',
-          completed_date: '',
-          inspection_expiry_date: '2027-09-23',
-          technician: 'Fleet Management — passed (confirmed)',
-          notes: 'Inspection passed; next expiry confirmed as 2027-09-23. Original inspection history retained.',
-          isMasterExpiryConfirmation: true
-        }]
-      : [];
-    const completedRows = isSix ? [] : [...recordedCompletedRows, ...confirmed1712Pass]
-      .sort((a, b) => {
-        const da = new Date(a.completed_date || 0).getTime();
-        const db = new Date(b.completed_date || 0).getTime();
-        return db - da || Number(b.id || 0) - Number(a.id || 0);
-      });
+    const completedRows = isSix ? [] : recordedCompletedRows;
 
     const title = isSix ? '6-Month Mechanical Inspection' : 'Annual Periodic Inspection — All Vehicles Missing Evidence';
     const description = isSix
       ? 'Mechanical 6-month inspection control. GREEN means inspection evidence is recorded; RED means no inspection evidence is recorded.'
-      : 'Pending section shows expired vehicles and vehicles expiring within the next 31 days. Completed inspections remain listed below with completion date and next due date.';
+      : 'Pending section lists every vehicle without a confirmed WhatsApp YES. Existing Vehicle Master expiry dates are shown without being overwritten.';
     return (
       <>
         <div className="panel" style={{ marginBottom: 18, overflowX: 'auto' }}>
@@ -1248,8 +1203,8 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
                       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                         <button className="btn" style={{padding:'6px 10px',background:'#25D366',color:'#fff'}} onClick={() => reportWhatsApp(row, title, done)}>📱 WhatsApp</button>
                         {canWork && (done
-                          ? <button className="btn btn-success" style={{padding:'6px 10px'}} disabled>✓ Inspected</button>
-                          : <button className="btn btn-danger" style={{padding:'6px 10px'}} onClick={() => closeComplianceReport(row, title, isSix ? '6_months_general' : 'inspection')}>Close Inspection</button>
+                          ? <button className="btn btn-success" style={{padding:'6px 10px'}} disabled>✓ Confirmed YES</button>
+                          : <span className="status-badge status-warning">Awaiting WhatsApp YES</span>
                         )}
                       </div>
                     </td>
@@ -1321,19 +1276,21 @@ th,td{border:1px solid #9aa4b2;padding:4px 5px;text-align:left;vertical-align:to
 
       <div className="sub-nav print-hide" style={{marginBottom:16}}>
         <button className={reportTab==='six' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('six')}>
-          🔧 6-Month Mechanical ({vehicleSummary.filter(v=>!v.sixDone).length})
+          🔧 6-Month Mechanical ({eligibleVehicleSummary.filter(v=>!v.sixDone).length})
         </button>
         <button className={reportTab==='annual' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('annual')}>
-          📋 Annual Inspection ({vehicleSummary.filter(v=>!v.annualDone).length})
+          📋 Annual Inspection ({eligibleVehicleSummary.filter(v=>!v.annualDone).length})
         </button>
         <button className={reportTab==='original' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('original')}>
           📚 Original Maintenance Records ({records.length})
         </button>
+        <button className={reportTab==='exempted' ? 'sub-btn active' : 'sub-btn'} onClick={()=>setReportTab('exempted')}>Exempted Vehicles ({exemptedVehicles.length})</button>
         {canWork && <button className="sub-btn" style={{background:'#7c3aed',color:'#fff'}} onClick={handleAutoClose}>Auto-Close (Annual Covered)</button>}
       </div>
 
       {reportTab === 'six' && renderControlTable('six')}
       {reportTab === 'annual' && renderControlTable('annual')}
+      {reportTab === 'exempted' && <div className="panel" style={{overflowX:'auto'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap'}}><h2>Exempted Vehicles ({exemptedVehicles.length})</h2><button className="btn btn-primary" onClick={printPdfReport}>Print / Save PDF</button></div><table><thead><tr><th>Vehicle</th><th>Driver</th><th>Location</th><th>Status</th></tr></thead><tbody>{exemptedVehicles.map(v=><tr key={v.vehicle_id}><td>{v.plate}</td><td>{v.driver}</td><td>{v.location}</td><td>Exempted</td></tr>)}</tbody></table></div>}
 
       {reportTab === 'original' && (
         <>

@@ -75,12 +75,15 @@ export default function Reports() {
         <button className={subTab === 'financial' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('financial')}>📊 Financial Reports</button>
         <button className={subTab === 'fleet' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('fleet')}>🔧 Fleet Maintenance</button>
         <button className={subTab === 'building' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('building')}>🏢 Building Maintenance</button>
+        <button className={subTab === 'presentations' ? 'sub-btn active' : 'sub-btn'} onClick={() => setSubTab('presentations')}>📽️ Annual PowerPoints</button>
       </div>
 
       {subTab === 'fleet' ? (
         <FleetMaintenanceReport />
       ) : subTab === 'building' ? (
         <BuildingMaintenanceReport />
+      ) : subTab === 'presentations' ? (
+        <FleetPresentations />
       ) : (
       <>
       <div className="panel">
@@ -636,3 +639,61 @@ function BuildingMaintenanceReport() {
   );
 }
 
+
+
+function FleetPresentations() {
+  const items = [
+    {
+      title: 'Annual Fleet Report 2025',
+      subtitle: 'Fleet Management Report • 2025',
+      status: 'SOURCE FILE FOUND',
+      detail: 'The 2025 annual PowerPoint is available in the working Library. It still needs to be copied into the application’s downloadable file storage.',
+      tone: '#15803d'
+    },
+    {
+      title: 'Vehicle Maintenance PowerPoint',
+      subtitle: 'Vehicle maintenance • Fleet',
+      status: 'AWAITING FILE PUBLICATION',
+      detail: 'A separate vehicle-maintenance-only presentation will be published here. Mixed Fleet & General Maintenance decks will not be labelled as vehicle-only.',
+      tone: '#b45309'
+    },
+    {
+      title: '2025 vs 2026 Comparison',
+      subtitle: 'Annual comparison • SAR',
+      status: 'DRAFT — DATA RECONCILIATION',
+      detail: 'PETROMIN 2026 is classified as confirmed: months 6, 9 and 10 include tyres (SAR 10,051 total invoice value); other months are oil / filters / service (SAR 8,142). The full comparison remains subject to the remaining 2026 invoices and like-for-like cost reconciliation.',
+      tone: '#b45309'
+    }
+  ];
+
+  return (
+    <div>
+      <div className="panel" style={{borderTop:'5px solid #173b70'}}>
+        <h2 style={{marginTop:0,color:'#173b70'}}>📽️ Fleet Annual Reports & PowerPoints</h2>
+        <p style={{color:'#64748b',marginBottom:18}}>
+          Official presentation library for management review. Files are kept separate from live operational reports.
+        </p>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:14}}>
+          {items.map((item,index)=>(
+            <div key={item.title} className="card" style={{border:'1px solid #dbe3ee',borderTop:`4px solid ${item.tone}`,padding:18}}>
+              <div style={{fontSize:28,marginBottom:8}}>{index===0?'📘':index===1?'🔧':'📊'}</div>
+              <h3 style={{margin:'0 0 5px',fontSize:17}}>{item.title}</h3>
+              <div style={{fontSize:12,color:'#64748b',marginBottom:12}}>{item.subtitle}</div>
+              <div style={{display:'inline-block',fontSize:11,fontWeight:700,color:item.tone,background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:20,padding:'5px 9px',marginBottom:12}}>{item.status}</div>
+              <p style={{fontSize:13,lineHeight:1.55,color:'#475569',minHeight:82}}>{item.detail}</p>
+              <button type="button" className="sub-btn" disabled style={{width:'100%',opacity:.65,cursor:'not-allowed'}}>
+                {index===2?'Comparison will be published after reconciliation':'Download PowerPoint — upload pending'}
+              </button>
+            </div>
+          ))}
+        </div>
+        <div style={{marginTop:18,padding:13,background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:8,fontSize:13,color:'#1e40af'}}>
+          <b>Publication note:</b> The PowerPoint source files are currently in the ChatGPT working Library, not in the Fleet ERP application’s file storage. The buttons will be enabled after the files are placed in the app’s public report storage; this avoids adding broken download links.
+        </div>
+        <div style={{marginTop:14,fontSize:12,color:'#64748b'}}>
+          Prepared by Hussein Anwar · Fleet Manager
+        </div>
+      </div>
+    </div>
+  );
+}

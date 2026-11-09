@@ -2389,11 +2389,21 @@ app.post("/api/annual-inspection/status", async (req, res) => {
 
     // Get WhatsApp confirmations from ALL tickets for each vehicle
     const waRes = await pgQuery(`
-      SELECT t.vehicle_id, MAX(t.whatsapp_confirmed_at::text) AS whatsapp_confirmed_at
-      FROM tickets t
-      WHERE t.whatsapp_confirmed_at IS NOT NULL
-        AND t.category = 'Annual Inspection'
-      GROUP BY t.vehicle_id
+      SELECT confirmations.vehicle_id,
+             MAX(confirmations.whatsapp_confirmed_at) AS whatsapp_confirmed_at
+      FROM (
+        SELECT t.vehicle_id, t.whatsapp_confirmed_at::text AS whatsapp_confirmed_at
+        FROM tickets t
+        WHERE t.whatsapp_confirmed_at IS NOT NULL
+          AND t.category = 'Annual Inspection'
+        UNION ALL
+        SELECT pm.vehicle_id, pm.whatsapp_confirmed_at::text AS whatsapp_confirmed_at
+        FROM periodic_maintenance pm
+        WHERE pm.type = 'inspection'
+          AND pm.status = 'Completed'
+          AND pm.whatsapp_confirmed_at IS NOT NULL
+      ) confirmations
+      GROUP BY confirmations.vehicle_id
     `);
     const waMap = new Map();
     for (const row of waRes.rows) {
@@ -2628,11 +2638,21 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
 
     // Get WhatsApp confirmations from ALL tickets (not just 6-Month)
     const whatsappRes = await pgQuery(`
-      SELECT t.vehicle_id, MAX(t.whatsapp_confirmed_at::text) AS whatsapp_confirmed_at
-      FROM tickets t
-      WHERE t.whatsapp_confirmed_at IS NOT NULL
-        AND t.category IN ('Annual Inspection','6-Month Maintenance')
-      GROUP BY t.vehicle_id
+      SELECT confirmations.vehicle_id,
+             MAX(confirmations.whatsapp_confirmed_at) AS whatsapp_confirmed_at
+      FROM (
+        SELECT t.vehicle_id, t.whatsapp_confirmed_at::text AS whatsapp_confirmed_at
+        FROM tickets t
+        WHERE t.whatsapp_confirmed_at IS NOT NULL
+          AND t.category IN ('Annual Inspection','6-Month Maintenance')
+        UNION ALL
+        SELECT pm.vehicle_id, pm.whatsapp_confirmed_at::text AS whatsapp_confirmed_at
+        FROM periodic_maintenance pm
+        WHERE pm.type IN ('inspection', '6_months_general')
+          AND pm.status = 'Completed'
+          AND pm.whatsapp_confirmed_at IS NOT NULL
+      ) confirmations
+      GROUP BY confirmations.vehicle_id
     `);
     const whatsappMap = new Map();
     for (const row of whatsappRes.rows) {

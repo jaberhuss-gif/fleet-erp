@@ -105,7 +105,7 @@ export default function SixMonthInspection({ canWork = false }) {
   if (error) return <div className="alert alert-error">{error}</div>;
   if (!data) return null;
 
-  const { summary, completed, due } = data;
+  const { summary, completed, due, exempt = [] } = data;
 
   return (
     <div style={{ padding: '20px' }}>
@@ -262,6 +262,42 @@ export default function SixMonthInspection({ canWork = false }) {
           </div>
         )}
       </div>
+
+      {/* Section 3: Exempted Vehicles (government decision 2024) */}
+      {exempt.length > 0 && (
+        <div className="panel" style={{ marginBottom: '24px', borderTop: '4px solid #6b7280' }}>
+          <h2 style={{ margin: '0 0 12px', fontSize: '18px', color: '#475569' }}>🚫 Exempted Vehicles ({exempt.length})</h2>
+          <p style={{ margin: '0 0 12px', color: '#64748b', fontSize: '13px' }}>
+            Vehicles exempted by government decision (2024). Excluded from completed / due / expired counts. Kept for audit only.
+          </p>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ background: '#f1f5f9' }}>
+                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>Vehicle</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>Driver</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>Location</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>Exemption</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'center' }}>WhatsApp Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {exempt.map((r, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                    <td style={{ padding: '7px 10px', fontWeight: 600 }}>{r.plate}</td>
+                    <td style={{ padding: '7px 10px' }}>{r.driver}</td>
+                    <td style={{ padding: '7px 10px', color: '#64748b' }}>{r.location}</td>
+                    <td style={{ padding: '7px 10px', color: '#6b7280', fontSize: '12px' }}>{r.exemption}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                      <span style={{ background: '#6b7280', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 600 }}>Exempted</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

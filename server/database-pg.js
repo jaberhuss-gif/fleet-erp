@@ -4339,15 +4339,44 @@ export async function autoCloseSixMonthCoveredByAnnual() {
 }
 
 export async function listPeriodicMaintenance(filters = {}) {
+  // IMPORTANT: WhatsApp confirmation data lives in TWO places:
+  //   1. periodic_maintenance.whatsapp_confirmed_at (set by the new YES flow)
+  //   2. tickets.whatsapp_confirmed_at              (set by the legacy YES flow)
+  //
+  // Older records (created before the unified YES CTE) only have the ticket
+  // confirmation, while periodic_maintenance.whatsapp_* is NULL. To avoid
+  // false negatives in isInspected() on the frontend, we LEFT JOIN the
+  // linked ticket via the [PM_INSPECTION:N] / [PM_REPAIR:N] marker in
+  // tickets.resolution_notes and COALESCE the values so the API always
+  // returns the effective confirmation state.
   let sql = `
     SELECT
-      pm.*,
+      pm.id, pm.vehicle_id, pm.type, pm.scheduled_date, pm.completed_date,
+      pm.status, pm.technician, pm.cost, pm.notes, pm.created_at,
+      pm.last_service_km, pm.last_service_date, pm.next_due_km, pm.interval_km,
+      pm.interval_days, pm.notification_sent_at, pm.whatsapp_confirmation_token,
+      COALESCE(pm.whatsapp_confirmed_at, t.whatsapp_confirmed_at) AS whatsapp_confirmed_at,
+      COALESCE(pm.whatsapp_confirmation_source, t.whatsapp_confirmation_source) AS whatsapp_confirmation_source,
+      pm.whatsapp_confirmed_at AS pm_whatsapp_confirmed_at,
+      pm.whatsapp_confirmation_source AS pm_whatsapp_confirmation_source,
+      t.id AS linked_ticket_id,
+      t.whatsapp_confirmed_at AS ticket_whatsapp_confirmed_at,
+      t.whatsapp_confirmation_source AS ticket_whatsapp_confirmation_source,
       CONCAT(v.plate_number, ' ', v.plate_code) AS vehicle_plate,
       v.location AS vehicle_location,
       v.driver AS driver_name
     FROM periodic_maintenance pm
     LEFT JOIN vehicles v
       ON v.id = pm.vehicle_id
+    LEFT JOIN tickets t
+      ON t.resolution_notes LIKE
+         CASE
+           WHEN pm.type = 'inspection'
+             THEN '[PM_INSPECTION:' || pm.id::text || ']%'
+           WHEN pm.type = '6_months_general'
+             THEN '[PM_REPAIR:' || pm.id::text || ']%'
+           ELSE NULL
+         END
     WHERE 1=1
   `;
 
@@ -4375,14 +4404,35 @@ export async function listPeriodicMaintenance(filters = {}) {
 }
 
 export async function getPeriodicMaintenance(id) {
+  // Same COALESCE pattern as listPeriodicMaintenance — see comment there.
   const result = await query(`
     SELECT
-      pm.*,
+      pm.id, pm.vehicle_id, pm.type, pm.scheduled_date, pm.completed_date,
+      pm.status, pm.technician, pm.cost, pm.notes, pm.created_at,
+      pm.last_service_km, pm.last_service_date, pm.next_due_km, pm.interval_km,
+      pm.interval_days, pm.notification_sent_at, pm.whatsapp_confirmation_token,
+      COALESCE(pm.whatsapp_confirmed_at, t.whatsapp_confirmed_at) AS whatsapp_confirmed_at,
+      COALESCE(pm.whatsapp_confirmation_source, t.whatsapp_confirmation_source) AS whatsapp_confirmation_source,
+      pm.whatsapp_confirmed_at AS pm_whatsapp_confirmed_at,
+      pm.whatsapp_confirmation_source AS pm_whatsapp_confirmation_source,
+      t.id AS linked_ticket_id,
+      t.whatsapp_confirmed_at AS ticket_whatsapp_confirmed_at,
+      t.whatsapp_confirmation_source AS ticket_whatsapp_confirmation_source,
       CONCAT(v.plate_number, ' ', v.plate_code) AS vehicle_plate,
+      v.location AS vehicle_location,
       v.driver AS driver_name
     FROM periodic_maintenance pm
     LEFT JOIN vehicles v
       ON v.id = pm.vehicle_id
+    LEFT JOIN tickets t
+      ON t.resolution_notes LIKE
+         CASE
+           WHEN pm.type = 'inspection'
+             THEN '[PM_INSPECTION:' || pm.id::text || ']%'
+           WHEN pm.type = '6_months_general'
+             THEN '[PM_REPAIR:' || pm.id::text || ']%'
+           ELSE NULL
+         END
     WHERE pm.id = $1
   `, [id]);
 

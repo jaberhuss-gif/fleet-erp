@@ -2642,6 +2642,20 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
     const todayKey = new Date().toISOString().slice(0, 10);
     const today = new Date(todayKey + 'T00:00:00Z');
 
+    // Exempted plates — per government decision 2024. These vehicles are
+    // excluded from completed/approaching/due counts and listed separately
+    // in the `exempt` array for audit. Source: user directive (5 vehicles).
+    const exemptPlateNumbers = new Set(['1357', '1369', '1560', '3296', '8571']);
+    // Test / demo plates — excluded from all sections.
+    const testPlateNumbers = new Set(['test', '123']);
+    const isTestPlate = (num) => {
+      const n = String(num || '').trim().toLowerCase();
+      if (testPlateNumbers.has(n)) return true;
+      if (n === 'test 123') return true;
+      if (n.startsWith('test')) return true;
+      return false;
+    };
+
     // Get all 6-month maintenance records
     const pmRes = await pgQuery(`
       SELECT pm.id, pm.vehicle_id, pm.type, pm.status,
@@ -2657,13 +2671,26 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
       ORDER BY pm.completed_date DESC NULLS LAST
     `);
 
-    // Get all active vehicles (to find vehicles with NO 6-month record)
+    // Get all active vehicles (to find vehicles with NO 6-month record).
+    // Exclude exempted + test plates from the active set — they go to the
+    // exempt[] array below, never into due/approaching/completed.
     const vehiclesRes = await pgQuery(`
       SELECT id, plate_number, plate_code, driver, phone, location, current_km
       FROM vehicles
       WHERE COALESCE(LOWER(TRIM(status)), '') NOT IN ('inactive','sold','disposed','disabled')
       ORDER BY plate_number ASC
     `);
+
+    // Build the exempt list (5 government-exempted vehicles) for the response.
+    const exempt = vehiclesRes.rows
+      .filter(v => exemptPlateNumbers.has(String(v.plate_number || '').trim()))
+      .map(v => ({
+        vehicleId: v.id,
+        plate: [v.plate_number, v.plate_code].filter(Boolean).join(' ').trim(),
+        driver: v.driver || 'Unassigned',
+        location: canonicalInspectionSite(v.location) || '-',
+        exemption: 'Government decision (2024) — Exempt'
+      }));
 
     // Group 6-month records by vehicle_id — keep latest completed
     const latestByVehicle = new Map();
@@ -2700,6 +2727,10 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
     // Process vehicles with completed 6-month records
     for (const [vid, rec] of latestByVehicle) {
       if (!rec.vehicle_status || ['inactive','sold','disposed','disabled'].includes(rec.vehicle_status.toLowerCase().trim())) continue;
+      // Exempted + test plates never appear in completed/approaching/due.
+      const plateNum = String(rec.plate_number || '').trim();
+      if (exemptPlateNumbers.has(plateNum)) continue;
+      if (isTestPlate(plateNum)) continue;
 
       const plate = [rec.plate_number, rec.plate_code].filter(Boolean).join(' ').trim();
       // Parse completed_date safely — handles Date objects, strings, null
@@ -2763,6 +2794,10 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
     // Check if they have ANNUAL inspection — if so, annual covers 6-month too
     for (const v of vehiclesRes.rows) {
       if (latestByVehicle.has(String(v.id))) continue; // has a 6-month record already
+      // Exempted + test plates never appear in due/not_inspected.
+      const plateNum = String(v.plate_number || '').trim();
+      if (exemptPlateNumbers.has(plateNum)) continue;
+      if (isTestPlate(plateNum)) continue;
       const plate = [v.plate_number, v.plate_code].filter(Boolean).join(' ').trim();
       let phone = String(v.phone || '').replace(/[^0-9]/g, '');
       if (phone.startsWith('00')) phone = phone.slice(2);
@@ -2877,9 +2912,10 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
         due: due.filter(d => d.status === 'due').length,
         expired: due.filter(d => d.status === 'expired').length,
         not_inspected: due.filter(d => d.status === 'not_inspected').length,
+        exempt: exempt.length,
         total: completed.length + approaching.length + due.length
       },
-      completed, approaching, due
+      completed, approaching, due, exempt
     });
   } catch (e) {
     console.error("[SixMonthInspection]", e);

@@ -2844,18 +2844,24 @@ app.post("/api/six-month-inspection/status", async (req, res) => {
       }
     }
 
+    // Include completed inspections approaching their next cycle in the visible
+    // completed list. The page has no separate "approaching" table, so omitting
+    // this bucket made vehicles such as 1706 disappear from the report.
+    const visibleCompleted = [...completed, ...approaching]
+      .sort((a, b) => String(b.completed_date || '').localeCompare(String(a.completed_date || '')));
+
     res.json({
       success: true,
       today: todayKey,
       summary: {
-        completed: completed.length,
+        completed: visibleCompleted.length,
         approaching: approaching.length,
         due: due.filter(d => d.status === 'due').length,
         expired: due.filter(d => d.status === 'expired').length,
         not_inspected: due.filter(d => d.status === 'not_inspected').length,
-        total: completed.length + approaching.length + due.length
+        total: visibleCompleted.length + due.length
       },
-      completed, approaching, due
+      completed: visibleCompleted, approaching, due
     });
   } catch (e) {
     console.error("[SixMonthInspection]", e);

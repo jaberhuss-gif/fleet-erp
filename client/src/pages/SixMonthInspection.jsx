@@ -150,7 +150,7 @@ export default function SixMonthInspection({ canWork = false }) {
           <div style={{ fontSize: '28px', fontWeight: 700, color: '#16a34a' }}>{summary.completed}</div>
         </div>
         <div style={{ background: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '140px', textAlign: 'center' }}>
-          <div style={{ fontSize: '11px', fontWeight: 600, color: '#991b1b', textTransform: 'uppercase' }}>Expired</div>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: '#991b1b', textTransform: 'uppercase' }}>Expired / Not Inspected</div>
           <div style={{ fontSize: '28px', fontWeight: 700, color: '#dc2626' }}>{summary.expired + summary.not_inspected}</div>
         </div>
         <div style={{ background: '#fffbeb', borderLeft: '4px solid #f59e0b', borderRadius: '8px', padding: '14px 20px', flex: 1, minWidth: '140px', textAlign: 'center' }}>

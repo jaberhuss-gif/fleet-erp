@@ -172,6 +172,34 @@ export default function GMDashboardExecutive() {
         'All figures in this deck are system-generated from live ERP API responses at export time; no manually typed performance figures are inserted.'
       ], source, generatedAt);
 
+      // Permanent final-page KPI scorecard. Actuals/targets remain explicit when source data is not verified.
+      const kpiSlide = pptx.addSlide();
+      kpiSlide.background = { color: 'F7F8FA' };
+      kpiSlide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.333, h: 0.16, line: { color: 'B49D5A', transparency: 100 }, fill: { color: 'B49D5A' } });
+      kpiSlide.addText('MAADEN  |  IVANHOE ELECTRIC', { x: 0.55, y: 0.34, w: 7.2, h: 0.28, fontFace: 'Aptos', fontSize: 12, bold: true, color: '263238', charSpacing: 1.2, margin: 0 });
+      kpiSlide.addText('Fleet Maintenance — Management KPI Performance', { x: 0.55, y: 0.88, w: 12.1, h: 0.52, fontFace: 'Aptos Display', fontSize: 24, bold: true, color: '172B4D', margin: 0 });
+      kpiSlide.addText('Permanent management scorecard | Targets are to be confirmed by the General Manager', { x: 0.58, y: 1.47, w: 12, h: 0.32, fontFace: 'Aptos', fontSize: 10, color: '667085', margin: 0 });
+      const managementKpis = [
+        ['On-time maintenance','Data Incomplete','Not configured','Monthly','Data Incomplete'],
+        ['Unexpected breakdowns','Data Incomplete','Not configured','Monthly','Data Incomplete'],
+        ['Checklist compliance','Data Incomplete','Not configured','Monthly','Data Incomplete'],
+        ['Incident resolution','Data Incomplete','Not configured','Monthly','Data Incomplete'],
+        ['Preventive maintenance','Data Incomplete','Not configured','Monthly','Data Incomplete'],
+        ['Driver training','Data Incomplete','Not configured','Quarterly','Data Incomplete'],
+        ['Unauthorized vehicle use','Data Incomplete','Not configured','Monthly','Data Incomplete'],
+        ['Timely reporting','Data Incomplete','Not configured','Monthly','Data Incomplete']
+      ];
+      kpiSlide.addTable([['Management KPI','Actual','Target','Frequency','Status'], ...managementKpis], {
+        x: 0.55, y: 2.0, w: 12.2, h: 3.95, border: { type: 'solid', color: 'D0D5DD', pt: 0.6 },
+        fill: 'FFFFFF', color: '344054', fontFace: 'Aptos', fontSize: 9, margin: 0.08, rowH: 0.43,
+        autoFit: false, columns: [{ w: 3.15 }, { w: 2.25 }, { w: 2.1 }, { w: 1.8 }, { w: 2.9 }]
+      });
+      kpiSlide.addShape(pptx.ShapeType.roundRect, { x: 0.58, y: 6.18, w: 12.15, h: 0.58, rectRadius: 0.06, line: { color: 'FEC84B', width: 0.8 }, fill: { color: 'FFFAEB' } });
+      kpiSlide.addText('DATA GOVERNANCE: No KPI is marked compliant until its source records, calculation rule, target and reporting period are approved. WhatsApp confirmation and recorded due/completion dates are required where applicable.', { x: 0.78, y: 6.31, w: 11.75, h: 0.28, fontFace: 'Aptos', fontSize: 8.5, color: '7A2E0E', margin: 0, fit: 'shrink' });
+      kpiSlide.addText(COMPANY + '  |  ' + PHASE, { x: 0.58, y: 6.91, w: 6.5, h: 0.18, fontFace: 'Aptos', fontSize: 7, color: '667085', margin: 0 });
+      kpiSlide.addText('GENERATED FROM FLEET ERP  •  ' + generatedAt, { x: 6.65, y: 6.91, w: 6.08, h: 0.18, fontFace: 'Aptos', fontSize: 7, color: '667085', align: 'right', margin: 0 });
+      kpiSlide.addText('KPI definitions and targets require General Manager approval. No missing values have been estimated.', { x: 0.58, y: 7.13, w: 12.15, h: 0.16, fontFace: 'Aptos', fontSize: 6.5, color: '98A2B3', margin: 0 });
+
       await pptx.writeFile({ fileName: 'Fleet_ERP_GM_Executive_Report_' + snapshot.year + '.pptx' });
     } catch (e) {
       console.error('Executive presentation export failed:', e);
@@ -213,6 +241,22 @@ export default function GMDashboardExecutive() {
           <div className="card"><h3>Financial Variance*</h3><div className="big-number">{sar(metrics.savings)}</div><div className="sub">{pct(metrics.savingsPct)} vs baseline · {metrics.financeMonths} active months</div></div>
         </div>
         <p style={{ color: '#98a2b3', fontSize: 11, marginTop: 18 }}>*Financial variance is calculated from the ERP financial report baseline and recorded actuals. Verify supporting transactions before external circulation.</p>
+        <div className="panel" style={{ marginTop: 20 }}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+            <h2 style={{margin:0,color:'#172b4d'}}>Fleet Maintenance — Management KPI Scorecard</h2>
+            <span style={{fontSize:11,color:'#b54708',fontWeight:700}}>TARGETS REQUIRE GM APPROVAL</span>
+          </div>
+          <p style={{color:'#667085',fontSize:12}}>These KPIs remain visible in the final page of every GM PowerPoint export. Missing source data is shown as Data Incomplete, never estimated.</p>
+          <div style={{overflowX:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse'}}>
+              <thead><tr style={{background:'#f1f5f9'}}>{['Management KPI','Actual','Target','Frequency','Status'].map(x=><th key={x} style={{padding:10,textAlign:'left'}}>{x}</th>)}</tr></thead>
+              <tbody>{[
+                'On-time maintenance','Unexpected breakdowns','Checklist compliance','Incident resolution',
+                'Preventive maintenance','Driver training','Unauthorized vehicle use','Timely reporting'
+              ].map((label,i)=><tr key={label}><td style={{padding:10,fontWeight:600}}>{label}</td><td style={{padding:10,color:'#b54708'}}>Data Incomplete</td><td style={{padding:10}}>Not configured</td><td style={{padding:10}}>{i===5?'Quarterly':'Monthly'}</td><td style={{padding:10,color:'#b54708',fontWeight:700}}>Data Incomplete</td></tr>)}</tbody>
+            </table>
+          </div>
+        </div>
       </>}
       {!snapshot && !loading && <div className="alert alert-warning">No live data is available. Refresh to try again.</div>}
     </div>

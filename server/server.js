@@ -3234,7 +3234,10 @@ app.post("/inspection-confirm/:token", async (req, res) => {
     res.set("Pragma", "no-cache");
     res.set("Expires", "0");
     const token = String(req.params.token || "").trim();
-    const decision = String(req.query?.decision || "yes").trim().toLowerCase();
+    const decision = String(req.query?.decision || req.body?.decision || "").trim().toLowerCase();
+    if (!["yes", "no"].includes(decision)) {
+      return res.status(400).send("<h2>Please choose YES or NO.</h2>");
+    }
     const result = await pgQuery(
       `SELECT id, status, completed_date FROM periodic_maintenance
        WHERE whatsapp_confirmation_token = $1
@@ -3249,15 +3252,20 @@ app.post("/inspection-confirm/:token", async (req, res) => {
     }
 
     if (decision === "no") {
-      await pgQuery(
+      const rejected = await pgQuery(
         `UPDATE periodic_maintenance
          SET whatsapp_confirmation_token = NULL,
              whatsapp_confirmed_at = NULL,
              whatsapp_confirmation_source = 'WhatsApp - NO'
          WHERE id = $1
-           AND whatsapp_confirmation_token = $2`,
+           AND whatsapp_confirmation_token = $2
+           AND status <> 'Completed'
+         RETURNING id`,
         [row.id, token]
       );
+      if (!rejected.rows.length) {
+        return res.status(409).send("<h2>This inspection has already been processed. Please use the latest Fleet Management link.</h2>");
+      }
       return res.send("<!doctype html><html><body style='font-family:Arial;max-width:620px;margin:50px auto;padding:24px;text-align:center'>" +
         "<h2 style='color:#dc2626'>NO — Inspection Not Completed</h2>" +
         "<p>The inspection remains <strong>Pending</strong> and has not been closed.</p>" +
@@ -3265,20 +3273,27 @@ app.post("/inspection-confirm/:token", async (req, res) => {
         "</body></html>");
     }
 
-    await completePeriodicMaintenancePG(row.id, {
-      technician: "WhatsApp Confirmation",
-      cost: 0,
-      notes: "Annual inspection confirmed by driver via WhatsApp confirmation link.",
-    });
-    await pgQuery(
+    // Claim the one-time token before applying the completion, preventing two
+    // concurrent clicks from completing the same inspection twice.
+    const claimed = await pgQuery(
       `UPDATE periodic_maintenance
        SET whatsapp_confirmation_token = NULL,
            whatsapp_confirmed_at = NOW(),
            whatsapp_confirmation_source = 'WhatsApp - YES'
        WHERE id = $1
-         AND whatsapp_confirmation_token = $2`,
+         AND whatsapp_confirmation_token = $2
+         AND status <> 'Completed'
+       RETURNING id`,
       [row.id, token]
     );
+    if (!claimed.rows.length) {
+      return res.status(409).send("<h2>This inspection has already been processed. Please use the latest Fleet Management link.</h2>");
+    }
+    await completePeriodicMaintenancePG(row.id, {
+      technician: "WhatsApp Confirmation",
+      cost: 0,
+      notes: "Annual inspection confirmed by driver via WhatsApp confirmation link.",
+    });
 
     res.send("<!doctype html><html><body style='font-family:Arial;max-width:620px;margin:50px auto;padding:24px;text-align:center'><h2 style='color:#16a34a'>✓ Inspection Completed</h2><p>The inspection has been recorded in Fleet ERP.</p><p>Date: " + new Date().toISOString().slice(0,10) + "</p></body></html>");
   } catch (e) {
@@ -3538,38 +3553,10 @@ app.get("/api/vehicles/:id/whatsapp-info", async (req, res) => {
     }
     const v = vehicleResult.rows[0];
     const plate = [v.plate_number, v.plate_code].filter(Boolean).join(" ").trim();
-    let confirmationUrl = "";
-    const annual = await pgQuery(
-      `SELECT id, status FROM periodic_maintenance
-       WHERE vehicle_id = $1 AND type = 'inspection'
-       ORDER BY CASE WHEN status = 'Pending' THEN 0 ELSE 1 END, id DESC
-       LIMIT 1`,
-      [v.id]
-    );
-    let annualRecord = annual.rows[0];
-    if (!annualRecord) {
-      const created = await pgQuery(
-        `INSERT INTO periodic_maintenance
-          (vehicle_id, type, scheduled_date, status, technician, notes)
-         VALUES ($1, 'inspection', CURRENT_DATE, 'Pending', '', '')
-         RETURNING id, status`,
-        [v.id]
-      );
-      annualRecord = created.rows[0];
-    }
-    if (annualRecord && String(annualRecord.status).toLowerCase() !== "completed") {
-      const token = randomUUID();
-      await pgQuery(
-        `UPDATE periodic_maintenance
-         SET whatsapp_confirmation_token = $1,
-             whatsapp_confirmed_at = NULL,
-             whatsapp_confirmation_source = NULL
-         WHERE id = $2`,
-        [token, annualRecord.id]
-      );
-      const baseUrl = String(process.env.PUBLIC_APP_URL || "https://fleet-erp-kn0c.onrender.com").replace(/\/$/, "");
-      confirmationUrl = baseUrl + "/inspection-confirm/" + token;
-    }
+    // This endpoint is used by WhatsApp message composers (Daily KM, tyres,
+    // maintenance reminders). It must be read-only: issuing an annual-inspection
+    // token here used to invalidate links as a side effect of a Daily KM reminder.
+    const confirmationUrl = "";
     res.json({
       success: true,
       vehicleId: v.id,

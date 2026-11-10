@@ -1289,6 +1289,30 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
         if(!done.rows.length) return res.status(409).send("<h2>Inspection record could not be matched to this vehicle. Fleet Management must review it.</h2>");
         return res.send("<h2>✓ Annual Inspection Confirmation Recorded</h2><p>The annual inspection record and vehicle expiry dates have been updated.</p><p>Date: "+new Date().toISOString().slice(0,10)+"</p>");
       }
+      // General maintenance tickets (e.g. Other, Electrical, AC, Fan, Wipers)
+      // do not have a periodic_maintenance row. Close the ticket directly.
+      if (row.category !== '6-Month Maintenance') {
+        const confirmed = await pgQuery(`
+          UPDATE tickets
+          SET status='Completed',
+              closed_at=CURRENT_TIMESTAMP,
+              closed_by='Driver - WhatsApp',
+              whatsapp_confirmed_at=CURRENT_TIMESTAMP,
+              whatsapp_confirmation_source='Fleet Management - WhatsApp YES',
+              whatsapp_confirmation_token=NULL,
+              resolution_notes=COALESCE(NULLIF(resolution_notes,''),'')
+                || E'\\nDriver confirmed maintenance via WhatsApp'
+          WHERE id=$1
+            AND whatsapp_confirmation_token=$2
+            AND status <> 'Completed'
+          RETURNING id
+        `, [row.id, token]);
+        if (!confirmed.rows.length) {
+          return res.status(409).send("<h2>Confirmation could not be recorded. Fleet Management must review this ticket.</h2>");
+        }
+        return res.send("<h2>✓ Maintenance Confirmation Recorded</h2><p>The maintenance ticket has been closed successfully.</p>");
+      }
+
       const done = await pgQuery(`
         WITH eligible AS (
           SELECT id,vehicle_id,substring(resolution_notes from '\\[PM_REPAIR:([0-9]+)\\]') AS pm_id

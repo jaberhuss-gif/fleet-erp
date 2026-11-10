@@ -1199,7 +1199,18 @@ ${row.closing_notes ? '<h3>Closing Notes</h3><p style="font-size:13px;background
         return res.status(409).json({success:false,error:"This request is not awaiting campus confirmation.",status:row.status});
       }
       const status=answer==="yes" ? "Operationally Completed" : "Reopened";
-      await query(`UPDATE maintenance_requests SET status=$1, requester_confirmed_at=CURRENT_TIMESTAMP, requester_confirmation=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3`,[status,answer,row.id]);
+      const recorded = await query(
+        `UPDATE maintenance_requests
+         SET status=$1, requester_confirmed_at=CURRENT_TIMESTAMP,
+             requester_confirmation=$2, updated_at=CURRENT_TIMESTAMP
+         WHERE id=$3 AND requester_confirmation IS NULL
+           AND status='Awaiting Confirmation' AND completed_at IS NOT NULL
+         RETURNING id`,
+        [status,answer,row.id]
+      );
+      if (!recorded.rows.length) {
+        return res.status(409).json({success:false,error:"Campus confirmation was already recorded or the request is no longer awaiting confirmation."});
+      }
       await auditEvent(row.id, answer==="yes" ? "CAMPUS_CONFIRMED" : "CAMPUS_REJECTED", "Campus", row.requester_name, {answer});
       if(row.work_order_id){
         await updateWorkOrder(row.work_order_id,{status: answer==="yes" ? "Operationally Completed" : "In Progress"});
@@ -1382,7 +1393,18 @@ if (action === "close" && amount !== null && (!Number.isFinite(amount) || amount
       if(!["yes","no"].includes(answer)) return res.status(400).send("<h2>Invalid answer</h2>");
       if(row.requester_confirmation) return res.status(409).json({success:false,error:"Campus confirmation has already been recorded."});
       const status=answer==="yes" ? "Operationally Completed" : "Reopened";
-      await query(`UPDATE maintenance_requests SET status=$1, requester_confirmed_at=CURRENT_TIMESTAMP, requester_confirmation=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3`,[status,answer,row.id]);
+      const recorded = await query(
+         `UPDATE maintenance_requests
+          SET status=$1, requester_confirmed_at=CURRENT_TIMESTAMP,
+              requester_confirmation=$2, updated_at=CURRENT_TIMESTAMP
+          WHERE id=$3 AND requester_confirmation IS NULL
+            AND status='Awaiting Confirmation' AND completed_at IS NOT NULL
+          RETURNING id`,
+         [status,answer,row.id]
+       );
+       if (!recorded.rows.length) {
+         return res.status(409).send("<h2>Campus confirmation was already recorded or this request is no longer awaiting confirmation.</h2>");
+       }
       if(row.work_order_id){
         await updateWorkOrder(row.work_order_id,{status: answer==="yes" ? "Operationally Completed" : "In Progress"});
         await query(`UPDATE work_orders SET operational_status=$1 WHERE id=$2`,[answer==="yes" ? "Completed" : "In Progress",row.work_order_id]);

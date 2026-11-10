@@ -147,7 +147,7 @@ export function printContent(title, subtitle) {
           <div class="company-name">Maaden Ivanhoe Electric Exploration and Development Limited Company</div>
           <div class="project-name">Exploration Phase — Arabian Shield</div>
           <div class="report-owner">Hussein Anwar</div>
-          <div class="report-role">Fleet Manager / Fleet &amp; Camp Maintenance Supervisor</div>
+          <div class="report-role">Fleet Manager</div>
         </div>
       </div>
       <div class="print-header">

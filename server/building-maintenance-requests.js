@@ -1192,6 +1192,12 @@ ${row.closing_notes ? '<h3>Closing Notes</h3><p style="font-size:13px;background
       const answer=clean(req.body?.answer || req.query?.answer).toLowerCase();
       if(!row || !token || token!==row.confirmation_token) return res.status(403).json({success:false,error:"Invalid confirmation link"});
       if(!["yes","no"].includes(answer)) return res.status(400).json({success:false,error:"Answer must be yes or no"});
+      if (row.requester_confirmation) {
+        return res.status(409).json({success:false,error:"Campus confirmation has already been recorded.",status:row.status,answer:row.requester_confirmation});
+      }
+      if (row.status !== "Awaiting Confirmation" || !row.completed_at) {
+        return res.status(409).json({success:false,error:"This request is not awaiting campus confirmation.",status:row.status});
+      }
       const status=answer==="yes" ? "Operationally Completed" : "Reopened";
       await query(`UPDATE maintenance_requests SET status=$1, requester_confirmed_at=CURRENT_TIMESTAMP, requester_confirmation=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3`,[status,answer,row.id]);
       await auditEvent(row.id, answer==="yes" ? "CAMPUS_CONFIRMED" : "CAMPUS_REJECTED", "Campus", row.requester_name, {answer});

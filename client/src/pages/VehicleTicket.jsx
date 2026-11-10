@@ -191,7 +191,7 @@ export default function VehicleTicket({ user, canWork=false }) {
       }else if(row.kind==='inspection'){
         let confirmationUrl='';
         try{
-          const info=(await api.get('/vehicles/'+row.vehicle.id+'/whatsapp-info')).data||{};
+          const info=(await api.get('/annual-inspection/vehicle/'+row.vehicle.id+'/confirmation-info')).data||{};
           phone=info.driverPhone||phone; driver=info.driverName||driver; plate=info.vehiclePlate||plate; confirmationUrl=info.confirmationUrl||'';
         }catch(_){}
         message='Hello '+driver+',\n\nVehicle '+plate+' — Annual Periodic Inspection is still pending. Please arrange the inspection.'+(confirmationUrl?'\n\nIf the inspection has been completed, please confirm here:\n'+confirmationUrl:'')+'\n\nFleet Management';

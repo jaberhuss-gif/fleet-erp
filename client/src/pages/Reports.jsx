@@ -275,6 +275,7 @@ function FleetMaintenanceReport() {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -322,6 +323,75 @@ function FleetMaintenanceReport() {
     }
   };
 
+  const exportFleetPowerPoint = async () => {
+    if (exporting) return;
+    setExporting(true);
+    setError('');
+    try {
+      const imported = await import(/* @vite-ignore */ 'https://esm.sh/pptxgenjs@3.12.0');
+      const PptxGenJS = imported.default || imported.PptxGenJS;
+      if (!PptxGenJS) throw new Error('PowerPoint generator could not be loaded.');
+      const pptx = new PptxGenJS();
+      pptx.layout = 'LAYOUT_WIDE';
+      pptx.author = 'Fleet ERP';
+      pptx.company = 'Maaden Ivanhoe Electric Exploration and Development Limited Company';
+      pptx.subject = 'Vehicle maintenance performance';
+      pptx.title = 'Fleet Vehicle Maintenance Report';
+      const navy = '172B4D', gold = 'B49D5A', muted = '667085';
+      const generated = new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+      const periodLabel = ({ month: 'This Month', '3months': 'Last 3 Months', '6months': 'Last 6 Months', year: 'Year to Date', all: 'All Time' })[period] || period;
+      const addHeader = (slide, title, subtitle) => {
+        slide.background = { color: 'F7F8FA' };
+        slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.333, h: 0.16, line: { color: gold, transparency: 100 }, fill: { color: gold } });
+        slide.addText('MAADEN  |  IVANHOE ELECTRIC', { x: 0.55, y: 0.35, w: 8, h: 0.25, fontFace: 'Aptos', fontSize: 11, bold: true, color: navy, margin: 0 });
+        slide.addText(title, { x: 0.55, y: 0.88, w: 12, h: 0.5, fontFace: 'Aptos Display', fontSize: 25, bold: true, color: navy, margin: 0 });
+        slide.addText(subtitle, { x: 0.58, y: 1.48, w: 12, h: 0.3, fontFace: 'Aptos', fontSize: 11, color: muted, margin: 0 });
+        slide.addText('FLEET ERP  •  ' + generated, { x: 0.58, y: 7.08, w: 12.15, h: 0.18, fontFace: 'Aptos', fontSize: 7, color: muted, align: 'right', margin: 0 });
+      };
+      const addCard = (slide, x, label, value, color = navy) => {
+        slide.addShape(pptx.ShapeType.roundRect, { x, y: 2.05, w: 2.92, h: 1.18, rectRadius: 0.08, line: { color: 'E4E7EC', width: 0.8 }, fill: { color: 'FFFFFF' } });
+        slide.addText(String(value), { x: x + 0.16, y: 2.25, w: 2.6, h: 0.43, fontFace: 'Aptos Display', fontSize: 22, bold: true, color, margin: 0, fit: 'shrink' });
+        slide.addText(label, { x: x + 0.16, y: 2.82, w: 2.6, h: 0.22, fontFace: 'Aptos', fontSize: 9, color: muted, margin: 0, fit: 'shrink' });
+      };
+      const money = v => 'SAR ' + Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+      const overview = pptx.addSlide();
+      addHeader(overview, 'Vehicle Maintenance — Executive Summary', periodLabel + ' | Vehicle maintenance records and completed scheduled services');
+      [filtered.length, money(totalCost), money(avgCost), byType.tickets].forEach((v,i) => addCard(overview, 0.58 + i * 3.08, ['Maintenance Records','Total Recorded Cost','Average Cost / Record','Vehicle Issue Tickets'][i], v, i===1?'16835D':navy));
+      overview.addText('MANAGEMENT HIGHLIGHTS', { x: 0.62, y: 3.72, w: 4, h: 0.25, fontFace: 'Aptos', fontSize: 10, bold: true, color: gold, margin: 0 });
+      [
+        'The report combines Maintenance-category vehicle tickets and completed scheduled-maintenance records.',
+        'Only records with a recorded date are included in the selected reporting period.',
+        'Cost totals use the cost values recorded in Fleet ERP; missing costs are treated as zero, not estimated.',
+        'This is a point-in-time export. Refresh the report before management circulation.'
+      ].forEach((line,i)=>overview.addText('•  '+line,{x:0.75,y:4.12+i*0.48,w:11.8,h:0.32,fontFace:'Aptos',fontSize:12,color:'344054',margin:0,fit:'shrink'}));
+
+      const costSlide = pptx.addSlide();
+      addHeader(costSlide, 'Maintenance Cost & Service Mix', periodLabel + ' | Breakdown from the selected Fleet ERP records');
+      const mix = [
+        {name:'Vehicle issue tickets',count:byType.tickets,cost:filtered.filter(r=>r.type==='ticket').reduce((s,r)=>s+Number(r.cost||0),0)},
+        {name:'Oil changes',count:byType.oil_change,cost:filtered.filter(r=>r.type==='oil_change').reduce((s,r)=>s+Number(r.cost||0),0)},
+        {name:'Inspections',count:byType.inspection,cost:filtered.filter(r=>r.type==='inspection').reduce((s,r)=>s+Number(r.cost||0),0)},
+        {name:'General / scheduled',count:byType.general,cost:filtered.filter(r=>r.type==='6_months_general'||r.type==='scheduled').reduce((s,r)=>s+Number(r.cost||0),0)}
+      ];
+      costSlide.addTable([['Service Category','Record Count','Recorded Cost (SAR)'],...mix.map(x=>[x.name,String(x.count),money(x.cost)])],{x:0.65,y:2.05,w:12,h:2.55,border:{type:'solid',color:'D0D5DD',pt:0.7},fill:'FFFFFF',color:'344054',fontFace:'Aptos',fontSize:13,margin:0.12,rowH:0.48,autoFit:false,columns:[{w:5.2},{w:2.6},{w:4.2}],bold:true});
+      costSlide.addText('Monthly trend (count / recorded cost)',{x:0.7,y:4.95,w:6,h:0.28,fontFace:'Aptos',fontSize:12,bold:true,color:navy,margin:0});
+      const trend=monthlyData.slice(-8);
+      if(trend.length) costSlide.addChart(pptx.ChartType.bar,[{name:'Records',labels:trend.map(x=>x.month),values:trend.map(x=>x.count)},{name:'Cost (SAR)',labels:trend.map(x=>x.month),values:trend.map(x=>Number(x.cost||0))}],{x:0.7,y:5.3,w:11.9,h:1.55,catAxisLabelFontSize:8,valAxisLabelFontSize:8,showLegend:true,showTitle:false,showValue:false});
+      else costSlide.addText('No monthly records are available for this period.',{x:0.7,y:5.35,w:11,h:0.4,fontFace:'Aptos',fontSize:12,color:muted,margin:0});
+
+      const detailSlide=pptx.addSlide();
+      addHeader(detailSlide,'Maintenance Register — Recent Records',periodLabel+' | Latest recorded activities (maximum 12 rows)');
+      const detailRows=filtered.slice(0,12).map(r=>[String(r.date).slice(0,10),String(r.vehicle_plate||'-'),String(r.type==='ticket'?'Vehicle Issue':r.type||'-'),String(r.technician||'-'),money(r.cost),String(r.description||'-').slice(0,90)]);
+      detailSlide.addTable([['Date','Vehicle','Type','Technician','Cost','Description'],...detailRows],{x:0.45,y:2.0,w:12.4,h:4.65,border:{type:'solid',color:'D0D5DD',pt:0.5},fill:'FFFFFF',color:'344054',fontFace:'Aptos',fontSize:8,margin:0.06,rowH:0.34,autoFit:false,columns:[{w:1.25},{w:1.5},{w:1.8},{w:1.8},{w:1.25},{w:4.8}]});
+      await pptx.writeFile({fileName:'Fleet_Vehicle_Maintenance_'+new Date().toISOString().slice(0,10)+'.pptx'});
+    } catch (e) {
+      console.error('Fleet maintenance PowerPoint export failed:', e);
+      setError('PowerPoint export failed: ' + (e?.message || 'Unknown error'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const now = new Date();
   const starts = {
     month: new Date(now.getFullYear(), now.getMonth(), 1),
@@ -364,7 +434,12 @@ function FleetMaintenanceReport() {
     <div>
       <div className="panel">
         <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
-          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>🔧 Fleet Maintenance Report</h2>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+            <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>🔧 Fleet Maintenance Report</h2>
+            <button className="btn btn-primary" onClick={exportFleetPowerPoint} disabled={exporting || loading || !filtered.length}>
+              {exporting ? 'Preparing PowerPoint…' : '📊 Export Vehicle Maintenance PowerPoint'}
+            </button>
+          </div>
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:10, marginTop:16, background:'#f8fafc', padding:12, borderRadius:8 }}>
           <div className="form-group" style={{marginBottom:0}}>

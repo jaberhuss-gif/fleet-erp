@@ -3289,11 +3289,25 @@ app.post("/inspection-confirm/:token", async (req, res) => {
     if (!claimed.rows.length) {
       return res.status(409).send("<h2>This inspection has already been processed. Please use the latest Fleet Management link.</h2>");
     }
-    await completePeriodicMaintenancePG(row.id, {
-      technician: "WhatsApp Confirmation",
-      cost: 0,
-      notes: "Annual inspection confirmed by driver via WhatsApp confirmation link.",
-    });
+    try {
+      await completePeriodicMaintenancePG(row.id, {
+        technician: "WhatsApp Confirmation",
+        cost: 0,
+        notes: "Annual inspection confirmed by driver via WhatsApp confirmation link.",
+      });
+    } catch (completionError) {
+      // If completion fails, restore the same one-time link so Fleet Management
+      // can retry instead of leaving the record stranded without a valid token.
+      await pgQuery(
+        `UPDATE periodic_maintenance
+         SET whatsapp_confirmation_token=$1,
+             whatsapp_confirmed_at=NULL,
+             whatsapp_confirmation_source=NULL
+         WHERE id=$2 AND status <> 'Completed' AND whatsapp_confirmation_token IS NULL`,
+        [token, row.id]
+      ).catch(restoreError => console.error("[InspectionConfirmTokenRestore]", restoreError));
+      throw completionError;
+    }
 
     res.send("<!doctype html><html><body style='font-family:Arial;max-width:620px;margin:50px auto;padding:24px;text-align:center'><h2 style='color:#16a34a'>✓ Inspection Completed</h2><p>The inspection has been recorded in Fleet ERP.</p><p>Date: " + new Date().toISOString().slice(0,10) + "</p></body></html>");
   } catch (e) {

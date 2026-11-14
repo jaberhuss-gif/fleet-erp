@@ -85,16 +85,29 @@ export default function GMDashboardExecutive() {
   const m = useMemo(() => {
     if (!data) return null;
     const dashboard = data.dashboard || {};
-    const vehicles = pick(dashboard.vehicles,'list') || [];
-    const tickets = pick(data.tickets,'tickets') || [];
-    const workOrders = pick(data.workOrders,'workOrders','orders') || [];
-    const projects = pick(data.projects,'projects') || [];
-    const purchases = pick(data.purchases,'purchases') || [];
-    const handovers = pick(data.handovers,'handovers') || [];
-    const periodic = pick(data.periodic,'records','maintenance') || [];
-    const inventory = pick(data.inventory,'items','inventory') || [];
-    const drivers = pick(data.drivers,'drivers') || [];
-    const tireRequests = pick(data.tires,'requests','serviceRequests') || [];
+    const raw = {
+      vehicles: pick(dashboard.vehicles,'list'),
+      tickets: pick(data.tickets,'tickets'),
+      workOrders: pick(data.workOrders,'workOrders','orders'),
+      projects: pick(data.projects,'projects'),
+      purchases: pick(data.purchases,'purchases'),
+      handovers: pick(data.handovers,'handovers'),
+      periodic: pick(data.periodic,'records','maintenance'),
+      inventory: pick(data.inventory,'items','inventory'),
+      drivers: pick(data.drivers,'drivers'),
+      tireRequests: pick(data.tires,'requests','serviceRequests')
+    };
+    const available = Object.fromEntries(Object.entries(raw).map(([key,value])=>[key,Array.isArray(value)]));
+    const vehicles = raw.vehicles || [];
+    const tickets = raw.tickets || [];
+    const workOrders = raw.workOrders || [];
+    const projects = raw.projects || [];
+    const purchases = raw.purchases || [];
+    const handovers = raw.handovers || [];
+    const periodic = raw.periodic || [];
+    const inventory = raw.inventory || [];
+    const drivers = raw.drivers || [];
+    const tireRequests = raw.tireRequests || [];
     const now = new Date();
     const year = now.getFullYear();
     const periodStart = new Date(year,6,1);
@@ -124,7 +137,7 @@ export default function GMDashboardExecutive() {
     return { vehicles,tickets,workOrders,projects,purchases,handovers,periodic,inventory,drivers,tireRequests,
       safe,warning,urgent,invalid,open,pendingConfirmation,completed,closed,year,
       periodWO,periodProjects,periodPurchases,totalWorkOrderCost,totalProjectSpend,totalPurchaseCost,
-      pmCompleted,pmPending,handoverLatest,siteMap,stockTotal,tirePending };
+      pmCompleted,pmPending,handoverLatest,siteMap,stockTotal,tirePending,available };
   },[data]);
 
   if (loading && !data) return <div className="loading">Loading live Fleet ERP data…</div>;
@@ -155,7 +168,7 @@ export default function GMDashboardExecutive() {
     {m && <>
       <Section title="Fleet at a Glance" subtitle="Vehicle readiness is calculated by the Fleet ERP vehicle dashboard using current odometer and oil-service rules.">
         <div className="cards-grid">
-          <Card label="Fleet Vehicles" value={number(m.vehicles.length)} note="Vehicle master records"/>
+          <Card label="Fleet Vehicles" value={m.available.vehicles ? number(m.vehicles.length) : 'Data Incomplete'} note="Vehicle master records"/>
           <Card label="Safe" value={number(m.safe)} tone="green" note="Oil and mileage rule: within interval"/>
           <Card label="Warning" value={number(m.warning)} tone="amber" note="Approaching service threshold"/>
           <Card label="Urgent / Overdue" value={number(m.urgent)} tone="red" note="Service overdue or missing oil KM"/>
@@ -164,11 +177,11 @@ export default function GMDashboardExecutive() {
       </Section>
       <Section title="Support & Maintenance" subtitle="Ticket status counts are mutually exclusive. Completed and awaiting-driver-confirmation are not counted as Open.">
         <div className="cards-grid">
-          <Card label="Open Tickets" value={number(m.open)} tone="red"/>
-          <Card label="Pending Driver Confirmation" value={number(m.pendingConfirmation)} tone="amber"/>
-          <Card label="Completed Tickets" value={number(m.completed)} tone="green"/>
-          <Card label="Closed Tickets" value={number(m.closed)} tone="green"/>
-          <Card label="Total Tickets" value={number(m.tickets.length)}/>
+          <Card label="Open Tickets" value={m.available.tickets ? number(m.open) : 'Data Incomplete'} tone="red"/>
+          <Card label="Pending Driver Confirmation" value={m.available.tickets ? number(m.pendingConfirmation) : 'Data Incomplete'} tone="amber"/>
+          <Card label="Completed Tickets" value={m.available.tickets ? number(m.completed) : 'Data Incomplete'} tone="green"/>
+          <Card label="Closed Tickets" value={m.available.tickets ? number(m.closed) : 'Data Incomplete'} tone="green"/>
+          <Card label="Total Tickets" value={m.available.tickets ? number(m.tickets.length) : 'Data Incomplete'}/>
         </div>
         <div style={{marginTop:14}}><Table headers={['Ticket Status','Records']} rows={[
           ['Open',number(m.open)],['Pending Driver Confirmation',number(m.pendingConfirmation)],
@@ -177,10 +190,10 @@ export default function GMDashboardExecutive() {
       </Section>
       <Section title="Maintenance Delivery & Spending" subtitle={'Actual records dated July–December ' + m.year + '. Amounts use recorded ERP transaction fields; no baseline assumptions are included.'}>
         <div className="cards-grid">
-          <Card label="Work Orders" value={number(m.periodWO.length)} note={money(m.totalWorkOrderCost)} />
-          <Card label="Projects" value={number(m.periodProjects.length)} note={money(m.totalProjectSpend)}/>
-          <Card label="Purchases" value={number(m.periodPurchases.length)} note={money(m.totalPurchaseCost)}/>
-          <Card label="Combined Recorded Spend" value={money(m.totalWorkOrderCost+m.totalProjectSpend+m.totalPurchaseCost)} note="Not a reconciled total cost of ownership"/>
+          <Card label="Work Orders" value={m.available.workOrders ? number(m.periodWO.length) : 'Data Incomplete'} note={m.available.workOrders ? money(m.totalWorkOrderCost) : 'Source unavailable'} />
+          <Card label="Projects" value={m.available.projects ? number(m.periodProjects.length) : 'Data Incomplete'} note={m.available.projects ? money(m.totalProjectSpend) : 'Source unavailable'}/>
+          <Card label="Purchases" value={m.available.purchases ? number(m.periodPurchases.length) : 'Data Incomplete'} note={m.available.purchases ? money(m.totalPurchaseCost) : 'Source unavailable'}/>
+          <Card label="Combined Recorded Spend" value={m.available.workOrders && m.available.projects && m.available.purchases ? money(m.totalWorkOrderCost+m.totalProjectSpend+m.totalPurchaseCost) : 'Data Incomplete'} note="Not a reconciled total cost of ownership"/>
         </div>
         <div style={{marginTop:14}}><Table headers={['Category','Transactions','Recorded Amount']} rows={[
           ['Work Orders',number(m.periodWO.length),money(m.totalWorkOrderCost)],
@@ -190,14 +203,14 @@ export default function GMDashboardExecutive() {
       </Section>
       <Section title="Preventive Maintenance" subtitle="Counts are taken from periodic_maintenance records returned by the ERP.">
         <div className="cards-grid">
-          <Card label="Periodic Records" value={number(m.periodic.length)}/>
-          <Card label="Completed" value={number(m.pmCompleted)} tone="green"/>
-          <Card label="Pending / Other Status" value={number(m.pmPending)} tone="amber"/>
+          <Card label="Periodic Records" value={m.available.periodic ? number(m.periodic.length) : 'Data Incomplete'}/>
+          <Card label="Completed" value={m.available.periodic ? number(m.pmCompleted) : 'Data Incomplete'} tone="green"/>
+          <Card label="Pending / Other Status" value={m.available.periodic ? number(m.pmPending) : 'Data Incomplete'} tone="amber"/>
         </div>
         <div style={{marginTop:14}}><Table headers={['Maintenance Type','Records']} rows={Object.entries(m.periodic.reduce((acc,r)=>{const k=String(r.type||'Not specified').replaceAll('_',' ');acc[k]=(acc[k]||0)+1;return acc;},{})).map(([k,v])=>[k,number(v)])}/></div>
       </Section>
       <Section title="Driver Handovers" subtitle="Latest handover records from the driver handover register.">
-        <div className="cards-grid"><Card label="Total Handovers" value={number(m.handovers.length)}/><Card label="Driver Master Records" value={number(m.drivers.length)}/></div>
+        <div className="cards-grid"><Card label="Total Handovers" value={m.available.handovers ? number(m.handovers.length) : 'Data Incomplete'}/><Card label="Driver Master Records" value={m.available.drivers ? number(m.drivers.length) : 'Data Incomplete'}/></div>
         <div style={{marginTop:14}}><Table headers={['Date','Vehicle','Previous Driver','New Driver','Notes']} rows={m.handoverLatest.map(h=>[
           h.handover_date || h.handoverDate || '—',
           h.plate || h.vehicle_plate || h.vehiclePlate || h.vehicle_id || '—',
@@ -208,10 +221,10 @@ export default function GMDashboardExecutive() {
       </Section>
       <Section title="Tire Services" subtitle="Live tire service requests. This is the request register, not a claim that every tire asset has been physically inspected.">
         <div className="cards-grid">
-          <Card label="Tire Service Requests" value={number(m.tireRequests.length)}/>
-          <Card label="Pending / In Progress" value={number(m.tirePending)} tone="amber"/>
-          <Card label="Completed" value={number(statusCountSafe(m.tireRequests,['completed']))} tone="green"/>
-          <Card label="Rejected" value={number(statusCountSafe(m.tireRequests,['rejected']))} tone="red"/>
+          <Card label="Tire Service Requests" value={m.available.tireRequests ? number(m.tireRequests.length) : 'Data Incomplete'}/>
+          <Card label="Pending / In Progress" value={m.available.tireRequests ? number(m.tirePending) : 'Data Incomplete'} tone="amber"/>
+          <Card label="Completed" value={m.available.tireRequests ? number(statusCountSafe(m.tireRequests,['completed'])) : 'Data Incomplete'} tone="green"/>
+          <Card label="Rejected" value={m.available.tireRequests ? number(statusCountSafe(m.tireRequests,['rejected'])) : 'Data Incomplete'} tone="red"/>
         </div>
         <div style={{marginTop:14}}><Table headers={['Request','Vehicle','Type','Status','Date']} rows={m.tireRequests.slice(0,8).map(r=>[
           r.id || '—',r.plate || r.vehicle_plate || r.vehicle_id || '—',r.request_type || r.requestType || r.type || '—',statusBadge(r.status),r.created_at || r.createdAt || '—'
@@ -219,8 +232,8 @@ export default function GMDashboardExecutive() {
       </Section>
       <Section title="Warehouse & Inventory" subtitle="Inventory quantities are shown only when the API exposes a recognized on-hand quantity field.">
         <div className="cards-grid">
-          <Card label="Inventory Items" value={number(m.inventory.length)}/>
-          <Card label="Total On-hand Quantity" value={m.inventory.some(x=>x.quantity!=null || x.on_hand!=null || x.stock_quantity!=null) ? number(m.stockTotal) : 'Data Incomplete'} note="Sum of available item quantities"/>
+          <Card label="Inventory Items" value={m.available.inventory ? number(m.inventory.length) : 'Data Incomplete'}/>
+          <Card label="Total On-hand Quantity" value={!m.available.inventory || !m.inventory.some(x=>x.quantity!=null || x.on_hand!=null || x.stock_quantity!=null) ? 'Data Incomplete' : number(m.stockTotal)} note="Sum of available item quantities"/>
         </div>
         <div style={{marginTop:14}}><Table headers={['Item','SKU / Part','Unit','On Hand','Minimum']} rows={m.inventory.slice(0,10).map(x=>[
           x.name || x.item_name || x.description || '—',x.sku || x.part_number || x.code || '—',

@@ -678,6 +678,7 @@ app.get("/api/vehicle-handover-data/:vehicleId", async (req, res) => {
         make: vehicle.make || '',
         model: vehicle.model || '',
         year: vehicle.year || '',
+        driver_id: vehicle.driver_id || null,
         driver: vehicle.driver || '—',
         phone: vehicle.phone || '',
         location: vehicle.location || '—',

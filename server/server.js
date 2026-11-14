@@ -519,7 +519,7 @@ app.get("/api/vehicle-handover-data/:vehicleId", async (req, res) => {
 
     // 1. Vehicle basic info + oil data + inspection dates from vehicles table
     const vRes = await pgQuery(`
-      SELECT id, plate_number, plate_code, make, model, year, driver, phone, location,
+      SELECT id, driver_id, plate_number, plate_code, make, model, year, driver, phone, location,
              current_km, last_oil_km, oil_change_interval, last_oil_change_date, status,
              inspection_last_date, inspection_due_date, inspection_expiry_date
       FROM vehicles WHERE id = $1 LIMIT 1
@@ -715,27 +715,65 @@ app.get("/api/vehicle-handover-data/:vehicleId", async (req, res) => {
 });
 
 app.post("/api/vehicles/:id/handover", async (req, res) => {
+  let vehicleId = Number(req.params.id);
+  let previousDriverId = null;
+  let assignmentChanged = false;
   try {
-    const vehicleId = Number(req.params.id);
-    if (!Number.isFinite(vehicleId)) {
+    if (!Number.isInteger(vehicleId) || vehicleId <= 0) {
       return res.status(400).json({ success: false, error: "Invalid vehicle ID" });
     }
+    const newDriverId = Number(req.body?.newDriverId);
+    if (!Number.isInteger(newDriverId) || newDriverId <= 0) {
+      return res.status(400).json({ success: false, error: "Select a valid new driver." });
+    }
 
-    const body = req.body || {};
+    const vehicleResult = await pgQuery(
+      "SELECT id, driver_id, driver, phone FROM vehicles WHERE id = $1 LIMIT 1",
+      [vehicleId]
+    );
+    const vehicle = vehicleResult.rows[0];
+    if (!vehicle) return res.status(404).json({ success: false, error: "Vehicle not found." });
+
+    previousDriverId = vehicle.driver_id ? Number(vehicle.driver_id) : null;
+    if (previousDriverId === newDriverId) {
+      return res.status(400).json({ success: false, error: "This driver is already assigned to the vehicle." });
+    }
+
+    const driverResult = await pgQuery(
+      "SELECT id, name, phone, vehicle_id FROM drivers WHERE id = $1 LIMIT 1",
+      [newDriverId]
+    );
+    const newDriver = driverResult.rows[0];
+    if (!newDriver) return res.status(404).json({ success: false, error: "Selected driver was not found." });
+    if (newDriver.vehicle_id && Number(newDriver.vehicle_id) !== vehicleId) {
+      return res.status(409).json({ success: false, error: "Selected driver is already assigned to another vehicle. Release that assignment first." });
+    }
+
+    // Update the authoritative Vehicle Master assignment, preserving all other vehicle fields.
+    const updateResult = await updateVehiclePG(vehicleId, { driverId: newDriverId });
+    if (!updateResult?.changes) {
+      return res.status(400).json({ success: false, error: "Vehicle assignment could not be updated." });
+    }
+    assignmentChanged = true;
+
     const handover = await db.createDriverHandover({
       vehicleId,
-      previousDriverId: body.previousDriverId || null,
-      previousDriverName: body.previousDriverName || "",
-      previousDriverPhone: body.previousDriverPhone || "",
-      newDriverId: body.newDriverId || null,
-      newDriverName: body.newDriverName || "",
-      newDriverPhone: body.newDriverPhone || "",
-      handoverDate: body.handoverDate || null,
-      notes: body.notes || ""
+      previousDriverId,
+      previousDriverName: vehicle.driver || "",
+      previousDriverPhone: vehicle.phone || "",
+      newDriverId,
+      newDriverName: newDriver.name || "",
+      newDriverPhone: newDriver.phone || "",
+      handoverDate: req.body?.handoverDate || null,
+      notes: req.body?.notes || ""
     });
 
-    res.json({ success: true, handover });
+    res.json({ success: true, handover, vehicleDriver: newDriver.name });
   } catch (e) {
+    if (assignmentChanged) {
+      try { await updateVehiclePG(vehicleId, { driverId: previousDriverId }); }
+      catch (rollbackError) { console.error("[HandoverRollback]", rollbackError); }
+    }
     console.error("[HandoverCreate]", e);
     res.status(400).json({ success: false, error: e.message });
   }

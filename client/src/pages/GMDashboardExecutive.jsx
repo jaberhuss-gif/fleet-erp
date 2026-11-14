@@ -56,9 +56,8 @@ export default function GMDashboardExecutive() {
   const refresh = useCallback(async (silent=false) => {
     if (silent) setRefreshing(true); else setLoading(true);
     const endpoints = [
-      ['dashboard','/dashboard'], ['tickets','/tickets'], ['workOrders','/work-orders'],
-      ['projects','/projects'], ['purchases','/purchases'], ['handovers','/driver-handovers'],
-      ['periodic','/periodic-maintenance'], ['inventory','/inventory'],
+      ['dashboard','/dashboard'], ['tickets','/tickets'], ['handovers','/driver-handovers'],
+      ['periodic','/periodic-maintenance'], ['stockReport','/inventory/report/full'],
       ['drivers','/drivers'], ['tires','/tire/service-requests']
     ];
     const settled = await Promise.allSettled(endpoints.map(([,url]) => api.get(url, { timeout:20000 })));
@@ -88,24 +87,18 @@ export default function GMDashboardExecutive() {
     const raw = {
       vehicles: pick(dashboard.vehicles,'list'),
       tickets: pick(data.tickets,'tickets'),
-      workOrders: pick(data.workOrders,'workOrders','orders'),
-      projects: pick(data.projects,'projects'),
-      purchases: pick(data.purchases,'purchases'),
       handovers: pick(data.handovers,'handovers'),
       periodic: pick(data.periodic,'records','maintenance'),
-      inventory: pick(data.inventory,'items','inventory'),
+      stockSites: pick(data.stockReport,'by_site'),
       drivers: pick(data.drivers,'drivers'),
       tireRequests: pick(data.tires,'requests','serviceRequests')
     };
     const available = Object.fromEntries(Object.entries(raw).map(([key,value])=>[key,Array.isArray(value)]));
     const vehicles = raw.vehicles || [];
     const tickets = raw.tickets || [];
-    const workOrders = raw.workOrders || [];
-    const projects = raw.projects || [];
-    const purchases = raw.purchases || [];
     const handovers = raw.handovers || [];
     const periodic = raw.periodic || [];
-    const inventory = raw.inventory || [];
+    const stockSites = raw.stockSites || [];
     const drivers = raw.drivers || [];
     const tireRequests = raw.tireRequests || [];
     const now = new Date();
@@ -121,22 +114,15 @@ export default function GMDashboardExecutive() {
     const pendingConfirmation = statusCount(tickets,['pending driver confirmation']);
     const completed = statusCount(tickets,['completed']);
     const closed = statusCount(tickets,['closed']);
-    const periodWO = workOrders.filter(r => inPeriod(r.reported_date || r.reportedDate || r.created_at,periodStart,periodEnd));
-    const periodProjects = projects.filter(r => inPeriod(r.start_date || r.startDate,periodStart,periodEnd));
-    const periodPurchases = purchases.filter(r => inPeriod(r.purchase_date || r.purchaseDate,periodStart,periodEnd));
     const pmCompleted = statusCount(periodic,['completed']);
     const pmPending = periodic.length - pmCompleted;
     const handoverLatest = [...handovers].sort((a,b)=>(dateValue(b.handover_date || b.handoverDate)?.getTime()||0)-(dateValue(a.handover_date || a.handoverDate)?.getTime()||0)).slice(0,6);
     const siteMap = {};
     vehicles.forEach(v => { const site=String(v.location || 'Not recorded').trim() || 'Not recorded'; siteMap[site]=(siteMap[site]||0)+1; });
-    const stockTotal = inventory.reduce((n,item)=>n+Number(item.quantity ?? item.on_hand ?? item.stock_quantity ?? 0),0);
+    const stockTotal = stockSites.reduce((n,row)=>n+Number(row.available || 0),0);
     const tirePending = tireRequests.filter(r=>['pending','in_progress'].includes(normalize(r.status))).length;
-    const totalWorkOrderCost = sum(periodWO,'final_cost');
-    const totalProjectSpend = sum(periodProjects,'spent');
-    const totalPurchaseCost = sum(periodPurchases,'total_cost');
-    return { vehicles,tickets,workOrders,projects,purchases,handovers,periodic,inventory,drivers,tireRequests,
-      safe,warning,urgent,invalid,open,pendingConfirmation,completed,closed,year,
-      periodWO,periodProjects,periodPurchases,totalWorkOrderCost,totalProjectSpend,totalPurchaseCost,
+    return { vehicles,tickets,handovers,periodic,stockSites,drivers,tireRequests,
+      safe,warning,urgent,invalid,open,pendingConfirmation,completed,closed,
       pmCompleted,pmPending,handoverLatest,siteMap,stockTotal,tirePending,available };
   },[data]);
 
@@ -188,19 +174,6 @@ export default function GMDashboardExecutive() {
           ['Completed',number(m.completed)],['Closed',number(m.closed)]
         ]}/></div>
       </Section>
-      <Section title="Maintenance Delivery & Spending" subtitle={'Actual records dated July–December ' + m.year + '. Amounts use recorded ERP transaction fields; no baseline assumptions are included.'}>
-        <div className="cards-grid">
-          <Card label="Work Orders" value={m.available.workOrders ? number(m.periodWO.length) : 'Data Incomplete'} note={m.available.workOrders ? money(m.totalWorkOrderCost) : 'Source unavailable'} />
-          <Card label="Projects" value={m.available.projects ? number(m.periodProjects.length) : 'Data Incomplete'} note={m.available.projects ? money(m.totalProjectSpend) : 'Source unavailable'}/>
-          <Card label="Purchases" value={m.available.purchases ? number(m.periodPurchases.length) : 'Data Incomplete'} note={m.available.purchases ? money(m.totalPurchaseCost) : 'Source unavailable'}/>
-          <Card label="Combined Recorded Spend" value={m.available.workOrders && m.available.projects && m.available.purchases ? money(m.totalWorkOrderCost+m.totalProjectSpend+m.totalPurchaseCost) : 'Data Incomplete'} note="Not a reconciled total cost of ownership"/>
-        </div>
-        <div style={{marginTop:14}}><Table headers={['Category','Transactions','Recorded Amount']} rows={[
-          ['Work Orders',number(m.periodWO.length),money(m.totalWorkOrderCost)],
-          ['Projects',number(m.periodProjects.length),money(m.totalProjectSpend)],
-          ['Purchases',number(m.periodPurchases.length),money(m.totalPurchaseCost)]
-        ]}/></div>
-      </Section>
       <Section title="Preventive Maintenance" subtitle="Counts are taken from periodic_maintenance records returned by the ERP.">
         <div className="cards-grid">
           <Card label="Periodic Records" value={m.available.periodic ? number(m.periodic.length) : 'Data Incomplete'}/>
@@ -230,14 +203,13 @@ export default function GMDashboardExecutive() {
           r.id || '—',r.plate || r.vehicle_plate || r.vehicle_id || '—',r.request_type || r.requestType || r.type || '—',statusBadge(r.status),r.created_at || r.createdAt || '—'
         ])}/></div>
       </Section>
-      <Section title="Warehouse & Inventory" subtitle="Inventory quantities are shown only when the API exposes a recognized on-hand quantity field.">
+      <Section title="Warehouse Stock — Live Balances" subtitle="Available balances come from warehouse_stock through the full inventory report API, not the legacy inventory item list.">
         <div className="cards-grid">
-          <Card label="Inventory Items" value={m.available.inventory ? number(m.inventory.length) : 'Data Incomplete'}/>
-          <Card label="Total On-hand Quantity" value={!m.available.inventory || !m.inventory.some(x=>x.quantity!=null || x.on_hand!=null || x.stock_quantity!=null) ? 'Data Incomplete' : number(m.stockTotal)} note="Sum of available item quantities"/>
+          <Card label="Total Available Tires / Stock Units" value={m.available.stockSites ? number(m.stockTotal) : 'Data Incomplete'} note="Sum of site balances from warehouse_stock"/>
+          <Card label="Sites with Stock Records" value={m.available.stockSites ? number(m.stockSites.length) : 'Data Incomplete'}/>
         </div>
-        <div style={{marginTop:14}}><Table headers={['Item','SKU / Part','Unit','On Hand','Minimum']} rows={m.inventory.slice(0,10).map(x=>[
-          x.name || x.item_name || x.description || '—',x.sku || x.part_number || x.code || '—',
-          x.unit || x.uom || '—',x.quantity ?? x.on_hand ?? x.stock_quantity ?? 'Not supplied',x.minimum_stock ?? x.min_stock ?? x.reorder_level ?? '—'
+        <div style={{marginTop:14}}><Table headers={['Site','Received Qty','Issued Qty','Transferred Out','Transferred In','Available Balance']} rows={m.stockSites.map(x=>[
+          x.site || '—',number(x.received_qty),number(x.issued_qty),number(x.transferred_out_qty),number(x.transferred_in_qty),number(x.available)
         ])}/></div>
       </Section>
       <Section title="Fleet Distribution by Location" subtitle="Based on the location field in the live vehicle master.">

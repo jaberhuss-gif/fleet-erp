@@ -765,6 +765,7 @@ app.post("/api/vehicles/:id/handover", async (req, res) => {
       newDriverName: newDriver.name || "",
       newDriverPhone: newDriver.phone || "",
       handoverDate: req.body?.handoverDate || null,
+      checklist: req.body?.checklist || {},
       notes: req.body?.notes || ""
     });
 

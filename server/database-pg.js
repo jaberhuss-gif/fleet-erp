@@ -752,6 +752,7 @@ export async function ensureDriverHandoverSchema() {
       last_oil_date DATE,
 
       open_issues JSONB DEFAULT '[]'::jsonb,
+      checklist JSONB DEFAULT '{}'::jsonb,
       notes TEXT,
 
       pdf_url TEXT,
@@ -761,6 +762,7 @@ export async function ensureDriverHandoverSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  await query(`ALTER TABLE driver_handovers ADD COLUMN IF NOT EXISTS checklist JSONB DEFAULT '{}'::jsonb`);
   await query(`CREATE INDEX IF NOT EXISTS idx_driver_handovers_vehicle ON driver_handovers(vehicle_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_driver_handovers_date ON driver_handovers(handover_date DESC)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_driver_handovers_new_driver ON driver_handovers(new_driver_id)`);
@@ -806,14 +808,14 @@ export async function createDriverHandover(data = {}) {
        new_driver_id, new_driver_name, new_driver_phone,
        handover_date,
        km_at_handover, last_oil_km, last_oil_date,
-       open_issues, notes)
+       open_issues, checklist, notes)
     VALUES
       ($1, $2,
        $3, $4, $5,
        $6, $7, $8,
        COALESCE($9::date, CURRENT_DATE),
        $10, $11, $12,
-       $13::jsonb, $14)
+       $13::jsonb, $14::jsonb, $15)
     RETURNING *
   `, [
     data.vehicleId,
@@ -829,6 +831,7 @@ export async function createDriverHandover(data = {}) {
     Number(vehicle.last_oil_km || 0),
     vehicle.last_oil_change_date || null,
     JSON.stringify(openIssues),
+    JSON.stringify(data.checklist || {}),
     data.notes || ''
   ]);
 

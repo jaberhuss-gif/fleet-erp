@@ -74,7 +74,7 @@ export default function ExecutivePowerPointButton({ metrics }) {
       if(sites.length) sites.slice(0,9).forEach(([site,count],i)=>line(s2,.85,3.85+i*.29,5.45,site,fmt(count)));
       else s2.addText('Site-level distribution is not available in this data response.',txt('',.9,4.1,5.2,.4,{color:C.muted}));
       panel(s2,6.85,3.35,5.88,3.25,'MANAGEMENT READING');
-      ['Vehicle master is the source for fleet population.','Missing or unrecorded readings must not be interpreted as zero usage.','Vehicle availability requires operational status and current assignment evidence.'].forEach((t,i)=>s2.addText('0'+(i+1)+'   '+t,txt('',7.15,3.95+i*.72,5.2,.45,{fontSize:11,color:C.ink,breakLine:false}));
+      ['Vehicle master is the source for fleet population.','Missing or unrecorded readings must not be interpreted as zero usage.','Vehicle availability requires operational status and current assignment evidence.'].forEach((t,i)=>s2.addText('0'+(i+1)+'   '+t,txt('',7.15,3.95+i*.72,5.2,.45,{fontSize:11,color:C.ink,breakLine:false})));
 
       const s3=pptx.addSlide(); header(s3,'','Maintenance Control','Actionable issue tickets separated from automated reminders and dedicated registers',3);
       card(s3,.6,1.85,2.9,'Open issue tickets',fmt(open),'Actionable maintenance / support',open?C.amber:C.green);

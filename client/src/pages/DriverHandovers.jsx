@@ -29,7 +29,7 @@ export default function DriverHandovers() {
         return plate.toLowerCase() !== 'test 123';
       }));
     } catch (e) {
-      setError(e.response?.data?.error || e.message);
+      setError(e.response?.status === 401 ? 'انتهت جلسة الدخول أو رمز الدخول غير صالح. سجّل الخروج ثم ادخل مرة أخرى.' : (e.response?.data?.error || e.message));
     }
   }, []);
 
@@ -44,7 +44,6 @@ export default function DriverHandovers() {
       setChecklist({});
       setNewDriver('');
       setHandoverNotes('');
-      setMessage('');
     } catch (e) {
       setError(e.response?.data?.error || e.message);
     } finally {
@@ -83,7 +82,7 @@ export default function DriverHandovers() {
     <div class="info">
       <div><span class="label">Vehicle:</span> <span class="value">${esc(d.vehicle.make)} ${esc(d.vehicle.model)} ${esc(d.vehicle.year || '')}</span></div>
       <div><span class="label">Location:</span> <span class="value">${esc(d.vehicle.location)}</span></div>
-      <div><span class="label">Driver:</span> <span class="value">${esc(d.vehicle.driver)}</span></div>
+      <div><span class="label">Previous Driver:</span> <span class="value">${esc(d.vehicle.driver)}</span></div><div><span class="label">New Driver:</span> <span class="value">${esc(selectedNewDriver?.name || "Not selected")}</span></div>
       <div><span class="label">Phone:</span> <span class="value">${esc(d.vehicle.phone || '-')}</span></div>
     </div>
     <h2>🛢️ Engine Oil Status</h2>
@@ -160,7 +159,7 @@ export default function DriverHandovers() {
             })}
           </select>
           {handoverData && (
-            <button className="btn btn-primary" onClick={printHandover} style={{ padding: '8px 20px', fontSize: '14px' }}>🖨️ Print Handover Form</button>
+            <button className="btn btn-primary" onClick={printHandover} disabled={!selectedNewDriver} style={{ padding: '8px 20px', fontSize: '14px' }}>🖨️ Print Handover Form</button>
           )}
         </div>
       </div>

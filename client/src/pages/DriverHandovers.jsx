@@ -9,15 +9,21 @@ export default function DriverHandovers() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [checklist, setChecklist] = useState({});
+  const [drivers, setDrivers] = useState([]);
   const [newDriver, setNewDriver] = useState('');
+  const [handoverNotes, setHandoverNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
 
   const load = useCallback(async () => {
     try {
-      const [hRes, vRes] = await Promise.all([
+      const [hRes, vRes, dRes] = await Promise.all([
         api.get('/driver-handovers'),
-        api.get('/vehicles/list')
+        api.get('/vehicles/list'),
+        api.get('/drivers')
       ]);
       setHandovers(hRes.data?.handovers || []);
+      setDrivers(dRes.data?.drivers || []);
       setVehicles((vRes.data?.vehicles || vRes.data || []).filter(v => {
         const plate = v.plate || ((v.plate_number || '') + ' ' + (v.plate_code || '')).trim();
         return plate.toLowerCase() !== 'test 123';
@@ -36,7 +42,9 @@ export default function DriverHandovers() {
       const res = await api.get('/vehicle-handover-data/' + vehicleId);
       setHandoverData(res.data);
       setChecklist({});
-      setNewDriver(res.data?.vehicle?.driver || '');
+      setNewDriver('');
+      setHandoverNotes('');
+      setMessage('');
     } catch (e) {
       setError(e.response?.data?.error || e.message);
     } finally {
@@ -112,6 +120,23 @@ export default function DriverHandovers() {
     w.document.close(); w.focus(); setTimeout(() => w.print(), 350);
   };
 
+  const selectedNewDriver = drivers.find(d => String(d.id) === String(newDriver));
+  const saveHandover = async () => {
+    if (!handoverData || !selectedVehicle) return;
+    if (!selectedNewDriver) { setError('Please select the new driver.'); return; }
+    if (String(handoverData.vehicle.driver_id || '') === String(selectedNewDriver.id)) { setError('The selected driver is already assigned to this vehicle.'); return; }
+    if (!window.confirm('Confirm handover from ' + (handoverData.vehicle.driver || 'Unassigned') + ' to ' + selectedNewDriver.name + '?')) return;
+    setSaving(true); setError(''); setMessage('');
+    try {
+      await api.post('/vehicles/' + selectedVehicle + '/handover', { newDriverId: selectedNewDriver.id, notes: handoverNotes, checklist });
+      setMessage('Handover saved. Vehicle driver updated to ' + selectedNewDriver.name + '.');
+      await load();
+      await loadHandoverData(selectedVehicle);
+    } catch (e) {
+      setError(e.response?.status === 401 ? 'انتهت جلسة الدخول. سجّل الخروج ثم ادخل مرة أخرى.' : (e.response?.data?.error || e.message));
+    } finally { setSaving(false); }
+  };
+
   const fmt = n => Number(n || 0).toLocaleString();
 
   return (
@@ -141,6 +166,7 @@ export default function DriverHandovers() {
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+      {message && <div className="alert alert-success">{message}</div>}
       {loading && <div className="loading">Loading vehicle data...</div>}
 
       {handoverData && !loading && (
@@ -155,6 +181,19 @@ export default function DriverHandovers() {
               <div><span style={{ color: '#64748b' }}>Current Driver:</span> <strong>{handoverData.vehicle.driver}</strong></div>
               <div><span style={{ color: '#64748b' }}>Phone:</span> <strong>{handoverData.vehicle.phone || '—'}</strong></div>
               <div><span style={{ color: '#64748b' }}>Status:</span> <strong>{handoverData.vehicle.status}</strong></div>
+            </div>
+          </div>
+
+          <div className="panel" style={{ marginBottom: '16px', padding: '16px' }}>
+            <h2 style={{ margin: '0 0 10px', fontSize: '18px', color: '#0f172a' }}>👥 Driver Change / تبديل السائق</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', alignItems: 'end' }}>
+              <div><label>Previous Driver / السائق المُسلِّم</label><input readOnly value={handoverData.vehicle.driver || 'Unassigned'} style={{ width: '100%', padding: 10, background: '#f8fafc' }} /></div>
+              <div><label>New Driver / السائق المستلِم</label><select value={newDriver} onChange={e => setNewDriver(e.target.value)} style={{ width: '100%', padding: 10 }}><option value="">— Select new driver —</option>{drivers.filter(d => String(d.id) !== String(handoverData.vehicle.driver_id || '')).map(d => <option key={d.id} value={d.id}>{d.name} {d.phone ? '— ' + d.phone : ''}</option>)}</select></div>
+            </div>
+            <div style={{ marginTop: 12 }}><label>Handover Notes</label><textarea value={handoverNotes} onChange={e => setHandoverNotes(e.target.value)} rows={2} style={{ width: '100%', padding: 10 }} /></div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+              <button className="btn btn-primary" onClick={saveHandover} disabled={saving || !selectedNewDriver}>{saving ? 'Saving...' : '✓ Save Handover & Change Driver'}</button>
+              <button className="btn btn-secondary" onClick={printHandover} disabled={!selectedNewDriver}>🖨️ Print Both-Driver Handover Form</button>
             </div>
           </div>
 

@@ -45,7 +45,7 @@ export default function DriverHandovers() {
       setNewDriver('');
       setHandoverNotes('');
     } catch (e) {
-      setError(e.response?.data?.error || e.message);
+      setError(e.response?.status === 401 ? 'انتهت جلسة الدخول أو رمز الدخول غير صالح. سجّل الخروج ثم ادخل مرة أخرى.' : (e.response?.data?.error || e.message));
     } finally {
       setLoading(false);
     }

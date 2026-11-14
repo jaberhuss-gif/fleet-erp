@@ -110,12 +110,34 @@ export default function GMDashboardExecutive() {
     const warning = statusCount(vehicles,['warning']);
     const urgent = statusCount(vehicles,['urgent overdue','urgent','overdue']);
     const invalid = statusCount(vehicles,['invalid reading']);
-    const open = statusCount(tickets,['open']);
-    const pendingConfirmation = statusCount(tickets,['pending driver confirmation']);
-    const completed = statusCount(tickets,['completed']);
-    const closed = statusCount(tickets,['closed']);
+    // Keep the GM support KPIs aligned with actionable issue tickets only.
+    // Automated preventive-maintenance reminders, Daily KM reminders and tire
+    // requests have their own registers/sections and must not inflate Open Tickets.
+    const supportTickets = tickets.filter(ticket => {
+      const category = normalize(ticket.category);
+      const reporter = normalize(ticket.reported_by || ticket.reportedBy);
+      const title = normalize(ticket.title);
+      const description = String(ticket.description || '');
+      const isAutomatedMaintenanceReminder = reporter === 'system' &&
+        (description.includes('MAINTENANCE_DUE|') || title.startsWith('maintenance overdue') || title.startsWith('maintenance due soon'));
+      return !isAutomatedMaintenanceReminder && category !== 'daily km' && category !== 'daily vehicle submission' && category !== 'tires';
+    });
+    const open = statusCount(supportTickets,['open']);
+    const pendingConfirmation = statusCount(supportTickets,['pending driver confirmation']);
+    const completed = statusCount(supportTickets,['completed']);
+    const closed = statusCount(supportTickets,['closed']);
     const pmCompleted = statusCount(periodic,['completed']);
-    const pmPending = periodic.length - pmCompleted;
+    const todayKey = new Date().toISOString().slice(0,10);
+    const pmPendingRows = periodic.filter(r => normalize(r.status) === 'pending');
+    const pmFutureScheduled = pmPendingRows.filter(r => {
+      const scheduled = String(r.scheduled_date || '').slice(0,10);
+      return scheduled && scheduled >= todayKey;
+    }).length;
+    const pmPastDue = pmPendingRows.filter(r => {
+      const scheduled = String(r.scheduled_date || '').slice(0,10);
+      return scheduled && scheduled < todayKey;
+    }).length;
+    const pmUnscheduled = pmPendingRows.length - pmFutureScheduled - pmPastDue;
     const handoverLatest = [...handovers].sort((a,b)=>(dateValue(b.handover_date || b.handoverDate)?.getTime()||0)-(dateValue(a.handover_date || a.handoverDate)?.getTime()||0)).slice(0,6);
     const siteMap = {};
     vehicles.forEach(v => { const site=String(v.location || 'Not recorded').trim() || 'Not recorded'; siteMap[site]=(siteMap[site]||0)+1; });
@@ -123,7 +145,7 @@ export default function GMDashboardExecutive() {
     const tirePending = tireRequests.filter(r=>['pending','in_progress'].includes(normalize(r.status))).length;
     return { vehicles,tickets,handovers,periodic,stockSites,drivers,tireRequests,
       safe,warning,urgent,invalid,open,pendingConfirmation,completed,closed,
-      pmCompleted,pmPending,handoverLatest,siteMap,stockTotal,tirePending,available };
+      supportTickets,pmCompleted,pmFutureScheduled,pmPastDue,pmUnscheduled,handoverLatest,siteMap,stockTotal,tirePending,available };
   },[data]);
 
   if (loading && !data) return <div className="loading">Loading live Fleet ERP data…</div>;
@@ -161,24 +183,26 @@ export default function GMDashboardExecutive() {
           <Card label="Invalid KM" value={number(m.invalid)} tone="grey" note="Odometer chronology requires review"/>
         </div>
       </Section>
-      <Section title="Support & Maintenance" subtitle="Ticket status counts are mutually exclusive. Completed and awaiting-driver-confirmation are not counted as Open.">
+      <Section title="Support & Maintenance" subtitle="Actionable issue tickets only. Automated preventive-maintenance reminders, Daily KM reminders and tire requests are excluded because they are tracked in their own registers below.">
         <div className="cards-grid">
           <Card label="Open Tickets" value={m.available.tickets ? number(m.open) : 'Data Incomplete'} tone="red"/>
           <Card label="Pending Driver Confirmation" value={m.available.tickets ? number(m.pendingConfirmation) : 'Data Incomplete'} tone="amber"/>
           <Card label="Completed Tickets" value={m.available.tickets ? number(m.completed) : 'Data Incomplete'} tone="green"/>
           <Card label="Closed Tickets" value={m.available.tickets ? number(m.closed) : 'Data Incomplete'} tone="green"/>
-          <Card label="Total Tickets" value={m.available.tickets ? number(m.tickets.length) : 'Data Incomplete'}/>
+          <Card label="Total Issue Tickets" value={m.available.tickets ? number(m.supportTickets.length) : 'Data Incomplete'}/>
         </div>
         <div style={{marginTop:14}}><Table headers={['Ticket Status','Records']} rows={[
           ['Open',number(m.open)],['Pending Driver Confirmation',number(m.pendingConfirmation)],
           ['Completed',number(m.completed)],['Closed',number(m.closed)]
         ]}/></div>
       </Section>
-      <Section title="Preventive Maintenance" subtitle="Counts are taken from periodic_maintenance records returned by the ERP.">
+      <Section title="Preventive Maintenance Schedule" subtitle="These are schedule records, not open driver-reported work orders. Future-dated Pending records are upcoming maintenance, not unfinished jobs.">
         <div className="cards-grid">
           <Card label="Periodic Records" value={m.available.periodic ? number(m.periodic.length) : 'Data Incomplete'}/>
           <Card label="Completed" value={m.available.periodic ? number(m.pmCompleted) : 'Data Incomplete'} tone="green"/>
-          <Card label="Pending / Other Status" value={m.available.periodic ? number(m.pmPending) : 'Data Incomplete'} tone="amber"/>
+          <Card label="Future Scheduled" value={m.available.periodic ? number(m.pmFutureScheduled) : 'Data Incomplete'} tone="amber"/>
+          <Card label="Past-Due Schedule Records" value={m.available.periodic ? number(m.pmPastDue) : 'Data Incomplete'} tone={m.pmPastDue ? 'red' : 'green'} note="Review schedule records; not counted as open issue tickets"/>
+          <Card label="Pending Without Date" value={m.available.periodic ? number(m.pmUnscheduled) : 'Data Incomplete'} tone="grey"/>
         </div>
         <div style={{marginTop:14}}><Table headers={['Maintenance Type','Records']} rows={Object.entries(m.periodic.reduce((acc,r)=>{const k=String(r.type||'Not specified').replaceAll('_',' ');acc[k]=(acc[k]||0)+1;return acc;},{})).map(([k,v])=>[k,number(v)])}/></div>
       </Section>

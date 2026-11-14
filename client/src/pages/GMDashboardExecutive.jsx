@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../api/client';
+import ExecutivePowerPointButton from '../components/ExecutivePowerPointButton';
 
 const COMPANY = 'Maaden Ivanhoe Electric Exploration and Development Limited Company';
 const PHASE = 'Exploration Phase — Arabian Shield';
@@ -164,7 +165,10 @@ export default function GMDashboardExecutive() {
         <h1 style={{margin:'7px 0 4px',color:'#172b4d'}}>GM Executive Dashboard</h1>
         <p style={{margin:0,color:'#667085'}}>{COMPANY} · {PHASE}</p>
       </div>
-      <button className="btn btn-secondary" onClick={()=>refresh()} disabled={loading || refreshing}>{loading || refreshing ? 'Refreshing…' : '↻ Refresh Live Data'}</button>
+      <div style={{display:'flex',gap:9,alignItems:'center',flexWrap:'wrap'}}>
+        <ExecutivePowerPointButton metrics={m}/>
+        <button className="btn btn-secondary" onClick={()=>refresh()} disabled={loading || refreshing}>{loading || refreshing ? 'Refreshing…' : '↻ Refresh Live Data'}</button>
+      </div>
     </div>
     <div className="alert alert-info" style={{marginBottom:14}}>
       <strong>Live database view.</strong> Automatic refresh every 60 seconds. Last refreshed: {updatedAt?.toLocaleString() || '—'}.

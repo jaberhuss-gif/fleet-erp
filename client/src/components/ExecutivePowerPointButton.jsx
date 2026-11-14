@@ -122,7 +122,7 @@ export default function ExecutivePowerPointButton({ metrics }) {
       ];
       risks.forEach((r,i)=>{s6.addShape(shape.ellipse,{x:.92,y:2.45+i*.72,w:.13,h:.13,line:{color:r[1],transparency:100},fill:{color:r[1]}});s6.addText(r[0],txt('',1.2,2.39+i*.72,4.9,.42,{fontSize:10,breakLine:false}));});
       panel(s6,6.8,1.85,5.85,4.8,'NEXT 30-DAY ACTION PLAN');
-      ['Validate overdue schedules and ownership.','Close data gaps in vehicle KM and handovers.','Reconcile tire receipts, issues and balances.','Capture cost evidence before closing work.','Review operational KPIs monthly with site owners.'].forEach((t,i)=>s6.addText('0'+(i+1),txt('',7.1,2.42+i*.72,.38,.22,{fontSize:10,bold:true,color:C.gold})),s6.addText(t,txt('',7.65,2.39+i*.72,4.5,.42,{fontSize:10,breakLine:false})));
+      ['Validate overdue schedules and ownership.','Close data gaps in vehicle KM and handovers.','Reconcile tire receipts, issues and balances.','Capture cost evidence before closing work.','Review operational KPIs monthly with site owners.'].forEach((t,i)=>{s6.addText('0'+(i+1),txt('',7.1,2.42+i*.72,.38,.22,{fontSize:10,bold:true,color:C.gold}));s6.addText(t,txt('',7.65,2.39+i*.72,4.5,.42,{fontSize:10,breakLine:false}));});
 
       const s7=pptx.addSlide(); header(s7,'','Operational Performance Summary','A concise scorecard for executive review',7);
       const rows=[

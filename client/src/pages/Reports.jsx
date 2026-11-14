@@ -298,7 +298,7 @@ function FleetMaintenanceReport() {
           driver_name: t.driver_name || t.reported_by || '-',
           type: 'ticket',
           technician: t.performed_by || t.assigned_to || '-',
-          cost: Number(t.final_cost || t.cost || 0),
+          cost: (() => { const raw = t.final_cost ?? t.cost ?? 0; const parsed = Number(String(raw).replace(/[^0-9.-]/g, '')); return Number.isFinite(parsed) ? parsed : 0; })(),
           source: 'Vehicle Ticket',
           description: t.description || ''
         }));

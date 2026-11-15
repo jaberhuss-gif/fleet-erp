@@ -416,7 +416,7 @@ function tiresHtml(rows,vehicles){
  const owner=canManageFleet(), inventory=DATA.tireInventory||[], installations=DATA.tireInstallations||[], movements=DATA.tireStockMovements||[];
  const opts=vehicles.map(v=>'<option value="'+esc(v.vehicle_id)+'">'+esc(v.plate)+'</option>').join('');
  const inStock=inventory.filter(t=>String(t.status)==='In Stock');
- const siteKey=s=>{s=String(s||'').trim();return /^main warehouse$/i.test(s)||/^riyadh(?:\\s*[-–—].*)?$/i.test(s)?'riyadh':s.toLowerCase().replace(/\\s+/g,' ');};
+ const siteKey=s=>{s=String(s||'').trim();return /^main warehouse$/i.test(s)||/^riyadh(?:\s*[-–—].*)?$/i.test(s)?'riyadh':s.toLowerCase().replace(/\s+/g,' ');};
  const siteLabel=s=>/^main warehouse$/i.test(String(s||'').trim())?'Riyadh – Main Warehouse':String(s||'').trim();
  const siteSet=new Map();siteSet.set('riyadh','Riyadh – Main Warehouse');
  (DATA.vehicles||[]).forEach(v=>{if(v.site){const k=siteKey(v.site);if(!siteSet.has(k))siteSet.set(k,String(v.site).trim());}});
@@ -449,7 +449,7 @@ function tiresHtml(rows,vehicles){
 async function addTireStockForm(e){
  e.preventDefault();
  try{
-  const quantity=Number(el('stockQuantity').value);const serials=el('stockSerials').value.split(/[\\n,;]+/).map(x=>x.trim()).filter(Boolean);if(!Number.isInteger(quantity)||quantity<1||quantity>100)throw new Error('Quantity must be between 1 and 100.');if(serials.length!==quantity)throw new Error('Enter exactly '+quantity+' unique manufacturer serial numbers.');if(new Set(serials.map(x=>x.toLowerCase())).size!==serials.length)throw new Error('Duplicate serial numbers are not allowed.');await rpc('addTireStock',TOKEN,{quantity,manufacturerSerials:serials,brand:el('stockBrand').value,model:el('stockModel').value,size:el('stockSize').value,warehouse:el('stockWarehouse').value,receivedDate:el('stockReceived').value,purchaseCost:el('stockCost').value,notes:el('stockNotes').value});
+  const quantity=Number(el('stockQuantity').value);const serials=el('stockSerials').value.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean);if(!Number.isInteger(quantity)||quantity<1||quantity>100)throw new Error('Quantity must be between 1 and 100.');if(serials.length!==quantity)throw new Error('Enter exactly '+quantity+' unique manufacturer serial numbers.');if(new Set(serials.map(x=>x.toLowerCase())).size!==serials.length)throw new Error('Duplicate serial numbers are not allowed.');await rpc('addTireStock',TOKEN,{quantity,manufacturerSerials:serials,brand:el('stockBrand').value,model:el('stockModel').value,size:el('stockSize').value,warehouse:el('stockWarehouse').value,receivedDate:el('stockReceived').value,purchaseCost:el('stockCost').value,notes:el('stockNotes').value});
   alert('Tire received into inventory.');await refreshData();render();
  }catch(err){alert(err.message||String(err));}
 }
@@ -460,7 +460,7 @@ async function transferTireStockForm(e){
   if(!serials.length)throw new Error('Enter at least one tire serial number.');
   if(new Set(serials.map(x=>x.toLowerCase())).size!==serials.length)throw new Error('Duplicate serial numbers are not allowed.');
   const sourceSite=el('transferSource').value,destinationSite=el('transferDestination').value.trim();
-  const key=s=>{s=String(s||'').trim();return /^main warehouse$/i.test(s)||/^riyadh(?:\\s*[-–—].*)?$/i.test(s)?'riyadh':s.toLowerCase().replace(/\\s+/g,' ');};
+  const key=s=>{s=String(s||'').trim();return /^main warehouse$/i.test(s)||/^riyadh(?:\s*[-–—].*)?$/i.test(s)?'riyadh':s.toLowerCase().replace(/\s+/g,' ');};
   if(key(sourceSite)===key(destinationSite))throw new Error('Choose a different destination site.');
   if(!confirm('Confirm transfer of '+serials.length+' tire(s) from '+sourceSite+' to '+destinationSite+'?'))return;
   const result=await rpc('transferTireStock',TOKEN,{sourceSite,destinationSite,serials,notes:el('transferNotes').value});

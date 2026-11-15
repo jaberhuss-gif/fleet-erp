@@ -12,17 +12,60 @@ function setLoginMode(mode){
 async function ownerLogin(e){e.preventDefault();await doLogin({username:document.getElementById('username').value,password:document.getElementById('password').value});}
 async function vehicleLogin(e){e.preventDefault();await doLogin({vehiclePlate:document.getElementById('vehiclePlate').value,vehiclePin:document.getElementById('vehiclePin').value,driverName:document.getElementById('driverName').value});}
 async function doLogin(payload){
- const err=document.getElementById('loginError');err.classList.add('hidden');
- try{const r=await rpc('login',payload);TOKEN=r.token;USER=r.user;sessionStorage.setItem('fleetToken',TOKEN);await openApp();}
- catch(e){err.textContent=e.message;err.classList.remove('hidden');}
+ const err=document.getElementById('loginError');
+ err.classList.add('hidden');
+ try{
+  const r=await rpc('login',payload);
+  TOKEN=r.token;
+  USER=r.user;
+  sessionStorage.setItem('fleetToken',TOKEN);
+  await openApp();
+ }catch(e){
+  const message=e&&e.message?e.message:String(e);
+  if(TOKEN&&USER){
+   showAppLoadError(message);
+  }else{
+   err.textContent=message;
+   err.classList.remove('hidden');
+  }
+ }
 }
 async function openApp(){
- document.getElementById('loginView').classList.add('hidden');document.getElementById('appView').classList.remove('hidden');
+ document.getElementById('loginView').classList.add('hidden');
+ document.getElementById('appView').classList.remove('hidden');
  document.getElementById('userLabel').textContent=(USER.role==='Driver'?(DATA?.selectedDriverName||'Shared Driver Portal'):(USER.fullName||USER.username))+' · '+USER.role;
  renderNavigation();
- await refreshData();showPage(USER.role==='Driver'?'km':'dashboard');
+ const root=document.getElementById('mainContent');
+ root.innerHTML='<div class="loading">Loading Fleet ERP data…</div>';
+ try{
+  await refreshData();
+  showPage(USER.role==='Driver'?'km':'dashboard');
+ }catch(e){
+  const message=e&&e.message?e.message:String(e);
+  console.error('Fleet ERP data loading failed:',e);
+  showAppLoadError(message);
+ }
 }
-async function refreshData(){DATA=await rpc('getAppData',TOKEN);}
+async function refreshData(){
+ const result=await rpc('getAppData',TOKEN);
+ if(!result||!Array.isArray(result.vehicles)) throw new Error('The server returned an invalid Fleet ERP data response.');
+ DATA=result;
+}
+function showAppLoadError(message){
+ const root=document.getElementById('mainContent');
+ root.innerHTML='<div class="panel"><div class="alert error"><b>Fleet ERP could not load its data.</b><br>'+esc(message)+'</div><p>Please retry. If the problem continues, the server-side getAppData request needs investigation.</p><button class="btn primary" type="button" onclick="retryAppLoad()">Retry loading</button></div>';
+}
+async function retryAppLoad(){
+ const root=document.getElementById('mainContent');
+ root.innerHTML='<div class="loading">Retrying Fleet ERP data load…</div>';
+ try{
+  await refreshData();
+  showPage(USER.role==='Driver'?'km':'dashboard');
+ }catch(e){
+  console.error('Fleet ERP retry failed:',e);
+  showAppLoadError(e&&e.message?e.message:String(e));
+ }
+}
 async function logout(){try{await rpc('logout',TOKEN);}catch(e){}TOKEN='';USER=null;DATA=null;sessionStorage.removeItem('fleetToken');document.getElementById('appView').classList.add('hidden');document.getElementById('loginView').classList.remove('hidden');}
 function renderNavigation(){
  const driverPages=['km','maintenance','tickets','tires'];

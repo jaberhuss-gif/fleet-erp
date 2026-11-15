@@ -335,27 +335,30 @@ function ticketsHtml(rows){
  }
 
  return '<div class="page-title"><div><h2>🎫 Vehicle Maintenance & Tickets</h2><p>Report and follow vehicle issues.</p></div></div>'+
-  '<div class="panel"><form onsubmit="saveTicket(event)"><div class="form-row">'+
-  '<div><label>Vehicle</label><select id="ticketVehicle" required>'+vehicleOptions+'</select></div>'+
-  '<div><label>Category</label><select id="ticketCategory"><option>Maintenance</option><option>Mechanical</option><option>Electrical</option><option>Tires</option><option>Accident</option></select></div>'+
-  '<div><label>Priority</label><select id="ticketPriority"><option>Normal</option><option>High</option><option>Urgent</option></select></div>'+
-  '</div><label>Issue Title</label><input id="ticketTitle" required><label>Description</label><textarea id="ticketDescription" required></textarea>'+
-  '<div class="form-actions"><button class="btn primary">Submit Request</button></div></form></div>'+
-  '<div class="panel"><h3>Requests Register</h3>'+register+'</div>';
-}
-
-function ticketRegisterHtml(rows){
- if(!rows.length) return '<div class="empty">No requests recorded.</div>';
- return '<div class="table-wrap"><table><thead><tr>'+
-  '<th>Vehicle</th><th>Category</th><th>Title</th><th>Reported By</th><th>Date</th><th>Status</th>'+
-  '</tr></thead><tbody>'+
-  rows.slice().reverse().map(t=>'<tr><td>'+esc(vehiclePlate(t.vehicle_id))+'</td>'+
-   '<td>'+esc(t.category)+'</td><td>'+esc(t.title)+'</td><td>'+esc(t.reported_by)+'</td>'+
-   '<td>'+esc(t.reported_at)+'</td><td>'+status(t.status)+'</td></tr>').join('')+
-  '</tbody></table></div>';
-}
-
-function canManageFleet(){return USER.role==='Owner';}
+   '<div class="panel"><form onsubmit="saveTicket(event)"><div class="form-row">'+
+   '<div><label>Vehicle</label><select id="ticketVehicle" required>'+vehicleOptions+'</select></div>'+
+   '<div><label>Category</label><select id="ticketCategory"><option>Maintenance</option><option>Mechanical</option><option>Electrical</option><option>Tires</option><option>Accident</option></select></div>'+
+   '<div><label>Priority</label><select id="ticketPriority"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select></div>'+
+   '</div><label>Issue Title</label><input id="ticketTitle" required><label>Description</label><textarea id="ticketDescription" required></textarea>'+
+   '<div class="form-actions"><button class="btn primary">Submit Request</button></div></form></div>'+
+   '<div class="panel"><h3>Requests Register</h3>'+register+'</div>';
+ }
+ 
+ function ticketRegisterHtml(rows){
+  if(!rows.length) return '<div class="empty">No requests recorded.</div>';
+  const owner=canManageFleet();
+  return '<div class="table-wrap"><table><thead><tr>'+
+   '<th>Vehicle</th><th>Category</th><th>Title / Description</th><th>Priority</th><th>Reported By</th><th>Date</th><th>Status</th>'+(owner?'<th>Follow-up</th>':'')+
+   '</tr></thead><tbody>'+
+   rows.slice().reverse().map(t=>'<tr><td><b>'+esc(vehiclePlate(t.vehicle_id))+'</b></td>'+
+    '<td>'+esc(t.category)+'</td><td><b>'+esc(t.title)+'</b><br><small>'+esc(t.description||'')+'</small></td><td>'+status(t.priority)+'</td><td>'+esc(t.reported_by)+'</td>'+
+    '<td>'+esc(t.reported_at)+'</td><td>'+status(t.status)+'</td>'+
+    (owner?'<td><select id="ticketStatus_'+esc(t.ticket_id)+'"><option '+(t.status==='Open'?'selected':'')+'>Open</option><option '+(t.status==='In Progress'?'selected':'')+'>In Progress</option><option '+(t.status==='Pending Driver Confirmation'?'selected':'')+'>Pending Driver Confirmation</option><option '+(t.status==='Closed'?'selected':'')+'>Closed</option></select><div class="form-actions"><button class="btn secondary" type="button" data-ticket-id="'+esc(t.ticket_id)+'" onclick="changeTicketStatus(this)">Update</button><button class="btn primary" type="button" data-ticket-id="'+esc(t.ticket_id)+'" onclick="openTicketWhatsApp(this)">📱 WhatsApp</button></div></td>':'')+
+    '</tr>').join('')+
+   '</tbody></table></div>';
+ }
+ 
+ function canManageFleet(){return USER.role==='Owner';}
 function tiresHtml(rows,vehicles){
  const opts=vehicles.map(v=>'<option value="'+esc(v.vehicle_id)+'">'+esc(v.plate)+'</option>').join('');
  return '<div class="page-title"><div><h2>🛞 Tire Management</h2><p>Submit and track tire service requests.</p></div><button class="btn secondary" onclick="refreshAndRender()">↻ Refresh</button></div>'+
@@ -379,6 +382,31 @@ function inspectionsHtml(rows,vehicles){
  return '<div class="page-title"><div><h2>📅 Annual & 6-Month Inspections</h2><p>Schedule and track vehicle compliance inspections.</p></div><button class="btn secondary" onclick="refreshAndRender()">↻ Refresh</button></div>'+form+
  '<div class="panel"><h3>Inspection Register</h3><div class="table-wrap"><table><thead><tr><th>Vehicle</th><th>Type</th><th>Due Date</th><th>Completed</th><th>Cost (SAR)</th><th>Status</th>'+(canManageFleet()?'<th>Action</th>':'')+'</tr></thead><tbody>'+
  (rows.length?rows.slice().reverse().map(x=>'<tr><td>'+esc(vehiclePlate(x.vehicle_id))+'</td><td>'+esc(x.inspection_type)+'</td><td>'+esc(x.due_date)+'</td><td>'+esc(x.completed_date||'-')+'</td><td>'+fmt(x.cost)+'</td><td>'+status(x.status)+'</td>'+(canManageFleet()?'<td><select id="inspStatus_'+esc(x.record_id)+'"><option>Pending</option><option>Completed</option><option>Overdue</option></select><button class="btn primary" onclick="changeInspectionStatus(\''+esc(x.record_id)+'\')">Save</button></td>':'')+'</tr>').join(''):'<tr><td colspan="7" class="empty">No inspections scheduled.</td></tr>')+'</tbody></table></div></div>';
+}
+async function changeTicketStatus(button){
+  try{
+   const id=button?.dataset.ticketId;
+   const next=el('ticketStatus_'+id)?.value;
+   if(!id||!next)return;
+   await rpc('updateTicketStatus',TOKEN,id,next,'');
+   await refreshData();render();
+  }catch(err){alert(err.message||String(err));}
+}
+async function openTicketWhatsApp(button){
+  const id=button?.dataset.ticketId;
+  const popup=window.open('about:blank','_blank');
+  if(!popup){alert('Please allow pop-ups to open WhatsApp.');return;}
+  try{
+   const info=await rpc('getTicketWhatsAppInfo',TOKEN,id);
+   if(!info.driverPhone){popup.close();alert('No WhatsApp number is saved for the current driver assigned to this vehicle.');return;}
+   const nl=String.fromCharCode(10);
+   const isKm=String(info.category||'').toLowerCase()==='daily km';
+   const parts=isKm
+    ? ['Hello '+(info.driverName||'Driver')+',','','No KM reading has been recorded today for vehicle '+(info.vehiclePlate||'')+'.','Last reading: '+Number(info.currentKm||0).toLocaleString()+' km.','','Please record the current odometer reading.','','Thank you,','Fleet Management']
+    : ['Hello '+(info.driverName||'Driver')+',','','Vehicle '+(info.vehiclePlate||'')+' requires your attention.','Issue: '+(info.title||info.category||'Maintenance'),'Priority: '+(info.priority||'Medium'),'Details: '+(info.description||'-'),'Current KM: '+Number(info.currentKm||0).toLocaleString()+' km.','','Please visit the workshop or contact Fleet Management and confirm the action.','','Thank you,','Fleet Management'];
+   popup.location.href='https://wa.me/'+info.driverPhone+'?text='+encodeURIComponent(parts.join(nl));
+   await rpc('logTicketWhatsAppOpened',TOKEN,id);
+  }catch(err){try{popup.close();}catch(e){}alert('Unable to prepare WhatsApp message: '+(err.message||String(err)));}
 }
 async function submitTireForm(e){e.preventDefault();try{await rpc('createTireRequest',TOKEN,{vehicleId:el('tireVehicle').value,requestType:el('tireType').value,description:el('tireDescription').value});alert('Tire request submitted.');await refreshData();render();}catch(err){alert(err.message);}}
 async function changeTireStatus(id){try{await rpc('updateTireRequest',TOKEN,id,el('tireStatus_'+id).value,'');await refreshData();render();}catch(err){alert(err.message);}}

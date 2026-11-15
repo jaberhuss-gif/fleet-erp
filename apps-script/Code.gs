@@ -253,8 +253,33 @@ function logTicketWhatsAppOpened(token, ticketId) {
   audit_(user.fullName,'WHATSAPP_DRAFT_OPENED','Ticket',ticketId,'WhatsApp draft opened for vehicle '+String(vehicle?.plate||ticket.vehicle_id));
   return {ok:true};
 }
+function getVehicleWhatsAppInfo(token, vehicleId) {
+  requireOwner_(token);
+  const vehicle=rows_('Vehicles').find(r=>String(r.vehicle_id)===String(vehicleId));
+  if(!vehicle) throw new Error('Vehicle not found.');
+  const enriched=enrichVehicle_(vehicle);
+  return {
+    vehicleId:String(vehicle.vehicle_id),
+    vehiclePlate:String(vehicle.plate||vehicle.vehicle_id),
+    driverName:String(vehicle.assigned_driver||'Driver'),
+    driverPhone:normalizeSaudiPhone_(vehicle.driver_phone||''),
+    site:String(vehicle.site||''),
+    currentKm:Number(vehicle.current_km||0),
+    lastOilKm:Number(vehicle.last_oil_km||0),
+    sinceOil:Number(enriched.sinceOil||0),
+    remaining:Number(enriched.remaining||0),
+    oilStatus:String(enriched.oilStatus||'')
+  };
+}
+function logVehicleWhatsAppOpened(token, vehicleId, context) {
+  const user=requireOwner_(token);
+  const vehicle=rows_('Vehicles').find(r=>String(r.vehicle_id)===String(vehicleId));
+  if(!vehicle) throw new Error('Vehicle not found.');
+  audit_(user.fullName,'WHATSAPP_DRAFT_OPENED','Vehicle',vehicleId,String(context||'Reminder')+' WhatsApp draft opened for '+String(vehicle.plate||vehicleId));
+  return {ok:true};
+}
 function normalizeSaudiPhone_(value) {
-  let phone=String(value||'').replace(/\\D/g,'');
+  let phone=String(value||'').replace(/\D/g,'');
   if(phone.startsWith('00')) phone=phone.slice(2);
   if(phone.startsWith('966')) return phone;
   if(phone.length===10 && phone.startsWith('05')) return '966'+phone.slice(1);

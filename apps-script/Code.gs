@@ -53,15 +53,12 @@ function setupSharedDriverPortal() {
   const ui = SpreadsheetApp.getUi();
   const userPrompt = ui.prompt('Shared Driver Portal', 'Enter one shared Driver Portal username:', ui.ButtonSet.OK_CANCEL);
   if (userPrompt.getSelectedButton() !== ui.Button.OK) return 'Cancelled.';
-  const passPrompt = ui.prompt('Shared Driver Portal', 'Enter a strong shared password (minimum 10 characters):', ui.ButtonSet.OK_CANCEL);
+  const passPrompt = ui.prompt('Shared Driver Portal', 'Enter the existing shared driver password (exactly 9 digits):', ui.ButtonSet.OK_CANCEL);
   if (passPrompt.getSelectedButton() !== ui.Button.OK) return 'Cancelled.';
   const result = initializeDriverPortalAccount(userPrompt.getResponseText(),passPrompt.getResponseText());
   ui.alert(result);
-  return result;
-}
-
-function initializeDriverPortalAccount(username, password) {
-  if (!username || !password || String(password).length < 10) throw new Error('Use a username and a password of at least 10 characters.');
+  return resulfunction initializeDriverPortalAccount(username, password) {
+  if (!username || !/^\d{9}$/.test(String(password))) throw new Error('The shared Driver Portal password must be exactly 9 digits.');
   const sh = sheet_('Users');
   const rows = rows_('Users');
   if (rows.some(r => String(r.role) === 'Driver')) throw new Error('A Driver Portal account already exists.');
@@ -71,6 +68,8 @@ function initializeDriverPortalAccount(username, password) {
   sh.appendRow([Utilities.getUuid(),normalized,salt+':'+hash_(salt+String(password)),'Shared Driver Portal','Driver',true,new Date()]);
   audit_('System','CREATE','User',normalized,'Single shared Driver Portal account created');
   return 'Shared Driver Portal account created.';
+}
+.';
 }
 
 function login(payload) {

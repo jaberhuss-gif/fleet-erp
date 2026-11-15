@@ -121,9 +121,11 @@ function getAppData(token) {
   const user = requireSession_(token);
   // Vehicle Master is small and must be current; activity sheets can grow indefinitely.
   const allVehicles = rows_('Vehicles').map(v => enrichVehicle_(v));
-  const activeVehicles = allVehicles.filter(v => String(v.status || 'Active').toLowerCase() !== 'inactive');
+  const activeVehicles = allVehicles.filter(v => String(v.status || 'Active').trim().toLowerCase() !== 'inactive');
+  // The shared Driver Portal must show every active vehicle, including rows where
+  // assigned_driver is blank. Vehicle ID remains the authorization boundary.
   const vehicleChoices = user.role === 'Driver' && !user.vehicleId
-    ? activeVehicles.map(v => ({vehicle_id:String(v.vehicle_id),plate:String(v.plate||''),assigned_driver:String(v.assigned_driver||''),make:String(v.make||''),model:String(v.model||'')})).filter(v=>v.assigned_driver)
+    ? activeVehicles.map(v => ({vehicle_id:String(v.vehicle_id),plate:String(v.plate||''),assigned_driver:String(v.assigned_driver||''),make:String(v.make||''),model:String(v.model||'')}))
     : [];
   const driverNames = user.role === 'Driver' && !user.vehicleId
     ? [...new Set(vehicleChoices.map(v => v.assigned_driver.trim()).filter(Boolean))].sort()
@@ -161,13 +163,15 @@ function selectPortalVehicle(token, vehicleId) {
   );
   if (!vehicle) throw new Error('Vehicle not found or inactive. Contact Fleet Admin.');
   const assignedDriver = String(vehicle.assigned_driver || '').trim();
-  if (!assignedDriver) throw new Error('This vehicle has no assigned driver in Vehicle Master. Contact Fleet Admin.');
+  // Some Vehicle Master rows may not yet have an assigned_driver value.
+  // Keep the selected vehicle usable while preserving vehicleId-based access control.
+  const driverName = assignedDriver || String(user.fullName || 'Shared Driver Portal').trim();
   user.vehicleId = id;
-  user.selectedDriverName = assignedDriver;
+  user.selectedDriverName = driverName;
   user.vehiclePlate = String(vehicle.plate || '');
   CacheService.getScriptCache().put('sess:' + token, JSON.stringify(user), APP.SESSION_TTL);
   audit_(assignedDriver, 'SELECT_VEHICLE', 'Driver Portal', id, 'Selected vehicle ' + user.vehiclePlate);
-  return {ok:true, vehicleId:id, vehiclePlate:user.vehiclePlate, driverName:assignedDriver};
+  return {ok:true, vehicleId:id, vehiclePlate:user.vehiclePlate, driverName};
 }
 
 function selectDriver(token, driverName) {

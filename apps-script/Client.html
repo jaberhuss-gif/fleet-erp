@@ -135,7 +135,7 @@ function driverPortalHtml(v){
   {id:'tires',icon:'🛞',label:'Tire Service Request'},
   {id:'tire-survey',icon:'🛞',label:'Tire Survey'}
  ];
- const tabBar='<div class="driver-tabs" role="tablist">'+tabs.map(t=>'<button type="button" role="tab" aria-selected="'+(DRIVER_TAB===t.id?'true':'false')+'" class="driver-tab '+(DRIVER_TAB===t.id?'active':'')+'" onclick="selectPortalAction(\\''+t.id+'\\')"><span>'+t.icon+'</span><b>'+t.label+'</b></button>').join('')+'</div>';
+ const tabBar='<div class="driver-tabs" role="tablist">'+tabs.map(t=>'<button type="button" role="tab" aria-selected="'+(DRIVER_TAB===t.id?'true':'false')+'" class="driver-tab '+(DRIVER_TAB===t.id?'active':'')+'" onclick="selectPortalAction(\''+t.id+'\')"><span>'+t.icon+'</span><b>'+t.label+'</b></button>').join('')+'</div>';
  if(!selected){
   const choices=(DATA.vehicleChoices||[]).map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate||x.vehicle_id)+' - '+esc(x.assigned_driver||'Driver not assigned')+'</option>').join('');
   return '<div class="page-title"><div><h2>🚗 Fleet</h2><p>Fleet vehicle and maintenance actions.</p></div></div>'+

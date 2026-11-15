@@ -126,7 +126,7 @@ function kmHtml(v){
 function driverPortalHtml(v){
  const selected=DATA.selectedDriverName||'';
  if(!selected){
-  const choices=(DATA.vehicleChoices||[]).map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+' - '+esc(x.assigned_driver)+'</option>').join('');
+  const choices=(DATA.vehicleChoices||[]).map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate||x.vehicle_id)+' - '+esc(x.assigned_driver||'Driver not assigned')+'</option>').join('');
   return '<div class="page-title"><div><h2>🚗 Fleet</h2><p>Fleet vehicle and maintenance actions.</p></div></div>'+
    '<div class="driver-action-grid">'+
    '<button class="driver-action" onclick="selectPortalAction(\'km\')"><span>📏</span><b>Add Daily KM</b><small>Record odometer reading</small></button>'+

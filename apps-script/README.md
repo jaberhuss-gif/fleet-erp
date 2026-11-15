@@ -11,10 +11,24 @@ This is an isolated rebuild branch. The existing Render deployment, production b
 ## Access model
 
 - One shared web-app URL.
-- One Owner/Admin login for fleet administration.
-- Vehicle-based driver access: one access code per vehicle, not a separate system account for every driver. The driver enters their name when opening the vehicle portal so actions are attributed to the person using the vehicle.
-- The server checks the session and vehicle assignment before accepting KM or ticket submissions. GM/view-only roles cannot submit operational records.
-- Do not use one shared Owner credential for all drivers.
+- One Owner/Admin account for fleet administration.
+- One shared Driver Portal account for all drivers; this avoids creating approximately 50 separate login accounts.
+- After signing in, each driver selects their name. The portal lists only active vehicles whose `assigned_driver` value matches that selected name. A driver can therefore see and use multiple assigned vehicles (for example, three vehicles).
+- Driver assignments are sourced from the `Vehicles.assigned_driver` column. Keep the spelling of each driver's name consistent across every vehicle assigned to that person.
+- The server checks the selected driver's assigned vehicle list before accepting KM, oil-change, maintenance-ticket, or tire-request actions.
+- Each action is recorded under the selected driver name and vehicle. Because the portal login is shared, selecting a name is not proof of personal identity; this is a practical low-assurance workflow, not a substitute for individual authentication where legally or operationally required.
+- Existing vehicle-PIN login support remains in the backend for compatibility, but the shared Driver Portal is the intended driver workflow.
+
+### Create the single shared Driver Portal login
+
+After `setupFleetERP()` and the Owner account are ready:
+
+1. In the Apps Script editor, select and run `setupSharedDriverPortal()`.
+2. Enter one shared Driver Portal username and a strong password of at least 10 characters in the prompts.
+3. Share those credentials only with authorized drivers.
+4. Drivers sign in through the same username/password form as the Owner, then select their own name.
+
+Do not create one Driver user per person. Do not share the Owner account with drivers.
 
 ## Initial data store
 

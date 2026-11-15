@@ -130,7 +130,56 @@ async function driverOilChanged(){
  }catch(err){alert(err.message);}
 }
 function oilHtml(v){return '<div class="page-title"><div><h2>🛢️ Engine Oil Control</h2><p>Oil interval, last change and due status.</p></div></div><div class="panel"><form onsubmit="saveOil(event)"><div class="form-row"><div><label>Vehicle</label><select id="oilVehicle" required>'+v.map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+'</option>').join('')+'</select></div><div><label>Oil-change KM</label><input id="oilReading" type="number" min="0" required></div><div><label>Oil Type</label><input id="oilType" placeholder="e.g. 5W30"></div></div><label>Notes</label><textarea id="oilNotes"></textarea><div class="form-actions"><button class="btn primary">Record Oil Change</button></div></form></div><div class="panel">'+vehicleTable(v)+'</div>';}
-function ticketsHtml(rows){return '<div class="page-title"><div><h2>🎫 Vehicle Maintenance & Tickets</h2><p>Report and follow vehicle issues.</p></div></div><div class="panel"><form onsubmit="saveTicket(event)"><div class="form-row"><div><label>Vehicle</label><select id="ticketVehicle" required>'+(DATA.vehicles||[]).map(v=>'<option value="'+esc(v.vehicle_id)+'">'+esc(v.plate)+'</option>').join('')+'</select></div><div><label>Category</label><select id="ticketCategory"><option>Maintenance</option><option>Mechanical</option><option>Electrical</option><option>Tires</option><option>Accident</option></select></div><div><label>Priority</label><select id="ticketPriority"><option>Normal</option><option>High</option><option>Urgent</option></select></div></div><label>Issue Title</label><input id="ticketTitle" required><label>Description</label><textarea id="ticketDescription" required></textarea><div class="form-actions"><button class="btn primary">Submit Request</button></div></form></div><div class="panel"><h3>Requests Register</h3><div class="table-wrap"><table><thead><tr><th>Vehicle</th><th>Category</th><th>Title</th><th>Reported By</th><th>Date</th><th>Status</th></tr></thead><tbody>'+rows.map(t=>'<tr><td>'+esc(vehiclePlate(t.vehicle_id))+'</td><td>'+esc(t.category)+'</td><td>'+esc(t.title)+'</td><td>'+esc(t.reported_by)+'</td><td>'+esc(t.reported_at)+'</td><td>'+status(t.status)+'</td></tr>').join('')+'</tbody></table></div></div>';}
+function ticketsHtml(rows){
+ const isDriver=USER.role==='Driver';
+ const vehicles=DATA.vehicles||[];
+ const vehicleOptions=vehicles.map(v=>'<option value="'+esc(v.vehicle_id)+'">'+esc(v.plate)+'</option>').join('');
+ const register=ticketRegisterHtml(rows);
+
+ if(isDriver){
+  return '<div class="page-title"><div><h2>🛠️ Report an Issue</h2><p>Fleet / Fleet vehicle and maintenance actions.</p></div></div>'+
+   '<div class="panel"><h3>Report an Issue</h3>'+
+   '<p>Select your vehicle, choose the issue type, and describe the problem. Use the voice button to speak.</p>'+
+   '<form onsubmit="saveTicket(event)">'+
+   '<label>Vehicle *</label><select id="ticketVehicle" required><option value="">-- Select vehicle --</option>'+vehicleOptions+'</select>'+
+   '<div class="form-row">'+
+   '<div><label>Issue Type *</label><select id="ticketCategory" required>'+
+   '<option value="">-- Select issue type --</option>'+
+   '<option>Tires</option><option>Engine</option><option>A/C</option><option>Lights</option>'+
+   '<option>Brakes</option><option>Battery</option><option>Door</option><option>Wipers</option>'+
+   '<option>Oil Engine</option><option>Other</option></select></div>'+
+   '<div><label>Priority</label><select id="ticketPriority">'+
+   '<option>Low</option><option>Medium</option><option>High</option><option>Critical</option>'+
+   '</select></div></div>'+
+   '<label>Description *</label><textarea id="ticketDescription" rows="5" required placeholder="Describe the vehicle issue..."></textarea>'+
+   '<div class="form-actions">'+
+   '<button type="button" class="btn secondary" onclick="startIssueSpeech()">🎤 Speak Description</button>'+
+   '<button class="btn primary" type="submit">Submit Report</button>'+
+   '</div></form></div>'+
+   '<div class="panel"><h3>My Requests Register</h3>'+register+'</div>';
+ }
+
+ return '<div class="page-title"><div><h2>🎫 Vehicle Maintenance & Tickets</h2><p>Report and follow vehicle issues.</p></div></div>'+
+  '<div class="panel"><form onsubmit="saveTicket(event)"><div class="form-row">'+
+  '<div><label>Vehicle</label><select id="ticketVehicle" required>'+vehicleOptions+'</select></div>'+
+  '<div><label>Category</label><select id="ticketCategory"><option>Maintenance</option><option>Mechanical</option><option>Electrical</option><option>Tires</option><option>Accident</option></select></div>'+
+  '<div><label>Priority</label><select id="ticketPriority"><option>Normal</option><option>High</option><option>Urgent</option></select></div>'+
+  '</div><label>Issue Title</label><input id="ticketTitle" required><label>Description</label><textarea id="ticketDescription" required></textarea>'+
+  '<div class="form-actions"><button class="btn primary">Submit Request</button></div></form></div>'+
+  '<div class="panel"><h3>Requests Register</h3>'+register+'</div>';
+}
+
+function ticketRegisterHtml(rows){
+ if(!rows.length) return '<div class="empty">No requests recorded.</div>';
+ return '<div class="table-wrap"><table><thead><tr>'+
+  '<th>Vehicle</th><th>Category</th><th>Title</th><th>Reported By</th><th>Date</th><th>Status</th>'+
+  '</tr></thead><tbody>'+
+  rows.slice().reverse().map(t=>'<tr><td>'+esc(vehiclePlate(t.vehicle_id))+'</td>'+
+   '<td>'+esc(t.category)+'</td><td>'+esc(t.title)+'</td><td>'+esc(t.reported_by)+'</td>'+
+   '<td>'+esc(t.reported_at)+'</td><td>'+status(t.status)+'</td></tr>').join('')+
+  '</tbody></table></div>';
+}
+
 function canManageFleet(){return ['Owner','Admin','FleetSupervisor'].includes(USER.role);}
 function tiresHtml(rows,vehicles){
  const opts=vehicles.map(v=>'<option value="'+esc(v.vehicle_id)+'">'+esc(v.plate)+'</option>').join('');
@@ -158,7 +207,51 @@ function placeholderHtml(p){
 }
 async function saveKm(e){e.preventDefault();try{await rpc('submitKm',TOKEN,{vehicleId:el('kmVehicle').value,readingKm:el('kmReading').value,notes:el('kmNotes').value});alert('KM reading saved.');await refreshData();render();}catch(err){alert(err.message);}}
 async function saveOil(e){e.preventDefault();try{await rpc('recordOilChange',TOKEN,{vehicleId:el('oilVehicle').value,readingKm:el('oilReading').value,oilType:el('oilType').value,notes:el('oilNotes').value});alert('Oil change recorded.');await refreshData();render();}catch(err){alert(err.message);}}
-async function saveTicket(e){e.preventDefault();try{await rpc('createTicket',TOKEN,{vehicleId:el('ticketVehicle').value,category:el('ticketCategory').value,priority:el('ticketPriority').value,title:el('ticketTitle').value,description:el('ticketDescription').value});alert('Request submitted.');await refreshData();render();}catch(err){alert(err.message);}}
+function startIssueSpeech(){
+ const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SpeechRecognition){
+  alert('Voice input is not supported by this browser. Please use Google Chrome.');
+  return;
+ }
+ const recognition=new SpeechRecognition();
+ recognition.lang='en-US';
+ recognition.continuous=true;
+ recognition.interimResults=false;
+ recognition.onresult=function(event){
+  let spoken='';
+  for(let i=event.resultIndex;i<event.results.length;i++){
+   spoken+=event.results[i][0].transcript+' ';
+  }
+  const field=el('ticketDescription');
+  field.value=(field.value+' '+spoken).trim();
+ };
+ recognition.onerror=function(event){alert('Voice recognition error: '+event.error);};
+ recognition.start();
+}
+
+async function saveTicket(e){
+ e.preventDefault();
+ const isDriver=USER.role==='Driver';
+ const category=el('ticketCategory').value;
+ const description=el('ticketDescription').value.trim();
+ if(!el('ticketVehicle').value){alert('Please select a vehicle.');return;}
+ if(!category||!description){alert('Please complete all required fields.');return;}
+ const title=isDriver?category:el('ticketTitle').value.trim();
+ if(!title){alert('Please enter the issue title.');return;}
+ try{
+  await rpc('createTicket',TOKEN,{
+   vehicleId:el('ticketVehicle').value,
+   category:category,
+   priority:el('ticketPriority').value,
+   title:title,
+   description:description
+  });
+  alert(isDriver?'Issue report submitted successfully.':'Request submitted.');
+  await refreshData();
+  render();
+ }catch(err){alert(err.message);}
+}
+
 async function refreshAndRender(){try{await refreshData();render();}catch(e){alert(e.message);}}
 function vehiclePlate(id){const v=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(id));return v?v.plate:id;}
 function fmt(n){return Number(n||0).toLocaleString();}

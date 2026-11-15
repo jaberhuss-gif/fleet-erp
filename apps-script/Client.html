@@ -16,7 +16,7 @@ async function doLogin(payload){
  try{const r=await rpc('login',payload);TOKEN=r.token;USER=r.user;sessionStorage.setItem('fleetToken',TOKEN);await openApp();}
  catch(e){err.textContent=e.message;err.classList.remove('hidden');}
 }
-async async function openApp(){
+async function openApp(){
  document.getElementById('loginView').classList.add('hidden');document.getElementById('appView').classList.remove('hidden');
  document.getElementById('userLabel').textContent=(USER.role==='Driver'?(DATA?.selectedDriverName||'Shared Driver Portal'):(USER.fullName||USER.username))+' · '+USER.role;
  renderNavigation();

@@ -359,8 +359,8 @@ function addTireStock(token,payload) {
 function tireSiteKey_(value) {
   const site=String(value||'').trim();
   if(!site) return '';
-  if(/^main warehouse$/i.test(site)||/^riyadh(?:\\s*[-–—].*)?$/i.test(site)) return 'riyadh';
-  return site.toLowerCase().replace(/\\s+/g,' ');
+  if(/^main warehouse$/i.test(site)||/^riyadh(?:\s*[-–—].*)?$/i.test(site)) return 'riyadh';
+  return site.toLowerCase().replace(/\s+/g,' ');
 }
 
 function transferTireStock(token,payload) {
@@ -386,7 +386,7 @@ function transferTireStock(token,payload) {
     const now=new Date(), movementSheet=sheet_('Tire_Stock_Movements');
     selected.forEach(tire=>{
       updateById_('Tire_Inventory','tire_id',tire.tire_id,{warehouse:destination});
-      movementSheet.appendRow([Utilities.getUuid(),tire.tire_id,'Transfer','', '', '',1,now,'',user.fullName,'Transferred from '+source+' to '+destination]);
+      movementSheet.appendRow([Utilities.getUuid(),tire.tire_id,'Transfer','', '', '',1,now,'',user.fullName,'Transferred from '+source+' to '+destination+(payload.notes?' | '+String(payload.notes):'')]);
       audit_(user.fullName,'TRANSFER','Tire_Inventory',tire.tire_id,tire.manufacturer_serial+' from '+source+' to '+destination);
     });
     return {ok:true,quantity:selected.length,source,destination};

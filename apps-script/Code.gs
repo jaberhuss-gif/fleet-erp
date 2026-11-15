@@ -61,7 +61,7 @@ function setupSharedDriverPortal() {
 }
 
 function initializeDriverPortalAccount(username, password) {
-  if (!username || !/^\\d{9}$/.test(String(password))) throw new Error('The shared Driver Portal password must be exactly 9 digits.');
+  if (!username || !/^\d{9}$/.test(String(password))) throw new Error('The shared Driver Portal password must be exactly 9 digits.');
   const sh = sheet_('Users');
   const rows = rows_('Users');
   if (rows.some(r => String(r.role) === 'Driver')) throw new Error('A Driver Portal account already exists.');

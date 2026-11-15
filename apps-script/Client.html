@@ -148,18 +148,20 @@ function driverPortalHtml(v){
 }
 async function choosePortalVehicle(){
  const id=el('portalVehicle')?.value;
- const choice=(DATA.vehicleChoices||[]).find(x=>String(x.vehicle_id)===String(id));
- if(!choice)return;
+ if(!id){alert('Please select your vehicle number first.');return;}
  try{
-  await rpc('selectDriver',TOKEN,choice.assigned_driver);
-  USER.selectedDriverName=choice.assigned_driver;
+  const result=await rpc('selectPortalVehicle',TOKEN,id);
+  USER.selectedDriverName=result.driverName;
+  USER.vehicleId=result.vehicleId;
+  USER.vehiclePlate=result.vehiclePlate;
   await refreshData();
-  document.getElementById('userLabel').textContent=choice.assigned_driver+' · Driver';
-  renderNavigation();showPage('fleet');
- }catch(err){alert(err.message);}
+  document.getElementById('userLabel').textContent=result.driverName+' · Driver';
+  renderNavigation();
+  showPage('fleet');
+ }catch(err){alert(err.message||String(err));}
 }
 function selectPortalAction(page){
- if(!DATA.selectedDriverName){alert('Please select your vehicle first.');return;}
+ if(!USER?.vehicleId){alert('Please select your vehicle number first.');return;}
  showPage(page);
 }
 

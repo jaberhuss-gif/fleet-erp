@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Styles'); ?>
+</head>
+<body>
+  <div id="loginView" class="login-wrap">
+    <div class="login-card">
+      <div class="login-brand">
+        <div class="brand-mark">🚙</div>
+        <h1>Fleet ERP</h1>
+        <p>Maaden Ivanhoe Electric Exploration and Development Limited Company</p>
+        <small>Enterprise Resource Planning System</small>
+      </div>
+      <div class="login-tabs">
+        <button id="ownerMode" class="login-tab active" onclick="setLoginMode('owner')">Administrator</button>
+        <button id="vehicleMode" class="login-tab" onclick="setLoginMode('vehicle')">Vehicle Access</button>
+      </div>
+      <form id="ownerForm" onsubmit="ownerLogin(event)">
+        <label>Username</label><input id="username" autocomplete="username" required>
+        <label>Password</label><input id="password" type="password" autocomplete="current-password" required>
+        <button class="btn primary full" type="submit">Sign In</button>
+      </form>
+      <form id="vehicleForm" class="hidden" onsubmit="vehicleLogin(event)">
+        <label>Vehicle Plate</label><input id="vehiclePlate" placeholder="Enter vehicle plate" required>
+        <label>Vehicle Access Code</label><input id="vehiclePin" type="password" required>
+        <label>Driver Name</label><input id="driverName" placeholder="Enter your name" required>
+        <button class="btn primary full" type="submit">Open Vehicle Portal</button>
+      </form>
+      <div id="loginError" class="alert error hidden"></div>
+      <div class="login-note">One shared system link · Access is limited by role or vehicle</div>
+    </div>
+  </div>
+
+  <div id="appView" class="app hidden">
+    <header class="header">
+      <h1>Fleet ERP</h1>
+      <div class="header-tools">
+        <span id="userLabel"></span>
+        <button class="btn logout" onclick="logout()">Logout</button>
+      </div>
+    </header>
+    <div class="erp-shell">
+      <aside class="erp-sidebar">
+        <div class="sidebar-brand"><div class="brand-mark small">🚙</div><strong>Navigation</strong></div>
+        <div class="nav-group"><div class="nav-heading">Fleet</div>
+          <button class="nav-btn active" data-page="dashboard" onclick="showPage('dashboard')">🚗 Fleet Dashboard</button>
+          <button class="nav-btn" data-page="vehicles" onclick="showPage('vehicles')">🚙 Vehicles</button>
+          <button class="nav-btn" data-page="km" onclick="showPage('km')">📏 Daily KM</button>
+          <button class="nav-btn" data-page="oil" onclick="showPage('oil')">🛢️ Engine Oil</button>
+          <button class="nav-btn" data-page="maintenance" onclick="showPage('maintenance')">🔧 Maintenance</button>
+          <button class="nav-btn" data-page="tickets" onclick="showPage('tickets')">🎫 Vehicle Tickets</button>
+        </div>
+        <div class="nav-group"><div class="nav-heading">Compliance</div>
+          <button class="nav-btn" data-page="inspections" onclick="showPage('inspections')">📅 Inspections</button>
+          <button class="nav-btn" data-page="tires" onclick="showPage('tires')">🛞 Tires</button>
+          <button class="nav-btn" data-page="handovers" onclick="showPage('handovers')">📋 Driver Handovers</button>
+        </div>
+        <div class="nav-group"><div class="nav-heading">Reports</div>
+          <button class="nav-btn" data-page="reports" onclick="showPage('reports')">📊 Reports</button>
+          <button class="nav-btn" data-page="audit" onclick="showPage('audit')">Audit Log</button>
+        </div>
+      </aside>
+      <main id="mainContent" class="main">
+        <div class="loading">Loading Fleet ERP…</div>
+      </main>
+    </div>
+  </div>
+  <?!= include('Client'); ?>
+</body>
+</html>

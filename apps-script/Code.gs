@@ -324,24 +324,35 @@ function updateTireRequest(token,id,status,notes) {
 function addTireStock(token,payload) {
   const user=requireOwner_(token);
   payload=payload||{};
-  const serial=String(payload.manufacturerSerial||'').trim();
+  const serials=Array.isArray(payload.manufacturerSerials)?payload.manufacturerSerials.map(x=>String(x||'').trim()).filter(Boolean):[];
+  const quantity=Number(payload.quantity);
   const brand=String(payload.brand||'').trim();
   const model=String(payload.model||'').trim();
   const size=String(payload.size||'').trim();
   const warehouse=String(payload.warehouse||'Main Warehouse').trim();
-  if(!serial||!brand||!model||!size||!warehouse) throw new Error('Enter the tire serial number, brand, model, size, and warehouse.');
+  if(!Number.isInteger(quantity)||quantity<1||quantity>100||serials.length!==quantity) throw new Error('Quantity must match the number of manufacturer serial numbers entered (1–100).');
+  if(new Set(serials.map(x=>x.toLowerCase())).size!==serials.length) throw new Error('Duplicate serial numbers are not allowed.');
+  if(!brand||!model||!size||!warehouse) throw new Error('Enter the tire brand, model, size, and warehouse.');
   const lock=LockService.getScriptLock(); lock.waitLock(10000);
   try {
-    if(rows_('Tire_Inventory').some(t=>String(t.manufacturer_serial||'').trim().toLowerCase()===serial.toLowerCase())) throw new Error('This manufacturer serial number already exists in inventory.');
-    const now=new Date(), id=Utilities.getUuid();
+    const existing=new Set(rows_('Tire_Inventory').map(t=>String(t.manufacturer_serial||'').trim().toLowerCase()));
+    const duplicate=serials.find(s=>existing.has(s.toLowerCase()));
+    if(duplicate) throw new Error('Manufacturer serial number already exists in inventory: '+duplicate);
+    const now=new Date();
     const receivedDate=payload.receivedDate?new Date(payload.receivedDate):now;
     if(isNaN(receivedDate.getTime())) throw new Error('Invalid received date.');
-    const cost=payload.purchaseCost===''||payload.purchaseCost==null?0:Number(payload.purchaseCost);
-    if(!Number.isFinite(cost)||cost<0) throw new Error('Enter a valid purchase cost.');
-    sheet_('Tire_Inventory').appendRow([id,serial,brand,model,size,warehouse,receivedDate,cost,'In Stock',String(payload.notes||''),user.fullName,now,'']);
-    sheet_('Tire_Stock_Movements').appendRow([Utilities.getUuid(),id,'Received','', '', '',1,now,'',user.fullName,'Initial stock receipt']);
-    audit_(user.fullName,'RECEIVE','Tire_Inventory',id,serial+' received into '+warehouse);
-    return {ok:true,tireId:id};
+    const totalCost=payload.purchaseCost===''||payload.purchaseCost==null?0:Number(payload.purchaseCost);
+    if(!Number.isFinite(totalCost)||totalCost<0) throw new Error('Enter a valid purchase cost.');
+    const costPerTire=quantity?totalCost/quantity:0;
+    const inventorySheet=sheet_('Tire_Inventory'), movementSheet=sheet_('Tire_Stock_Movements');
+    const tireIds=[];
+    serials.forEach(serial=>{
+      const id=Utilities.getUuid(); tireIds.push(id);
+      inventorySheet.appendRow([id,serial,brand,model,size,warehouse,receivedDate,costPerTire,'In Stock',String(payload.notes||''),user.fullName,now,'']);
+      movementSheet.appendRow([Utilities.getUuid(),id,'Received','', '', '',1,now,'',user.fullName,'Initial stock receipt']);
+      audit_(user.fullName,'RECEIVE','Tire_Inventory',id,serial+' received into '+warehouse);
+    });
+    return {ok:true,quantity:tireIds.length,tireIds};
   } finally { lock.releaseLock(); }
 }
 

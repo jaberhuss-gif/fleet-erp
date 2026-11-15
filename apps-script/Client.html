@@ -507,7 +507,7 @@ async function saveTicket(e){
 
 async function refreshAndRender(){try{await refreshData();render();}catch(e){alert(e.message);}}
 function normalizeWhatsAppPhone(value){
- let phone=String(value||'').replace(/\\D/g,'');
+ let phone=String(value||'').replace(/\D/g,'');
  if(phone.startsWith('00'))phone=phone.slice(2);
  if(phone.startsWith('966'))return phone;
  if(phone.length===10&&phone.startsWith('05'))return '966'+phone.slice(1);

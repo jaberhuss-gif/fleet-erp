@@ -223,7 +223,8 @@ function addVehicle(token,payload) {
   if(!plate) throw new Error('Vehicle plate is required.');
   if(pin && pin.length<4) throw new Error('Vehicle access code must be at least 4 characters when provided.');
   if(rows_('Vehicles').some(v=>String(v.plate).trim().toUpperCase()===plate)) throw new Error('This vehicle plate already exists.');
-  const pinHash=pin ? (Utilities.getUuid()+':'+hash_(Utilities.getUuid()+pin)) : '';
+  const pinSalt=Utilities.getUuid();
+  const pinHash=pin ? (pinSalt+':'+hash_(pinSalt+pin)) : '';
   const id=Utilities.getUuid(), now=new Date();
   sheet_('Vehicles').appendRow([id,plate,String(payload.make||''),String(payload.model||''),String(payload.year||''),String(payload.site||''),String(payload.driver||''),String(payload.phone||''),Number(payload.currentKm||0),Number(payload.lastOilKm||0),Number(payload.oilIntervalKm||5000),pinHash,'Active',now,now]);
   audit_(user.fullName,'CREATE','Vehicle',id,'Added '+plate);

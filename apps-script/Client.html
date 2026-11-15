@@ -19,22 +19,43 @@ async function doLogin(payload){
 async function openApp(){
  document.getElementById('loginView').classList.add('hidden');document.getElementById('appView').classList.remove('hidden');
  document.getElementById('userLabel').textContent=(USER.fullName||USER.username)+' · '+USER.role;
+ renderNavigation();
  await refreshData();showPage(USER.role==='Driver'?'km':'dashboard');
 }
 async function refreshData(){DATA=await rpc('getAppData',TOKEN);}
 async function logout(){try{await rpc('logout',TOKEN);}catch(e){}TOKEN='';USER=null;DATA=null;sessionStorage.removeItem('fleetToken');document.getElementById('appView').classList.add('hidden');document.getElementById('loginView').classList.remove('hidden');}
+function renderNavigation(){
+ const driverPages=['km','maintenance','tickets','tires'];
+ document.querySelectorAll('.nav-btn').forEach(b=>{
+   const page=b.dataset.page;
+   const visible=USER.role!=='Driver'||driverPages.includes(page);
+   b.style.display=visible?'block':'none';
+ });
+ document.querySelectorAll('[data-nav-group]').forEach(g=>{
+   const visible=[...g.querySelectorAll('.nav-btn')].some(b=>b.style.display!=='none');
+   g.style.display=visible?'block':'none';
+ });
+}
 function showPage(page){
- PAGE=page;document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
- const allowed=USER.role==='Driver'?['km','maintenance','tickets']:null;
- if(allowed&&!allowed.includes(page)){PAGE='km';}
+ const driverPages=['km','maintenance','tickets','tires'];
+ if(USER.role==='Driver'&&!driverPages.includes(page)) page='km';
+ PAGE=page;
+ document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
+ if(page==='audit'){loadAuditPage();return;}
  render();
+}
+function toggleTheme(){
+ const dark=document.body.classList.toggle('dark-mode');
+ const b=document.getElementById('themeToggle');
+ if(b)b.textContent=dark?'☀️':'🌙';
+ try{sessionStorage.setItem('fleetTheme',dark?'dark':'light');}catch(e){}
 }
 function render(){
  const root=document.getElementById('mainContent');
  if(!DATA){root.innerHTML='<div class="loading">Loading…</div>';return;}
  const vehicles=DATA.vehicles||[],tickets=DATA.tickets||[],km=DATA.km||[],maint=DATA.maintenance||[];
  const total=vehicles.length,overdue=vehicles.filter(v=>v.status==='Urgent Overdue').length,warning=vehicles.filter(v=>v.status==='Warning').length;
- if(PAGE==='dashboard')root.innerHTML=dashboardHtml(vehicles,tickets,km,overdue,warning);
+ if(PAGE==='dashboard'||PAGE==='gm')root.innerHTML=dashboardHtml(vehicles,tickets,km,overdue,warning);
  else if(PAGE==='vehicles')root.innerHTML=vehiclesHtml(vehicles);
  else if(PAGE==='km')root.innerHTML=kmHtml(vehicles);
  else if(PAGE==='oil')root.innerHTML=oilHtml(vehicles);
@@ -65,7 +86,11 @@ function kmHtml(v){
 function oilHtml(v){return '<div class="page-title"><div><h2>🛢️ Engine Oil Control</h2><p>Oil interval, last change and due status.</p></div></div><div class="panel"><form onsubmit="saveOil(event)"><div class="form-row"><div><label>Vehicle</label><select id="oilVehicle" required>'+v.map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+'</option>').join('')+'</select></div><div><label>Oil-change KM</label><input id="oilReading" type="number" min="0" required></div><div><label>Oil Type</label><input id="oilType" placeholder="e.g. 5W30"></div></div><label>Notes</label><textarea id="oilNotes"></textarea><div class="form-actions"><button class="btn primary">Record Oil Change</button></div></form></div><div class="panel">'+vehicleTable(v)+'</div>';}
 function ticketsHtml(rows){return '<div class="page-title"><div><h2>🎫 Vehicle Maintenance & Tickets</h2><p>Report and follow vehicle issues.</p></div></div><div class="panel"><form onsubmit="saveTicket(event)"><div class="form-row"><div><label>Vehicle</label><select id="ticketVehicle" required>'+(DATA.vehicles||[]).map(v=>'<option value="'+esc(v.vehicle_id)+'">'+esc(v.plate)+'</option>').join('')+'</select></div><div><label>Category</label><select id="ticketCategory"><option>Maintenance</option><option>Mechanical</option><option>Electrical</option><option>Tires</option><option>Accident</option></select></div><div><label>Priority</label><select id="ticketPriority"><option>Normal</option><option>High</option><option>Urgent</option></select></div></div><label>Issue Title</label><input id="ticketTitle" required><label>Description</label><textarea id="ticketDescription" required></textarea><div class="form-actions"><button class="btn primary">Submit Request</button></div></form></div><div class="panel"><h3>Requests Register</h3><div class="table-wrap"><table><thead><tr><th>Vehicle</th><th>Category</th><th>Title</th><th>Reported By</th><th>Date</th><th>Status</th></tr></thead><tbody>'+rows.map(t=>'<tr><td>'+esc(vehiclePlate(t.vehicle_id))+'</td><td>'+esc(t.category)+'</td><td>'+esc(t.title)+'</td><td>'+esc(t.reported_by)+'</td><td>'+esc(t.reported_at)+'</td><td>'+status(t.status)+'</td></tr>').join('')+'</tbody></table></div></div>';}
 async function loadAuditPage(){const root=document.getElementById('mainContent');root.innerHTML='<div class="loading">Loading audit log…</div>';try{const rows=await rpc('getAuditLog',TOKEN);root.innerHTML='<div class="page-title"><div><h2>Audit Log</h2><p>Recent system activity.</p></div></div><div class="panel"><div class="table-wrap"><table><thead><tr><th>Date</th><th>User</th><th>Action</th><th>Entity</th><th>Details</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(r.created_at)+'</td><td>'+esc(r.actor)+'</td><td>'+esc(r.action)+'</td><td>'+esc(r.entity)+'</td><td>'+esc(r.details)+'</td></tr>').join('')+'</tbody></table></div></div>';}catch(e){root.innerHTML='<div class="alert error">'+esc(e.message)+'</div>';}}
-function placeholderHtml(p){const labels={inspections:'Annual & Periodic Inspections',tires:'Tire Management',handovers:'Driver Handovers',reports:'Fleet Reports',audit:'Audit Log'};return '<div class="panel"><h2>'+esc(labels[p]||p)+'</h2><p class="muted">This module is scheduled for the next implementation stage. No production data has been imported.</p></div>';}
+function placeholderHtml(p){
+ const labels={inspections:'Annual & 6-Month Inspections',tires:'Tire Management',handovers:'Driver Handovers',reports:'Fleet Reports', 'advanced-reports':'Advanced Reports',audit:'Audit Log',drivers:'Driver Management',users:'User Management',backup:'Backup & Restore', 'support-service':'Support & Service',troubleshooter:'Fleet Troubleshooter',warehouse:'Warehouse Management'};
+ const title=labels[p]||p;
+ return '<div class="page-title"><div><h2>'+esc(title)+'</h2><p>Fleet ERP module</p></div><span class="badge warning">Migration in progress</span></div><div class="panel"><h3>'+esc(title)+'</h3><p class="muted">This screen is included in the rebuilt navigation. Its production workflow and data actions are being migrated and validated before activation. No production data has been imported or changed.</p></div>';
+}
 async function saveKm(e){e.preventDefault();try{await rpc('submitKm',TOKEN,{vehicleId:el('kmVehicle').value,readingKm:el('kmReading').value,notes:el('kmNotes').value});alert('KM reading saved.');await refreshData();render();}catch(err){alert(err.message);}}
 async function saveOil(e){e.preventDefault();try{await rpc('recordOilChange',TOKEN,{vehicleId:el('oilVehicle').value,readingKm:el('oilReading').value,oilType:el('oilType').value,notes:el('oilNotes').value});alert('Oil change recorded.');await refreshData();render();}catch(err){alert(err.message);}}
 async function saveTicket(e){e.preventDefault();try{await rpc('createTicket',TOKEN,{vehicleId:el('ticketVehicle').value,category:el('ticketCategory').value,priority:el('ticketPriority').value,title:el('ticketTitle').value,description:el('ticketDescription').value});alert('Request submitted.');await refreshData();render();}catch(err){alert(err.message);}}

@@ -103,8 +103,8 @@ function getAppData(token) {
   // Vehicle Master is small and must be current; activity sheets can grow indefinitely.
   const allVehicles = rows_('Vehicles').map(v => enrichVehicle_(v));
   const activeVehicles = allVehicles.filter(v => String(v.status || 'Active').toLowerCase() !== 'inactive');
-  const driverNames = user.role === 'Driver' && !user.vehicleId
-    ? [...new Set(activeVehicles.map(v => String(v.assigned_driver || '').trim()).filter(Boolean))].sort()
+  const vehicleChoices = user.role === 'Driver' && !user.vehicleId
+    ? activeVehicles.map(v => ({vehicle_id:String(v.vehicle_id),plate:String(v.plate||''),assigned_driver:String(v.assigned_driver||''),make:String(v.make||''),model:String(v.model||'')})).filter(v=>v.assigned_driver)
     : [];
   const allowedIds = user.role !== 'Driver' ? null : user.vehicleId
     ? [String(user.vehicleId)]
@@ -120,7 +120,7 @@ function getAppData(token) {
     return recentRows_(name, recordLimit).filter(row => allowedIds === null || allowedIds.includes(String(row.vehicle_id)));
   };
   return {
-    user, vehicles:visibleVehicles,
+    user, vehicles:visibleVehicles, vehicleChoices,
     tickets:readRecords('Tickets'), km:readRecords('KM_Records'),
     maintenance:readRecords('Maintenance'), tireRequests:readRecords('Tire_Requests'),
     inspections:readRecords('Inspections'), oilChanges:readRecords('Oil_Changes'),

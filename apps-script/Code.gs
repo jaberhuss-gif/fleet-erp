@@ -6,6 +6,8 @@ const TABLES = {
   Tickets: ['ticket_id','vehicle_id','category','title','description','priority','status','reported_by','reported_at','assigned_to','closed_at','notes'],
   Maintenance: ['record_id','vehicle_id','maintenance_type','scheduled_date','completed_date','status','technician','cost','notes','created_at','updated_at'],
   Tire_Requests: ['request_id','vehicle_id','request_type','description','status','requested_by','requested_at','notes'],
+  Tire_Surveys: ['survey_id','vehicle_id','driver_name','survey_date','notes','status','created_at'],
+  Tire_Survey_Tires: ['tire_record_id','survey_id','vehicle_id','position','manufacturer_serial','brand','model','size','manufacturing_year','tread_mm','pressure_psi','condition_notes','photo_file_id','photo_url','created_at'],
   Inspections: ['record_id','vehicle_id','inspection_type','due_date','completed_date','status','cost','notes','created_at'],
   Users: ['user_id','username','password_hash','full_name','role','is_active','created_at'],
   Audit_Log: ['log_id','actor','action','entity','entity_id','details','created_at'],
@@ -130,7 +132,7 @@ function getAppData(token) {
     user, vehicles:visibleVehicles,
     tickets:readRecords('Tickets'), km:readRecords('KM_Records'),
     maintenance:readRecords('Maintenance'), tireRequests:readRecords('Tire_Requests'),
-    inspections:readRecords('Inspections'), oilChanges:readRecords('Oil_Changes'),
+    inspections:readRecords('Inspections'), oilChanges:readRecords('Oil_Changes'),\n    tireSurveys:readRecords('Tire_Surveys'), tireSurveyTires:readRecords('Tire_Survey_Tires'),
     driverNames, selectedDriverName:user.selectedDriverName||'', serverTime:new Date().toISOString()
   };
 }
@@ -198,6 +200,71 @@ function createTireRequest(token,payload) {
   audit_(driverActor_(user),'CREATE','Tire_Request',id,'Vehicle '+v.plate);
   return {ok:true,id};
 }
+function submitTireSurvey(token, payload) {
+  const user = requireSession_(token);
+  if (user.role !== 'Driver' || !user.selectedDriverName) throw new Error('Sign in through the shared Driver Portal and select your driver name first.');
+  const v = permittedVehicle_(user, payload.vehicleId);
+  const positions = ['Front Left','Front Right','Rear Left','Rear Right','Spare','Sixth'];
+  if (!Array.isArray(payload.tires) || payload.tires.length !== 6) throw new Error('Complete all six tire sections.');
+  const lock = LockService.getScriptLock(); lock.waitLock(10000);
+  try {
+    const existing = rows_('Tire_Surveys').filter(x => String(x.vehicle_id) === String(v.vehicle_id) && ['Locked','Submitted'].includes(String(x.status)));
+    if (existing.length) throw new Error('This vehicle already has a submitted 6-tire survey. Contact Fleet Admin if it must be reopened.');
+    const byPosition = {};
+    payload.tires.forEach(t => { byPosition[String(t.position)] = t; });
+    positions.forEach(p => {
+      const t = byPosition[p];
+      if (!t || !String(t.manufacturerSerial||'').trim() || !String(t.brand||'').trim() ||
+          !String(t.model||'').trim() || !String(t.size||'').trim() ||
+          !Number.isFinite(Number(t.treadMm)) || Number(t.treadMm) < 0 ||
+          !Number.isFinite(Number(t.pressurePsi)) || Number(t.pressurePsi) < 0 ||
+          !String(t.photoData||'').startsWith('data:image/')) {
+        throw new Error('Complete all required fields and attach a photo for: ' + p);
+      }
+    });
+    const folder = tireSurveyFolder_();
+    const surveyId = Utilities.getUuid(), now = new Date();
+    sheet_('Tire_Surveys').appendRow([surveyId,v.vehicle_id,user.selectedDriverName,now,String(payload.notes||''),'Locked',now]);
+    positions.forEach(position => {
+      const t = byPosition[position];
+      const match = String(t.photoData).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+      if (!match) throw new Error('Invalid photo file for ' + position);
+      const bytes = Utilities.base64Decode(match[2]);
+      if (bytes.length > 1500000) throw new Error('Photo is too large for ' + position + '. Please retake it.');
+      const ext = match[1].split('/')[1].replace('jpeg','jpg');
+      const file = folder.createFile(Utilities.newBlob(bytes,match[1],v.plate+'_'+position.replace(/\s/g,'_')+'_'+surveyId+'.'+ext));
+      sheet_('Tire_Survey_Tires').appendRow([
+        Utilities.getUuid(),surveyId,v.vehicle_id,position,String(t.manufacturerSerial),String(t.brand),String(t.model),
+        String(t.size),Number(t.manufacturingYear||0),Number(t.treadMm),Number(t.pressurePsi),
+        String(t.conditionNotes||''),file.getId(),file.getUrl(),now
+      ]);
+    });
+    audit_(user.selectedDriverName,'CREATE','Tire_Survey',surveyId,'Six-tire survey submitted and vehicle locked: '+v.plate);
+    return {ok:true,surveyId,vehiclePlate:v.plate,status:'Locked'};
+  } finally { lock.releaseLock(); }
+}
+
+function reopenTireSurvey(token, vehicleId, notes) {
+  const user = requireOwner_(token);
+  const surveys = rows_('Tire_Surveys').filter(x => String(x.vehicle_id) === String(vehicleId) && ['Locked','Submitted'].includes(String(x.status)));
+  if (!surveys.length) throw new Error('No locked tire survey was found for this vehicle.');
+  const latest = surveys[surveys.length-1];
+  updateById_('Tire_Surveys','survey_id',latest.survey_id,{status:'Reopened',notes:String(notes||'Reopened by Fleet Admin')});
+  audit_(user.fullName,'REOPEN','Tire_Survey',latest.survey_id,'Vehicle '+vehicleId+'; '+String(notes||''));
+  return {ok:true};
+}
+
+function tireSurveyFolder_() {
+  const props = PropertiesService.getScriptProperties();
+  const saved = props.getProperty('FLEET_TIRE_SURVEY_FOLDER_ID');
+  if (saved) {
+    try { return DriveApp.getFolderById(saved); } catch (e) { props.deleteProperty('FLEET_TIRE_SURVEY_FOLDER_ID'); }
+  }
+  const folder = DriveApp.createFolder('Fleet ERP Tire Survey Photos');
+  props.setProperty('FLEET_TIRE_SURVEY_FOLDER_ID',folder.getId());
+  return folder;
+}
+
 function updateTireRequest(token,id,status,notes) {
   const user=requireOwner_(token);
   if(!['Open','In Progress','Completed','Rejected'].includes(String(status))) throw new Error('Invalid tire request status.');

@@ -324,20 +324,27 @@ function updateTireRequest(token,id,status,notes) {
 function addTireStock(token,payload) {
   const user=requireOwner_(token);
   payload=payload||{};
+  const serialMode=String(payload.serialMode||'manufacturer');
   const serials=Array.isArray(payload.manufacturerSerials)?payload.manufacturerSerials.map(x=>String(x||'').trim()).filter(Boolean):[];
   const quantity=Number(payload.quantity);
   const brand=String(payload.brand||'').trim();
   const model=String(payload.model||'').trim();
   const size=String(payload.size||'').trim();
   const warehouse=String(payload.warehouse||'Main Warehouse').trim();
-  if(!Number.isInteger(quantity)||quantity<1||quantity>100||serials.length!==quantity) throw new Error('Quantity must match the number of manufacturer serial numbers entered (1–100).');
-  if(new Set(serials.map(x=>x.toLowerCase())).size!==serials.length) throw new Error('Duplicate serial numbers are not allowed.');
+  if(!Number.isInteger(quantity)||quantity<1||quantity>100) throw new Error('Quantity must be between 1 and 100.');
+  if(!['manufacturer','internal'].includes(serialMode)) throw new Error('Invalid serial number mode.');
+  if(serialMode==='manufacturer'&&serials.length!==quantity) throw new Error('Enter exactly '+quantity+' unique manufacturer serial numbers.');
+  if(serialMode==='internal'&&serials.length) throw new Error('Do not enter manufacturer serials when using internal tracking numbers.');
+  if(serialMode==='manufacturer'&&new Set(serials.map(x=>x.toLowerCase())).size!==serials.length) throw new Error('Duplicate serial numbers are not allowed.');
   if(!brand||!model||!size||!warehouse) throw new Error('Enter the tire brand, model, size, and warehouse.');
   const lock=LockService.getScriptLock(); lock.waitLock(10000);
   try {
     const existing=new Set(rows_('Tire_Inventory').map(t=>String(t.manufacturer_serial||'').trim().toLowerCase()));
     const duplicate=serials.find(s=>existing.has(s.toLowerCase()));
     if(duplicate) throw new Error('Manufacturer serial number already exists in inventory: '+duplicate);
+    const trackingNumbers=serialMode==='internal'
+      ? Array.from({length:quantity},(_,i)=>'LEGACY-'+Utilities.getUuid().replace(/-/g,'').slice(0,12).toUpperCase())
+      : serials;
     const now=new Date();
     const receivedDate=payload.receivedDate?new Date(payload.receivedDate):now;
     if(isNaN(receivedDate.getTime())) throw new Error('Invalid received date.');
@@ -346,11 +353,12 @@ function addTireStock(token,payload) {
     const costPerTire=quantity?totalCost/quantity:0;
     const inventorySheet=sheet_('Tire_Inventory'), movementSheet=sheet_('Tire_Stock_Movements');
     const tireIds=[];
-    serials.forEach(serial=>{
+    trackingNumbers.forEach(serial=>{
       const id=Utilities.getUuid(); tireIds.push(id);
-      inventorySheet.appendRow([id,serial,brand,model,size,warehouse,receivedDate,costPerTire,'In Stock',String(payload.notes||''),user.fullName,now,'']);
-      movementSheet.appendRow([Utilities.getUuid(),id,'Received','', '', '',1,now,'',user.fullName,'Received into '+warehouse+(payload.notes?' | '+String(payload.notes):'')]);
-      audit_(user.fullName,'RECEIVE','Tire_Inventory',id,serial+' received into '+warehouse);
+      const recordNotes=(serialMode==='internal'?'Legacy stock; manufacturer serial not recorded. ':'')+String(payload.notes||'');
+      inventorySheet.appendRow([id,serial,brand,model,size,warehouse,receivedDate,costPerTire,'In Stock',recordNotes,user.fullName,now,'']);
+      movementSheet.appendRow([Utilities.getUuid(),id,'Received','', '', '',1,now,'',user.fullName,'Received into '+warehouse+(serialMode==='internal'?' with system tracking number':'')+(payload.notes?' | '+String(payload.notes):'')]);
+      audit_(user.fullName,'RECEIVE','Tire_Inventory',id,serial+' received into '+warehouse+(serialMode==='internal'?' (internal tracking number)':''));
     });
     return {ok:true,quantity:tireIds.length,tireIds};
   } finally { lock.releaseLock(); }

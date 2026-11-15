@@ -180,6 +180,12 @@ function selectPortalVehicle(token, vehicleId) {
   return {ok:true, vehicleId:id, vehiclePlate:user.vehiclePlate, driverName};
 }
 
+// Complete vehicle selection and return the driver's initial data in one browser/server round trip.
+function selectPortalVehicleAndGetAppData(token, vehicleId) {
+  selectPortalVehicle(token, vehicleId);
+  return getAppData(token);
+}
+
 function selectDriver(token, driverName) {
   const user = requireSession_(token);
   if (user.role !== 'Driver' || user.vehicleId) throw new Error('This action is only available to the shared Driver Portal.');

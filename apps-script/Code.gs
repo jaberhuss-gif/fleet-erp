@@ -359,7 +359,7 @@ function recentRows_(name, limit) {
   const headers = sh.getRange(1, 1, 1, width).getValues()[0];
   return values.filter(r => r.some(v => v !== '' && v !== null)).map(r =>
     Object.fromEntries(headers.map((h, i) => [h, r[i] instanceof Date ? r[i].toISOString() : r[i]]))
-  ).reverse();
+  );
 }
 function updateById_(name,key,id,patch) {
   const sh=sheet_(name), values=sh.getDataRange().getValues(), headers=values[0], idx=headers.indexOf(key);

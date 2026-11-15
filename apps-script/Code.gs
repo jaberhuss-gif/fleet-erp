@@ -78,30 +78,20 @@ function initializeDriverPortalAccount(username, password) {
 
 function login(payload) {
   payload = payload || {};
-  const username = String(payload.username || '').trim().toLowerCase();
+  const username = String(payload.username || '').trim();
   const password = String(payload.password || '');
-  const vehiclePlate = String(payload.vehiclePlate || '').trim().toUpperCase();
-  const driverName = String(payload.driverName || '').trim();
-  const vehiclePin = String(payload.vehiclePin || '');
-  let identity;
-  if (username && password) {
-    const rows = rows_('Users');
-    const u = rows.find(r => String(r.username).toLowerCase() === username && String(r.is_active).toLowerCase() !== 'false');
-    if (!u || !verify_(u.password_hash,password)) throw new Error('Invalid username or password.');
-    identity = {id:u.user_id,username:u.username,fullName:u.full_name,role:u.role,vehicleId:null,vehiclePlate:null};
-  } else if (vehiclePlate && vehiclePin && driverName) {
-    const v = rows_('Vehicles').find(r => String(r.plate).trim().toUpperCase() === vehiclePlate && String(r.status||'Active').toLowerCase() !== 'inactive');
-    if (!v || !verify_(v.vehicle_pin_hash,vehiclePin)) throw new Error('Vehicle number or access code is incorrect.');
-    identity = {id:'vehicle:'+v.vehicle_id,username:'vehicle-'+vehiclePlate,fullName:driverName,role:'Driver',vehicleId:v.vehicle_id,vehiclePlate:v.plate};
-  } else {
-    throw new Error('Enter your Owner login or vehicle access details.');
+  if (!username || !password) throw new Error('Enter your Owner or Driver username and password.');
+  const rows = rows_('Users');
+  const u = rows.find(r => String(r.username) === username && String(r.is_active).toLowerCase() !== 'false');
+  if (!u || !['Owner','Driver'].includes(String(u.role)) || (u.role === 'Driver' && u.username !== 'Driver') || !verify_(u.password_hash,password)) {
+    throw new Error('Invalid username or password.');
   }
+  const identity = {id:u.user_id,username:u.username,fullName:u.full_name,role:u.role,vehicleId:null,vehiclePlate:null};
   const token = Utilities.getUuid()+Utilities.getUuid();
   CacheService.getScriptCache().put('sess:'+token,JSON.stringify(identity),APP.SESSION_TTL);
   audit_(identity.fullName,'LOGIN','Session',token.slice(0,8),'Signed in');
   return {token,user:identity};
 }
-
 function logout(token) {
   const user = session_(token);
   if (user) audit_(user.fullName,'LOGOUT','Session','', 'Signed out');

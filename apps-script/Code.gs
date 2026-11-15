@@ -57,8 +57,11 @@ function setupSharedDriverPortal() {
   if (passPrompt.getSelectedButton() !== ui.Button.OK) return 'Cancelled.';
   const result = initializeDriverPortalAccount(userPrompt.getResponseText(),passPrompt.getResponseText());
   ui.alert(result);
-  return resulfunction initializeDriverPortalAccount(username, password) {
-  if (!username || !/^\d{9}$/.test(String(password))) throw new Error('The shared Driver Portal password must be exactly 9 digits.');
+  return result;
+}
+
+function initializeDriverPortalAccount(username, password) {
+  if (!username || !/^\\d{9}$/.test(String(password))) throw new Error('The shared Driver Portal password must be exactly 9 digits.');
   const sh = sheet_('Users');
   const rows = rows_('Users');
   if (rows.some(r => String(r.role) === 'Driver')) throw new Error('A Driver Portal account already exists.');
@@ -68,8 +71,6 @@ function setupSharedDriverPortal() {
   sh.appendRow([Utilities.getUuid(),normalized,salt+':'+hash_(salt+String(password)),'Shared Driver Portal','Driver',true,new Date()]);
   audit_('System','CREATE','User',normalized,'Single shared Driver Portal account created');
   return 'Shared Driver Portal account created.';
-}
-.';
 }
 
 function login(payload) {

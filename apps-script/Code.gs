@@ -221,7 +221,7 @@ function submitTireSurvey(token, payload) {
     const surveyId = Utilities.getUuid(), now = new Date(), tireRows = [];
     positions.forEach(position => {
       const t = byPosition[position];
-      const match = String(t.photoData).match(/^data:(image\\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+      const match = String(t.photoData).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
       if (!match) throw new Error('Invalid photo file for ' + position);
       const bytes = Utilities.base64Decode(match[2]);
       if (bytes.length > 1500000) throw new Error('Photo is too large for ' + position + '. Please retake it.');

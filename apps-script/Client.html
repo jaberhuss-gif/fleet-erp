@@ -103,7 +103,8 @@ function render(){
  else if(PAGE==='km')root.innerHTML=kmHtml(vehicles);
  else if(PAGE==='oil')root.innerHTML=oilHtml(vehicles);
  else if(PAGE==='tickets'||PAGE==='maintenance')root.innerHTML=ticketsHtml(tickets);
- else if(PAGE==='tires')root.innerHTML=tiresHtml(DATA.tireRequests||[],vehicles);\n else if(PAGE==='tire-survey')root.innerHTML=tireSurveyHtml(vehicles);
+ else if(PAGE==='tires')root.innerHTML=tiresHtml(DATA.tireRequests||[],vehicles);
+ else if(PAGE==='tire-survey')root.innerHTML=tireSurveyHtml(vehicles);
  else if(PAGE==='inspections')root.innerHTML=inspectionsHtml(DATA.inspections||[],vehicles);
  else root.innerHTML=placeholderHtml(PAGE);
 }
@@ -292,7 +293,7 @@ function tiresHtml(rows,vehicles){
 function tireSurveyRegisterHtml(){
  const rows=DATA.tireSurveys||[];
  if(!rows.length)return '';
- return '<div class="panel"><h3>Initial 6-Tire Surveys</h3><div class="table-wrap"><table><thead><tr><th>Vehicle</th><th>Driver</th><th>Date</th><th>Status</th><th>Action</th></tr></thead><tbody>'+rows.slice().reverse().map(s=>'<tr><td>'+esc(vehiclePlate(s.vehicle_id))+'</td><td>'+esc(s.driver_name)+'</td><td>'+esc(s.survey_date)+'</td><td>'+status(s.status)+'</td><td>'+(canManageFleet()&&['Locked','Submitted'].includes(String(s.status))?'<button class="btn secondary" onclick="reopenSurvey(\\''+esc(s.vehicle_id)+'\\')">Reopen</button>':'—')+'</td></tr>').join('')+'</tbody></table></div></div>';
+ return '<div class="panel"><h3>Initial 6-Tire Surveys</h3><div class="table-wrap"><table><thead><tr><th>Vehicle</th><th>Driver</th><th>Date</th><th>Status</th><th>Action</th></tr></thead><tbody>'+rows.slice().reverse().map(s=>'<tr><td>'+esc(vehiclePlate(s.vehicle_id))+'</td><td>'+esc(s.driver_name)+'</td><td>'+esc(s.survey_date)+'</td><td>'+status(s.status)+'</td><td>'+(canManageFleet()&&['Locked','Submitted'].includes(String(s.status))?'<button class="btn secondary" onclick="reopenSurvey(\''+esc(s.vehicle_id)+'\\')">Reopen</button>':'—')+'</td></tr>').join('')+'</tbody></table></div></div>';
 }
 async function reopenSurvey(vehicleId){
  const note=prompt('Reason for reopening this vehicle tire survey:');

@@ -107,22 +107,30 @@ function logout(token) {
 }
 function getAppData(token) {
   const user = requireSession_(token);
+  // Vehicle Master is small and must be current; activity sheets can grow indefinitely.
   const allVehicles = rows_('Vehicles').map(v => enrichVehicle_(v));
+  const activeVehicles = allVehicles.filter(v => String(v.status || 'Active').toLowerCase() !== 'inactive');
   const driverNames = user.role === 'Driver' && !user.vehicleId
-    ? [...new Set(allVehicles.filter(v => String(v.status||'Active').toLowerCase() !== 'inactive').map(v => String(v.assigned_driver||'').trim()).filter(Boolean))].sort()
+    ? [...new Set(activeVehicles.map(v => String(v.assigned_driver || '').trim()).filter(Boolean))].sort()
     : [];
   const allowedIds = user.role !== 'Driver' ? null : user.vehicleId
     ? [String(user.vehicleId)]
     : user.selectedDriverName
-      ? allVehicles.filter(v => String(v.assigned_driver||'').trim().toLowerCase() === String(user.selectedDriverName).trim().toLowerCase() && String(v.status||'Active').toLowerCase() !== 'inactive').map(v => String(v.vehicle_id))
+      ? activeVehicles.filter(v => String(v.assigned_driver || '').trim().toLowerCase() === String(user.selectedDriverName).trim().toLowerCase()).map(v => String(v.vehicle_id))
       : [];
   const visibleVehicles = allowedIds === null ? allVehicles : allVehicles.filter(v => allowedIds.includes(String(v.vehicle_id)));
-  const allowed = row => allowedIds === null || allowedIds.includes(String(row.vehicle_id));
+  // Never send another driver's records to the shared Driver Portal. Before a driver
+  // selects a name, return no operational records. Keep payloads bounded for Apps Script.
+  const recordLimit = user.role === 'Driver' ? 150 : 500;
+  const readRecords = name => {
+    if (user.role === 'Driver' && !allowedIds.length) return [];
+    return recentRows_(name, recordLimit).filter(row => allowedIds === null || allowedIds.includes(String(row.vehicle_id)));
+  };
   return {
     user, vehicles:visibleVehicles,
-    tickets:rows_('Tickets').filter(allowed), km:rows_('KM_Records').filter(allowed),
-    maintenance:rows_('Maintenance').filter(allowed), tireRequests:rows_('Tire_Requests').filter(allowed),
-    inspections:rows_('Inspections').filter(allowed), oilChanges:rows_('Oil_Changes').filter(allowed),
+    tickets:readRecords('Tickets'), km:readRecords('KM_Records'),
+    maintenance:readRecords('Maintenance'), tireRequests:readRecords('Tire_Requests'),
+    inspections:readRecords('Inspections'), oilChanges:readRecords('Oil_Changes'),
     driverNames, selectedDriverName:user.selectedDriverName||'', serverTime:new Date().toISOString()
   };
 }
@@ -276,6 +284,19 @@ function rows_(name) {
   if(values.length<2) return [];
   const headers=values.shift();
   return values.filter(r=>r.some(c=>c!=='' && c!==null)).map(r=>Object.fromEntries(headers.map((h,i)=>[h,r[i] instanceof Date?r[i].toISOString():r[i]])));
+}
+function recentRows_(name, limit) {
+  const sh = sheet_(name);
+  const last = sh.getLastRow();
+  if (last < 2) return [];
+  const width = sh.getLastColumn();
+  const count = Math.min(Number(limit) || 200, last - 1);
+  const start = Math.max(2, last - count + 1);
+  const values = sh.getRange(start, 1, last - start + 1, width).getValues();
+  const headers = sh.getRange(1, 1, 1, width).getValues()[0];
+  return values.filter(r => r.some(v => v !== '' && v !== null)).map(r =>
+    Object.fromEntries(headers.map((h, i) => [h, r[i] instanceof Date ? r[i].toISOString() : r[i]]))
+  ).reverse();
 }
 function updateById_(name,key,id,patch) {
   const sh=sheet_(name), values=sh.getDataRange().getValues(), headers=values[0], idx=headers.indexOf(key);

@@ -14,12 +14,12 @@
         <small>Enterprise Resource Planning System</small>
       </div>
       <form id="ownerForm" onsubmit="ownerLogin(event)">
-        <label>Username</label><input id="username" placeholder="Fleet Admin or Shared Driver Portal username" autocomplete="username" required>
+        <label>Username</label><input id="username" placeholder="Owner or Driver" autocomplete="username" required>
         <label>Password</label><input id="password" type="password" placeholder="Enter your password" autocomplete="current-password" required>
         <button class="btn primary full" type="submit">Sign In</button>
       </form>
       <div id="loginError" class="alert error hidden"></div>
-      <div class="login-note">Fleet Admin and one shared Driver Portal login · Drivers select their name and see assigned vehicles only</div>
+      <div class="login-note">Owner and one shared Driver Portal login · Drivers select their name and see assigned vehicles only</div>
     </div>
   </div>
 
@@ -41,7 +41,7 @@
 
         <div class="nav-group" data-nav-group="fleet">
           <div class="nav-heading">Fleet</div>
-          <button class="nav-btn" data-page="dashboard" onclick="showPage('dashboard')">🚗 Fleet Dashboard</button>
+          <button class="nav-btn" data-page="fleet" onclick="showPage('fleet')">➕ Add</button>
           <button class="nav-btn" data-page="vehicles" onclick="showPage('vehicles')">🚙 Vehicles</button>
           <button class="nav-btn" data-page="km" onclick="showPage('km')">📏 Daily KM</button>
           <button class="nav-btn" data-page="oil" onclick="showPage('oil')">🛢️ Engine Oil</button>

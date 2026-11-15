@@ -46,6 +46,21 @@ function initializeOwnerAccount(username, password, fullName) {
   return 'Owner account created.';
 }
 
+// Creates ONE shared Driver Portal login. Run once from Apps Script editor.
+// Drivers choose their own name after signing in; no individual user accounts are created.
+function initializeDriverPortalAccount(username, password) {
+  if (!username || !password || String(password).length < 10) throw new Error('Use a username and a password of at least 10 characters.');
+  const sh = sheet_('Users');
+  const rows = rows_('Users');
+  if (rows.some(r => String(r.role) === 'Driver')) throw new Error('A Driver Portal account already exists.');
+  const normalized = String(username).trim().toLowerCase();
+  if (rows.some(r => String(r.username).toLowerCase() === normalized)) throw new Error('This username already exists.');
+  const salt = Utilities.getUuid();
+  sh.appendRow([Utilities.getUuid(),normalized,salt+':'+hash_(salt+String(password)),'Shared Driver Portal','Driver',true,new Date()]);
+  audit_('System','CREATE','User',normalized,'Single shared Driver Portal account created');
+  return 'Shared Driver Portal account created.';
+}
+
 function login(payload) {
   payload = payload || {};
   const username = String(payload.username || '').trim().toLowerCase();
@@ -80,15 +95,34 @@ function logout(token) {
 }
 function getAppData(token) {
   const user = requireSession_(token);
-  const vehicles = rows_('Vehicles').map(v => enrichVehicle_(v));
-  const visibleVehicles = user.role === 'Driver' ? vehicles.filter(v => String(v.vehicle_id) === String(user.vehicleId)) : vehicles;
-  const tickets = rows_('Tickets').filter(t => user.role !== 'Driver' || String(t.vehicle_id) === String(user.vehicleId));
-  const km = rows_('KM_Records').filter(r => user.role !== 'Driver' || String(r.vehicle_id) === String(user.vehicleId));
-  const maintenance = rows_('Maintenance').filter(r => user.role !== 'Driver' || String(r.vehicle_id) === String(user.vehicleId));
-  const tireRequests = rows_('Tire_Requests').filter(r => user.role !== 'Driver' || String(r.vehicle_id) === String(user.vehicleId));
-  const inspections = rows_('Inspections').filter(r => user.role !== 'Driver' || String(r.vehicle_id) === String(user.vehicleId));
-  const oilChanges = rows_('Oil_Changes').filter(r => user.role !== 'Driver' || String(r.vehicle_id) === String(user.vehicleId));
-  return {user,vehicles:visibleVehicles,tickets,km,maintenance,tireRequests,inspections,oilChanges,serverTime:new Date().toISOString()};
+  const allVehicles = rows_('Vehicles').map(v => enrichVehicle_(v));
+  const driverNames = user.role === 'Driver' && !user.vehicleId
+    ? [...new Set(allVehicles.filter(v => String(v.status||'Active').toLowerCase() !== 'inactive').map(v => String(v.assigned_driver||'').trim()).filter(Boolean))].sort()
+    : [];
+  const allowedIds = user.role !== 'Driver' ? null : user.vehicleId
+    ? [String(user.vehicleId)]
+    : allVehicles.filter(v => String(v.assigned_driver||'').trim().toLowerCase() === String(user.selectedDriverName||'').trim().toLowerCase() && String(v.status||'Active').toLowerCase() !== 'inactive').map(v => String(v.vehicle_id));
+  const visibleVehicles = allowedIds === null ? allVehicles : allVehicles.filter(v => allowedIds.includes(String(v.vehicle_id)));
+  const allowed = row => allowedIds === null || allowedIds.includes(String(row.vehicle_id));
+  return {
+    user, vehicles:visibleVehicles,
+    tickets:rows_('Tickets').filter(allowed), km:rows_('KM_Records').filter(allowed),
+    maintenance:rows_('Maintenance').filter(allowed), tireRequests:rows_('Tire_Requests').filter(allowed),
+    inspections:rows_('Inspections').filter(allowed), oilChanges:rows_('Oil_Changes').filter(allowed),
+    driverNames, selectedDriverName:user.selectedDriverName||'', serverTime:new Date().toISOString()
+  };
+}
+function selectDriver(token, driverName) {
+  const user = requireSession_(token);
+  if (user.role !== 'Driver' || user.vehicleId) throw new Error('This action is only available to the shared Driver Portal.');
+  const name = String(driverName||'').trim();
+  if (!name) throw new Error('Select your driver name.');
+  const matches = rows_('Vehicles').filter(v => String(v.assigned_driver||'').trim().toLowerCase() === name.toLowerCase() && String(v.status||'Active').toLowerCase() !== 'inactive');
+  if (!matches.length) throw new Error('No active vehicles are assigned to this driver. Ask Fleet Admin to check the vehicle assignment.');
+  user.selectedDriverName = String(matches[0].assigned_driver).trim();
+  CacheService.getScriptCache().put('sess:'+token,JSON.stringify(user),APP.SESSION_TTL);
+  audit_(user.selectedDriverName,'SELECT_DRIVER','Driver Portal','',matches.length+' assigned vehicle(s)');
+  return {ok:true,driverName:user.selectedDriverName,vehicleCount:matches.length};
 }
 function submitKm(token, payload) {
   const user = requireSession_(token), v = permittedVehicle_(user,payload.vehicleId);
@@ -99,17 +133,17 @@ function submitKm(token, payload) {
     const latest = rows_('Vehicles').find(x => String(x.vehicle_id) === String(v.vehicle_id));
     if (reading < Number(latest.current_km||0)) throw new Error('A newer KM reading was saved. Refresh and try again.');
     const now = new Date();
-    sheet_('KM_Records').appendRow([Utilities.getUuid(),v.vehicle_id,reading,now,user.fullName,String(payload.notes||''),user.username,now]);
+    sheet_('KM_Records').appendRow([Utilities.getUuid(),v.vehicle_id,reading,now,driverActor_(user),String(payload.notes||''),user.username,now]);
     updateById_('Vehicles','vehicle_id',v.vehicle_id,{current_km:reading,updated_at:now});
-    audit_(user.fullName,'CREATE','KM_Records',v.vehicle_id,'KM '+reading);
+    audit_(driverActor_(user),'CREATE','KM_Records',v.vehicle_id,'KM '+reading);
     return {ok:true,currentKm:reading};
   } finally { lock.releaseLock(); }
 }
 function createTicket(token,payload) {
   const user = requireSession_(token), v = permittedVehicle_(user,payload.vehicleId);
   const now = new Date(), id = Utilities.getUuid();
-  sheet_('Tickets').appendRow([id,v.vehicle_id,String(payload.category||'Maintenance'),String(payload.title||'Maintenance request'),String(payload.description||''),String(payload.priority||'Normal'),'Open',user.fullName,now,'', '', '']);
-  audit_(user.fullName,'CREATE','Ticket',id,'Vehicle '+v.plate);
+  sheet_('Tickets').appendRow([id,v.vehicle_id,String(payload.category||'Maintenance'),String(payload.title||'Maintenance request'),String(payload.description||''),String(payload.priority||'Normal'),'Open',driverActor_(user),now,'', '', '']);
+  audit_(driverActor_(user),'CREATE','Ticket',id,'Vehicle '+v.plate);
   return {ok:true,id};
 }
 function recordOilChange(token,payload) {
@@ -117,9 +151,9 @@ function recordOilChange(token,payload) {
   const km = Number(payload.readingKm || v.current_km || 0);
   if (km < Number(v.last_oil_km||0) || km > Number(v.current_km||0)) throw new Error('Check the oil-change KM against the current vehicle reading.');
   const now = new Date(), id = Utilities.getUuid();
-  sheet_('Oil_Changes').appendRow([id,v.vehicle_id,km,now,String(payload.oilType||''),String(payload.notes||''),user.fullName,now]);
+  sheet_('Oil_Changes').appendRow([id,v.vehicle_id,km,now,String(payload.oilType||''),String(payload.notes||''),driverActor_(user),now]);
   updateById_('Vehicles','vehicle_id',v.vehicle_id,{last_oil_km:km,updated_at:now});
-  audit_(user.fullName,'CREATE','Oil_Changes',id,'Oil change at '+km+' km');
+  audit_(driverActor_(user),'CREATE','Oil_Changes',id,'Oil change at '+km+' km');
   return {ok:true};
 }
 function updateTicketStatus(token,id,status,notes) {
@@ -134,8 +168,8 @@ function createTireRequest(token,payload) {
   const description=String(payload.description||'').trim();
   if(!description) throw new Error('Describe the tire condition or service required.');
   const id=Utilities.getUuid(), now=new Date();
-  sheet_('Tire_Requests').appendRow([id,v.vehicle_id,String(payload.requestType||'Tire Service'),description,'Open',user.fullName,now,'']);
-  audit_(user.fullName,'CREATE','Tire_Request',id,'Vehicle '+v.plate);
+  sheet_('Tire_Requests').appendRow([id,v.vehicle_id,String(payload.requestType||'Tire Service'),description,'Open',driverActor_(user),now,'']);
+  audit_(driverActor_(user),'CREATE','Tire_Request',id,'Vehicle '+v.plate);
   return {ok:true,id};
 }
 function updateTireRequest(token,id,status,notes) {
@@ -205,9 +239,13 @@ function requireOwner_(token) { const u=requireSession_(token); if(!['Owner','Ad
 function permittedVehicle_(user,id) {
   const v=rows_('Vehicles').find(x=>String(x.vehicle_id)===String(id));
   if(!v) throw new Error('Vehicle not found.');
-  if(user.role==='Driver' && String(user.vehicleId)!==String(v.vehicle_id)) throw new Error('Access denied for this vehicle.');
+  if(user.role==='Driver') {
+    if(user.vehicleId && String(user.vehicleId)!==String(v.vehicle_id)) throw new Error('Access denied for this vehicle.');
+    if(!user.vehicleId && (!user.selectedDriverName || String(v.assigned_driver||'').trim().toLowerCase()!==String(user.selectedDriverName).trim().toLowerCase())) throw new Error('This vehicle is not assigned to the selected driver.');
+  }
   return v;
 }
+function driverActor_(user) { return user.role==='Driver' && user.selectedDriverName ? user.selectedDriverName : user.fullName; }
 function enrichVehicle_(v) {
   const current=Number(v.current_km||0), last=Number(v.last_oil_km||0), interval=Number(v.oil_interval_km||5000);
   const since=Math.max(0,current-last), remaining=interval-since;

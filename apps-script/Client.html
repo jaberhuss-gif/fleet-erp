@@ -137,14 +137,21 @@ function driverPortalHtml(v){
  }
  if(!v.length)return '<div class="alert warning">No active vehicles are assigned to '+esc(selected)+'. Please contact Fleet Admin.</div>';
  const options=v.map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+' - '+esc(x.assigned_driver||selected)+'</option>').join('');
- const ticketForm=ticketsHtml(DATA.tickets||[]);
+ const vehicle=v[0];
+ const recent=(DATA.km||[]).filter(r=>String(r.vehicle_id)===String(vehicle.vehicle_id)).slice().reverse().slice(0,15);
  return '<div class="page-title"><div><h2>🚗 Fleet</h2><p>Fleet vehicle and maintenance actions.</p></div></div>'+
   '<div class="driver-action-grid">'+
    '<button class="driver-action" onclick="showPage(\'km\')"><span>📏</span><b>Add Daily KM</b><small>Record odometer reading</small></button>'+
    '<button class="driver-action" onclick="showPage(\'maintenance\')"><span>🛠️</span><b>Maintenance Issue Report</b><small>Report a vehicle problem</small></button>'+
    '<button class="driver-action" onclick="showPage(\'tires\')"><span>🛞</span><b>Tire Service Request</b><small>Request tire support</small></button>'+
    '<button class="driver-action" onclick="showPage(\'tire-survey\')"><span>🛞</span><b>Tire Survey</b><small>Complete tire inspection</small></button>'+
-  '</div><div class="panel"><h3>Driver Portal</h3><label>Select Vehicle</label><select id="fleetVehicle" onchange="renderFleetVehicleSummary()">'+options+'</select><div id="fleetVehicleSummary">'+driverVehicleSummary(v[0])+'</div></div><div class="driver-ticket-form">'+ticketForm+'</div>';
+  '</div><div class="panel"><h3>Driver Portal</h3><label for="kmVehicle">Select Vehicle</label><select id="kmVehicle" onchange="renderDriverKmSummary()">'+options+'</select>'+
+  '<div id="driverKmSummary">'+driverVehicleSummary(vehicle)+'</div></div>'+
+  '<div class="panel"><h3>📏 Add Daily KM</h3><form onsubmit="saveDriverKm(event)"><label for="kmReading">Today\'s Odometer Reading (km) *</label><input id="kmReading" type="number" min="0" placeholder="Enter current odometer reading" required>'+
+  '<label for="kmNotes">Notes</label><textarea id="kmNotes" placeholder="Optional notes"></textarea>'+
+  '<div class="form-actions"><button class="btn primary" type="submit">Save Reading</button><button class="btn secondary" type="button" onclick="driverOilChanged()">🔧 Oil Changed</button></div></form></div>'+
+  '<div class="panel"><h3>Recent Readings</h3>'+ticketKmTable(recent)+'</div>'+
+  '<div class="driver-ticket-form">'+ticketsHtml(DATA.tickets||[])+'</div>';
 }
 async function choosePortalVehicle(){
  const id=el('portalVehicle')?.value;

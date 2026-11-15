@@ -4,7 +4,7 @@ This is an isolated rebuild branch. The existing Render deployment, production b
 
 ## Current implementation
 
-- `Code.gs`: Apps Script web entry point, spreadsheet schema setup, session handling, Owner/vehicle login, vehicle access-code verification, KM submission, ticket creation, oil-change recording, vehicle creation/update, and audit logging.
+- `Code.gs`: Apps Script web entry point, spreadsheet schema setup, shared Owner/Driver login, assigned-vehicle validation, daily KM submission, maintenance issue reporting, oil-change recording, tire service requests, six-tire survey locking/reopening, Drive photo storage, vehicle administration, and audit logging.
 - `Index.html`, `Styles.html`, `Client.html`: single-link web interface using the current Fleet ERP visual language (navy/blue header, sidebar navigation, cards, tables, status badges, company JV branding).
 - `appsscript.json`: V8 web app manifest; initial scope is limited to the bound spreadsheet.
 
@@ -23,7 +23,7 @@ This is an isolated rebuild branch. The existing Render deployment, production b
 
 After `setupFleetERP()` and the Owner account are ready:
 
-1. In the Apps Script editor, select and run `setupSharedDriverPortal()`.
+1. If the shared Driver account has not already been created, select and run `setupSharedDriverPortal()` exactly once.
 2. Enter one shared Driver Portal username and a strong password of at least 10 characters in the prompts.
 3. Share those credentials only with authorized drivers.
 4. Drivers sign in through the same username/password form as the Owner, then select their own name.
@@ -33,16 +33,16 @@ Do not create one Driver user per person. Do not share the Owner account with dr
 ## Initial data store
 
 The first version uses a bound Google Spreadsheet with these tabs:
-`Vehicles`, `KM_Records`, `Oil_Changes`, `Tickets`, `Maintenance`, `Tire_Requests`, `Inspections`, `Users`, `Audit_Log`, and `Settings`.
+`Vehicles`, `KM_Records`, `Oil_Changes`, `Tickets`, `Maintenance`, `Tire_Requests`, `Tire_Surveys`, `Tire_Survey_Tires`, `Inspections`, `Users`, `Audit_Log`, and `Settings`.
 
-Uploaded files will be added through a Drive-backed file service in a later stage. The current shell does not yet implement all legacy modules.
+Six-tire survey photos are compressed in the browser and stored in a dedicated Google Drive folder named `Fleet ERP Tire Survey Photos`. The survey locks the vehicle after submission; Owner can reopen it. The current build is the driver-operational phase, not yet full module parity with Render.
 
 ## Setup (when ready to connect a Google account)
 
 1. Create a new, empty Google Spreadsheet dedicated to the rebuild.
 2. Open Extensions → Apps Script from that spreadsheet and add the files from this folder (`Code.gs`, `Index.html`, `Styles.html`, `Client.html`); copy the manifest into the Apps Script project's `appsscript.json` after enabling display of the manifest file.
 3. Run `setupFleetERP()` once and authorize the spreadsheet scope.
-4. Run `initializeOwnerAccount(username, password, fullName)` once from the Apps Script editor. Use a unique password of at least 10 characters; do not put it in this repository or a Sheet.
+4. Run `initializeOwnerAccount(username, password, fullName)` only if the Owner account has not already been created. Use a unique password of at least 10 characters; do not put it in this repository or a Sheet.
 5. Add vehicles from the Vehicle Master screen and set a separate vehicle access code for each one.
 6. Deploy as a Web App, executing as the deploying account. Choose the access audience deliberately; anyone with the link can reach the login screen, but cannot access data without valid credentials.
 

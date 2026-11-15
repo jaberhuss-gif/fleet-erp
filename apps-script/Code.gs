@@ -116,7 +116,11 @@ function selectDriver(token, driverName) {
   const user = requireSession_(token);
   if (user.role !== 'Driver' || user.vehicleId) throw new Error('This action is only available to the shared Driver Portal.');
   const name = String(driverName||'').trim();
-  if (!name) throw new Error('Select your driver name.');
+  if (!name) {
+    delete user.selectedDriverName;
+    CacheService.getScriptCache().put('sess:'+token,JSON.stringify(user),APP.SESSION_TTL);
+    return {ok:true,driverName:'',vehicleCount:0};
+  }
   const matches = rows_('Vehicles').filter(v => String(v.assigned_driver||'').trim().toLowerCase() === name.toLowerCase() && String(v.status||'Active').toLowerCase() !== 'inactive');
   if (!matches.length) throw new Error('No active vehicles are assigned to this driver. Ask Fleet Admin to check the vehicle assignment.');
   user.selectedDriverName = String(matches[0].assigned_driver).trim();

@@ -85,7 +85,10 @@ function getAppData(token) {
   const tickets = rows_('Tickets').filter(t => user.role !== 'Driver' || String(t.vehicle_id) === String(user.vehicleId));
   const km = rows_('KM_Records').filter(r => user.role !== 'Driver' || String(r.vehicle_id) === String(user.vehicleId));
   const maintenance = rows_('Maintenance').filter(r => user.role !== 'Driver' || String(r.vehicle_id) === String(user.vehicleId));
-  return {user,vehicles:visibleVehicles,tickets,km,maintenance,serverTime:new Date().toISOString()};
+  const tireRequests = rows_('Tire_Requests').filter(r => user.role !== 'Driver' || String(r.vehicle_id) === String(user.vehicleId));
+  const inspections = rows_('Inspections').filter(r => user.role !== 'Driver' || String(r.vehicle_id) === String(user.vehicleId));
+  const oilChanges = rows_('Oil_Changes').filter(r => user.role !== 'Driver' || String(r.vehicle_id) === String(user.vehicleId));
+  return {user,vehicles:visibleVehicles,tickets,km,maintenance,tireRequests,inspections,oilChanges,serverTime:new Date().toISOString()};
 }
 function submitKm(token, payload) {
   const user = requireSession_(token), v = permittedVehicle_(user,payload.vehicleId);
@@ -126,6 +129,41 @@ function updateTicketStatus(token,id,status,notes) {
   return {ok:true};
 }
 
+function createTireRequest(token,payload) {
+  const user=requireSession_(token), v=permittedVehicle_(user,payload.vehicleId);
+  const description=String(payload.description||'').trim();
+  if(!description) throw new Error('Describe the tire condition or service required.');
+  const id=Utilities.getUuid(), now=new Date();
+  sheet_('Tire_Requests').appendRow([id,v.vehicle_id,String(payload.requestType||'Tire Service'),description,'Open',user.fullName,now,'']);
+  audit_(user.fullName,'CREATE','Tire_Request',id,'Vehicle '+v.plate);
+  return {ok:true,id};
+}
+function updateTireRequest(token,id,status,notes) {
+  const user=requireOwner_(token);
+  if(!['Open','In Progress','Completed','Rejected'].includes(String(status))) throw new Error('Invalid tire request status.');
+  updateById_('Tire_Requests','request_id',id,{status:String(status),notes:String(notes||'')});
+  audit_(user.fullName,'UPDATE','Tire_Request',id,'Status '+status);
+  return {ok:true};
+}
+function saveInspection(token,payload) {
+  const user=requireOwner_(token), v=permittedVehicle_(user,payload.vehicleId);
+  const type=String(payload.inspectionType||'').trim();
+  if(!['Annual','6-Month'].includes(type)) throw new Error('Select Annual or 6-Month inspection.');
+  const due=String(payload.dueDate||'').trim();
+  const status=String(payload.status||'Pending');
+  if(!due) throw new Error('Inspection due date is required.');
+  const id=Utilities.getUuid(), now=new Date();
+  sheet_('Inspections').appendRow([id,v.vehicle_id,type,due,status==='Completed'?now:'',status,Number(payload.cost||0),String(payload.notes||''),now]);
+  audit_(user.fullName,'CREATE','Inspection',id,type+' inspection for '+v.plate);
+  return {ok:true,id};
+}
+function updateInspection(token,id,status,notes,cost) {
+  const user=requireOwner_(token);
+  if(!['Pending','Completed','Overdue'].includes(String(status))) throw new Error('Invalid inspection status.');
+  updateById_('Inspections','record_id',id,{status:String(status),completed_date:status==='Completed'?new Date():'',notes:String(notes||''),cost:Number(cost||0)});
+  audit_(user.fullName,'UPDATE','Inspection',id,'Status '+status);
+  return {ok:true};
+}
 function addVehicle(token,payload) {
   const user=requireOwner_(token);
   const plate=String(payload.plate||'').trim().toUpperCase();

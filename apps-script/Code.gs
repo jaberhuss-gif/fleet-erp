@@ -427,7 +427,7 @@ function installTireForRequest(token,payload) {
       updateById_('Tire_Inventory','tire_id',active.tire_id,{status:'Removed',installation_id:''});
     }
     sheet_('Tire_Installations').appendRow([installationId,vehicle.vehicle_id,position,tireId,tire.manufacturer_serial,requestId,now,installKm,'','', '', 'Installed',user.fullName,'',String(payload.notes||''),now,now]);
-    updateById_('Tire_Inventory','tire_id',tireId,{status:'Installed',installation_id:installationId});
+    updateById_('Tire_Inventory','tire_id',tireId,{status:'Installed',installation_id:installationId,warehouse:vehicleSite});
     sheet_('Tire_Stock_Movements').appendRow([Utilities.getUuid(),tireId,'Issued',requestId,installationId,vehicle.vehicle_id,1,now,installKm,user.fullName,'Installed at '+position]);
     updateById_('Tire_Requests','request_id',requestId,{status:'Completed',notes:String(request.notes||'')+(request.notes?' | ':'')+'Installed '+tire.manufacturer_serial+' at '+position+' / '+installKm+' km'});
     audit_(user.fullName,'INSTALL','Tire',tireId,'Vehicle '+vehicle.plate+'; '+position+'; '+installKm+' km; request '+requestId);

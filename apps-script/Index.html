@@ -27,29 +27,59 @@
     <header class="header">
       <h1>Fleet ERP</h1>
       <div class="header-tools">
+        <button id="themeToggle" class="btn secondary" type="button" onclick="toggleTheme()" title="Switch theme">🌙</button>
         <span id="userLabel"></span>
         <button class="btn logout" onclick="logout()">Logout</button>
       </div>
     </header>
     <div class="erp-shell">
       <aside class="erp-sidebar">
-        <div class="sidebar-brand"><img class="sidebar-logo" src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Maaden and Ivanhoe Electric joint venture logo"><strong class="sidebar-title">NAVIGATION</strong></div>
-        <div class="nav-group"><div class="nav-heading">Fleet</div>
-          <button class="nav-btn active" data-page="dashboard" onclick="showPage('dashboard')">🚗 Fleet Dashboard</button>
+        <div class="sidebar-brand">
+          <img class="sidebar-logo" src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Maaden and Ivanhoe Electric joint venture logo">
+          <strong class="sidebar-title">NAVIGATION</strong>
+        </div>
+
+        <div class="nav-group" data-nav-group="fleet">
+          <div class="nav-heading">Fleet</div>
+          <button class="nav-btn" data-page="dashboard" onclick="showPage('dashboard')">🚗 Fleet Dashboard</button>
           <button class="nav-btn" data-page="vehicles" onclick="showPage('vehicles')">🚙 Vehicles</button>
           <button class="nav-btn" data-page="km" onclick="showPage('km')">📏 Daily KM</button>
           <button class="nav-btn" data-page="oil" onclick="showPage('oil')">🛢️ Engine Oil</button>
           <button class="nav-btn" data-page="maintenance" onclick="showPage('maintenance')">🔧 Maintenance</button>
           <button class="nav-btn" data-page="tickets" onclick="showPage('tickets')">🎫 Vehicle Tickets</button>
-        </div>
-        <div class="nav-group"><div class="nav-heading">Compliance</div>
-          <button class="nav-btn" data-page="inspections" onclick="showPage('inspections')">📅 Inspections</button>
-          <button class="nav-btn" data-page="tires" onclick="showPage('tires')">🛞 Tires</button>
           <button class="nav-btn" data-page="handovers" onclick="showPage('handovers')">📋 Driver Handovers</button>
         </div>
-        <div class="nav-group"><div class="nav-heading">Reports</div>
+
+        <div class="nav-group" data-nav-group="support">
+          <div class="nav-heading">Support &amp; Service</div>
+          <button class="nav-btn" data-page="support-service" onclick="showPage('support-service')">🛠️ Support &amp; Service</button>
+          <button class="nav-btn" data-page="troubleshooter" onclick="showPage('troubleshooter')">🧠 Troubleshooter</button>
+          <button class="nav-btn" data-page="warehouse" onclick="showPage('warehouse')">📦 Warehouse</button>
+        </div>
+
+        <div class="nav-group" data-nav-group="compliance">
+          <div class="nav-heading">Compliance</div>
+          <button class="nav-btn" data-page="inspections" onclick="showPage('inspections')">📅 Annual &amp; 6-Month Inspections</button>
+          <button class="nav-btn" data-page="tires" onclick="showPage('tires')">🛞 Tires</button>
+        </div>
+
+        <div class="nav-group" data-nav-group="reports">
+          <div class="nav-heading">Reports</div>
           <button class="nav-btn" data-page="reports" onclick="showPage('reports')">📊 Reports</button>
+          <button class="nav-btn" data-page="advanced-reports" onclick="showPage('advanced-reports')">📈 Advanced Reports</button>
+        </div>
+
+        <div class="nav-group" data-nav-group="administration">
+          <div class="nav-heading">Administration</div>
+          <button class="nav-btn" data-page="drivers" onclick="showPage('drivers')">👨‍🔧 Drivers</button>
+          <button class="nav-btn" data-page="users" onclick="showPage('users')">👥 Users</button>
           <button class="nav-btn" data-page="audit" onclick="showPage('audit')">Audit Log</button>
+          <button class="nav-btn" data-page="backup" onclick="showPage('backup')">💾 Backup</button>
+        </div>
+
+        <div class="nav-group" data-nav-group="management">
+          <div class="nav-heading">Management</div>
+          <button class="nav-btn" data-page="gm" onclick="showPage('gm')">GM Dashboard</button>
         </div>
       </aside>
       <main id="mainContent" class="main">

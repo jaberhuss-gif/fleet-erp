@@ -6,6 +6,9 @@ const TABLES = {
   Tickets: ['ticket_id','vehicle_id','category','title','description','priority','status','reported_by','reported_at','assigned_to','closed_at','notes'],
   Maintenance: ['record_id','vehicle_id','maintenance_type','scheduled_date','completed_date','status','technician','cost','notes','created_at','updated_at'],
   Tire_Requests: ['request_id','vehicle_id','request_type','description','status','requested_by','requested_at','notes'],
+  Tire_Inventory: ['tire_id','manufacturer_serial','brand','model','size','warehouse','received_date','purchase_cost','status','notes','created_by','created_at','installation_id'],
+  Tire_Installations: ['installation_id','vehicle_id','position','tire_id','manufacturer_serial','request_id','install_date','install_km','removal_date','removal_km','distance_km','status','installed_by','removed_by','notes','created_at','updated_at'],
+  Tire_Stock_Movements: ['movement_id','tire_id','movement_type','request_id','installation_id','vehicle_id','quantity','movement_date','odometer_km','performed_by','notes'],
   Tire_Surveys: ['survey_id','vehicle_id','driver_name','survey_date','notes','status','created_at'],
   Tire_Survey_Tires: ['tire_record_id','survey_id','vehicle_id','position','manufacturer_serial','brand','model','size','manufacturing_year','tread_mm','pressure_psi','condition_notes','photo_file_id','photo_url','created_at'],
   Inspections: ['record_id','vehicle_id','inspection_type','due_date','completed_date','status','cost','notes','created_at'],
@@ -149,6 +152,9 @@ function getAppData(token) {
     maintenance:readRecords('Maintenance'), tireRequests:readRecords('Tire_Requests'),
     inspections:readRecords('Inspections'), oilChanges:readRecords('Oil_Changes'),
     tireSurveys:readRecords('Tire_Surveys'), tireSurveyTires:readRecords('Tire_Survey_Tires'),
+    tireInventory:user.role==='Owner'?recentRows_('Tire_Inventory',1000):[],
+    tireInstallations:readRecords('Tire_Installations'),
+    tireStockMovements:user.role==='Owner'?recentRows_('Tire_Stock_Movements',1000):[],
     driverNames, selectedDriverName:user.selectedDriverName||'', requiresDriverSelection:user.role==='Driver'&&!user.selectedDriverName, serverTime:new Date().toISOString()
   };
 }
@@ -305,10 +311,78 @@ function tireSurveyFolder_() {
 
 function updateTireRequest(token,id,status,notes) {
   const user=requireOwner_(token);
-  if(!['Open','In Progress','Completed','Rejected'].includes(String(status))) throw new Error('Invalid tire request status.');
-  updateById_('Tire_Requests','request_id',id,{status:String(status),notes:String(notes||'')});
-  audit_(user.fullName,'UPDATE','Tire_Request',id,'Status '+status);
+  const next=String(status||'');
+  if(!['Open','In Progress','Approved','Rejected'].includes(next)) throw new Error('Choose Open, In Progress, Approved, or Rejected. Completed is recorded only after a tire is installed.');
+  const request=rows_('Tire_Requests').find(r=>String(r.request_id)===String(id));
+  if(!request) throw new Error('Tire request not found.');
+  if(String(request.status)==='Completed') throw new Error('This request is already completed and cannot be changed.');
+  updateById_('Tire_Requests','request_id',id,{status:next,notes:String(notes||'')});
+  audit_(user.fullName,'UPDATE','Tire_Request',id,'Status '+next);
   return {ok:true};
+}
+
+function addTireStock(token,payload) {
+  const user=requireOwner_(token);
+  payload=payload||{};
+  const serial=String(payload.manufacturerSerial||'').trim();
+  const brand=String(payload.brand||'').trim();
+  const model=String(payload.model||'').trim();
+  const size=String(payload.size||'').trim();
+  const warehouse=String(payload.warehouse||'Main Warehouse').trim();
+  if(!serial||!brand||!model||!size||!warehouse) throw new Error('Enter the tire serial number, brand, model, size, and warehouse.');
+  const lock=LockService.getScriptLock(); lock.waitLock(10000);
+  try {
+    if(rows_('Tire_Inventory').some(t=>String(t.manufacturer_serial||'').trim().toLowerCase()===serial.toLowerCase())) throw new Error('This manufacturer serial number already exists in inventory.');
+    const now=new Date(), id=Utilities.getUuid();
+    const receivedDate=payload.receivedDate?new Date(payload.receivedDate):now;
+    if(isNaN(receivedDate.getTime())) throw new Error('Invalid received date.');
+    const cost=payload.purchaseCost===''||payload.purchaseCost==null?0:Number(payload.purchaseCost);
+    if(!Number.isFinite(cost)||cost<0) throw new Error('Enter a valid purchase cost.');
+    sheet_('Tire_Inventory').appendRow([id,serial,brand,model,size,warehouse,receivedDate,cost,'In Stock',String(payload.notes||''),user.fullName,now,'']);
+    sheet_('Tire_Stock_Movements').appendRow([Utilities.getUuid(),id,'Received','', '', '',1,now,'',user.fullName,'Initial stock receipt']);
+    audit_(user.fullName,'RECEIVE','Tire_Inventory',id,serial+' received into '+warehouse);
+    return {ok:true,tireId:id};
+  } finally { lock.releaseLock(); }
+}
+
+function installTireForRequest(token,payload) {
+  const user=requireOwner_(token);
+  payload=payload||{};
+  const requestId=String(payload.requestId||'').trim();
+  const tireId=String(payload.tireId||'').trim();
+  const position=String(payload.position||'').trim();
+  const allowedPositions=['Front Left','Front Right','Rear Left','Rear Right','Spare','Sixth'];
+  if(!requestId||!tireId||!allowedPositions.includes(position)) throw new Error('Select the approved request, an in-stock tire, and a valid installation position.');
+  const lock=LockService.getScriptLock(); lock.waitLock(10000);
+  try {
+    const request=rows_('Tire_Requests').find(r=>String(r.request_id)===requestId);
+    if(!request) throw new Error('Tire request not found.');
+    if(String(request.status)!=='Approved') throw new Error('Only an approved tire request can be installed.');
+    const vehicle=rows_('Vehicles').find(v=>String(v.vehicle_id)===String(request.vehicle_id));
+    if(!vehicle) throw new Error('The vehicle linked to this request was not found.');
+    const installKm=Number(vehicle.current_km);
+    if(!Number.isFinite(installKm)||installKm<=0) throw new Error('No valid current odometer reading is recorded. Submit Daily KM before installing the tire.');
+    const tire=rows_('Tire_Inventory').find(t=>String(t.tire_id)===tireId);
+    if(!tire) throw new Error('Tire not found in inventory.');
+    if(String(tire.status)!=='In Stock') throw new Error('This tire is no longer available in stock.');
+    const duplicate=rows_('Tire_Installations').some(x=>String(x.tire_id)===tireId&&String(x.status)==='Installed');
+    if(duplicate) throw new Error('This tire already has an active installation record.');
+    const now=new Date(), installationId=Utilities.getUuid();
+    const active=rows_('Tire_Installations').find(x=>String(x.vehicle_id)===String(vehicle.vehicle_id)&&String(x.position)===position&&String(x.status)==='Installed');
+    if(active) {
+      const oldInstallKm=Number(active.install_km||0);
+      if(installKm<oldInstallKm) throw new Error('Current vehicle KM is lower than the previous installation KM. Check Daily KM records.');
+      const distance=installKm-oldInstallKm;
+      updateById_('Tire_Installations','installation_id',active.installation_id,{removal_date:now,removal_km:installKm,distance_km:distance,status:'Removed',removed_by:user.fullName,updated_at:now});
+      updateById_('Tire_Inventory','tire_id',active.tire_id,{status:'Removed',installation_id:''});
+    }
+    sheet_('Tire_Installations').appendRow([installationId,vehicle.vehicle_id,position,tireId,tire.manufacturer_serial,requestId,now,installKm,'','', '', 'Installed',user.fullName,'',String(payload.notes||''),now,now]);
+    updateById_('Tire_Inventory','tire_id',tireId,{status:'Installed',installation_id:installationId});
+    sheet_('Tire_Stock_Movements').appendRow([Utilities.getUuid(),tireId,'Issued',requestId,installationId,vehicle.vehicle_id,1,now,installKm,user.fullName,'Installed at '+position]);
+    updateById_('Tire_Requests','request_id',requestId,{status:'Completed',notes:String(request.notes||'')+(request.notes?' | ':'')+'Installed '+tire.manufacturer_serial+' at '+position+' / '+installKm+' km'});
+    audit_(user.fullName,'INSTALL','Tire',tireId,'Vehicle '+vehicle.plate+'; '+position+'; '+installKm+' km; request '+requestId);
+    return {ok:true,installationId,installKm,vehiclePlate:vehicle.plate,serial:tire.manufacturer_serial};
+  } finally { lock.releaseLock(); }
 }
 function saveInspection(token,payload) {
   const user=requireOwner_(token), v=permittedVehicle_(user,payload.vehicleId);

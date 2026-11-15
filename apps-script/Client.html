@@ -172,7 +172,7 @@ function driverKmHtml(v){
  '<div class="panel"><form onsubmit="saveDriverKm(event)"><div class="form-row"><div><label>Vehicle *</label><select id="kmVehicle" required onchange="renderDriverKmSummary()">'+options+'</select></div>'+
  '<div><label>Today’s Odometer Reading (km) *</label><input id="kmReading" type="number" min="0" required></div></div>'+
  '<div id="driverKmSummary">'+driverVehicleSummary(v[0])+'</div><label>Notes</label><textarea id="kmNotes" placeholder="Optional notes"></textarea>'+
- '<div class="form-actions"><button class="btn primary">Save Daily KM</button></div></form></div>'+
+ '<div class="form-actions"><button class="btn primary" type="submit">Save Daily KM</button><button class="btn secondary" type="button" onclick="driverOilChanged()">🔧 Record Oil Change</button></div></form></div>'+
  '<div class="panel"><h3>My Recent KM Records</h3>'+ticketKmTable(recent)+'</div>';
 }
 function renderFleetVehicleSummary(){
@@ -271,7 +271,9 @@ async function saveDriverKm(e){
 }
 async function driverOilChanged(){
  const id=el('kmVehicle').value, v=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(id));
+ if(!v){alert('Please select a vehicle first.');return;}
  const km=Number(el('kmReading').value||v.current_km);
+ if(!Number.isFinite(km)||km<Number(v.current_km||0)){alert('Oil-change KM cannot be lower than the current recorded odometer. Enter the current or a newer reading.');return;}
  if(!confirm('Confirm that the oil has been changed for '+v.plate+' at '+km+' km?'))return;
  try{
   if(km>Number(v.current_km||0)) await rpc('submitKm',TOKEN,{vehicleId:id,readingKm:km,notes:'Odometer reading recorded with oil change'});

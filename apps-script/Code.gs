@@ -125,6 +125,38 @@ function updateTicketStatus(token,id,status,notes) {
   audit_(user.fullName,'UPDATE','Ticket',id,'Status '+status);
   return {ok:true};
 }
+
+function addVehicle(token,payload) {
+  const user=requireOwner_(token);
+  const plate=String(payload.plate||'').trim().toUpperCase();
+  const pin=String(payload.vehiclePin||'');
+  if(!plate) throw new Error('Vehicle plate is required.');
+  if(pin.length<4) throw new Error('Vehicle access code must be at least 4 characters.');
+  if(rows_('Vehicles').some(v=>String(v.plate).trim().toUpperCase()===plate)) throw new Error('This vehicle plate already exists.');
+  const salt=Utilities.getUuid();
+  const id=Utilities.getUuid(), now=new Date();
+  sheet_('Vehicles').appendRow([id,plate,String(payload.make||''),String(payload.model||''),String(payload.year||''),String(payload.site||''),String(payload.driver||''),String(payload.phone||''),Number(payload.currentKm||0),Number(payload.lastOilKm||0),Number(payload.oilIntervalKm||5000),salt+':'+hash_(salt+pin),'Active',now,now]);
+  audit_(user.fullName,'CREATE','Vehicle',id,'Added '+plate);
+  return {ok:true,id};
+}
+function updateVehicle(token,id,payload) {
+  const user=requireOwner_(token);
+  const patch={plate:String(payload.plate||'').trim().toUpperCase(),make:String(payload.make||''),model:String(payload.model||''),year:String(payload.year||''),site:String(payload.site||''),assigned_driver:String(payload.driver||''),driver_phone:String(payload.phone||''),oil_interval_km:Number(payload.oilIntervalKm||5000),status:String(payload.status||'Active'),updated_at:new Date()};
+  if(payload.currentKm!==undefined) patch.current_km=Number(payload.currentKm||0);
+  if(payload.lastOilKm!==undefined) patch.last_oil_km=Number(payload.lastOilKm||0);
+  if(payload.vehiclePin) {
+    if(String(payload.vehiclePin).length<4) throw new Error('Vehicle access code must be at least 4 characters.');
+    const salt=Utilities.getUuid(); patch.vehicle_pin_hash=salt+':'+hash_(salt+String(payload.vehiclePin));
+  }
+  updateById_('Vehicles','vehicle_id',id,patch);
+  audit_(user.fullName,'UPDATE','Vehicle',id,'Updated '+patch.plate);
+  return {ok:true};
+}
+function getAuditLog(token) {
+  requireOwner_(token);
+  return rows_('Audit_Log').slice(-200).reverse();
+}
+
 function session_(token) {
   if (!token) return null;
   const raw = CacheService.getScriptCache().get('sess:'+token);

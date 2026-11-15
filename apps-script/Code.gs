@@ -144,6 +144,12 @@ function getAppData(token) {
   const recordLimit = user.role === 'Driver' ? 150 : 500;
   const readRecords = name => {
     if (user.role === 'Driver' && !allowedIds.length) return [];
+    // For drivers, filter KM history by their authorized vehicle(s) BEFORE
+    // applying the limit, so activity from other vehicles cannot hide their
+    // latest odometer readings.
+    if (user.role === 'Driver' && name === 'KM_Records') {
+      return recentRowsForVehicles_('KM_Records', recordLimit, allowedIds);
+    }
     return recentRows_(name, recordLimit).filter(row => allowedIds === null || allowedIds.includes(String(row.vehicle_id)));
   };
   return {
@@ -540,6 +546,23 @@ function recentRows_(name, limit) {
   const headers = sh.getRange(1, 1, 1, width).getValues()[0];
   return values.filter(r => r.some(v => v !== '' && v !== null)).map(r =>
     Object.fromEntries(headers.map((h, i) => [h, r[i] instanceof Date ? r[i].toISOString() : r[i]]))
+  );
+}
+function recentRowsForVehicles_(name, limit, vehicleIds) {
+  const sh = sheet_(name), last = sh.getLastRow();
+  if (last < 2 || !vehicleIds || !vehicleIds.length) return [];
+  const width = sh.getLastColumn();
+  const values = sh.getRange(1, 1, last, width).getValues();
+  const headers = values.shift();
+  const vehicleIndex = headers.indexOf('vehicle_id');
+  if (vehicleIndex < 0) throw new Error('Missing vehicle_id column in ' + name + '.');
+  const allowed = new Set(vehicleIds.map(String));
+  const matching = values.filter(row =>
+    row.some(v => v !== '' && v !== null) && allowed.has(String(row[vehicleIndex]))
+  );
+  const count = Math.max(1, Number(limit) || 150);
+  return matching.slice(-count).map(row =>
+    Object.fromEntries(headers.map((h, i) => [h, row[i] instanceof Date ? row[i].toISOString() : row[i]]))
   );
 }
 function updateById_(name,key,id,patch) {

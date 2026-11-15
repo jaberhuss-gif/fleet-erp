@@ -400,7 +400,10 @@ async function openVehicleWhatsApp(button){
  const popup=window.open('about:blank','_blank');
  if(!popup){alert('Please allow pop-ups to open WhatsApp.');return;}
  try{
-  const info=await rpc('getVehicleWhatsAppInfo',TOKEN,vehicleId);
+  await refreshData();
+  const vehicle=(DATA.vehicles||[]).find(v=>String(v.vehicle_id)===String(vehicleId));
+  if(!vehicle){popup.close();alert('Vehicle data could not be refreshed.');return;}
+  const info={driverName:vehicle.assigned_driver||'Driver',driverPhone:normalizeWhatsAppPhone(vehicle.driver_phone),vehiclePlate:vehicle.plate||vehicle.vehicle_id,currentKm:vehicle.current_km,lastOilKm:vehicle.last_oil_km,sinceOil:vehicle.sinceOil,remaining:vehicle.remaining,oilStatus:vehicle.oilStatus};
   if(!info.driverPhone){popup.close();alert('No WhatsApp number is saved for the current driver assigned to this vehicle.');return;}
   const nl=String.fromCharCode(10);
   let parts=['Hello '+(info.driverName||'Driver')+',',''];
@@ -415,7 +418,6 @@ async function openVehicleWhatsApp(button){
   }
   parts.push('','Thank you,','Fleet Management');
   popup.location.href='https://wa.me/'+info.driverPhone+'?text='+encodeURIComponent(parts.join(nl));
-  await rpc('logVehicleWhatsAppOpened',TOKEN,vehicleId,type);
  }catch(err){try{popup.close();}catch(e){}alert('Unable to prepare WhatsApp message: '+(err.message||String(err)));}
 }
 async function changeTicketStatus(button){
@@ -432,7 +434,11 @@ async function openTicketWhatsApp(button){
   const popup=window.open('about:blank','_blank');
   if(!popup){alert('Please allow pop-ups to open WhatsApp.');return;}
   try{
-   const info=await rpc('getTicketWhatsAppInfo',TOKEN,id);
+   await refreshData();
+   const ticket=(DATA.tickets||[]).find(x=>String(x.ticket_id)===String(id));
+   const vehicle=ticket?(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(ticket.vehicle_id)):null;
+   if(!ticket||!vehicle){popup.close();alert('Ticket or vehicle data could not be refreshed.');return;}
+   const info={driverName:vehicle.assigned_driver||ticket.reported_by||'Driver',driverPhone:normalizeWhatsAppPhone(vehicle.driver_phone),vehiclePlate:vehicle.plate||vehicle.vehicle_id,currentKm:vehicle.current_km,category:ticket.category,title:ticket.title,priority:ticket.priority,description:ticket.description};
    if(!info.driverPhone){popup.close();alert('No WhatsApp number is saved for the current driver assigned to this vehicle.');return;}
    const nl=String.fromCharCode(10);
    const isKm=String(info.category||'').toLowerCase()==='daily km';
@@ -440,7 +446,6 @@ async function openTicketWhatsApp(button){
     ? ['Hello '+(info.driverName||'Driver')+',','','No KM reading has been recorded today for vehicle '+(info.vehiclePlate||'')+'.','Last reading: '+Number(info.currentKm||0).toLocaleString()+' km.','','Please record the current odometer reading.','','Thank you,','Fleet Management']
     : ['Hello '+(info.driverName||'Driver')+',','','Vehicle '+(info.vehiclePlate||'')+' requires your attention.','Issue: '+(info.title||info.category||'Maintenance'),'Priority: '+(info.priority||'Medium'),'Details: '+(info.description||'-'),'Current KM: '+Number(info.currentKm||0).toLocaleString()+' km.','','Please visit the workshop or contact Fleet Management and confirm the action.','','Thank you,','Fleet Management'];
    popup.location.href='https://wa.me/'+info.driverPhone+'?text='+encodeURIComponent(parts.join(nl));
-   await rpc('logTicketWhatsAppOpened',TOKEN,id);
   }catch(err){try{popup.close();}catch(e){}alert('Unable to prepare WhatsApp message: '+(err.message||String(err)));}
 }
 async function submitTireForm(e){e.preventDefault();try{await rpc('createTireRequest',TOKEN,{vehicleId:el('tireVehicle').value,requestType:el('tireType').value,description:el('tireDescription').value});alert('Tire request submitted.');await refreshData();render();}catch(err){alert(err.message);}}
@@ -501,6 +506,14 @@ async function saveTicket(e){
 }
 
 async function refreshAndRender(){try{await refreshData();render();}catch(e){alert(e.message);}}
+function normalizeWhatsAppPhone(value){
+ let phone=String(value||'').replace(/\\D/g,'');
+ if(phone.startsWith('00'))phone=phone.slice(2);
+ if(phone.startsWith('966'))return phone;
+ if(phone.length===10&&phone.startsWith('05'))return '966'+phone.slice(1);
+ if(phone.length===9&&phone.startsWith('5'))return '966'+phone;
+ return phone;
+}
 function vehiclePlate(id){const v=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(id));return v?v.plate:id;}
 function fmt(n){return Number(n||0).toLocaleString();}
 function status(s){const c=s==='Safe'||s==='Closed'?'safe':s==='Warning'?'warning':'urgent';return '<span class="badge '+c+'">'+esc(s||'Open')+'</span>';}

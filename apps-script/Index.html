@@ -25,9 +25,13 @@
 
   <div id="appView" class="app hidden">
     <header class="header">
-      <h1>Fleet ERP</h1>
+      <div class="header-brand">
+        <img src="https://pbs.twimg.com/media/G0B19WzaYAIKWy1.png" alt="Maaden and Ivanhoe Electric">
+        <h1>Fleet ERP</h1>
+      </div>
       <div class="header-tools">
-        <button id="themeToggle" class="btn secondary" type="button" onclick="toggleTheme()" title="Switch theme">🌙</button>
+        <button id="themeToggle" class="header-icon-btn" type="button" onclick="toggleTheme()" title="Switch theme">🌙</button>
+        <button class="header-notifications" type="button" aria-label="Notifications">🔔<span>44</span></button>
         <span id="userLabel"></span>
         <button class="btn logout" onclick="logout()">Logout</button>
       </div>
@@ -41,7 +45,6 @@
 
         <div class="nav-group" data-nav-group="fleet">
           <div class="nav-heading">Fleet</div>
-          <button class="nav-btn" data-page="dashboard" onclick="showPage('dashboard')">🚗 Fleet Dashboard</button>
           <button class="nav-btn" data-page="dashboard" onclick="showPage('dashboard')">🚗 Fleet Dashboard</button>
           <button class="nav-btn" data-page="fleet" onclick="showPage('fleet')">➕ Add</button>
           <button class="nav-btn" data-page="vehicles" onclick="showPage('vehicles')">🚙 Vehicles</button>

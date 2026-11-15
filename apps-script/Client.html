@@ -210,12 +210,11 @@ async function choosePortalVehicle(){
  const id=el('portalVehicle')?.value;
  if(!id){alert('Please select your vehicle number first.');return;}
  try{
-  const result=await rpc('selectPortalVehicle',TOKEN,id);
-  USER.selectedDriverName=result.driverName;
-  USER.vehicleId=result.vehicleId;
-  USER.vehiclePlate=result.vehiclePlate;
-  await refreshData();
-  document.getElementById('userLabel').textContent=result.driverName+' · Driver';
+  const result=await rpc('selectPortalVehicleAndGetAppData',TOKEN,id);
+  if(!result||!Array.isArray(result.vehicles))throw new Error('The server returned an invalid Fleet ERP data response.');
+  DATA=result;
+  USER=result.user;
+  document.getElementById('userLabel').textContent=(result.selectedDriverName||'Driver')+' · Driver';
   renderNavigation();
   showPage('fleet');
  }catch(err){alert(err.message||String(err));}

@@ -61,7 +61,7 @@ async function retryAppLoad(){
  root.innerHTML='<div class="loading">Retrying Fleet ERP data load…</div>';
  try{
   await refreshData();
-  showPage(USER.role==='Driver'?'km':'dashboard');
+  showPage(USER.role==='Driver'?'fleet':'dashboard');
  }catch(e){
   console.error('Fleet ERP retry failed:',e);
   showAppLoadError(e&&e.message?e.message:String(e));

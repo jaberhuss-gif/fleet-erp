@@ -226,7 +226,7 @@ function submitTireSurvey(token, payload) {
       const bytes = Utilities.base64Decode(match[2]);
       if (bytes.length > 1500000) throw new Error('Photo is too large for ' + position + '. Please retake it.');
       const ext = match[1].split('/')[1].replace('jpeg','jpg');
-      const file = folder.createFile(Utilities.newBlob(bytes,match[1],v.plate+'_'+position.replace(/\\s/g,'_')+'_'+surveyId+'.'+ext));
+      const file = folder.createFile(Utilities.newBlob(bytes,match[1],v.plate+'_'+position.replace(/\s/g,'_')+'_'+surveyId+'.'+ext));
       createdFiles.push(file);
       tireRows.push([Utilities.getUuid(),surveyId,v.vehicle_id,position,String(t.manufacturerSerial),String(t.brand),String(t.model),String(t.size),Number(t.manufacturingYear||0),Number(t.treadMm),Number(t.pressurePsi),String(t.conditionNotes||''),file.getId(),file.getUrl(),now]);
     });

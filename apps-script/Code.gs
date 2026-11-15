@@ -150,6 +150,26 @@ function getAppData(token) {
     driverNames, selectedDriverName:user.selectedDriverName||'', requiresDriverSelection:user.role==='Driver'&&!user.selectedDriverName, serverTime:new Date().toISOString()
   };
 }
+function selectPortalVehicle(token, vehicleId) {
+  const user = requireSession_(token);
+  if (user.role !== 'Driver') throw new Error('This action is only available to the shared Driver Portal.');
+  const id = String(vehicleId || '').trim();
+  if (!id) throw new Error('Select your vehicle number.');
+  const vehicle = rows_('Vehicles').find(v =>
+    String(v.vehicle_id) === id &&
+    String(v.status || 'Active').trim().toLowerCase() !== 'inactive'
+  );
+  if (!vehicle) throw new Error('Vehicle not found or inactive. Contact Fleet Admin.');
+  const assignedDriver = String(vehicle.assigned_driver || '').trim();
+  if (!assignedDriver) throw new Error('This vehicle has no assigned driver in Vehicle Master. Contact Fleet Admin.');
+  user.vehicleId = id;
+  user.selectedDriverName = assignedDriver;
+  user.vehiclePlate = String(vehicle.plate || '');
+  CacheService.getScriptCache().put('sess:' + token, JSON.stringify(user), APP.SESSION_TTL);
+  audit_(assignedDriver, 'SELECT_VEHICLE', 'Driver Portal', id, 'Selected vehicle ' + user.vehiclePlate);
+  return {ok:true, vehicleId:id, vehiclePlate:user.vehiclePlate, driverName:assignedDriver};
+}
+
 function selectDriver(token, driverName) {
   const user = requireSession_(token);
   if (user.role !== 'Driver' || user.vehicleId) throw new Error('This action is only available to the shared Driver Portal.');

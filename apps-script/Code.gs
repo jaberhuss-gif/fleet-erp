@@ -48,6 +48,18 @@ function initializeOwnerAccount(username, password, fullName) {
 
 // Creates ONE shared Driver Portal login. Run once from Apps Script editor.
 // Drivers choose their own name after signing in; no individual user accounts are created.
+// Run this from the Apps Script editor once. It asks for the single shared Driver Portal username/password.
+function setupSharedDriverPortal() {
+  const ui = SpreadsheetApp.getUi();
+  const userPrompt = ui.prompt('Shared Driver Portal', 'Enter one shared Driver Portal username:', ui.ButtonSet.OK_CANCEL);
+  if (userPrompt.getSelectedButton() !== ui.Button.OK) return 'Cancelled.';
+  const passPrompt = ui.prompt('Shared Driver Portal', 'Enter a strong shared password (minimum 10 characters):', ui.ButtonSet.OK_CANCEL);
+  if (passPrompt.getSelectedButton() !== ui.Button.OK) return 'Cancelled.';
+  const result = initializeDriverPortalAccount(userPrompt.getResponseText(),passPrompt.getResponseText());
+  ui.alert(result);
+  return result;
+}
+
 function initializeDriverPortalAccount(username, password) {
   if (!username || !password || String(password).length < 10) throw new Error('Use a username and a password of at least 10 characters.');
   const sh = sheet_('Users');
@@ -101,7 +113,9 @@ function getAppData(token) {
     : [];
   const allowedIds = user.role !== 'Driver' ? null : user.vehicleId
     ? [String(user.vehicleId)]
-    : allVehicles.filter(v => String(v.assigned_driver||'').trim().toLowerCase() === String(user.selectedDriverName||'').trim().toLowerCase() && String(v.status||'Active').toLowerCase() !== 'inactive').map(v => String(v.vehicle_id));
+    : user.selectedDriverName
+      ? allVehicles.filter(v => String(v.assigned_driver||'').trim().toLowerCase() === String(user.selectedDriverName).trim().toLowerCase() && String(v.status||'Active').toLowerCase() !== 'inactive').map(v => String(v.vehicle_id))
+      : [];
   const visibleVehicles = allowedIds === null ? allVehicles : allVehicles.filter(v => allowedIds.includes(String(v.vehicle_id)));
   const allowed = row => allowedIds === null || allowedIds.includes(String(row.vehicle_id));
   return {

@@ -416,16 +416,31 @@ function tiresHtml(rows,vehicles){
  const owner=canManageFleet(), inventory=DATA.tireInventory||[], installations=DATA.tireInstallations||[], movements=DATA.tireStockMovements||[];
  const opts=vehicles.map(v=>'<option value="'+esc(v.vehicle_id)+'">'+esc(v.plate)+'</option>').join('');
  const inStock=inventory.filter(t=>String(t.status)==='In Stock');
- const siteKey=s=>{s=String(s||'').trim();return /^main warehouse$/i.test(s)||/^riyadh(?:\s*[-–—].*)?$/i.test(s)?'riyadh':s.toLowerCase().replace(/\s+/g,' ');};
- const siteLabel=s=>/^main warehouse$/i.test(String(s||'').trim())?'Riyadh – Main Warehouse':String(s||'').trim();
- const currentTireSite=t=>{if(String(t.status)==='Installed'){const ins=installations.find(x=>String(x.tire_id)===String(t.tire_id)&&String(x.status)==='Installed');const v=ins&&(DATA.vehicles||[]).find(z=>String(z.vehicle_id)===String(ins.vehicle_id));if(v&&v.site)return String(v.site).trim();}return siteLabel(t.warehouse);};
- const siteSet=new Map();siteSet.set('riyadh','Riyadh – Main Warehouse');
- (DATA.vehicles||[]).forEach(v=>{if(v.site){const k=siteKey(v.site);if(!siteSet.has(k))siteSet.set(k,String(v.site).trim());}});
- inventory.forEach(t=>{const location=currentTireSite(t);if(location){const k=siteKey(location);if(!siteSet.has(k))siteSet.set(k,location);}});
+ const canonicalSite=s=>{
+  const raw=String(s||'').trim();
+  const compact=raw.toLowerCase().replace(/[^a-z0-9]/g,'');
+  if(!compact||compact==='mainwarehouse'||compact.startsWith('riyadh'))return 'Riyadh – Main Warehouse';
+  const aliases={
+   alhulaifa:'Al Hulayfa',alhulayfa:'Al Hulayfa',alhulaifah:'Al Hulayfa',
+   alquwayiyah:'Al Quwayiyah',alquwayiah:'Al Quwayiyah',quwayiyah:'Al Quwayiyah',
+   alsabiyah:'Al Sabiyah',sabayia:'Al Sabiyah',sabeyah:'Al Sabiyah',sabiyah:'Al Sabiyah',
+   uqlatalsaquour:'Uqlat Al Soqour',uqlatalsaqour:'Uqlat Al Soqour',uqlatalsuqur:'Uqlat Al Soqour',
+   wadibeddah:'Wadi Beddah',wadibidah:'Wadi Beddah',wadibida:'Wadi Beddah',
+   mahdadhdhahab:'Mahd ad Dhahab',mahdadhahab:'Mahd ad Dhahab',
+   alhadar:'Al Hadar',typhoon:'Typhoon',diran:'Diran'
+  };
+  return aliases[compact]||raw.replace(/\s+/g,' ');
+ };
+ const siteKey=s=>canonicalSite(s).toLowerCase();
+ const siteLabel=s=>canonicalSite(s);
+ const currentTireSite=t=>{if(String(t.status)==='Installed'){const ins=installations.find(x=>String(x.tire_id)===String(t.tire_id)&&String(x.status)==='Installed');const v=ins&&(DATA.vehicles||[]).find(z=>String(z.vehicle_id)===String(ins.vehicle_id));if(v&&v.site)return canonicalSite(v.site);}return siteLabel(t.warehouse);};
+ const siteSet=new Map();siteSet.set(siteKey('Riyadh'),'Riyadh – Main Warehouse');
+ (DATA.vehicles||[]).forEach(v=>{if(v.site){const label=canonicalSite(v.site);siteSet.set(siteKey(label),label);}});
+ inventory.forEach(t=>{const location=currentTireSite(t);if(location){const label=canonicalSite(location);siteSet.set(siteKey(label),label);}});
  const sites=[...siteSet.values()].sort((a,b)=>a.localeCompare(b));
  const sourceSites=[...new Set(inStock.map(t=>siteKey(t.warehouse)))].map(k=>siteSet.get(k)||k).sort();
  const positions=['Front Left','Front Right','Rear Left','Rear Right','Spare','Sixth'];
- const stockForm=owner?'<div class="panel"><h3>➕ Receive Tires into Inventory</h3><form onsubmit="addTireStockForm(event)"><div class="form-row"><div><label>Quantity *</label><input id="stockQuantity" type="number" min="1" max="100" value="1" required></div><div><label>Manufacturer Serial Numbers *</label><textarea id="stockSerials" rows="2" required placeholder="Enter one unique serial number per line"></textarea><small>Enter one serial number for each tire. The number of serials must match Quantity.</small></div><div><label>Brand *</label><input id="stockBrand" required></div><div><label>Model *</label><input id="stockModel" required></div><div><label>Size *</label><input id="stockSize" required placeholder="e.g. 265/65R17"></div></div><div class="form-row"><div><label>Receiving Site *</label><input id="stockWarehouse" value="Riyadh – Main Warehouse" required></div><div><label>Received Date</label><input id="stockReceived" type="date"></div><div><label>Purchase Cost (SAR)</label><input id="stockCost" type="number" min="0" step="0.01"></div></div><label>Notes</label><textarea id="stockNotes" rows="2"></textarea><div class="form-actions"><button class="btn primary">Receive into Stock</button></div></form></div>':'';
+ const stockForm=owner?'<div class="panel"><h3>➕ Receive Tires into Inventory</h3><form onsubmit="addTireStockForm(event)"><div class="form-row"><div><label>Quantity *</label><input id="stockQuantity" type="number" min="1" max="100" value="1" required></div><div><label>Manufacturer Serial Numbers *</label><textarea id="stockSerials" rows="2" required placeholder="Enter one unique serial number per line"></textarea><small>Enter one serial number for each tire. The number of serials must match Quantity.</small></div><div><label>Brand *</label><input id="stockBrand" required></div><div><label>Model *</label><input id="stockModel" required></div><div><label>Size *</label><input id="stockSize" required placeholder="e.g. 265/65R17"></div></div><div class="form-row"><div><label>Receiving Site *</label><select id="stockWarehouse" required>'+sites.map(s=>'<option value="'+esc(s)+'" '+(siteKey(s)==='riyadh'?'selected':'')+'>'+esc(s)+'</option>').join('')+'</select></div><div><label>Received Date</label><input id="stockReceived" type="date"></div><div><label>Purchase Cost (SAR)</label><input id="stockCost" type="number" min="0" step="0.01"></div></div><label>Notes</label><textarea id="stockNotes" rows="2"></textarea><div class="form-actions"><button class="btn primary">Receive into Stock</button></div></form></div>':'';
  const requestRows=rows.length?rows.slice().reverse().map(x=>{
   const vehicle=(DATA.vehicles||[]).find(v=>String(v.vehicle_id)===String(x.vehicle_id));
   const km=vehicle?Number(vehicle.current_km||0):0;

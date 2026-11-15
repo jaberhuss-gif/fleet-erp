@@ -226,73 +226,10 @@ function recordOilChange(token,payload) {
   audit_(driverActor_(user),'CREATE','Oil_Changes',id,'Oil change at '+km+' km');
   return {ok:true};
 }
-function getTicketWhatsAppInfo(token, ticketId) {
-  requireOwner_(token);
-  const ticket = rows_('Tickets').find(r => String(r.ticket_id) === String(ticketId));
-  if (!ticket) throw new Error('Ticket not found.');
-  const vehicle = rows_('Vehicles').find(r => String(r.vehicle_id) === String(ticket.vehicle_id));
-  if (!vehicle) throw new Error('Vehicle not found for this ticket.');
-  return {
-    ticketId:String(ticket.ticket_id),
-    category:String(ticket.category||''),
-    title:String(ticket.title||''),
-    description:String(ticket.description||''),
-    priority:String(ticket.priority||''),
-    status:String(ticket.status||'Open'),
-    driverName:String(vehicle.assigned_driver||ticket.reported_by||'Driver'),
-    driverPhone:normalizeSaudiPhone_(vehicle.driver_phone||''),
-    vehiclePlate:String(vehicle.plate||vehicle.vehicle_id||''),
-    currentKm:Number(vehicle.current_km||0)
-  };
-}
-function logTicketWhatsAppOpened(token, ticketId) {
-  const user = requireOwner_(token);
-  const ticket = rows_('Tickets').find(r => String(r.ticket_id) === String(ticketId));
-  if (!ticket) throw new Error('Ticket not found.');
-  const vehicle = rows_('Vehicles').find(r => String(r.vehicle_id) === String(ticket.vehicle_id));
-  audit_(user.fullName,'WHATSAPP_DRAFT_OPENED','Ticket',ticketId,'WhatsApp draft opened for vehicle '+String(vehicle?.plate||ticket.vehicle_id));
-  return {ok:true};
-}
-function getVehicleWhatsAppInfo(token, vehicleId) {
-  requireOwner_(token);
-  const vehicle=rows_('Vehicles').find(r=>String(r.vehicle_id)===String(vehicleId));
-  if(!vehicle) throw new Error('Vehicle not found.');
-  const enriched=enrichVehicle_(vehicle);
-  return {
-    vehicleId:String(vehicle.vehicle_id),
-    vehiclePlate:String(vehicle.plate||vehicle.vehicle_id),
-    driverName:String(vehicle.assigned_driver||'Driver'),
-    driverPhone:normalizeSaudiPhone_(vehicle.driver_phone||''),
-    site:String(vehicle.site||''),
-    currentKm:Number(vehicle.current_km||0),
-    lastOilKm:Number(vehicle.last_oil_km||0),
-    sinceOil:Number(enriched.sinceOil||0),
-    remaining:Number(enriched.remaining||0),
-    oilStatus:String(enriched.oilStatus||'')
-  };
-}
-function logVehicleWhatsAppOpened(token, vehicleId, context) {
-  const user=requireOwner_(token);
-  const vehicle=rows_('Vehicles').find(r=>String(r.vehicle_id)===String(vehicleId));
-  if(!vehicle) throw new Error('Vehicle not found.');
-  audit_(user.fullName,'WHATSAPP_DRAFT_OPENED','Vehicle',vehicleId,String(context||'Reminder')+' WhatsApp draft opened for '+String(vehicle.plate||vehicleId));
-  return {ok:true};
-}
-function normalizeSaudiPhone_(value) {
-  let phone=String(value||'').replace(/\D/g,'');
-  if(phone.startsWith('00')) phone=phone.slice(2);
-  if(phone.startsWith('966')) return phone;
-  if(phone.length===10 && phone.startsWith('05')) return '966'+phone.slice(1);
-  if(phone.length===9 && phone.startsWith('5')) return '966'+phone;
-  return phone;
-}
 function updateTicketStatus(token,id,status,notes) {
   const user = requireOwner_(token);
-  const allowed=['Open','In Progress','Pending Driver Confirmation','Closed'];
-  const next=String(status||'').trim();
-  if(!allowed.includes(next)) throw new Error('Invalid ticket status.');
-  updateById_('Tickets','ticket_id',id,{status:next,notes:String(notes||''),closed_at:next==='Closed'?new Date():''});
-  audit_(user.fullName,'UPDATE','Ticket',id,'Status '+next);
+  updateById_('Tickets','ticket_id',id,{status:String(status),notes:String(notes||''),closed_at:String(status)==='Closed'?new Date():''});
+  audit_(user.fullName,'UPDATE','Ticket',id,'Status '+status);
   return {ok:true};
 }
 

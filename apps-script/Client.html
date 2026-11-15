@@ -106,8 +106,11 @@ function render(){
  else if(PAGE==='inspections')root.innerHTML=inspectionsHtml(DATA.inspections||[],vehicles);
  else root.innerHTML=placeholderHtml(PAGE);
 }function dashboardHtml(v,t,k,overdue,warning){
- return '<div class="page-title"><div><h2>🚗 Vehicle Control Center</h2><p>Fleet overview and daily vehicle controls.</p></div><button class="btn primary" onclick="refreshAndRender()">↻ Refresh</button></div>'+
- '<div class="cards-grid">'+card('Total Vehicles',v.length,'Registered fleet')+card('Oil Overdue',overdue,'Immediate attention','urgent')+card('Oil Warning',warning,'Approaching due','warning')+card('Open Tickets',t.filter(x=>x.status!=='Closed').length,'Maintenance and issues')+card('KM Entries',k.length,'Recorded readings')+'</div>'+
+ const openTires=(DATA.tireRequests||[]).filter(x=>!['Completed','Rejected','Closed'].includes(String(x.status)));
+ const pendingInspections=(DATA.inspections||[]).filter(x=>String(x.status)!=='Completed');
+ const pendingMaintenance=(DATA.maintenance||[]).filter(x=>String(x.status)!=='Completed');
+ return '<div class="page-title"><div><h2>🚗 Vehicle Control Center</h2><p>Live fleet overview, pending actions and daily vehicle controls.</p></div><button class="btn primary" onclick="refreshAndRender()">↻ Refresh</button></div>'+
+ '<div class="cards-grid">'+card('Total Vehicles',v.length,'Registered fleet')+card('Oil Overdue',overdue,'Immediate attention','urgent')+card('Oil Warning',warning,'Approaching due','warning')+card('Open Tickets',t.filter(x=>x.status!=='Closed').length,'Maintenance and issues','warning')+card('Open Tire Requests',openTires.length,'Awaiting follow-up','warning')+card('Pending Inspections',pendingInspections.length,'Compliance follow-up','warning')+card('Pending Maintenance',pendingMaintenance.length,'Scheduled / in progress')+card('KM Entries',k.length,'Recorded readings')+'</div>'+
  '<div class="panel"><h3>Vehicle Status</h3>'+vehicleTable(v)+'</div>';
 }
 function card(label,value,note,tone){return '<div class="card"><h3>'+esc(label)+'</h3><div class="big-number">'+Number(value||0).toLocaleString()+'</div><div class="sub">'+esc(note)+'</div></div>';}
@@ -360,7 +363,7 @@ function ticketsHtml(rows){
    '<th>Vehicle</th><th>Category</th><th>Title / Description</th><th>Priority</th><th>Reported By</th><th>Date</th><th>Status</th>'+(owner?'<th>Follow-up</th>':'')+
    '</tr></thead><tbody>'+
    rows.slice().reverse().map(t=>'<tr><td><b>'+esc(vehiclePlate(t.vehicle_id))+'</b></td>'+
-    '<td>'+esc(t.category)+'</td><td><b>'+esc(t.title)+'</b><br><small>'+esc(t.description||'')+'</small></td><td>'+status(t.priority)+'</td><td>'+esc(t.reported_by)+'</td>'+
+    '<td>'+esc(t.category)+'</td><td><b>'+esc(t.title)+'</b><br><small>'+esc(t.description||'')+'</small></td><td>'+priorityBadge(t.priority)+'</td><td>'+esc(t.reported_by)+'</td>'+
     '<td>'+esc(t.reported_at)+'</td><td>'+status(t.status)+'</td>'+
     (owner?'<td><select id="ticketStatus_'+esc(t.ticket_id)+'"><option '+(t.status==='Open'?'selected':'')+'>Open</option><option '+(t.status==='In Progress'?'selected':'')+'>In Progress</option><option '+(t.status==='Pending Driver Confirmation'?'selected':'')+'>Pending Driver Confirmation</option><option '+(t.status==='Closed'?'selected':'')+'>Closed</option></select><div class="form-actions"><button class="btn secondary" type="button" data-ticket-id="'+esc(t.ticket_id)+'" onclick="changeTicketStatus(this)">Update</button><button class="btn primary" type="button" data-ticket-id="'+esc(t.ticket_id)+'" onclick="openTicketWhatsApp(this)">📱 WhatsApp</button></div></td>':'')+
     '</tr>').join('')+
@@ -501,5 +504,6 @@ async function refreshAndRender(){try{await refreshData();render();}catch(e){ale
 function vehiclePlate(id){const v=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(id));return v?v.plate:id;}
 function fmt(n){return Number(n||0).toLocaleString();}
 function status(s){const c=s==='Safe'||s==='Closed'?'safe':s==='Warning'?'warning':'urgent';return '<span class="badge '+c+'">'+esc(s||'Open')+'</span>';}
+function priorityBadge(p){const value=String(p||'Medium');const c=value==='Low'?'safe':value==='Medium'?'info':value==='High'?'warning':'urgent';return '<span class="badge '+c+'">'+esc(value)+'</span>';}
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 </script>

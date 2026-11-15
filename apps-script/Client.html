@@ -127,8 +127,49 @@ function toggleVehicleForm(){document.getElementById('vehicleFormWrap').classLis
 async function addVehicleForm(e){e.preventDefault();try{await rpc('addVehicle',TOKEN,{plate:el('newPlate').value,make:el('newMake').value,model:el('newModel').value,year:el('newYear').value,site:el('newSite').value,driver:el('newDriver').value,phone:el('newPhone').value,currentKm:el('newKm').value,lastOilKm:el('newOilKm').value,oilIntervalKm:el('newInterval').value,vehiclePin:el('newPin').value});alert('Vehicle added. Give its access code only to its assigned drivers.');await refreshData();render();}catch(err){alert(err.message);}}
 function kmHtml(v){
  if(USER.role==='Driver') return driverKmHtml(v);
- const opts=v.map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+'</option>').join('');
- return '<div class="page-title"><div><h2>📏 Daily KM Control</h2><p>Record the current odometer reading for the selected vehicle.</p></div></div><div class="panel"><form onsubmit="saveKm(event)"><div class="form-row"><div><label>Vehicle</label><select id="kmVehicle" required>'+opts+'</select></div><div><label>Current Odometer (KM)</label><input id="kmReading" type="number" min="0" required></div><div><label>Driver Name</label><input id="kmDriver" value="'+esc(USER.fullName||'')+'" required></div></div><label>Notes</label><textarea id="kmNotes"></textarea><div class="form-actions"><button class="btn success-btn">Save KM Reading</button></div></form></div><div class="panel"><h3>Recent KM Records</h3><div class="table-wrap"><table><thead><tr><th>Date</th><th>Vehicle ID</th><th>Reading</th><th>Driver</th></tr></thead><tbody>'+(DATA.km||[]).slice(-30).reverse().map(r=>'<tr><td>'+esc(r.reading_date)+'</td><td>'+esc(r.vehicle_id)+'</td><td>'+fmt(r.reading_km)+'</td><td>'+esc(r.driver_name)+'</td></tr>').join('')+'</tbody></table></div></div>';
+ const vehicles=(v||[]).filter(x=>String(x.status||'Active').trim().toLowerCase()!=='inactive');
+ const today=(DATA.serverTime?new Date(DATA.serverTime):new Date()).toLocaleDateString('en-CA',{timeZone:'Asia/Riyadh'});
+ const dayKey=value=>{
+  if(!value)return '';
+  const d=value instanceof Date?value:new Date(value);
+  return Number.isNaN(d.getTime())?'':d.toLocaleDateString('en-CA',{timeZone:'Asia/Riyadh'});
+ };
+ const todays=(DATA.km||[]).filter(r=>dayKey(r.reading_date)===today);
+ const latestByVehicle={};
+ todays.forEach(r=>{
+  const id=String(r.vehicle_id);
+  if(!latestByVehicle[id]||new Date(r.created_at||r.reading_date)>new Date(latestByVehicle[id].created_at||latestByVehicle[id].reading_date))latestByVehicle[id]=r;
+ });
+ const entered=vehicles.filter(v=>latestByVehicle[String(v.vehicle_id)]).length;
+ const missing=vehicles.length-entered;
+ const options=vehicles.map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+'</option>').join('');
+ const rows=vehicles.map(vehicle=>{
+  const record=latestByVehicle[String(vehicle.vehicle_id)];
+  const driver=vehicle.assigned_driver||record?.driver_name||'Not assigned';
+  const phone=normalizeWhatsAppPhone(vehicle.driver_phone);
+  const reminder=(!record&&phone)?'<button type="button" class="btn secondary small" onclick="remindKmVehicle(\''+esc(vehicle.vehicle_id)+'\')">WhatsApp Reminder</button>':(!record?'<span class="muted">No phone saved</span>':'—');
+  return '<tr><td><b>'+esc(vehicle.plate||vehicle.vehicle_id)+'</b><div class="muted">'+esc(vehicle.vehicle_id)+'</div></td><td>'+esc(driver)+'</td><td>'+(record?'<span class="badge safe">Entered</span>':'<span class="badge urgent">Not Entered</span>')+'</td><td>'+(record?fmt(record.reading_km)+' km':'—')+'</td><td>'+(record?esc(record.created_at||record.reading_date):'—')+'</td><td>'+reminder+'</td></tr>';
+ }).join('');
+ return '<div class="page-title"><div><h2>📏 Daily KM Control</h2><p>Record odometer readings and track which drivers have submitted today.</p></div></div>'+
+ '<div class="stats-grid"><div class="stat-card"><span>Total Active Vehicles</span><strong>'+vehicles.length+'</strong></div><div class="stat-card"><span>KM Entered Today</span><strong>'+entered+'</strong></div><div class="stat-card"><span>Not Entered Today</span><strong>'+missing+'</strong></div><div class="stat-card"><span>Submission Rate</span><strong>'+(vehicles.length?Math.round(entered/vehicles.length*100):0)+'%</strong></div></div>'+
+ '<div class="panel"><h3>Record Daily KM</h3><form onsubmit="saveKm(event)"><div class="form-row"><div><label>Vehicle</label><select id="kmVehicle" required>'+options+'</select></div><div><label>Current Odometer (KM)</label><input id="kmReading" type="number" min="0" required></div><div><label>Driver Name</label><input id="kmDriver" value="'+esc(USER.fullName||'')+'" required></div></div><label>Notes</label><textarea id="kmNotes"></textarea><div class="form-actions"><button class="btn success-btn">Save KM Reading</button></div></form></div>'+
+ '<div class="panel"><div class="page-title"><div><h3>Today’s KM Submission Status</h3><p class="muted">As of '+esc(today)+' — each active vehicle is counted once.</p></div></div><div class="table-wrap"><table><thead><tr><th>Vehicle</th><th>Assigned Driver</th><th>Today Status</th><th>Odometer</th><th>Submitted At</th><th>Follow-up</th></tr></thead><tbody>'+(rows||'<tr><td colspan="6">No active vehicles found.</td></tr>')+'</tbody></table></div></div>'+
+ '<div class="panel"><h3>Recent KM Records</h3><div class="table-wrap"><table><thead><tr><th>Date</th><th>Vehicle</th><th>Reading</th><th>Driver</th></tr></thead><tbody>'+(DATA.km||[]).slice().reverse().slice(0,30).map(r=>'<tr><td>'+esc(r.reading_date)+'</td><td>'+esc(vehiclePlate(r.vehicle_id))+'</td><td>'+fmt(r.reading_km)+'</td><td>'+esc(r.driver_name)+'</td></tr>').join('')+'</tbody></table></div></div>';
+}
+async function remindKmVehicle(vehicleId){
+ const popup=window.open('about:blank','_blank');
+ if(!popup){alert('Please allow pop-ups to open WhatsApp.');return;}
+ try{
+  await refreshData();
+  const vehicle=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(vehicleId));
+  if(!vehicle){popup.close();alert('Vehicle data could not be refreshed.');return;}
+  const phone=normalizeWhatsAppPhone(vehicle.driver_phone);
+  if(!phone){popup.close();alert('No WhatsApp number is saved for this vehicle’s assigned driver.');return;}
+  const driver=vehicle.assigned_driver||'Driver';
+  const nl=String.fromCharCode(10);
+  const message=['Hello '+driver+',','','No daily odometer reading has been recorded today for vehicle '+(vehicle.plate||vehicle.vehicle_id)+'.','Last recorded KM: '+Number(vehicle.current_km||0).toLocaleString()+' km.','','Please submit today’s current odometer reading.','','Thank you,','Fleet Management'].join(nl);
+  popup.location.href='https://wa.me/'+phone+'?text='+encodeURIComponent(message);
+ }catch(err){try{popup.close();}catch(e){}alert('Unable to prepare WhatsApp reminder: '+(err.message||String(err)));}
 }
 function driverPortalHtml(v){
  const selected=DATA.selectedDriverName||'';

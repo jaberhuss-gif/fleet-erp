@@ -82,8 +82,48 @@ function vehiclesHtml(v){
 function toggleVehicleForm(){document.getElementById('vehicleFormWrap').classList.toggle('hidden');}
 async function addVehicleForm(e){e.preventDefault();try{await rpc('addVehicle',TOKEN,{plate:el('newPlate').value,make:el('newMake').value,model:el('newModel').value,year:el('newYear').value,site:el('newSite').value,driver:el('newDriver').value,phone:el('newPhone').value,currentKm:el('newKm').value,lastOilKm:el('newOilKm').value,oilIntervalKm:el('newInterval').value,vehiclePin:el('newPin').value});alert('Vehicle added. Give its access code only to its assigned drivers.');await refreshData();render();}catch(err){alert(err.message);}}
 function kmHtml(v){
+ if(USER.role==='Driver') return driverPortalHtml(v);
  const opts=v.map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+'</option>').join('');
  return '<div class="page-title"><div><h2>📏 Daily KM Control</h2><p>Record the current odometer reading for the selected vehicle.</p></div></div><div class="panel"><form onsubmit="saveKm(event)"><div class="form-row"><div><label>Vehicle</label><select id="kmVehicle" required>'+opts+'</select></div><div><label>Current Odometer (KM)</label><input id="kmReading" type="number" min="0" required></div><div><label>Driver Name</label><input id="kmDriver" value="'+esc(USER.fullName||'')+'" required></div></div><label>Notes</label><textarea id="kmNotes"></textarea><div class="form-actions"><button class="btn success-btn">Save KM Reading</button></div></form></div><div class="panel"><h3>Recent KM Records</h3><div class="table-wrap"><table><thead><tr><th>Date</th><th>Vehicle ID</th><th>Reading</th><th>Driver</th></tr></thead><tbody>'+(DATA.km||[]).slice(-30).reverse().map(r=>'<tr><td>'+esc(r.reading_date)+'</td><td>'+esc(r.vehicle_id)+'</td><td>'+fmt(r.reading_km)+'</td><td>'+esc(r.driver_name)+'</td></tr>').join('')+'</tbody></table></div></div>';
+}
+function driverPortalHtml(v){
+ if(!DATA.selectedDriverName){
+  const names=(DATA.driverNames||[]).map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join('');
+  return '<div class="page-title"><div><h2>Fleet / Fleet vehicle and maintenance actions</h2><p>Driver Portal · Select your name to load your assigned vehicles.</p></div></div><div class="panel"><h3>👤 Select Driver</h3><form onsubmit="confirmDriverSelection(event)"><label>Driver Name</label><select id="driverSelect" required><option value="">Select your name</option>'+names+'</select><div class="form-actions"><button class="btn primary">Continue to Driver Portal</button></div></form><div class="alert info">Only vehicles assigned to the selected driver will be displayed. If your name or vehicle is missing, contact Fleet Admin.</div></div>';
+ }
+ const opts=v.map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+'</option>').join('');
+ const first=v[0];
+ const rows=(DATA.km||[]).filter(r=>String(r.vehicle_id)===String(first?.vehicle_id)).slice(-12).reverse();
+ return '<div class="page-title"><div><h2>Fleet / Fleet vehicle and maintenance actions</h2><p>Driver Portal · '+esc(DATA.selectedDriverName)+'</p></div><button class="btn secondary" onclick="changeDriverSelection()">Change Driver</button></div>'+
+ '<div class="cards-grid"><button class="btn primary" onclick="showPage(\'km\')">📏 Add Daily KM</button><button class="btn primary" onclick="showPage(\'tickets\')">🛠️ Maintenance Issue Report</button><button class="btn primary" onclick="showPage(\'tires\')">🛞 Tire Service Request</button><button class="btn primary" onclick="showPage(\'tires\')">🛞 Tire Survey</button></div>'+
+ '<div class="panel"><h3>Driver Portal</h3><div class="form-row"><div><label>Select Vehicle</label><select id="kmVehicle" onchange="renderDriverVehicleSummary()">'+opts+'</select></div><div><label>Today's Odometer Reading (km)</label><input id="kmReading" type="number" min="0" placeholder="Enter current reading"></div></div><div id="driverVehicleSummary">'+driverVehicleSummary(first)+'</div><label>Notes</label><textarea id="kmNotes" placeholder="Optional notes"></textarea><div class="form-actions"><button class="btn success-btn" onclick="saveDriverKm(event)">Save Reading</button><button class="btn secondary" onclick="driverOilChanged()">Oil Changed</button></div></div>'+
+ '<div class="panel"><h3>Recent Readings</h3><div class="table-wrap"><table><thead><tr><th>Date</th><th>Reading (km)</th><th>Oil</th><th>Notes</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(r.reading_date)+'</td><td>'+fmt(r.reading_km)+'</td><td>-</td><td>'+esc(r.notes||'-')+'</td></tr>').join('')+'</tbody></table></div></div>';
+}
+function driverVehicleSummary(v){
+ if(!v)return '<div class="alert warning">No active vehicles are assigned to this driver.</div>';
+ return '<div class="cards-grid"><div class="card"><h3>Plate</h3><div class="big-number">'+esc(v.plate)+'</div></div><div class="card"><h3>Driver</h3><div class="big-number" style="font-size:20px">'+esc(DATA.selectedDriverName)+'</div></div><div class="card"><h3>Location</h3><div class="big-number" style="font-size:20px">'+esc(v.site||'-')+'</div></div><div class="card"><h3>Current Odometer</h3><div class="big-number">'+fmt(v.current_km)+'</div></div><div class="card"><h3>Last Oil Change</h3><div class="big-number">'+fmt(v.last_oil_km)+'</div></div><div class="card"><h3>KM Since Oil Change</h3><div class="big-number">'+fmt(v.sinceOil)+'</div></div><div class="card"><h3>Remaining to Next Oil</h3><div class="big-number">'+fmt(v.remaining)+'</div></div><div class="card"><h3>Status</h3>'+status(v.status)+'</div></div>';
+}
+function renderDriverVehicleSummary(){
+ const id=el('kmVehicle')?.value, v=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(id));
+ el('driverVehicleSummary').innerHTML=driverVehicleSummary(v);
+}
+async function confirmDriverSelection(e){
+ e.preventDefault();try{const r=await rpc('selectDriver',TOKEN,el('driverSelect').value);USER.selectedDriverName=r.driverName;await refreshData();document.getElementById('userLabel').textContent=r.driverName+' · Driver';render();}catch(err){alert(err.message);}
+}
+async function changeDriverSelection(){
+ try{await rpc('selectDriver',TOKEN,'');}catch(e){}
+ USER.selectedDriverName='';DATA.selectedDriverName='';await refreshData();render();
+}
+async function saveDriverKm(e){
+ e.preventDefault();const id=el('kmVehicle').value,reading=el('kmReading').value;
+ if(!reading){alert('Enter today’s odometer reading.');return;}
+ try{await rpc('submitKm',TOKEN,{vehicleId:id,readingKm:reading,notes:el('kmNotes').value});alert('KM reading saved.');await refreshData();render();}catch(err){alert(err.message);}
+}
+async function driverOilChanged(){
+ const id=el('kmVehicle').value, v=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(id));
+ const km=el('kmReading').value||v.current_km;
+ if(!confirm('Confirm that the oil has been changed for '+v.plate+' at '+km+' km?'))return;
+ try{await rpc('recordOilChange',TOKEN,{vehicleId:id,readingKm:km,oilType:'',notes:'Recorded from Driver Portal'});alert('Oil change recorded.');await refreshData();render();}catch(err){alert(err.message);}
 }
 function oilHtml(v){return '<div class="page-title"><div><h2>🛢️ Engine Oil Control</h2><p>Oil interval, last change and due status.</p></div></div><div class="panel"><form onsubmit="saveOil(event)"><div class="form-row"><div><label>Vehicle</label><select id="oilVehicle" required>'+v.map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+'</option>').join('')+'</select></div><div><label>Oil-change KM</label><input id="oilReading" type="number" min="0" required></div><div><label>Oil Type</label><input id="oilType" placeholder="e.g. 5W30"></div></div><label>Notes</label><textarea id="oilNotes"></textarea><div class="form-actions"><button class="btn primary">Record Oil Change</button></div></form></div><div class="panel">'+vehicleTable(v)+'</div>';}
 function ticketsHtml(rows){return '<div class="page-title"><div><h2>🎫 Vehicle Maintenance & Tickets</h2><p>Report and follow vehicle issues.</p></div></div><div class="panel"><form onsubmit="saveTicket(event)"><div class="form-row"><div><label>Vehicle</label><select id="ticketVehicle" required>'+(DATA.vehicles||[]).map(v=>'<option value="'+esc(v.vehicle_id)+'">'+esc(v.plate)+'</option>').join('')+'</select></div><div><label>Category</label><select id="ticketCategory"><option>Maintenance</option><option>Mechanical</option><option>Electrical</option><option>Tires</option><option>Accident</option></select></div><div><label>Priority</label><select id="ticketPriority"><option>Normal</option><option>High</option><option>Urgent</option></select></div></div><label>Issue Title</label><input id="ticketTitle" required><label>Description</label><textarea id="ticketDescription" required></textarea><div class="form-actions"><button class="btn primary">Submit Request</button></div></form></div><div class="panel"><h3>Requests Register</h3><div class="table-wrap"><table><thead><tr><th>Vehicle</th><th>Category</th><th>Title</th><th>Reported By</th><th>Date</th><th>Status</th></tr></thead><tbody>'+rows.map(t=>'<tr><td>'+esc(vehiclePlate(t.vehicle_id))+'</td><td>'+esc(t.category)+'</td><td>'+esc(t.title)+'</td><td>'+esc(t.reported_by)+'</td><td>'+esc(t.reported_at)+'</td><td>'+status(t.status)+'</td></tr>').join('')+'</tbody></table></div></div>';}

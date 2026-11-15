@@ -79,18 +79,37 @@ function initializeDriverPortalAccount(username, password) {
 function login(payload) {
   payload = payload || {};
   const username = String(payload.username || '').trim();
+  const normalizedUsername = username.toLowerCase();
   const password = String(payload.password || '');
   if (!username || !password) throw new Error('Enter your Owner or Driver username and password.');
+
+  // Match usernames and roles case-insensitively. Existing Users rows may contain
+  // lowercase "owner"/"driver" even though the portal roles are Owner/Driver.
   const rows = rows_('Users');
-  const u = rows.find(r => String(r.username) === username && String(r.is_active).toLowerCase() !== 'false');
-  if (!u || !['Owner','Driver'].includes(String(u.role)) || (u.role === 'Driver' && u.username !== 'Driver') || !verify_(u.password_hash,password)) {
+  const u = rows.find(r =>
+    String(r.username || '').trim().toLowerCase() === normalizedUsername &&
+    String(r.is_active).trim().toLowerCase() !== 'false'
+  );
+  const roleKey = u ? String(u.role || '').trim().toLowerCase() : '';
+  if (!u || !['owner','driver'].includes(roleKey) ||
+      (roleKey === 'driver' && normalizedUsername !== 'driver') ||
+      !verify_(u.password_hash, password)) {
     throw new Error('Invalid username or password.');
   }
-  const identity = {id:u.user_id,username:u.username,fullName:u.full_name,role:u.role,vehicleId:null,vehiclePlate:null};
-  const token = Utilities.getUuid()+Utilities.getUuid();
-  CacheService.getScriptCache().put('sess:'+token,JSON.stringify(identity),APP.SESSION_TTL);
-  audit_(identity.fullName,'LOGIN','Session',token.slice(0,8),'Signed in');
-  return {token,user:identity};
+
+  const role = roleKey === 'owner' ? 'Owner' : 'Driver';
+  const identity = {
+    id: u.user_id,
+    username: String(u.username || '').trim(),
+    fullName: u.full_name || (role === 'Owner' ? 'Fleet Owner' : 'Shared Driver Portal'),
+    role,
+    vehicleId: null,
+    vehiclePlate: null
+  };
+  const token = Utilities.getUuid() + Utilities.getUuid();
+  CacheService.getScriptCache().put('sess:' + token, JSON.stringify(identity), APP.SESSION_TTL);
+  audit_(identity.fullName, 'LOGIN', 'Session', token.slice(0, 8), 'Signed in');
+  return {token, user: identity};
 }
 function logout(token) {
   const user = session_(token);
@@ -105,6 +124,9 @@ function getAppData(token) {
   const activeVehicles = allVehicles.filter(v => String(v.status || 'Active').toLowerCase() !== 'inactive');
   const vehicleChoices = user.role === 'Driver' && !user.vehicleId
     ? activeVehicles.map(v => ({vehicle_id:String(v.vehicle_id),plate:String(v.plate||''),assigned_driver:String(v.assigned_driver||''),make:String(v.make||''),model:String(v.model||'')})).filter(v=>v.assigned_driver)
+    : [];
+  const driverNames = user.role === 'Driver' && !user.vehicleId
+    ? [...new Set(vehicleChoices.map(v => v.assigned_driver.trim()).filter(Boolean))].sort()
     : [];
   const allowedIds = user.role !== 'Driver' ? null : user.vehicleId
     ? [String(user.vehicleId)]

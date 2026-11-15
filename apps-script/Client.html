@@ -287,7 +287,17 @@ function tiresHtml(rows,vehicles){
  return '<div class="page-title"><div><h2>🛞 Tire Management</h2><p>Submit and track tire service requests.</p></div><button class="btn secondary" onclick="refreshAndRender()">↻ Refresh</button></div>'+
  '<div class="panel"><h3>New Tire Service Request</h3><form onsubmit="submitTireForm(event)"><div class="form-row"><div><label>Vehicle</label><select id="tireVehicle" required>'+opts+'</select></div><div><label>Request Type</label><select id="tireType"><option>Tire Inspection</option><option>Tire Replacement</option><option>Tire Repair</option><option>Tire Rotation</option><option>Tire Survey</option></select></div></div><label>Description / Tire Condition</label><textarea id="tireDescription" required></textarea><div class="form-actions"><button class="btn primary">Submit Tire Request</button></div></form></div>'+
  '<div class="panel"><h3>Tire Requests Register</h3><div class="table-wrap"><table><thead><tr><th>Vehicle</th><th>Type</th><th>Description</th><th>Requested By</th><th>Date</th><th>Status</th>'+(canManageFleet()?'<th>Action</th>':'')+'</tr></thead><tbody>'+
- (rows.length?rows.slice().reverse().map(x=>'<tr><td>'+esc(vehiclePlate(x.vehicle_id))+'</td><td>'+esc(x.request_type)+'</td><td>'+esc(x.description)+'</td><td>'+esc(x.requested_by)+'</td><td>'+esc(x.requested_at)+'</td><td>'+status(x.status)+'</td>'+(canManageFleet()?'<td><select id="tireStatus_'+esc(x.request_id)+'"><option>Open</option><option>In Progress</option><option>Completed</option><option>Rejected</option></select><button class="btn primary" onclick="changeTireStatus(\''+esc(x.request_id)+'\')">Save</button></td>':'')+'</tr>').join(''):'<tr><td colspan="7" class="empty">No tire requests recorded.</td></tr>')+'</tbody></table></div></div>';
+ (rows.length?rows.slice().reverse().map(x=>'<tr><td>'+esc(vehiclePlate(x.vehicle_id))+'</td><td>'+esc(x.request_type)+'</td><td>'+esc(x.description)+'</td><td>'+esc(x.requested_by)+'</td><td>'+esc(x.requested_at)+'</td><td>'+status(x.status)+'</td>'+(canManageFleet()?'<td><select id="tireStatus_'+esc(x.request_id)+'"><option>Open</option><option>In Progress</option><option>Completed</option><option>Rejected</option></select><button class="btn primary" onclick="changeTireStatus(\''+esc(x.request_id)+'\')">Save</button></td>':'')+'</tr>').join(''):'<tr><td colspan="7" class="empty">No tire requests recorded.</td></tr>')+'</tbody></table></div></div>'+tireSurveyRegisterHtml();
+}
+function tireSurveyRegisterHtml(){
+ const rows=DATA.tireSurveys||[];
+ if(!rows.length)return '';
+ return '<div class="panel"><h3>Initial 6-Tire Surveys</h3><div class="table-wrap"><table><thead><tr><th>Vehicle</th><th>Driver</th><th>Date</th><th>Status</th><th>Action</th></tr></thead><tbody>'+rows.slice().reverse().map(s=>'<tr><td>'+esc(vehiclePlate(s.vehicle_id))+'</td><td>'+esc(s.driver_name)+'</td><td>'+esc(s.survey_date)+'</td><td>'+status(s.status)+'</td><td>'+(canManageFleet()&&['Locked','Submitted'].includes(String(s.status))?'<button class="btn secondary" onclick="reopenSurvey(\\''+esc(s.vehicle_id)+'\\')">Reopen</button>':'—')+'</td></tr>').join('')+'</tbody></table></div></div>';
+}
+async function reopenSurvey(vehicleId){
+ const note=prompt('Reason for reopening this vehicle tire survey:');
+ if(note===null)return;
+ try{await rpc('reopenTireSurvey',TOKEN,vehicleId,note);alert('Tire survey reopened.');await refreshData();render();}catch(e){alert(e.message);}
 }
 function inspectionsHtml(rows,vehicles){
  const opts=vehicles.map(v=>'<option value="'+esc(v.vehicle_id)+'">'+esc(v.plate)+'</option>').join('');

@@ -1,5 +1,5 @@
 <script>
-let TOKEN='', USER=null, DATA=null, PAGE='dashboard';
+let TOKEN='', USER=null, DATA=null, PAGE='dashboard', DRIVER_TAB='km';
 const el=id=>document.getElementById(id);
 function rpc(name,...args){return new Promise((resolve,reject)=>google.script.run.withSuccessHandler(resolve).withFailureHandler(e=>reject(new Error(e.message||String(e))))[name](...args));}
 function setLoginMode(mode){
@@ -73,6 +73,10 @@ function renderNavigation(){
  document.querySelectorAll('.nav-btn').forEach(b=>{b.style.display=USER.role!=='Driver'||driverPages.includes(b.dataset.page)?'block':'none';});
  document.querySelectorAll('[data-nav-group]').forEach(g=>{g.style.display=[...g.querySelectorAll('.nav-btn')].some(b=>b.style.display!=='none')?'block':'none';});
 }function showPage(page){
+ if(USER?.role==='Driver'&&['fleet','km','maintenance','tickets','tires','tire-survey'].includes(page)){
+  DRIVER_TAB=page==='fleet'?'km':(page==='tickets'?'maintenance':page);
+  page='fleet';
+ }
  const allowed=['fleet','handovers','troubleshooter','km','maintenance','tickets','tires','tire-survey'];
  if(USER.role==='Driver'&&!allowed.includes(page))page='fleet';
  if(USER.role==='Driver'&&!DATA?.selectedDriverName&&page!=='fleet')page='fleet';
@@ -125,33 +129,38 @@ function kmHtml(v){
 }
 function driverPortalHtml(v){
  const selected=DATA.selectedDriverName||'';
+ const tabs=[
+  {id:'km',icon:'📏',label:'Add Daily KM'},
+  {id:'maintenance',icon:'🛠️',label:'Maintenance Issue Report'},
+  {id:'tires',icon:'🛞',label:'Tire Service Request'},
+  {id:'tire-survey',icon:'🛞',label:'Tire Survey'}
+ ];
+ const tabBar='<div class="driver-tabs" role="tablist">'+tabs.map(t=>'<button type="button" role="tab" aria-selected="'+(DRIVER_TAB===t.id?'true':'false')+'" class="driver-tab '+(DRIVER_TAB===t.id?'active':'')+'" onclick="selectPortalAction(\\''+t.id+'\\')"><span>'+t.icon+'</span><b>'+t.label+'</b></button>').join('')+'</div>';
  if(!selected){
   const choices=(DATA.vehicleChoices||[]).map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate||x.vehicle_id)+' - '+esc(x.assigned_driver||'Driver not assigned')+'</option>').join('');
   return '<div class="page-title"><div><h2>🚗 Fleet</h2><p>Fleet vehicle and maintenance actions.</p></div></div>'+
-   '<div class="driver-action-grid">'+
-   '<button class="driver-action" onclick="selectPortalAction(\'km\')"><span>📏</span><b>Add Daily KM</b><small>Record odometer reading</small></button>'+
-   '<button class="driver-action" onclick="selectPortalAction(\'maintenance\')"><span>🛠️</span><b>Maintenance Issue Report</b><small>Report a vehicle problem</small></button>'+
-   '<button class="driver-action" onclick="selectPortalAction(\'tires\')"><span>🛞</span><b>Tire Service Request</b><small>Request tire support</small></button>'+
-   '<button class="driver-action" onclick="selectPortalAction(\'tire-survey\')"><span>🛞</span><b>Tire Survey</b><small>Complete tire inspection</small></button></div>'+
-   '<div class="panel"><h3>Driver Portal</h3><label for="portalVehicle">Select Vehicle</label><select id="portalVehicle" onchange="choosePortalVehicle()"><option value="">-- Choose your vehicle --</option>'+choices+'</select><p class="muted">Please select your vehicle from the list above.</p></div>';
+   tabBar+'<div class="panel driver-select-panel"><h3>Driver Portal</h3><label for="portalVehicle">Select Vehicle</label><select id="portalVehicle" onchange="choosePortalVehicle()"><option value="">-- Choose your vehicle --</option>'+choices+'</select><p class="muted">Please select your assigned vehicle to continue.</p></div>';
  }
  if(!v.length)return '<div class="alert warning">No active vehicles are assigned to '+esc(selected)+'. Please contact Fleet Admin.</div>';
- const options=v.map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+' - '+esc(x.assigned_driver||selected)+'</option>').join('');
  const vehicle=v[0];
- const recent=(DATA.km||[]).filter(r=>String(r.vehicle_id)===String(vehicle.vehicle_id)).slice().reverse().slice(0,15);
- return '<div class="page-title"><div><h2>🚗 Fleet</h2><p>Fleet vehicle and maintenance actions.</p></div></div>'+
-  '<div class="driver-action-grid">'+
-   '<button class="driver-action" onclick="showPage(\'km\')"><span>📏</span><b>Add Daily KM</b><small>Record odometer reading</small></button>'+
-   '<button class="driver-action" onclick="showPage(\'maintenance\')"><span>🛠️</span><b>Maintenance Issue Report</b><small>Report a vehicle problem</small></button>'+
-   '<button class="driver-action" onclick="showPage(\'tires\')"><span>🛞</span><b>Tire Service Request</b><small>Request tire support</small></button>'+
-   '<button class="driver-action" onclick="showPage(\'tire-survey\')"><span>🛞</span><b>Tire Survey</b><small>Complete tire inspection</small></button>'+
-  '</div><div class="panel"><h3>Driver Portal</h3><label for="kmVehicle">Select Vehicle</label><select id="kmVehicle" onchange="renderDriverKmSummary()">'+options+'</select>'+
-  '<div id="driverKmSummary">'+driverVehicleSummary(vehicle)+'</div></div>'+
-  '<div class="panel"><h3>📏 Add Daily KM</h3><form onsubmit="saveDriverKm(event)"><label for="kmReading">Today\'s Odometer Reading (km) *</label><input id="kmReading" type="number" min="0" placeholder="Enter current odometer reading" required>'+
-  '<label for="kmNotes">Notes</label><textarea id="kmNotes" placeholder="Optional notes"></textarea>'+
-  '<div class="form-actions"><button class="btn primary" type="submit">Save Reading</button><button class="btn secondary" type="button" onclick="driverOilChanged()">🔧 Oil Changed</button></div></form></div>'+
-  '<div class="panel"><h3>Recent Readings</h3>'+ticketKmTable(recent)+'</div>'+
-  '<div class="driver-ticket-form">'+ticketsHtml(DATA.tickets||[])+'</div>';
+ const options=v.map(x=>'<option value="'+esc(x.vehicle_id)+'" '+(String(x.vehicle_id)===String(vehicle.vehicle_id)?'selected':'')+'>'+esc(x.plate)+' - '+esc(x.assigned_driver||selected)+'</option>').join('');
+ const vehiclePanel='<div class="panel driver-vehicle-panel"><div class="driver-vehicle-heading"><div><h3>Driver Portal</h3><p class="muted">Your assigned vehicle details</p></div><div class="driver-vehicle-select"><label for="kmVehicle">Select Vehicle</label><select id="kmVehicle" onchange="renderDriverKmSummary()">'+options+'</select></div></div><div id="driverKmSummary">'+driverVehicleSummary(vehicle)+'</div></div>';
+ let content='';
+ if(DRIVER_TAB==='km'){
+  const recent=(DATA.km||[]).filter(r=>String(r.vehicle_id)===String(vehicle.vehicle_id)).slice().reverse().slice(0,15);
+  content='<div class="page-title driver-section-title"><div><h2>📏 Add Daily KM</h2><p>Record today’s odometer reading for your assigned vehicle.</p></div></div>'+
+   '<div class="panel driver-form-panel"><form onsubmit="saveDriverKm(event)"><label for="kmReading">Today’s Odometer Reading (km) *</label><input id="kmReading" type="number" min="0" placeholder="Enter current odometer reading" required>'+
+   '<label for="kmNotes">Notes</label><textarea id="kmNotes" placeholder="Optional notes"></textarea>'+
+   '<div class="form-actions"><button class="btn primary" type="submit">Save Daily KM</button><button class="btn secondary" type="button" onclick="driverOilChanged()">🔧 Record Oil Change</button></div></form></div>'+
+   '<div class="panel"><h3>My Recent KM Records</h3>'+ticketKmTable(recent)+'</div>';
+ }else if(DRIVER_TAB==='maintenance'){
+  content='<div class="driver-ticket-form">'+ticketsHtml(DATA.tickets||[])+'</div>';
+ }else if(DRIVER_TAB==='tires'){
+  content=tiresHtml(DATA.tireRequests||[],v);
+ }else if(DRIVER_TAB==='tire-survey'){
+  content=tireSurveyHtml(v);
+ }
+ return '<div class="page-title"><div><h2>🚗 Fleet</h2><p>Fleet vehicle and maintenance actions.</p></div></div>'+tabBar+vehiclePanel+content;
 }
 async function choosePortalVehicle(){
  const id=el('portalVehicle')?.value;
@@ -169,7 +178,9 @@ async function choosePortalVehicle(){
 }
 function selectPortalAction(page){
  if(!USER?.vehicleId){alert('Please select your vehicle number first.');return;}
- showPage(page);
+ DRIVER_TAB=page==='tickets'?'maintenance':page;
+ PAGE='fleet';
+ render();
 }
 
 function driverKmHtml(v){

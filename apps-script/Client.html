@@ -124,27 +124,45 @@ function kmHtml(v){
  return '<div class="page-title"><div><h2>📏 Daily KM Control</h2><p>Record the current odometer reading for the selected vehicle.</p></div></div><div class="panel"><form onsubmit="saveKm(event)"><div class="form-row"><div><label>Vehicle</label><select id="kmVehicle" required>'+opts+'</select></div><div><label>Current Odometer (KM)</label><input id="kmReading" type="number" min="0" required></div><div><label>Driver Name</label><input id="kmDriver" value="'+esc(USER.fullName||'')+'" required></div></div><label>Notes</label><textarea id="kmNotes"></textarea><div class="form-actions"><button class="btn success-btn">Save KM Reading</button></div></form></div><div class="panel"><h3>Recent KM Records</h3><div class="table-wrap"><table><thead><tr><th>Date</th><th>Vehicle ID</th><th>Reading</th><th>Driver</th></tr></thead><tbody>'+(DATA.km||[]).slice(-30).reverse().map(r=>'<tr><td>'+esc(r.reading_date)+'</td><td>'+esc(r.vehicle_id)+'</td><td>'+fmt(r.reading_km)+'</td><td>'+esc(r.driver_name)+'</td></tr>').join('')+'</tbody></table></div></div>';
 }
 function driverPortalHtml(v){
- if(!DATA.selectedDriverName){
-  const names=(DATA.driverNames||[]).map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join('');
-  return '<div class="page-title"><div><h2>🚗 Fleet</h2><p>Driver Portal · Select your name to load your assigned vehicles.</p></div></div>'+
-   '<div class="panel driver-select-panel"><h3>👤 Select Driver</h3><form onsubmit="confirmDriverSelection(event)"><label>Driver Name</label>'+
-   '<select id="driverSelect" required><option value="">Select your name</option>'+names+'</select>'+
-   '<div class="form-actions"><button class="btn primary">Continue to Driver Portal</button></div></form>'+
-   '<div class="alert info">Only vehicles assigned to the selected driver will be displayed. If your name or vehicle is missing, contact Fleet Admin.</div></div>';
+ const selected=DATA.selectedDriverName||'';
+ if(!selected){
+  const choices=(DATA.vehicleChoices||[]).map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+' - '+esc(x.assigned_driver)+'</option>').join('');
+  return '<div class="page-title"><div><h2>🚗 Fleet</h2><p>Fleet vehicle and maintenance actions.</p></div></div>'+
+   '<div class="driver-action-grid">'+
+   '<button class="driver-action" onclick="selectPortalAction(\'km\')"><span>📏</span><b>Add Daily KM</b><small>Record odometer reading</small></button>'+
+   '<button class="driver-action" onclick="selectPortalAction(\'maintenance\')"><span>🛠️</span><b>Maintenance Issue Report</b><small>Report a vehicle problem</small></button>'+
+   '<button class="driver-action" onclick="selectPortalAction(\'tires\')"><span>🛞</span><b>Tire Service Request</b><small>Request tire support</small></button>'+
+   '<button class="driver-action" onclick="selectPortalAction(\'tire-survey\')"><span>🛞</span><b>Tire Survey</b><small>Complete tire inspection</small></button></div>'+
+   '<div class="panel"><h3>Driver Portal</h3><label for="portalVehicle">Select Vehicle</label><select id="portalVehicle" onchange="choosePortalVehicle()"><option value="">-- Choose your vehicle --</option>'+choices+'</select><p class="muted">Please select your vehicle from the list above.</p></div>';
  }
- if(!v.length)return '<div class="alert warning">No active vehicles are assigned to '+esc(DATA.selectedDriverName)+'. Please contact Fleet Admin.</div>';
- const options=v.map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+' - '+esc(x.assigned_driver||DATA.selectedDriverName||'')+'</option>').join('');
+ if(!v.length)return '<div class="alert warning">No active vehicles are assigned to '+esc(selected)+'. Please contact Fleet Admin.</div>';
+ const options=v.map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+' - '+esc(x.assigned_driver||selected)+'</option>').join('');
  const ticketForm=ticketsHtml(DATA.tickets||[]);
- return '<div class="page-title"><div><h2>🚗 Fleet</h2><p>Fleet vehicle and maintenance actions.</p></div><span class="badge safe">'+v.length+' assigned vehicle(s)</span></div>'+
+ return '<div class="page-title"><div><h2>🚗 Fleet</h2><p>Fleet vehicle and maintenance actions.</p></div></div>'+
   '<div class="driver-action-grid">'+
    '<button class="driver-action" onclick="showPage(\'km\')"><span>📏</span><b>Add Daily KM</b><small>Record odometer reading</small></button>'+
    '<button class="driver-action" onclick="showPage(\'maintenance\')"><span>🛠️</span><b>Maintenance Issue Report</b><small>Report a vehicle problem</small></button>'+
    '<button class="driver-action" onclick="showPage(\'tires\')"><span>🛞</span><b>Tire Service Request</b><small>Request tire support</small></button>'+
    '<button class="driver-action" onclick="showPage(\'tire-survey\')"><span>🛞</span><b>Tire Survey</b><small>Complete tire inspection</small></button>'+
-  '</div>'+
-  '<div class="panel"><h3>Driver Portal</h3><div class="form-row"><div><label>Select Vehicle</label><select id="fleetVehicle" onchange="renderFleetVehicleSummary()">'+options+'</select></div></div><div id="fleetVehicleSummary">'+driverVehicleSummary(v[0])+'</div></div>'+
-  '<div class="driver-ticket-form">'+ticketForm+'</div>';
+  '</div><div class="panel"><h3>Driver Portal</h3><label>Select Vehicle</label><select id="fleetVehicle" onchange="renderFleetVehicleSummary()">'+options+'</select><div id="fleetVehicleSummary">'+driverVehicleSummary(v[0])+'</div></div><div class="driver-ticket-form">'+ticketForm+'</div>';
 }
+async function choosePortalVehicle(){
+ const id=el('portalVehicle')?.value;
+ const choice=(DATA.vehicleChoices||[]).find(x=>String(x.vehicle_id)===String(id));
+ if(!choice)return;
+ try{
+  await rpc('selectDriver',TOKEN,choice.assigned_driver);
+  USER.selectedDriverName=choice.assigned_driver;
+  await refreshData();
+  document.getElementById('userLabel').textContent=choice.assigned_driver+' · Driver';
+  renderNavigation();showPage('fleet');
+ }catch(err){alert(err.message);}
+}
+function selectPortalAction(page){
+ if(!DATA.selectedDriverName){alert('Please select your vehicle first.');return;}
+ showPage(page);
+}
+
 function driverKmHtml(v){
  const options=v.map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+'</option>').join('');
  const recent=(DATA.km||[]).slice().reverse().slice(0,15);

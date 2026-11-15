@@ -216,7 +216,7 @@ function submitTireSurvey(token, payload) {
     payload.tires.forEach(t => { byPosition[String(t.position)] = t; });
     positions.forEach(p => {
       const t = byPosition[p];
-      if (!t || !String(t.manufacturerSerial||'').trim() || !String(t.brand||'').trim() || !String(t.model||'').trim() || !String(t.size||'').trim() || !Number.isFinite(Number(t.treadMm)) || Number(t.treadMm) < 0 || !Number.isFinite(Number(t.pressurePsi)) || Number(t.pressurePsi) < 0 || !String(t.photoData||'').startsWith('data:image/')) throw new Error('Complete all required fields and attach a photo for: ' + p);
+      if (!t || !String(t.manufacturerSerial||'').trim() || !String(t.brand||'').trim() || !String(t.model||'').trim() || !String(t.size||'').trim() || !String(t.treadMm||'').trim() || !Number.isFinite(Number(t.treadMm)) || Number(t.treadMm) < 0 || !String(t.pressurePsi||'').trim() || !Number.isFinite(Number(t.pressurePsi)) || Number(t.pressurePsi) < 0 || !String(t.photoData||'').startsWith('data:image/')) throw new Error('Complete all required fields and attach a photo for: ' + p);
     });
     const folder = tireSurveyFolder_();
     const surveyId = Utilities.getUuid(), now = new Date(), tireRows = [];

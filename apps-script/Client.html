@@ -80,7 +80,7 @@ function renderNavigation(){
  });
 }
 function showPage(page){
- const driverPages=['km','maintenance','tickets','tires'];
+ const driverPages=['km','maintenance','tickets','tires','tire-survey'];
  if(USER.role==='Driver'&&!driverPages.includes(page)) page='km';
  PAGE=page;
  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===page));

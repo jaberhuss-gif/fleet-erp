@@ -63,11 +63,12 @@ function setupSharedDriverPortal() {
 }
 
 function initializeDriverPortalAccount(username, password) {
-  if (!username || !/^\d{9}$/.test(String(password))) throw new Error('The shared Driver Portal password must be exactly 9 digits.');
+  if (String(username||'').trim() !== 'Driver') throw new Error('The shared Driver Portal username must be exactly Driver.');
+  if (!/^\d{9}$/.test(String(password))) throw new Error('The shared Driver Portal password must be exactly 9 digits.');
   const sh = sheet_('Users');
   const rows = rows_('Users');
   if (rows.some(r => String(r.role) === 'Driver')) throw new Error('A Driver Portal account already exists.');
-  const normalized = String(username).trim().toLowerCase();
+  const normalized = 'Driver';
   if (rows.some(r => String(r.username).toLowerCase() === normalized)) throw new Error('This username already exists.');
   const salt = Utilities.getUuid();
   sh.appendRow([Utilities.getUuid(),normalized,salt+':'+hash_(salt+String(password)),'Shared Driver Portal','Driver',true,new Date()]);
@@ -134,18 +135,18 @@ function getAppData(token) {
     maintenance:readRecords('Maintenance'), tireRequests:readRecords('Tire_Requests'),
     inspections:readRecords('Inspections'), oilChanges:readRecords('Oil_Changes'),
     tireSurveys:readRecords('Tire_Surveys'), tireSurveyTires:readRecords('Tire_Survey_Tires'),
-    driverNames, selectedDriverName:user.selectedDriverName||'', serverTime:new Date().toISOString()
+    driverNames, selectedDriverName:user.selectedDriverName||'', requiresDriverSelection:user.role==='Driver'&&!user.selectedDriverName, serverTime:new Date().toISOString()
   };
 }
 function selectDriver(token, driverName) {
   const user = requireSession_(token);
   if (user.role !== 'Driver' || user.vehicleId) throw new Error('This action is only available to the shared Driver Portal.');
   const name = String(driverName||'').trim();
-  if (!name) {
-    delete user.selectedDriverName;
-    CacheService.getScriptCache().put('sess:'+token,JSON.stringify(user),APP.SESSION_TTL);
-    return {ok:true,driverName:'',vehicleCount:0};
+  if (user.selectedDriverName) {
+    if (String(user.selectedDriverName).toLowerCase() !== name.toLowerCase()) throw new Error('Driver identity is locked for this session. Log out and sign in again to select a driver.');
+    return {ok:true,driverName:user.selectedDriverName,vehicleCount:rows_('Vehicles').filter(v=>String(v.assigned_driver||'').trim().toLowerCase()===String(user.selectedDriverName).toLowerCase() && String(v.status||'Active').toLowerCase()!=='inactive').length};
   }
+  if (!name) throw new Error('Select your driver name.');
   const matches = rows_('Vehicles').filter(v => String(v.assigned_driver||'').trim().toLowerCase() === name.toLowerCase() && String(v.status||'Active').toLowerCase() !== 'inactive');
   if (!matches.length) throw new Error('No active vehicles are assigned to this driver. Ask Fleet Admin to check the vehicle assignment.');
   user.selectedDriverName = String(matches[0].assigned_driver).trim();
@@ -170,8 +171,12 @@ function submitKm(token, payload) {
 }
 function createTicket(token,payload) {
   const user = requireSession_(token), v = permittedVehicle_(user,payload.vehicleId);
+  const category=String(payload.category||'').trim(), title=String(payload.title||'Maintenance request').trim();
+  const description=String(payload.description||'').trim(), priority=String(payload.priority||'High').trim();
+  if(!category||!description) throw new Error('Select an issue type and describe the problem.');
+  if(!['Low','Medium','High','Critical'].includes(priority)) throw new Error('Invalid issue priority.');
   const now = new Date(), id = Utilities.getUuid();
-  sheet_('Tickets').appendRow([id,v.vehicle_id,String(payload.category||'Maintenance'),String(payload.title||'Maintenance request'),String(payload.description||''),String(payload.priority||'Normal'),'Open',driverActor_(user),now,'', '', '']);
+  sheet_('Tickets').appendRow([id,v.vehicle_id,category,title,description,priority,'Open',driverActor_(user),now,'', '', '']);
   audit_(driverActor_(user),'CREATE','Ticket',id,'Vehicle '+v.plate);
   return {ok:true,id};
 }
@@ -326,7 +331,7 @@ function session_(token) {
   return raw ? JSON.parse(raw) : null;
 }
 function requireSession_(token) { const u=session_(token); if(!u) throw new Error('Session expired. Please sign in again.'); return u; }
-function requireOwner_(token) { const u=requireSession_(token); if(!['Owner','Admin','FleetSupervisor'].includes(u.role)) throw new Error('You do not have permission for this action.'); return u; }
+function requireOwner_(token) { const u=requireSession_(token); if(u.role!=='Owner') throw new Error('You do not have permission for this action.'); return u; }
 function permittedVehicle_(user,id) {
   const v=rows_('Vehicles').find(x=>String(x.vehicle_id)===String(id));
   if(!v) throw new Error('Vehicle not found.');
@@ -340,7 +345,8 @@ function driverActor_(user) { return user.role==='Driver' && user.selectedDriver
 function enrichVehicle_(v) {
   const current=Number(v.current_km||0), last=Number(v.last_oil_km||0), interval=Number(v.oil_interval_km||5000);
   const since=Math.max(0,current-last), remaining=interval-since;
-  return Object.assign({},v,{sinceOil:since,remaining,status:remaining<=0?'Urgent Overdue':remaining<=500?'Warning':'Safe'});
+  const oilStatus=remaining<=0?'Urgent Overdue':remaining<=500?'Warning':'Safe';
+  return Object.assign({},v,{vehicleStatus:v.status||'Active',sinceOil:since,remaining,oilStatus});
 }
 function sheet_(name) { const s=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name); if(!s) throw new Error('Missing sheet '+name+'. Run setupFleetERP first.'); return s; }
 function rows_(name) {

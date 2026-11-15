@@ -349,13 +349,49 @@ function addTireStock(token,payload) {
     serials.forEach(serial=>{
       const id=Utilities.getUuid(); tireIds.push(id);
       inventorySheet.appendRow([id,serial,brand,model,size,warehouse,receivedDate,costPerTire,'In Stock',String(payload.notes||''),user.fullName,now,'']);
-      movementSheet.appendRow([Utilities.getUuid(),id,'Received','', '', '',1,now,'',user.fullName,'Initial stock receipt']);
+      movementSheet.appendRow([Utilities.getUuid(),id,'Received','', '', '',1,now,'',user.fullName,'Received into '+warehouse+(payload.notes?' | '+String(payload.notes):'')]);
       audit_(user.fullName,'RECEIVE','Tire_Inventory',id,serial+' received into '+warehouse);
     });
     return {ok:true,quantity:tireIds.length,tireIds};
   } finally { lock.releaseLock(); }
 }
 
+function tireSiteKey_(value) {
+  const site=String(value||'').trim();
+  if(!site) return '';
+  if(/^main warehouse$/i.test(site)||/^riyadh(?:\\s*[-–—].*)?$/i.test(site)) return 'riyadh';
+  return site.toLowerCase().replace(/\\s+/g,' ');
+}
+
+function transferTireStock(token,payload) {
+  const user=requireOwner_(token);
+  payload=payload||{};
+  const source=String(payload.sourceSite||'').trim();
+  const destination=String(payload.destinationSite||'').trim();
+  const serials=Array.isArray(payload.serials)?payload.serials.map(x=>String(x||'').trim()).filter(Boolean):[];
+  if(!source||!destination) throw new Error('Select the source site and enter the destination site.');
+  if(tireSiteKey_(source)===tireSiteKey_(destination)) throw new Error('Source and destination sites must be different.');
+  if(!serials.length) throw new Error('Enter at least one tire serial number to transfer.');
+  if(new Set(serials.map(x=>x.toLowerCase())).size!==serials.length) throw new Error('Duplicate serial numbers are not allowed.');
+  const lock=LockService.getScriptLock(); lock.waitLock(10000);
+  try {
+    const all=rows_('Tire_Inventory');
+    const selected=serials.map(serial=>{
+      const tire=all.find(t=>String(t.manufacturer_serial||'').trim().toLowerCase()===serial.toLowerCase());
+      if(!tire) throw new Error('Tire serial not found: '+serial);
+      if(String(tire.status)!=='In Stock') throw new Error('Tire '+serial+' is not available in stock.');
+      if(tireSiteKey_(tire.warehouse)!==tireSiteKey_(source)) throw new Error('Tire '+serial+' is not in '+source+'. Current site: '+String(tire.warehouse||'Not assigned'));
+      return tire;
+    });
+    const now=new Date(), movementSheet=sheet_('Tire_Stock_Movements');
+    selected.forEach(tire=>{
+      updateById_('Tire_Inventory','tire_id',tire.tire_id,{warehouse:destination});
+      movementSheet.appendRow([Utilities.getUuid(),tire.tire_id,'Transfer','', '', '',1,now,'',user.fullName,'Transferred from '+source+' to '+destination]);
+      audit_(user.fullName,'TRANSFER','Tire_Inventory',tire.tire_id,tire.manufacturer_serial+' from '+source+' to '+destination);
+    });
+    return {ok:true,quantity:selected.length,source,destination};
+  } finally { lock.releaseLock(); }
+}
 function installTireForRequest(token,payload) {
   const user=requireOwner_(token);
   payload=payload||{};
@@ -376,6 +412,9 @@ function installTireForRequest(token,payload) {
     const tire=rows_('Tire_Inventory').find(t=>String(t.tire_id)===tireId);
     if(!tire) throw new Error('Tire not found in inventory.');
     if(String(tire.status)!=='In Stock') throw new Error('This tire is no longer available in stock.');
+    const vehicleSite=String(vehicle.site||'').trim();
+    if(!vehicleSite) throw new Error('This vehicle has no site assigned in Vehicle Master. Assign its site before installing a tire.');
+    if(tireSiteKey_(tire.warehouse)!==tireSiteKey_(vehicleSite)) throw new Error('This tire is currently at '+String(tire.warehouse||'an unknown site')+', while the vehicle belongs to '+vehicleSite+'. Transfer the tire to the vehicle site first.');
     const duplicate=rows_('Tire_Installations').some(x=>String(x.tire_id)===tireId&&String(x.status)==='Installed');
     if(duplicate) throw new Error('This tire already has an active installation record.');
     const now=new Date(), installationId=Utilities.getUuid();

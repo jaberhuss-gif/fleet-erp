@@ -132,7 +132,8 @@ function getAppData(token) {
     user, vehicles:visibleVehicles,
     tickets:readRecords('Tickets'), km:readRecords('KM_Records'),
     maintenance:readRecords('Maintenance'), tireRequests:readRecords('Tire_Requests'),
-    inspections:readRecords('Inspections'), oilChanges:readRecords('Oil_Changes'),\n    tireSurveys:readRecords('Tire_Surveys'), tireSurveyTires:readRecords('Tire_Survey_Tires'),
+    inspections:readRecords('Inspections'), oilChanges:readRecords('Oil_Changes'),
+    tireSurveys:readRecords('Tire_Surveys'), tireSurveyTires:readRecords('Tire_Survey_Tires'),
     driverNames, selectedDriverName:user.selectedDriverName||'', serverTime:new Date().toISOString()
   };
 }

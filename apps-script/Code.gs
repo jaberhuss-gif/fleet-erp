@@ -207,6 +207,7 @@ function submitTireSurvey(token, payload) {
   const positions = ['Front Left','Front Right','Rear Left','Rear Right','Spare','Sixth'];
   if (!Array.isArray(payload.tires) || payload.tires.length !== 6) throw new Error('Complete all six tire sections.');
   const lock = LockService.getScriptLock(); lock.waitLock(10000);
+  const createdFiles = [];
   try {
     const existing = rows_('Tire_Surveys').filter(x => String(x.vehicle_id) === String(v.vehicle_id) && ['Locked','Submitted'].includes(String(x.status)));
     if (existing.length) throw new Error('This vehicle already has a submitted 6-tire survey. Contact Fleet Admin if it must be reopened.');
@@ -214,36 +215,31 @@ function submitTireSurvey(token, payload) {
     payload.tires.forEach(t => { byPosition[String(t.position)] = t; });
     positions.forEach(p => {
       const t = byPosition[p];
-      if (!t || !String(t.manufacturerSerial||'').trim() || !String(t.brand||'').trim() ||
-          !String(t.model||'').trim() || !String(t.size||'').trim() ||
-          !Number.isFinite(Number(t.treadMm)) || Number(t.treadMm) < 0 ||
-          !Number.isFinite(Number(t.pressurePsi)) || Number(t.pressurePsi) < 0 ||
-          !String(t.photoData||'').startsWith('data:image/')) {
-        throw new Error('Complete all required fields and attach a photo for: ' + p);
-      }
+      if (!t || !String(t.manufacturerSerial||'').trim() || !String(t.brand||'').trim() || !String(t.model||'').trim() || !String(t.size||'').trim() || !Number.isFinite(Number(t.treadMm)) || Number(t.treadMm) < 0 || !Number.isFinite(Number(t.pressurePsi)) || Number(t.pressurePsi) < 0 || !String(t.photoData||'').startsWith('data:image/')) throw new Error('Complete all required fields and attach a photo for: ' + p);
     });
     const folder = tireSurveyFolder_();
-    const surveyId = Utilities.getUuid(), now = new Date();
-    sheet_('Tire_Surveys').appendRow([surveyId,v.vehicle_id,user.selectedDriverName,now,String(payload.notes||''),'Locked',now]);
+    const surveyId = Utilities.getUuid(), now = new Date(), tireRows = [];
     positions.forEach(position => {
       const t = byPosition[position];
-      const match = String(t.photoData).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+      const match = String(t.photoData).match(/^data:(image\\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
       if (!match) throw new Error('Invalid photo file for ' + position);
       const bytes = Utilities.base64Decode(match[2]);
       if (bytes.length > 1500000) throw new Error('Photo is too large for ' + position + '. Please retake it.');
       const ext = match[1].split('/')[1].replace('jpeg','jpg');
-      const file = folder.createFile(Utilities.newBlob(bytes,match[1],v.plate+'_'+position.replace(/\s/g,'_')+'_'+surveyId+'.'+ext));
-      sheet_('Tire_Survey_Tires').appendRow([
-        Utilities.getUuid(),surveyId,v.vehicle_id,position,String(t.manufacturerSerial),String(t.brand),String(t.model),
-        String(t.size),Number(t.manufacturingYear||0),Number(t.treadMm),Number(t.pressurePsi),
-        String(t.conditionNotes||''),file.getId(),file.getUrl(),now
-      ]);
+      const file = folder.createFile(Utilities.newBlob(bytes,match[1],v.plate+'_'+position.replace(/\\s/g,'_')+'_'+surveyId+'.'+ext));
+      createdFiles.push(file);
+      tireRows.push([Utilities.getUuid(),surveyId,v.vehicle_id,position,String(t.manufacturerSerial),String(t.brand),String(t.model),String(t.size),Number(t.manufacturingYear||0),Number(t.treadMm),Number(t.pressurePsi),String(t.conditionNotes||''),file.getId(),file.getUrl(),now]);
     });
+    sheet_('Tire_Surveys').appendRow([surveyId,v.vehicle_id,user.selectedDriverName,now,String(payload.notes||''),'Locked',now]);
+    const tireSheet = sheet_('Tire_Survey_Tires');
+    tireSheet.getRange(tireSheet.getLastRow()+1,1,tireRows.length,tireRows[0].length).setValues(tireRows);
     audit_(user.selectedDriverName,'CREATE','Tire_Survey',surveyId,'Six-tire survey submitted and vehicle locked: '+v.plate);
     return {ok:true,surveyId,vehiclePlate:v.plate,status:'Locked'};
+  } catch (e) {
+    createdFiles.forEach(file => { try { file.setTrashed(true); } catch (ignored) {} });
+    throw e;
   } finally { lock.releaseLock(); }
 }
-
 function reopenTireSurvey(token, vehicleId, notes) {
   const user = requireOwner_(token);
   const surveys = rows_('Tire_Surveys').filter(x => String(x.vehicle_id) === String(vehicleId) && ['Locked','Submitted'].includes(String(x.status)));

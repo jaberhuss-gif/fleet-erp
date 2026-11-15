@@ -18,7 +18,7 @@ async function doLogin(payload){
 }
 async function openApp(){
  document.getElementById('loginView').classList.add('hidden');document.getElementById('appView').classList.remove('hidden');
- document.getElementById('userLabel').textContent=(USER.fullName||USER.username)+' · '+USER.role;
+ document.getElementById('userLabel').textContent=(USER.role==='Driver'?(DATA?.selectedDriverName||'Shared Driver Portal'):(USER.fullName||USER.username))+' · '+USER.role;
  renderNavigation();
  await refreshData();showPage(USER.role==='Driver'?'km':'dashboard');
 }
@@ -121,9 +121,13 @@ async function saveDriverKm(e){
 }
 async function driverOilChanged(){
  const id=el('kmVehicle').value, v=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(id));
- const km=el('kmReading').value||v.current_km;
+ const km=Number(el('kmReading').value||v.current_km);
  if(!confirm('Confirm that the oil has been changed for '+v.plate+' at '+km+' km?'))return;
- try{await rpc('recordOilChange',TOKEN,{vehicleId:id,readingKm:km,oilType:'',notes:'Recorded from Driver Portal'});alert('Oil change recorded.');await refreshData();render();}catch(err){alert(err.message);}
+ try{
+  if(km>Number(v.current_km||0)) await rpc('submitKm',TOKEN,{vehicleId:id,readingKm:km,notes:'Odometer reading recorded with oil change'});
+  await rpc('recordOilChange',TOKEN,{vehicleId:id,readingKm:km,oilType:'',notes:'Recorded from Driver Portal'});
+  alert('Oil change recorded.');await refreshData();render();
+ }catch(err){alert(err.message);}
 }
 function oilHtml(v){return '<div class="page-title"><div><h2>🛢️ Engine Oil Control</h2><p>Oil interval, last change and due status.</p></div></div><div class="panel"><form onsubmit="saveOil(event)"><div class="form-row"><div><label>Vehicle</label><select id="oilVehicle" required>'+v.map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+'</option>').join('')+'</select></div><div><label>Oil-change KM</label><input id="oilReading" type="number" min="0" required></div><div><label>Oil Type</label><input id="oilType" placeholder="e.g. 5W30"></div></div><label>Notes</label><textarea id="oilNotes"></textarea><div class="form-actions"><button class="btn primary">Record Oil Change</button></div></form></div><div class="panel">'+vehicleTable(v)+'</div>';}
 function ticketsHtml(rows){return '<div class="page-title"><div><h2>🎫 Vehicle Maintenance & Tickets</h2><p>Report and follow vehicle issues.</p></div></div><div class="panel"><form onsubmit="saveTicket(event)"><div class="form-row"><div><label>Vehicle</label><select id="ticketVehicle" required>'+(DATA.vehicles||[]).map(v=>'<option value="'+esc(v.vehicle_id)+'">'+esc(v.plate)+'</option>').join('')+'</select></div><div><label>Category</label><select id="ticketCategory"><option>Maintenance</option><option>Mechanical</option><option>Electrical</option><option>Tires</option><option>Accident</option></select></div><div><label>Priority</label><select id="ticketPriority"><option>Normal</option><option>High</option><option>Urgent</option></select></div></div><label>Issue Title</label><input id="ticketTitle" required><label>Description</label><textarea id="ticketDescription" required></textarea><div class="form-actions"><button class="btn primary">Submit Request</button></div></form></div><div class="panel"><h3>Requests Register</h3><div class="table-wrap"><table><thead><tr><th>Vehicle</th><th>Category</th><th>Title</th><th>Reported By</th><th>Date</th><th>Status</th></tr></thead><tbody>'+rows.map(t=>'<tr><td>'+esc(vehiclePlate(t.vehicle_id))+'</td><td>'+esc(t.category)+'</td><td>'+esc(t.title)+'</td><td>'+esc(t.reported_by)+'</td><td>'+esc(t.reported_at)+'</td><td>'+status(t.status)+'</td></tr>').join('')+'</tbody></table></div></div>';}

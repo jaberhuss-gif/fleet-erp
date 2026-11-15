@@ -133,16 +133,16 @@ function driverPortalHtml(v){
    '<div class="alert info">Only vehicles assigned to the selected driver will be displayed. If your name or vehicle is missing, contact Fleet Admin.</div></div>';
  }
  if(!v.length)return '<div class="alert warning">No active vehicles are assigned to '+esc(DATA.selectedDriverName)+'. Please contact Fleet Admin.</div>';
- const options=v.map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+' - '+esc(x.make||'')+' '+esc(x.model||'')+'</option>').join('');
+ const options=v.map(x=>'<option value="'+esc(x.vehicle_id)+'">'+esc(x.plate)+' - '+esc(x.assigned_driver||DATA.selectedDriverName||'')+'</option>').join('');
  const ticketForm=ticketsHtml(DATA.tickets||[]);
- return '<div class="page-title"><div><h2>🚗 Fleet</h2><p>Fleet vehicle and maintenance actions · Driver: '+esc(DATA.selectedDriverName)+'</p></div><span class="badge safe">'+v.length+' assigned vehicle(s)</span></div>'+
+ return '<div class="page-title"><div><h2>🚗 Fleet</h2><p>Fleet vehicle and maintenance actions.</p></div><span class="badge safe">'+v.length+' assigned vehicle(s)</span></div>'+
   '<div class="driver-action-grid">'+
    '<button class="driver-action" onclick="showPage(\'km\')"><span>📏</span><b>Add Daily KM</b><small>Record odometer reading</small></button>'+
    '<button class="driver-action" onclick="showPage(\'maintenance\')"><span>🛠️</span><b>Maintenance Issue Report</b><small>Report a vehicle problem</small></button>'+
    '<button class="driver-action" onclick="showPage(\'tires\')"><span>🛞</span><b>Tire Service Request</b><small>Request tire support</small></button>'+
    '<button class="driver-action" onclick="showPage(\'tire-survey\')"><span>🛞</span><b>Tire Survey</b><small>Complete tire inspection</small></button>'+
   '</div>'+
-  '<div class="panel"><h3>Assigned Vehicles</h3><div class="form-row"><div><label>Select Vehicle</label><select id="fleetVehicle" onchange="renderFleetVehicleSummary()">'+options+'</select></div></div><div id="fleetVehicleSummary">'+driverVehicleSummary(v[0])+'</div></div>'+
+  '<div class="panel"><h3>Driver Portal</h3><div class="form-row"><div><label>Select Vehicle</label><select id="fleetVehicle" onchange="renderFleetVehicleSummary()">'+options+'</select></div></div><div id="fleetVehicleSummary">'+driverVehicleSummary(v[0])+'</div></div>'+
   '<div class="driver-ticket-form">'+ticketForm+'</div>';
 }
 function driverKmHtml(v){

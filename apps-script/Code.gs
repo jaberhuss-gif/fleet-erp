@@ -557,7 +557,7 @@ function saveInspection(token,payload) {
   }
   const id=Utilities.getUuid(), now=new Date();
   const sh=sheet_('Inspections');
-  sh.appendRow([id,v.vehicle_id,type,due,'','Pending',Number(payload.cost||0),String(payload.notes||''),now,closeDate,'','','','','','', '']);
+  sh.appendRow([id,v.vehicle_id,type,due,'','Pending',Number(payload.cost||0),String(payload.notes||''),now,closeDate,'','','','','','']);
   audit_(user.fullName,'CREATE','Inspection',id,type+' inspection for '+v.plate);
   return {ok:true,id};
 }
@@ -618,9 +618,13 @@ function confirmInspectionFromLink(token,answer) {
       const base=new Date(now);base.setHours(12,0,0,0);
       const months=type==='Annual'?12:6, next=new Date(base);next.setMonth(next.getMonth()+months);
       const existing=rows_('Inspections').some(x=>String(x.vehicle_id)===vehicleId&&String(x.inspection_type)===type&&String(x.status)!=='Completed'&&String(x.due_date)===next.toISOString().slice(0,10));
-      if(!existing) sh.appendRow([Utilities.getUuid(),vehicleId,type,next.toISOString().slice(0,10),'','Pending',0,'Automatically scheduled after driver WhatsApp confirmation',now,'','','','','','','', '']);
+      if(!existing) sh.appendRow([Utilities.getUuid(),vehicleId,type,next.toISOString().slice(0,10),'','Pending',0,'Automatically scheduled after driver WhatsApp confirmation',now,'','','','','','']);
       if(type==='Annual') {
         rows_('Inspections').filter(x=>String(x.vehicle_id)===vehicleId&&String(x.inspection_type)==='6-Month'&&String(x.status)!=='Completed').forEach(x=>updateById_('Inspections','record_id',x.record_id,{status:'Completed',completed_date:now,confirmation_at:now,confirmed_by:'Closed by Annual inspection confirmation'}));
+        const sixDue=new Date(base);sixDue.setMonth(sixDue.getMonth()+6);
+        const sixKey=Utilities.formatDate(sixDue,'Asia/Riyadh','yyyy-MM-dd');
+        const hasSix=rows_('Inspections').some(x=>String(x.vehicle_id)===vehicleId&&String(x.inspection_type)==='6-Month'&&String(x.status)!=='Completed'&&String(x.due_date)===sixKey);
+        if(!hasSix) sh.appendRow([Utilities.getUuid(),vehicleId,'6-Month',sixKey,'','Pending',0,'Automatically scheduled six months after annual inspection confirmation',now,'','','','','','','']);
       }
     }
     return confirmationPage_(choice==='yes'?'Inspection confirmed':'Inspection not confirmed',choice==='yes'?'Thank you. Fleet Management has recorded the completion date.':'Thank you. The inspection remains open and Fleet Management will follow up.');

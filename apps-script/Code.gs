@@ -889,7 +889,7 @@ function execAddText_(slide,text,x,y,w,h,size,color,bold,align) {
 function execAddRect_(slide,x,y,w,h,fill,radius) {
   const shape=slide.insertShape(radius?SlidesApp.ShapeType.ROUND_RECTANGLE:SlidesApp.ShapeType.RECTANGLE,x,y,w,h);
   shape.getFill().setSolidFill(fill);
-  shape.getLine().setTransparent();
+  shape.getLine().getLineFill().setSolidFill(fill);
   return shape;
 }
 function execAddCard_(slide,x,y,w,label,value,note,accent) {

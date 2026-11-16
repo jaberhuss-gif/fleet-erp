@@ -17,7 +17,9 @@ const TABLES = {
   Settings: ['key','value','updated_at']
 };
 
-function doGet() {
+function doGet(e) {
+  const params = e && e.parameter ? e.parameter : {};
+  if (String(params.action || '') === 'maintenance-confirm') return renderMaintenanceConfirmation_(params);
   return HtmlService.createTemplateFromFile('Index').evaluate()
     .setTitle(APP.NAME)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
@@ -225,15 +227,78 @@ function submitKm(token, payload) {
 }
 function createTicket(token,payload) {
   const user = requireSession_(token), v = permittedVehicle_(user,payload.vehicleId);
-  const category=String(payload.category||'').trim(), title=String(payload.title||'Maintenance request').trim();
-  const description=String(payload.description||'').trim(), priority=String(payload.priority||'High').trim();
-  if(!category||!description) throw new Error('Select an issue type and describe the problem.');
+  const category=String(payload.category||'').trim(), title=String(payload.title||'').trim();
+  const description=String(payload.description||'').trim(), priority=String(payload.priority||'Medium').trim();
+  if(!['Maintenance','Mechanical','Electrical','Tires','Accident'].includes(category)||!title||!description) throw new Error('Complete the issue category, title and description.');
+  if(title.length>120||description.length>3000) throw new Error('Title or description is too long.');
   if(!['Low','Medium','High','Critical'].includes(priority)) throw new Error('Invalid issue priority.');
+  ensureTicketConfirmationColumns_();
   const now = new Date(), id = Utilities.getUuid();
   sheet_('Tickets').appendRow([id,v.vehicle_id,category,title,description,priority,'Open',driverActor_(user),now,'', '', '']);
-  audit_(driverActor_(user),'CREATE','Ticket',id,'Vehicle '+v.plate);
+  audit_(driverActor_(user),'CREATE','Ticket',id,'Vehicle '+v.plate+'; '+category+'; '+priority);
   return {ok:true,id};
 }
+function prepareTicketConfirmation(token,id) {
+  const user=requireOwner_(token), ticket=rows_('Tickets').find(x=>String(x.ticket_id)===String(id));
+  if(!ticket) throw new Error('Ticket not found.');
+  if(String(ticket.status)==='Closed') throw new Error('This ticket is already closed.');
+  const vehicle=rows_('Vehicles').find(v=>String(v.vehicle_id)===String(ticket.vehicle_id));
+  if(!vehicle) throw new Error('Vehicle not found.');
+  const phone=String(vehicle.driver_phone||'').replace(/\D/g,'');
+  if(!phone) throw new Error('No driver phone number is saved for this vehicle.');
+  ensureTicketConfirmationColumns_();
+  const rawToken=Utilities.getUuid().replace(/-/g,'')+Utilities.getUuid().replace(/-/g,'');
+  const expires=new Date(Date.now()+14*24*60*60*1000);
+  updateById_('Tickets','ticket_id',id,{status:'Pending Driver Confirmation',confirmation_token_hash:hash_(rawToken),confirmation_expires_at:expires,confirmation_answer:'',confirmation_at:'',closure_method:''});
+  audit_(user.fullName,'SEND_CONFIRMATION','Ticket',id,'WhatsApp confirmation link prepared; token expires in 14 days.');
+  const base=ScriptApp.getService().getUrl();
+  if(!base) throw new Error('Deploy the Apps Script as a Web App before generating driver confirmation links.');
+  return {ok:true,phone:phone,driverName:String(vehicle.assigned_driver||ticket.reported_by||'Driver'),vehiclePlate:String(vehicle.plate||vehicle.vehicle_id),title:String(ticket.title||ticket.category),
+    yesUrl:base+'?action=maintenance-confirm&token='+encodeURIComponent(rawToken)+'&answer=yes',
+    noUrl:base+'?action=maintenance-confirm&token='+encodeURIComponent(rawToken)+'&answer=no'};
+}
+function ensureTicketConfirmationColumns_() {
+  const sh=sheet_('Tickets'), width=sh.getLastColumn();
+  const headers=width?sh.getRange(1,1,1,width).getValues()[0].map(String):[];
+  ['confirmation_token_hash','confirmation_expires_at','confirmation_answer','confirmation_at','closure_method'].forEach(name=>{
+    if(headers.indexOf(name)<0){sh.getRange(1,sh.getLastColumn()+1).setValue(name);headers.push(name);}
+  });
+}
+function renderMaintenanceConfirmation_(params) {
+  const raw=String(params.token||''), answer=String(params.answer||'').toLowerCase();
+  if(!raw||!['yes','no'].includes(answer)) return HtmlService.createHtmlOutput(confirmationPage_('Invalid link','This confirmation link is invalid. Please contact Fleet Management.'));
+  const lock=LockService.getScriptLock(); lock.waitLock(10000);
+  try {
+    ensureTicketConfirmationColumns_();
+    const sh=sheet_('Tickets'), values=sh.getDataRange().getValues(), headers=values[0].map(String), ix={};
+    headers.forEach((h,i)=>ix[h]=i);
+    const digest=hash_(raw); let row=-1;
+    for(let i=1;i<values.length;i++) if(String(values[i][ix.confirmation_token_hash]||'')===digest){row=i+1;break;}
+    if(row<0) return HtmlService.createHtmlOutput(confirmationPage_('Link not found','This link is invalid, already used, or has been replaced. Please contact Fleet Management.'));
+    const record=values[row-1], expiry=new Date(record[ix.confirmation_expires_at]);
+    if(isNaN(expiry.getTime())||expiry.getTime()<Date.now()) return HtmlService.createHtmlOutput(confirmationPage_('Link expired','This confirmation link has expired. Please contact Fleet Management for a new link.'));
+    if(String(record[ix.status])==='Closed') return HtmlService.createHtmlOutput(confirmationPage_('Already closed','This ticket has already been closed. Thank you.'));
+    const now=new Date();
+    sh.getRange(row,ix.confirmation_answer+1).setValue(answer.toUpperCase());
+    sh.getRange(row,ix.confirmation_at+1).setValue(now);
+    sh.getRange(row,ix.confirmation_token_hash+1).setValue('');
+    if(answer==='yes'){
+      sh.getRange(row,ix.status+1).setValue('Closed');
+      sh.getRange(row,ix.closed_at+1).setValue(now);
+      sh.getRange(row,ix.closure_method+1).setValue('WhatsApp Confirmation');
+    } else {
+      if(String(record[ix.status])==='Pending Driver Confirmation') sh.getRange(row,ix.status+1).setValue('In Progress');
+      sh.getRange(row,ix.closure_method+1).setValue('Driver reported NOT fixed');
+    }
+    audit_('Driver','WHATSAPP_CONFIRMATION','Ticket',String(record[ix.ticket_id]||''),'Driver answered '+answer.toUpperCase());
+    return HtmlService.createHtmlOutput(confirmationPage_(answer==='yes'?'Thank you — ticket closed':'Thank you — ticket remains open',answer==='yes'?'Your confirmation was recorded. The maintenance ticket is now closed.':'Your response was recorded. The ticket remains open and Fleet Management will follow up.'));
+  } finally { lock.releaseLock(); }
+}
+function confirmationPage_(title,message) {
+  const safe=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font-family:Arial,sans-serif;background:#f1f5f9;margin:0;padding:24px;color:#0f172a}.card{max-width:520px;margin:8vh auto;background:white;padding:30px;border-radius:14px;box-shadow:0 8px 30px #0001;text-align:center}h2{color:#1e3a8a}p{line-height:1.7}</style></head><body><div class="card"><h2>'+safe(title)+'</h2><p>'+safe(message)+'</p><p>Fleet Management</p></div></body></html>';
+}
+
 function recordOilChange(token,payload) {
   const user = requireSession_(token), v = permittedVehicle_(user,payload.vehicleId);
   const km = Number(payload.readingKm || v.current_km || 0);

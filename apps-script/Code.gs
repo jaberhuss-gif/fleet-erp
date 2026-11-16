@@ -939,7 +939,7 @@ function exportFleetExecutivePowerPoint(token) {
   execAddBarRows_(s,d.fleet.bySite.map(x=>({label:x.name,value:x.count})),38,263,400,4,v=>String(v));
   execAddRect_(s,470,235,212,118,'#E8EEF4',true);
   execAddText_(s,'MANAGEMENT SIGNAL',486,249,180,16,9,'#0B5260',true);
-  execAddText_(s,d.fleet.unassigned+' vehicles without an assigned driver',486,272,180,34,13,'#102A43',true);
+  execAddText_(s,execMetric_(d,'Vehicles',d.fleet.unassigned)+' vehicles without an assigned driver',486,272,180,34,13,'#102A43',true);
   execAddText_(s,d.dataQuality.missingSheets.length?'Data coverage incomplete: '+d.dataQuality.missingSheets.join(', '):'All expected source sheets are available.',486,315,180,32,8,'#526477',false);
   // Slide 2 — maintenance and ticket backlog.
   s=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
@@ -966,7 +966,7 @@ function exportFleetExecutivePowerPoint(token) {
   execAddText_(s,'Movements: '+(d.sources.Tire_Stock_Movements.available?d.tires.movements:'Data Incomplete')+'  •  Surveys: '+(d.sources.Tire_Surveys.available?d.tires.surveys:'Data Incomplete'),54,333,270,12,7,'#64748B',false);
   execAddRect_(s,370,239,312,114,'#E8EEF4',true);
   execAddText_(s,'MANAGEMENT FOLLOW-UP',386,252,280,16,10,'#0B5260',true);
-  execAddText_(s,d.tires.open+' tire requests remain open. '+(d.tires.inStock===0?'No tires are recorded as in stock.':d.tires.inStock+' tires are recorded in stock.'),386,278,275,48,12,'#102A43',true);
+  execAddText_(s,execMetric_(d,'Tire_Requests',d.tires.open)+' tire requests remain open. '+(d.sources.Tire_Inventory.available?(d.tires.inStock===0?'No tires are recorded as in stock.':d.tires.inStock+' tires are recorded in stock.'):'Inventory: Data Incomplete'),386,278,275,48,12,'#102A43',true);
   execAddText_(s,'Stock valuation is based only on recorded purchase_cost values; missing costs are not estimated.',386,328,275,18,7,'#526477',false);
   // Slide 4 — handovers, compliance and management actions.
   s=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);

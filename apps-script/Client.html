@@ -16,35 +16,35 @@ async function doLogin(payload){
  err.classList.add('hidden');
  try{
   const r=await rpc('login',payload);
+  if(!r||!r.token||!r.user) throw new Error('Login response is incomplete. Please contact Fleet Admin.');
   TOKEN=r.token;
   USER=r.user;
-  sessionStorage.setItem('fleetToken',TOKEN);
   await openApp();
+  sessionStorage.setItem('fleetToken',TOKEN);
  }catch(e){
   const message=e&&e.message?e.message:String(e);
-  if(TOKEN&&USER){
-   showAppLoadError(message);
-  }else{
-   err.textContent=message;
-   err.classList.remove('hidden');
-  }
+  TOKEN=''; USER=null; DATA=null;
+  try{sessionStorage.removeItem('fleetToken');}catch(storageError){}
+  document.getElementById('appView').classList.add('hidden');
+  document.getElementById('loginView').classList.remove('hidden');
+  err.textContent='Login succeeded, but the Fleet ERP screen could not load: '+message;
+  err.classList.remove('hidden');
+  console.error('Fleet ERP sign-in screen failed:',e);
  }
 }
 async function openApp(){
- document.getElementById('loginView').classList.add('hidden');
- document.getElementById('appView').classList.remove('hidden');
- document.getElementById('userLabel').textContent=(USER.role==='Driver'?(DATA?.selectedDriverName||'Shared Driver Portal'):(USER.fullName||USER.username))+' · '+USER.role;
- renderNavigation();
  const root=document.getElementById('mainContent');
  root.innerHTML='<div class="loading">Loading Fleet ERP data…</div>';
  try{
   await refreshData();
   document.getElementById('userLabel').textContent=(USER.role==='Driver'?(DATA.selectedDriverName||'Driver'):(USER.fullName||USER.username))+' · '+USER.role;
+  renderNavigation();
   showPage(USER.role==='Driver'?'fleet':'dashboard');
+  document.getElementById('loginView').classList.add('hidden');
+  document.getElementById('appView').classList.remove('hidden');
  }catch(e){
-  const message=e&&e.message?e.message:String(e);
   console.error('Fleet ERP data loading failed:',e);
-  showAppLoadError(message);
+  throw e;
  }
 }
 async function refreshData(){

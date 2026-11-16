@@ -597,11 +597,13 @@ function createHandover(token,payload) {
   if(!v)throw new Error('Vehicle not found.');
   const oldDriver=String(payload.oldDriver||'').trim(),newDriver=String(payload.newDriver||'').trim();
   if(!oldDriver||!newDriver||oldDriver.toLowerCase()===newDriver.toLowerCase())throw new Error('Old and new driver names must be different.');
-  const id=Utilities.getUuid(),now=new Date();
-  const checklist=payload.checklist||{};
-  const snapshot=payload.snapshot||{};
-  sheet_('Handovers').appendRow([id,v.vehicle_id,v.plate,oldDriver,newDriver,String(payload.oldPhone||''),String(payload.newPhone||''),payload.date||now,Number(payload.km||v.current_km||0),'Pending Signatures',JSON.stringify(checklist),String(payload.notes||''),JSON.stringify(snapshot),user.fullName,now,'','']);
-  audit_(user.fullName,'CREATE','Handover',id,v.plate+'; '+oldDriver+' -> '+newDriver);
+  const now=new Date(),checklist=payload.checklist||{},snapshot=payload.snapshot||{};
+  const pending=rows_('Handovers').find(h=>String(h.vehicle_id)===String(v.vehicle_id)&&String(h.old_driver).toLowerCase()===oldDriver.toLowerCase()&&String(h.new_driver).toLowerCase()===newDriver.toLowerCase()&&String(h.status)!=='Completed');
+  const id=pending?String(pending.handover_id):Utilities.getUuid();
+  const values={vehicle_plate:v.plate,old_driver_phone:String(payload.oldPhone||pending?.old_driver_phone||''),new_driver_phone:String(payload.newPhone||''),handover_date:payload.date||now,handover_km:Number(payload.km||v.current_km||0),status:'Pending Signatures',checklist_json:JSON.stringify(checklist),condition_notes:String(payload.notes||''),snapshot_json:JSON.stringify(snapshot),created_by:user.fullName};
+  if(pending)updateById_('Handovers','handover_id',id,values);
+  else sheet_('Handovers').appendRow([id,v.vehicle_id,v.plate,oldDriver,newDriver,values.old_driver_phone,values.new_driver_phone,values.handover_date,values.handover_km,values.status,values.checklist_json,values.condition_notes,values.snapshot_json,user.fullName,now,'','']);
+  audit_(user.fullName,pending?'UPDATE':'CREATE','Handover',id,v.plate+'; '+oldDriver+' -> '+newDriver);
   return {ok:true,id};
 }
 function completeHandover(token,id,side) {

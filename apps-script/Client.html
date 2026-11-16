@@ -607,7 +607,8 @@ function printHandover(id){
 
 function placeholderHtml(p){
  const labels={inspections:'Annual & 6-Month Inspections',tires:'Tire Management',handovers:'Driver Handovers',reports:'Fleet Reports', 'advanced-reports':'Advanced Reports',audit:'Audit Log',drivers:'Driver Management',users:'User Management',backup:'Backup & Restore', 'support-service':'Support & Service',troubleshooter:'Fleet Troubleshooter',warehouse:'Warehouse Management'};
- if(p==='handovers')return handoversHtml(DATA?.handovers||[],DATA?.vehicles||[]);\n  const title=labels[p]||p;
+ if(p==='handovers')return handoversHtml(DATA?.handovers||[],DATA?.vehicles||[]);
+  const title=labels[p]||p;
  return '<div class="page-title"><div><h2>'+esc(title)+'</h2><p>Fleet ERP module</p></div><span class="badge warning">Migration in progress</span></div><div class="panel"><h3>'+esc(title)+'</h3><p class="muted">This screen is included in the rebuilt navigation. Its production workflow and data actions are being migrated and validated before activation. No production data has been imported or changed.</p></div>';
 }
 async function saveKm(e){e.preventDefault();try{await rpc('submitKm',TOKEN,{vehicleId:el('kmVehicle').value,readingKm:el('kmReading').value,notes:el('kmNotes').value});alert('KM reading saved.');await refreshData();render();}catch(err){alert(err.message);}}

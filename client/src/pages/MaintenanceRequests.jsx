@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import api from '../api/client';
 import { getMaintenanceTickets, getMaintenanceWhatsAppInfo, getSixMonthRepairStatuses, getSixMonthRepairWhatsAppInfo } from '../api/client';
 
-const ISSUE_TYPES = ['Tires','Engine','A/C','Lights','Brakes','Battery','Door','Wipers','Oil Engine','Other'];
+const ISSUE_TYPES = ['Maintenance','Mechanical','Electrical','Tires','Accident','Engine','A/C','Lights','Brakes','Battery','Door','Wipers','Oil Engine','Other'];
 
 export default function MaintenanceRequests() {
   const [tickets, setTickets] = useState([]);
@@ -103,7 +103,7 @@ export default function MaintenanceRequests() {
     if (!win) return;
     const esc = value => String(value ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     const body = rows.map(r => '<tr>' +
-      ['Vehicle','Location','Driver','Issue Type','Description','Priority','Status','Opened Date','Driver Confirmed']
+      ['Vehicle','Location','Driver','Issue Type','Issue Title','Description','Priority','Status','Opened Date','Driver Confirmed']
         .map(k => '<td>' + esc(r[k]) + '</td>').join('') + '</tr>').join('');
     win.document.write('<!doctype html><html><head><title>Maintenance Requests Report</title><style>' +
       'body{font-family:Arial,sans-serif;margin:28px;color:#111827}h1{margin:0 0 6px;font-size:22px}p{margin:4px 0 18px;color:#475569;font-size:12px}' +
@@ -194,7 +194,7 @@ export default function MaintenanceRequests() {
        <div style={{width:'100%',overflowX:'auto'}}>
         <table className="data-table" style={{width:'100%',minWidth:1100}}>
           <thead><tr>
-            <th>Vehicle</th><th>Location</th><th>Driver</th><th>Issue Type</th><th>Description</th><th>Priority</th><th>Status</th><th>Opened</th><th>Driver Confirmed</th><th>Actions</th>
+            <th>Vehicle</th><th>Location</th><th>Driver</th><th>Category</th><th>Issue Title</th><th>Description</th><th>Priority</th><th>Status</th><th>Opened</th><th>Closure Method</th><th>Driver Confirmed</th><th>Actions</th>
           </tr></thead>
           <tbody>{filtered.map(t=><tr key={t.id}>
             <td><strong>{t.plate || '—'}</strong></td>
@@ -205,7 +205,7 @@ export default function MaintenanceRequests() {
             <td>{t.priority || 'Medium'}</td>
             <td>{t.status || '—'}</td>
             <td>{t.opened_at ? String(t.opened_at).slice(0,10) : '—'}</td>
-            <td>{t.whatsapp_confirmed_at ? <span style={{color:'#16a34a',whiteSpace:'nowrap'}}>OK {String(t.whatsapp_confirmed_at).slice(0,10)}</span> : '-'}</td>
+            <td>{t.whatsapp_confirmation_source ? (String(t.whatsapp_confirmation_source).includes('WhatsApp') ? 'WhatsApp Confirmation' : t.whatsapp_confirmation_source) : (t.closed_by || '—')}</td>\n            <td>{t.whatsapp_confirmed_at ? <span style={{color:'#16a34a',whiteSpace:'nowrap'}}>✓ Confirmed {String(t.whatsapp_confirmed_at).slice(0,10)}</span> : 'Not confirmed'}</td>
             <td>{['completed','closed','confirmed'].includes(String(t.status || '').trim().toLowerCase()) ? <span style={{whiteSpace:'nowrap'}}>✓ Confirmed</span> : <button type="button" className="btn" style={{whiteSpace:'nowrap'}} onClick={()=>sendWhatsApp(t)}>📱 WhatsApp</button>}</td>
           </tr>)}</tbody>
         </table>

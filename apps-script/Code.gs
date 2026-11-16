@@ -892,6 +892,8 @@ function execAddRect_(slide,x,y,w,h,fill,radius) {
   shape.getLine().getLineFill().setSolidFill(fill);
   return shape;
 }
+function execMetric_(d,source,value) { return d.sources[source]&&d.sources[source].available?value:'Data Incomplete'; }
+function execMultiMetric_(d,sources,value) { return sources.every(name=>d.sources[name]&&d.sources[name].available)?value:'Data Incomplete'; }
 function execAddCard_(slide,x,y,w,label,value,note,accent) {
   execAddRect_(slide,x,y,w,78,'#FFFFFF',true);
   execAddRect_(slide,x,y,5,78,accent||'#0F766E',false);
@@ -927,10 +929,10 @@ function exportFleetExecutivePowerPoint(token) {
   let s=slides.length?slides[0]:pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
   s.getPageElements().forEach(element=>element.remove());
   execAddHeader_(s,'EXECUTIVE BRIEFING','Fleet Performance at a Glance','A consolidated view of fleet readiness, service workload and operational exposure.',1);
-  execAddCard_(s,38,139,150,'Active Fleet',d.fleet.active,'of '+d.fleet.total+' registered vehicles','#0F766E');
-  execAddCard_(s,202,139,150,'Open Requests',d.tickets.open+d.tires.open,'Maintenance + tire requests','#D97706');
+  execAddCard_(s,38,139,150,'Active Fleet',execMetric_(d,'Vehicles',d.fleet.active),'of '+execMetric_(d,'Vehicles',d.fleet.total)+' registered vehicles','#0F766E');
+  execAddCard_(s,202,139,150,'Open Requests',execMultiMetric_(d,['Tickets','Tire_Requests'],d.tickets.open+d.tires.open),'Maintenance + tire requests','#D97706');
   execAddCard_(s,366,139,150,'Maintenance Spend',d.maintenance.withCost?('SAR '+Math.round(d.maintenance.cost).toLocaleString('en-US')):'Data Incomplete',d.maintenance.withCost+' records with cost data','#2563EB');
-  execAddCard_(s,530,139,152,'Compliance Risks',d.inspections.overdue+d.utilization.oilOverdue,'Overdue inspections + oil alerts','#DC2626');
+  execAddCard_(s,530,139,152,'Compliance Risks',execMultiMetric_(d,['Inspections','Vehicles'],d.inspections.overdue+d.utilization.oilOverdue),'Overdue inspections + oil alerts','#DC2626');
   execAddText_(s,'FLEET DISTRIBUTION BY SITE',38,239,300,18,10,'#102A43',true);
   execAddBarRows_(s,d.fleet.bySite.map(x=>({label:x.name,value:x.count})),38,263,400,4,v=>String(v));
   execAddRect_(s,470,235,212,118,'#E8EEF4',true);
@@ -940,10 +942,10 @@ function exportFleetExecutivePowerPoint(token) {
   // Slide 2 — maintenance and ticket backlog.
   s=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
   execAddHeader_(s,'SERVICE DELIVERY','Maintenance & Workload','Recorded maintenance activity, costs and open work requiring management attention.',2);
-  execAddCard_(s,38,139,150,'Maintenance Records',d.maintenance.total,d.maintenance.completed+' completed / '+d.maintenance.open+' open','#0F766E');
+  execAddCard_(s,38,139,150,'Maintenance Records',execMetric_(d,'Maintenance',d.maintenance.total),d.maintenance.completed+' completed / '+d.maintenance.open+' open','#0F766E');
   execAddCard_(s,202,139,150,'Maintenance Cost',d.maintenance.withCost?'SAR '+Math.round(d.maintenance.cost).toLocaleString('en-US'):'Data Incomplete',d.maintenance.withCost+' cost entries','#2563EB');
-  execAddCard_(s,366,139,150,'Open Tickets',d.tickets.open,d.tickets.highPriority+' high / urgent priority','#D97706');
-  execAddCard_(s,530,139,152,'Closed Tickets',d.tickets.closed,'of '+d.tickets.total+' recorded tickets','#64748B');
+  execAddCard_(s,366,139,150,'Open Tickets',execMetric_(d,'Tickets',d.tickets.open),d.tickets.highPriority+' high / urgent priority','#D97706');
+  execAddCard_(s,530,139,152,'Closed Tickets',execMetric_(d,'Tickets',d.tickets.closed),'of '+d.tickets.total+' recorded tickets','#64748B');
   execAddText_(s,'MAINTENANCE COST BY TYPE (SAR)',38,239,320,18,10,'#102A43',true);
   execAddBarRows_(s,d.maintenance.byType.map(x=>({label:x.name,value:x.cost})),38,264,420,4,v=>'SAR '+Math.round(v).toLocaleString('en-US'));
   execAddRect_(s,490,235,192,118,'#E8EEF4',true);
@@ -952,9 +954,9 @@ function exportFleetExecutivePowerPoint(token) {
   // Slide 3 — tires and warehouse.
   s=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
   execAddHeader_(s,'ASSET CONTROL','Tires & Warehouse Position','Tire requests, stock availability, installed assets and recorded stock value.',3);
-  execAddCard_(s,38,139,150,'Tire Requests',d.tires.requests,d.tires.open+' open / '+d.tires.completed+' completed','#D97706');
-  execAddCard_(s,202,139,150,'In-Stock Tires',d.tires.inStock,'of '+d.tires.inventory+' inventory records','#0F766E');
-  execAddCard_(s,366,139,150,'Installed Tires',d.tires.installed,d.tires.installations+' installation records','#2563EB');
+  execAddCard_(s,38,139,150,'Tire Requests',execMetric_(d,'Tire_Requests',d.tires.requests),d.tires.open+' open / '+d.tires.completed+' completed','#D97706');
+  execAddCard_(s,202,139,150,'In-Stock Tires',execMetric_(d,'Tire_Inventory',d.tires.inStock),'of '+d.tires.inventory+' inventory records','#0F766E');
+  execAddCard_(s,366,139,150,'Installed Tires',execMetric_(d,'Tire_Inventory',d.tires.installed),execMetric_(d,'Tire_Installations',d.tires.installations)+' installation records','#2563EB');
   execAddCard_(s,530,139,152,'Stock Value',d.tires.inventory?('SAR '+Math.round(d.tires.stockValue).toLocaleString('en-US')):'Data Incomplete','Recorded purchase cost of in-stock tires','#64748B');
   execAddRect_(s,38,239,310,114,'#FFFFFF',true);
   execAddText_(s,'WAREHOUSE ACTIVITY',54,252,270,16,10,'#102A43',true);
@@ -966,10 +968,10 @@ function exportFleetExecutivePowerPoint(token) {
   // Slide 4 — handovers, compliance and management actions.
   s=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
   execAddHeader_(s,'GOVERNANCE & READINESS','Compliance, Handovers & Priorities','Evidence of driver transitions, scheduled inspections and daily vehicle controls.',4);
-  execAddCard_(s,38,139,150,'Handovers',d.handovers.total,d.handovers.completed+' completed / '+d.handovers.pending+' pending','#0F766E');
-  execAddCard_(s,202,139,150,'Inspections',d.inspections.total,d.inspections.completed+' completed / '+d.inspections.pending+' pending','#2563EB');
-  execAddCard_(s,366,139,150,'Overdue Checks',d.inspections.overdue,'Inspection due dates passed','#DC2626');
-  execAddCard_(s,530,139,152,'KM / Oil Records',d.utilization.kmEntries+' / '+d.utilization.oilChanges,'KM entries / oil changes','#64748B');
+  execAddCard_(s,38,139,150,'Handovers',execMetric_(d,'Handovers',d.handovers.total),d.handovers.completed+' completed / '+d.handovers.pending+' pending','#0F766E');
+  execAddCard_(s,202,139,150,'Inspections',execMetric_(d,'Inspections',d.inspections.total),d.inspections.completed+' completed / '+d.inspections.pending+' pending','#2563EB');
+  execAddCard_(s,366,139,150,'Overdue Checks',execMetric_(d,'Inspections',d.inspections.overdue),'Inspection due dates passed','#DC2626');
+  execAddCard_(s,530,139,152,'KM / Oil Records',execMetric_(d,'KM_Records',d.utilization.kmEntries)+' / '+execMetric_(d,'Oil_Changes',d.utilization.oilChanges),'KM entries / oil changes','#64748B');
   execAddRect_(s,38,239,310,114,'#FFFFFF',true);
   execAddText_(s,'VEHICLE READINESS ALERTS',54,252,270,16,10,'#102A43',true);
   execAddText_(s,'Oil overdue: '+d.utilization.oilOverdue+' vehicles\\nOil warning: '+d.utilization.oilWarning+' vehicles\\nUnassigned drivers: '+d.fleet.unassigned,54,278,270,62,11,'#334155',false);

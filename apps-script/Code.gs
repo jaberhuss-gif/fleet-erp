@@ -617,8 +617,8 @@ function confirmInspectionFromLink(token,answer) {
     if(choice==='yes') {
       const base=new Date(now);base.setHours(12,0,0,0);
       const months=type==='Annual'?12:6, next=new Date(base);next.setMonth(next.getMonth()+months);
-      const existing=rows_('Inspections').some(x=>String(x.vehicle_id)===vehicleId&&String(x.inspection_type)===type&&String(x.status)!=='Completed'&&String(x.due_date)===next.toISOString().slice(0,10));
-      if(!existing) sh.appendRow([Utilities.getUuid(),vehicleId,type,next.toISOString().slice(0,10),'','Pending',0,'Automatically scheduled after driver WhatsApp confirmation',now,'','','','','','']);
+      const existing=rows_('Inspections').some(x=>String(x.vehicle_id)===vehicleId&&String(x.inspection_type)===type&&String(x.status)!=='Completed'&&String(x.due_date)===Utilities.formatDate(next,'Asia/Riyadh','yyyy-MM-dd'));
+      if(!existing) sh.appendRow([Utilities.getUuid(),vehicleId,type,Utilities.formatDate(next,'Asia/Riyadh','yyyy-MM-dd'),'','Pending',0,'Automatically scheduled after driver WhatsApp confirmation',now,'','','','','','']);
       if(type==='Annual') {
         rows_('Inspections').filter(x=>String(x.vehicle_id)===vehicleId&&String(x.inspection_type)==='6-Month'&&String(x.status)!=='Completed').forEach(x=>updateById_('Inspections','record_id',x.record_id,{status:'Completed',completed_date:now,confirmation_at:now,confirmed_by:'Closed by Annual inspection confirmation'}));
         const sixDue=new Date(base);sixDue.setMonth(sixDue.getMonth()+6);

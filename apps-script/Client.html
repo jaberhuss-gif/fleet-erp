@@ -522,13 +522,97 @@ async function reopenSurvey(vehicleId){
  try{await rpc('reopenTireSurvey',TOKEN,vehicleId,note);alert('Tire survey reopened.');await refreshData();render();}catch(e){alert(e.message);}
 }
 function inspectionsHtml(rows,vehicles){
- const opts=vehicles.map(v=>'<option value="'+esc(v.vehicle_id)+'">'+esc(v.plate)+'</option>').join('');
- const form=canManageFleet()?'<div class="panel"><h3>Schedule Inspection</h3><form onsubmit="saveInspectionForm(event)"><div class="form-row"><div><label>Vehicle</label><select id="inspVehicle" required>'+opts+'</select></div><div><label>Inspection Type</label><select id="inspType"><option>Annual</option><option>6-Month</option></select></div><div><label>Due Date</label><input id="inspDue" type="date" required></div><div><label>Estimated / Actual Cost (SAR)</label><input id="inspCost" type="number" min="0" step="0.01" value="0"></div></div><label>Notes</label><textarea id="inspNotes"></textarea><div class="form-actions"><button class="btn primary">Save Inspection</button></div></form></div>':'';
- return '<div class="page-title"><div><h2>📅 Annual & 6-Month Inspections</h2><p>Schedule and track vehicle compliance inspections.</p></div><button class="btn secondary" onclick="refreshAndRender()">↻ Refresh</button></div>'+form+
- '<div class="panel"><h3>Inspection Register</h3><div class="table-wrap"><table><thead><tr><th>Vehicle</th><th>Type</th><th>Due Date</th><th>Completed</th><th>Cost (SAR)</th><th>Status</th>'+(canManageFleet()?'<th>Action</th>':'')+'</tr></thead><tbody>'+
- (rows.length?rows.slice().reverse().map(x=>'<tr><td>'+esc(vehiclePlate(x.vehicle_id))+'</td><td>'+esc(x.inspection_type)+'</td><td>'+esc(x.due_date)+'</td><td>'+esc(x.completed_date||'-')+'</td><td>'+fmt(x.cost)+'</td><td>'+status(x.status)+'</td>'+(canManageFleet()?'<td><select id="inspStatus_'+esc(x.record_id)+'"><option>Pending</option><option>Completed</option><option>Overdue</option></select><button class="btn primary" onclick="changeInspectionStatus(\''+esc(x.record_id)+'\')">Save</button><button class="btn primary" type="button" data-vehicle-id="'+esc(x.vehicle_id)+'" data-message-type="inspection" data-message-detail="'+esc(x.inspection_type+' - due '+x.due_date)+'" onclick="openVehicleWhatsApp(this)">📱 WhatsApp</button></td>':'')+'</tr>').join(''):'<tr><td colspan="7" class="empty">No inspections scheduled.</td></tr>')+'</tbody></table></div></div>';
+ const active=(vehicles||[]).filter(v=>String(v.status||'Active').trim().toLowerCase()!=='inactive');
+ const records=(rows||[]).slice();
+ const dateKey=value=>{
+  if(!value)return '';
+  const raw=String(value);
+  const m=raw.match(/^(\\d{4}-\\d{2}-\\d{2})/);
+  if(m)return m[1];
+  const d=new Date(value);
+  return Number.isNaN(d.getTime())?'':d.toISOString().slice(0,10);
+ };
+ const today=new Date((DATA.serverTime||new Date().toISOString()));
+ const todayKey=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Riyadh',year:'numeric',month:'2-digit',day:'2-digit'}).format(today);
+ const daysLeft=due=>{const a=new Date(todayKey+'T12:00:00'),b=new Date(due+'T12:00:00');return Math.round((b-a)/86400000);};
+ const statusFor=x=>{
+  if(String(x.status)==='Completed')return 'completed';
+  const due=dateKey(x.due_date);
+  if(!due)return 'unset';
+  const left=daysLeft(due);
+  return left<0?'overdue':left<=30?'warning':'pending';
+ };
+ const labelFor=x=>({completed:'Completed',overdue:'Overdue',warning:'Due within 30 days',pending:'Scheduled',unset:'Date not set'})[statusFor(x)];
+ const virtual=[];
+ active.forEach(v=>{
+  ['Annual','6-Month'].forEach(type=>{
+   const list=records.filter(x=>String(x.vehicle_id)===String(v.vehicle_id)&&String(x.inspection_type)===type);
+   if(!list.length)virtual.push({record_id:'',vehicle_id:v.vehicle_id,inspection_type:type,due_date:type==='6-Month'?(v.close_date||''):'',completed_date:'',cost:0,status:'Pending',_virtual:true,close_date:v.close_date||''});
+  });
+ });
+ const all=records.concat(virtual).sort((a,b)=>{
+  const da=dateKey(a.due_date)||'9999-12-31',db=dateKey(b.due_date)||'9999-12-31';
+  return da.localeCompare(db)||String(a.inspection_type).localeCompare(String(b.inspection_type));
+ });
+ const count=(key)=>all.filter(x=>statusFor(x)===key).length;
+ const options=active.map(v=>'<option value="'+esc(v.vehicle_id)+'">'+esc(v.plate)+'</option>').join('');
+ const form=canManageFleet()?'<div class="panel"><h3>Schedule Inspection</h3><form onsubmit="saveInspectionForm(event)"><div class="form-row"><div><label>Vehicle</label><select id="inspVehicle" required>'+options+'</select></div><div><label>Inspection Type</label><select id="inspType" onchange="inspectionTypeChanged()"><option>Annual</option><option>6-Month</option></select></div><div><label>Vehicle Close Date (for 6-Month cycle)</label><input id="inspCloseDate" type="date" onchange="inspectionTypeChanged()"></div><div><label>Next Due Date</label><input id="inspDue" type="date" required></div><div><label>Estimated / Actual Cost (SAR)</label><input id="inspCost" type="number" min="0" step="0.01" value="0"></div></div><label>Notes</label><textarea id="inspNotes" placeholder="Inspection reference, location, or remarks"></textarea><div class="form-actions"><button class="btn primary">Save Inspection</button></div><small class="muted">For 6-Month inspections, entering a vehicle close date automatically calculates the due date six months later.</small></form></div>':'';
+ const rowsHtml=all.map(x=>{
+  const v=active.find(z=>String(z.vehicle_id)===String(x.vehicle_id))||{};
+  const state=statusFor(x),due=dateKey(x.due_date),complete=dateKey(x.completed_date),id=String(x.record_id||'');
+  const rowStyle=state==='completed'?'background:#dcfce7':state==='overdue'?'background:#fee2e2':state==='warning'?'background:#fef3c7':'';
+  const actions=canManageFleet()?(id?'<button class="btn secondary" data-inspection-id="'+esc(id)+'" onclick="sendInspectionReminder(this)">📱 Reminder</button> <button class="btn primary" data-inspection-id="'+esc(id)+'" onclick="sendInspectionConfirmation(this)">🔗 Send Confirmation Link</button>':'<span class="muted">Schedule date first</span>'):'';
+  return '<tr style="'+rowStyle+'"><td><b>'+esc(v.plate||vehiclePlate(x.vehicle_id))+'</b><br><small>'+esc(v.assigned_driver||'Driver not assigned')+'</small></td><td>'+esc(x.inspection_type)+'</td><td>'+esc(due||'Not set')+'</td><td>'+esc(complete||'-')+'</td><td>'+fmt(x.cost)+'</td><td><span class="badge '+(state==='completed'?'safe':state==='overdue'?'urgent':state==='warning'?'warning':'info')+'">'+esc(labelFor(x))+'</span></td>'+(canManageFleet()?'<td>'+actions+'</td>':'')+'</tr>';
+ }).join('');
+ return '<div class="page-title"><div><h2>📅 Annual & 6-Month Inspections</h2><p>Full fleet inspection calendar, 30-day warnings, driver WhatsApp confirmation and printable evidence.</p></div><div class="form-actions"><button class="btn secondary" onclick="refreshAndRender()">↻ Refresh</button><button class="btn primary" onclick="printInspectionReport()">🖨️ Print Inspection Report</button></div></div>'+
+ '<div class="cards-grid">'+card('Total Vehicles',active.length,'Active vehicles')+card('Overdue',count('overdue'),'Past due date','urgent')+card('Due Within 30 Days',count('warning'),'Send driver reminder','warning')+card('Completed',count('completed'),'Driver confirmation recorded','safe')+'</div>'+form+
+ '<div class="panel"><h3>Fleet Inspection Register</h3><div class="form-row" style="margin-bottom:12px"><input id="inspectionSearch" class="table-search" placeholder="Search vehicle / driver / type" oninput="filterInspectionRows()"><select id="inspectionFilter" onchange="filterInspectionRows()"><option value="">All statuses</option><option value="overdue">Overdue</option><option value="warning">Due within 30 days</option><option value="pending">Scheduled</option><option value="completed">Completed</option><option value="unset">Date not set</option></select></div><div class="table-wrap"><table id="inspectionTable"><thead><tr><th>Vehicle / Driver</th><th>Type</th><th>Due Date</th><th>Completed</th><th>Cost (SAR)</th><th>Status</th>'+(canManageFleet()?'<th>Action</th>':'')+'</tr></thead><tbody>'+(rowsHtml||'<tr><td colspan="7" class="empty">No active vehicles found.</td></tr>')+'</tbody></table></div><p class="muted" style="font-size:11px;margin-top:12px">Yellow: due within 30 days · Red: overdue · Green: completed and confirmed by driver. A missing date must be imported or scheduled before reminders can be sent.</p></div>';
 }
-async function openVehicleWhatsApp(button){
+function inspectionTypeChanged(){
+ const type=el('inspType')?.value,close=el('inspCloseDate')?.value;
+ if(type==='6-Month'&&close){
+  const d=new Date(close+'T12:00:00');d.setMonth(d.getMonth()+6);
+  el('inspDue').value=d.toISOString().slice(0,10);
+ }
+}
+function filterInspectionRows(){
+ const q=(el('inspectionSearch')?.value||'').toLowerCase(),f=el('inspectionFilter')?.value||'';
+ document.querySelectorAll('#inspectionTable tbody tr').forEach(tr=>{
+  const text=tr.textContent.toLowerCase(),badge=tr.querySelector('.badge'),label=badge?.textContent||'';
+  const key=label==='Completed'?'completed':label==='Overdue'?'overdue':label==='Due within 30 days'?'warning':label==='Scheduled'?'pending':'unset';
+  tr.style.display=(!q||text.includes(q))&&(!f||f===key)?'':'none';
+ });
+}
+async function sendInspectionReminder(button){
+ const id=button?.dataset.inspectionId,record=(DATA.inspections||[]).find(x=>String(x.record_id)===String(id));
+ if(!record)return;
+ const v=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(record.vehicle_id));
+ if(!v){alert('Vehicle not found.');return;}
+ const phone=normalizeWhatsAppPhone(v.driver_phone);
+ if(!phone){alert('No WhatsApp number is saved for this vehicle.');return;}
+ const due=String(record.due_date||'').slice(0,10),message='Hello '+(v.assigned_driver||'Driver')+',\\n\\nReminder: '+record.inspection_type+' inspection for vehicle '+(v.plate||v.vehicle_id)+' is due on '+due+'. Please arrange the inspection and update Fleet Management once completed.\\n\\nFleet Management';
+ window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(message),'_blank');
+}
+async function sendInspectionConfirmation(button){
+ const id=button?.dataset.inspectionId,popup=window.open('about:blank','_blank');
+ if(!popup){alert('Please allow pop-ups to open WhatsApp.');return;}
+ try{
+  const p=await rpc('prepareInspectionConfirmation',TOKEN,id);
+  const message='Hello '+p.driverName+',\\n\\nPlease confirm the inspection result for vehicle '+p.vehiclePlate+'.\\nInspection: '+p.type+'\\nDue date: '+p.dueDate+'\\n\\nYES — '+p.yesUrl+'\\nNO — '+p.noUrl+'\\n\\nTap YES only if the inspection has been completed. If not completed, tap NO.\\n\\nFleet Management';
+  popup.location.href='https://wa.me/'+normalizeWhatsAppPhone(p.phone)+'?text='+encodeURIComponent(message);
+  await refreshData();render();
+ }catch(e){try{popup.close();}catch(x){}alert(e.message||String(e));}
+}
+function printInspectionReport(){
+ const table=document.getElementById('inspectionTable');
+ if(!table){alert('Inspection register is not available.');return;}
+ const w=window.open('','_blank','width=1200,height=800');
+ if(!w){alert('Please allow pop-ups to print the inspection report.');return;}
+ const now=new Date().toLocaleString('en-GB',{timeZone:'Asia/Riyadh'});
+ w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Fleet Inspection Register</title><style>@page{size:A4 landscape;margin:12mm}body{font:11px Arial;color:#172033}h1{font-size:19px;margin-bottom:4px}p{color:#475569}table{width:100%;border-collapse:collapse}th,td{border:1px solid #94a3b8;padding:7px;text-align:left}th{background:#e2e8f0}tr{break-inside:avoid}.badge{font-weight:bold}</style></head><body><h1>Ma’aden Ivanhoe Electric JV — Fleet Inspection Register</h1><p>Annual & 6-Month Inspections | Printed: '+esc(now)+'</p>'+table.outerHTML+'<p>Green = completed and driver confirmed. Confirmation date is retained in the Inspections register.</p><script>window.onload=function(){setTimeout(function(){window.print()},250)};<\\/script></body></html>');
+ w.document.close();
+}
+function openVehicleWhatsApp(button){
  const vehicleId=button?.dataset.vehicleId, type=button?.dataset.messageType||'reminder', detail=button?.dataset.messageDetail||'';
  const popup=window.open('about:blank','_blank');
  if(!popup){alert('Please allow pop-ups to open WhatsApp.');return;}
@@ -575,7 +659,7 @@ async function openTicketWhatsApp(button){
 }
 async function submitTireForm(e){e.preventDefault();try{await rpc('createTireRequest',TOKEN,{vehicleId:el('tireVehicle').value,requestType:el('tireType').value,description:el('tireDescription').value});alert('Tire request submitted.');await refreshData();render();}catch(err){alert(err.message);}}
 async function changeTireStatus(id){try{const next=el('tireStatus_'+id).value;await rpc('updateTireRequest',TOKEN,id,next,'');await refreshData();render();}catch(err){alert(err.message||String(err));}}
-async function saveInspectionForm(e){e.preventDefault();try{await rpc('saveInspection',TOKEN,{vehicleId:el('inspVehicle').value,inspectionType:el('inspType').value,dueDate:el('inspDue').value,cost:el('inspCost').value,notes:el('inspNotes').value});alert('Inspection saved.');await refreshData();render();}catch(err){alert(err.message);}}
+async function saveInspectionForm(e){e.preventDefault();try{await rpc('saveInspection',TOKEN,{vehicleId:el('inspVehicle').value,inspectionType:el('inspType').value,dueDate:el('inspDue').value,closeDate:el('inspCloseDate').value,cost:el('inspCost').value,notes:el('inspNotes').value});alert('Inspection saved.');await refreshData();render();}catch(err){alert(err.message);}}
 async function changeInspectionStatus(id){try{await rpc('updateInspection',TOKEN,id,el('inspStatus_'+id).value,'',0);await refreshData();render();}catch(err){alert(err.message);}}
 async function loadAuditPage(){const root=document.getElementById('mainContent');root.innerHTML='<div class="loading">Loading audit log…</div>';try{const rows=await rpc('getAuditLog',TOKEN);root.innerHTML='<div class="page-title"><div><h2>Audit Log</h2><p>Recent system activity.</p></div></div><div class="panel"><div class="table-wrap"><table><thead><tr><th>Date</th><th>User</th><th>Action</th><th>Entity</th><th>Details</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(r.created_at)+'</td><td>'+esc(r.actor)+'</td><td>'+esc(r.action)+'</td><td>'+esc(r.entity)+'</td><td>'+esc(r.details)+'</td></tr>').join('')+'</tbody></table></div></div>';}catch(e){root.innerHTML='<div class="alert error">'+esc(e.message)+'</div>';}}
 

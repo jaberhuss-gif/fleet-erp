@@ -891,7 +891,7 @@ function execAddText_(slide,text,x,y,w,h,size,color,bold,align) {
 function execAddRect_(slide,x,y,w,h,fill,radius) {
   const shape=slide.insertShape(radius?SlidesApp.ShapeType.ROUND_RECTANGLE:SlidesApp.ShapeType.RECTANGLE,x,y,w,h);
   shape.getFill().setSolidFill(fill);
-  shape.getLine().getLineFill().setSolidFill(fill);
+  // SlidesApp.Shape does not expose getLine(); keep the shape fill and default outline.
   return shape;
 }
 function execMetric_(d,source,value) { return d.sources[source]&&d.sources[source].available?value:'Data Incomplete'; }

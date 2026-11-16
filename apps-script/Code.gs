@@ -801,7 +801,7 @@ function reportReadSheet_(name) {
   if (!values.length) return {available:true, rows:[], count:0};
   const headers = values[0].map(h=>String(h||'').trim());
   const rows = values.slice(1).filter(r=>r.some(v=>v!==''&&v!==null)).map(r=>
-    Object.fromEntries(headers.map((h,i)=>[h,r[i] instanceof Date?r[i].toISOString():r[i]])
+    Object.fromEntries(headers.map((h,i)=>[h,r[i] instanceof Date?r[i].toISOString():r[i]]))
   );
   return {available:true, rows, count:rows.length};
 }

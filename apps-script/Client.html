@@ -602,7 +602,7 @@ async function saveTicket(e){
  const description=el('ticketDescription').value.trim();
  if(!el('ticketVehicle').value){alert('Please select a vehicle.');return;}
  if(!category||!description){alert('Please complete all required fields.');return;}
- const title=isDriver?category:el('ticketTitle').value.trim();
+ const title=el('ticketTitle').value.trim();
  if(!title){alert('Please enter the issue title.');return;}
  try{
   await rpc('createTicket',TOKEN,{

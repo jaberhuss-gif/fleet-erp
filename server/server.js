@@ -1392,16 +1392,31 @@ app.post("/maintenance-confirm/:token", async(req,res)=>{
 
 app.post("/api/issues/report", async (req, res) => {
   try {
-    const { vehicleId, issueType, category, description, priority, openedAt } = req.body;
-    const finalCategory = issueType || category || "Other";
+    const { vehicleId, issueType, category, title, issueTitle, description, priority, openedAt } = req.body;
+    const finalCategory = issueType || category || "Maintenance";
+    const finalTitle = String(issueTitle || title || "").trim();
+    const finalDescription = String(description || "").trim();
+    const allowedCategories = ["Maintenance", "Mechanical", "Electrical", "Tires", "Accident"];
+    const allowedPriorities = ["Low", "Medium", "High", "Critical"];
+    if (!vehicleId || !finalTitle || !finalDescription) {
+      return res.status(400).json({ success: false, error: "Vehicle, issue title and description are required." });
+    }
+    if (!allowedCategories.includes(finalCategory)) {
+      return res.status(400).json({ success: false, error: "Invalid maintenance category." });
+    }
+    if (priority && !allowedPriorities.includes(priority)) {
+      return res.status(400).json({ success: false, error: "Invalid priority." });
+    }
     const reporter = req.user?.username || req.user?.full_name || "Driver";
     const ticket = await createTicketPG({
       vehicleId,
+      title: finalTitle,
       category: finalCategory,
-      description,
+      description: finalDescription,
       reportedBy: reporter,
       priority: priority || "Medium",
-      openedAt
+      openedAt,
+      department: "Fleet"
     });
     res.json({ success: true, message: "Ticket created", ticket });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }

@@ -1,121 +1,124 @@
 import { useState, useEffect, useRef } from 'react';
-import { getVehiclesList, getIssueTypes, reportIssue } from '../api/client';
+import { getVehiclesList, reportIssue } from '../api/client';
 
-export default function ReportIssue({ canWork = false, user = null }) {
+const ISSUE_CATEGORIES = ['Maintenance', 'Mechanical', 'Electrical', 'Tires', 'Accident'];
+const PRIORITIES = ['Low', 'Medium', 'High', 'Critical'];
+
+export default function ReportIssue({ canWork = false }) {
   const [vehicles, setVehicles] = useState([]);
-  const [types, setTypes] = useState([]);
   const [vehicleId, setVehicleId] = useState('');
-  const [issueType, setIssueType] = useState('');
-  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('Maintenance');
   const [priority, setPriority] = useState('Medium');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
   const [listening, setListening] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const recognitionRef = useRef(null);
 
-  useEffect(() => { loadData(); }, []);
-
-  const loadData = async () => {
-    try {
-      const [v, t] = await Promise.all([getVehiclesList(), getIssueTypes()]);
-      setVehicles(v.vehicles || []);
-      setTypes(t.types || []);
-    } catch (e) { setError('Failed to load data'); }
-  };
+  useEffect(() => {
+    getVehiclesList()
+      .then(res => setVehicles(res.vehicles || []))
+      .catch(e => setError('Failed to load vehicles: ' + (e.response?.data?.error || e.message)));
+  }, []);
 
   const startVoice = () => {
     setMessage(''); setError('');
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { setError('Voice not supported. Use Chrome or Edge.'); return; }
+    if (!SR) { setError('Voice input is not supported in this browser.'); return; }
     const rec = new SR();
     rec.lang = 'en-US';
     rec.continuous = false;
     rec.interimResults = false;
     rec.onstart = () => setListening(true);
-    rec.onresult = (event) => {
-      const text = event.results[0][0].transcript;
-      setDescription(prev => (prev ? prev + ' ' : '') + text);
-    };
-    rec.onerror = (e) => { setError('Voice error: ' + e.error); setListening(false); };
+    rec.onresult = event => setDescription(prev => (prev ? prev + ' ' : '') + event.results[0][0].transcript);
+    rec.onerror = event => { setError('Voice error: ' + event.error); setListening(false); };
     rec.onend = () => setListening(false);
     recognitionRef.current = rec;
     rec.start();
   };
 
   const stopVoice = () => {
-    if (recognitionRef.current) recognitionRef.current.stop();
+    recognitionRef.current?.stop();
     setListening(false);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async event => {
+    event.preventDefault();
     setMessage(''); setError('');
-    if (!vehicleId) { setError('Please select a vehicle'); return; }
-    if (!issueType) { setError('Please select an issue type'); return; }
-    if (!description.trim()) { setError('Please describe the issue'); return; }
+    if (!vehicleId || !title.trim() || !description.trim()) {
+      setError('Please select a vehicle and enter the issue title and description.');
+      return;
+    }
     try {
-      const res = await reportIssue({ vehicleId: Number(vehicleId), issueType, description, priority });
-      setMessage('Issue reported. Ticket #' + res.ticket.id + ' created.');
-      setVehicleId(''); setIssueType(''); setDescription(''); setPriority('Medium');
-    } catch (e) { setError(e.response?.data?.error || e.message); }
+      setSubmitting(true);
+      const res = await reportIssue({
+        vehicleId: Number(vehicleId),
+        issueType: category,
+        category,
+        title: title.trim(),
+        issueTitle: title.trim(),
+        description: description.trim(),
+        priority
+      });
+      setMessage('Request submitted successfully. Ticket #' + res.ticket.id + ' has been added to the maintenance register.');
+      setVehicleId('');
+      setCategory('Maintenance');
+      setPriority('Medium');
+      setTitle('');
+      setDescription('');
+    } catch (e) {
+      setError(e.response?.data?.error || e.message || 'Unable to submit maintenance request.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (!canWork) {
-    return (
-      <div className="form-container">
-        <div className="panel">
-          <div className="alert alert-info">
-            Fleet is view-only for this user. Maintenance issue reporting is disabled.
-          </div>
-        </div>
-      </div>
-    );
+    return <div className="form-container"><div className="panel"><div className="alert alert-info">Maintenance request submission is not enabled for this account.</div></div></div>;
   }
 
   return (
     <div className="form-container">
       <div className="panel">
-        <div style={{ background: 'linear-gradient(135deg, #be123c, #fb7185)', padding: '16px 24px', borderRadius: '12px 12px 0 0', color: '#fff' }}>
-          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>Report an Issue</h2>
+        <div style={{background:'linear-gradient(135deg,#1e3a8a,#3b82f6)',padding:'16px 24px',borderRadius:'12px 12px 0 0',color:'#fff'}}>
+          <h2 style={{margin:0,fontSize:22,fontWeight:700}}>🎫 Vehicle Maintenance &amp; Tickets</h2>
         </div>
-        <p style={{ color: '#64748b', marginBottom: '16px', fontSize: '14px' }}>
-          Select your vehicle, choose the issue type, and describe the problem. Use the voice button to speak.
-        </p>
+        <p style={{color:'#64748b',margin:'14px 0 16px',fontSize:14}}>Report a vehicle issue. Your request will be sent to Fleet Management and tracked until you confirm that the repair is complete.</p>
         {message && <div className="alert alert-success">{message}</div>}
         {error && <div className="alert alert-error">{error}</div>}
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Vehicle *</label>
-            <select value={vehicleId} onChange={e => setVehicleId(e.target.value)} required>
+            <select value={vehicleId} onChange={e=>setVehicleId(e.target.value)} required>
               <option value="">-- Select vehicle --</option>
-              {vehicles.map(v => <option key={v.id} value={v.id}>{v.plate} - {v.driver}</option>)}
+              {vehicles.map(v=><option key={v.id} value={v.id}>{v.plate}{v.driver ? ' — '+v.driver : ''}</option>)}
             </select>
           </div>
           <div className="form-group">
-            <label>Issue Type *</label>
-            <select value={issueType} onChange={e => setIssueType(e.target.value)} required>
-              <option value="">-- Select issue type --</option>
-              {types.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            <label>Category *</label>
+            <select value={category} onChange={e=>setCategory(e.target.value)} required>
+              {ISSUE_CATEGORIES.map(value=><option key={value} value={value}>{value}</option>)}
             </select>
           </div>
           <div className="form-group">
-            <label>Priority</label>
-            <select value={priority} onChange={e => setPriority(e.target.value)}>
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
-              <option value="Critical">Critical</option>
+            <label>Priority *</label>
+            <select value={priority} onChange={e=>setPriority(e.target.value)} required>
+              {PRIORITIES.map(value=><option key={value} value={value}>{value}</option>)}
             </select>
+          </div>
+          <div className="form-group">
+            <label>Issue Title *</label>
+            <input value={title} onChange={e=>setTitle(e.target.value)} maxLength={160} placeholder="Short title of the problem" required />
           </div>
           <div className="form-group">
             <label>Description *</label>
-            <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe the issue, or click the mic button below to speak." rows={4} required />
+            <textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="Describe the vehicle issue in detail." rows={4} required />
           </div>
           <div className="btn-row">
-            <button type="button" className={listening ? 'btn btn-danger' : 'btn btn-primary'} onClick={listening ? stopVoice : startVoice}>
-              {listening ? 'Stop Recording' : 'Speak Description'}
-            </button>
-            <button type="submit" className="btn btn-success">Submit Report</button>
+            <button type="button" className={listening?'btn btn-danger':'btn btn-primary'} onClick={listening?stopVoice:startVoice}>{listening?'Stop Recording':'🎙️ Speak Description'}</button>
+            <button type="submit" className="btn btn-success" disabled={submitting}>{submitting?'Submitting...':'Submit Request'}</button>
           </div>
         </form>
       </div>

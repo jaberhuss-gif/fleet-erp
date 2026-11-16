@@ -125,6 +125,7 @@ function logout(token) {
 }
 function getAppData(token) {
   const user = requireSession_(token);
+  if (user.role === 'Owner') ensureHandoverSheet_();
   // Vehicle Master is small and must be current; activity sheets can grow indefinitely.
   const allVehicles = rows_('Vehicles').map(v => enrichVehicle_(v));
   const activeVehicles = allVehicles.filter(v => String(v.status || 'Active').trim().toLowerCase() !== 'inactive');
@@ -567,6 +568,7 @@ function addVehicle(token,payload) {
 }
 function updateVehicle(token,id,payload) {
   const user=requireOwner_(token);
+  ensureHandoverSheet_();
   const previous=rows_('Vehicles').find(v=>String(v.vehicle_id)===String(id));
   if(!previous) throw new Error('Vehicle not found.');
   const oldDriver=String(previous.assigned_driver||'').trim(), newDriver=String(payload.driver||'').trim();
@@ -593,7 +595,9 @@ function updateVehicle(token,id,payload) {
   return {ok:true,handoverRequired:driverChanged&&!!oldDriver&&!!newDriver,oldDriver,newDriver};
 }
 function createHandover(token,payload) {
-  const user=requireOwner_(token),v=rows_('Vehicles').find(x=>String(x.vehicle_id)===String(payload.vehicleId));
+  const user=requireOwner_(token);
+  ensureHandoverSheet_();
+  const v=rows_('Vehicles').find(x=>String(x.vehicle_id)===String(payload.vehicleId));
   if(!v)throw new Error('Vehicle not found.');
   const oldDriver=String(payload.oldDriver||'').trim(),newDriver=String(payload.newDriver||'').trim();
   if(!oldDriver||!newDriver||oldDriver.toLowerCase()===newDriver.toLowerCase())throw new Error('Old and new driver names must be different.');
@@ -645,6 +649,17 @@ function enrichVehicle_(v) {
   return Object.assign({},v,{vehicleStatus:v.status||'Active',sinceOil:since,remaining,oilStatus});
 }
 function sheet_(name) { const s=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name); if(!s) throw new Error('Missing sheet '+name+'. Run setupFleetERP first.'); return s; }
+function ensureHandoverSheet_() {
+  const ss=SpreadsheetApp.getActiveSpreadsheet();
+  let sh=ss.getSheetByName('Handovers');
+  if(!sh) sh=ss.insertSheet('Handovers');
+  if(sh.getLastRow()===0) {
+    sh.getRange(1,1,1,TABLES.Handovers.length).setValues([TABLES.Handovers]);
+    sh.setFrozenRows(1);
+    sh.getRange(1,1,1,TABLES.Handovers.length).setFontWeight('bold').setBackground('#1e3a8a').setFontColor('#ffffff');
+  }
+  return sh;
+}
 function rows_(name) {
   const sh=sheet_(name), values=sh.getDataRange().getValues();
   if(values.length<2) return [];

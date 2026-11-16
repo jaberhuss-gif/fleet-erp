@@ -922,9 +922,10 @@ function execAddBarRows_(slide,items,x,y,w,maxRows,formatter) {
 function exportFleetExecutivePowerPoint(token) {
   const user=requireOwner_(token), d=buildFleetExecutiveData_();
   const pres=SlidesApp.create('Fleet Executive Dashboard — '+Utilities.formatDate(new Date(),'Asia/Riyadh','yyyy-MM-dd'));
-  const slides=pres.getSlides(); if(slides.length) slides[0].remove();
-  // Slide 1 — executive fleet overview.
-  let s=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  const slides=pres.getSlides();
+  // Reuse the presentation's first blank slide, then append exactly three more.
+  let s=slides.length?slides[0]:pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  s.getPageElements().forEach(element=>element.remove());
   execAddHeader_(s,'EXECUTIVE BRIEFING','Fleet Performance at a Glance','A consolidated view of fleet readiness, service workload and operational exposure.',1);
   execAddCard_(s,38,139,150,'Active Fleet',d.fleet.active,'of '+d.fleet.total+' registered vehicles','#0F766E');
   execAddCard_(s,202,139,150,'Open Requests',d.tickets.open+d.tires.open,'Maintenance + tire requests','#D97706');
@@ -947,7 +948,7 @@ function exportFleetExecutivePowerPoint(token) {
   execAddBarRows_(s,d.maintenance.byType.map(x=>({label:x.name,value:x.cost})),38,264,420,4,v=>'SAR '+Math.round(v).toLocaleString('en-US'));
   execAddRect_(s,490,235,192,118,'#E8EEF4',true);
   execAddText_(s,'SIX-MONTH COST TREND',505,249,160,16,9,'#0B5260',true);
-  execAddText_(s,d.maintenance.monthly.length?d.maintenance.monthly.map(x=>x.month+': SAR '+Math.round(x.cost).toLocaleString('en-US')).join('\\n'):'Data Incomplete — no dated maintenance cost records.',505,272,160,72,8,'#334155',false);
+  execAddText_(s,d.maintenance.monthly.length?d.maintenance.monthly.map(x=>x.month+': SAR '+Math.round(x.cost).toLocaleString('en-US')).join('\n'):'Data Incomplete — no dated maintenance cost records.',505,272,160,72,8,'#334155',false);
   // Slide 3 — tires and warehouse.
   s=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
   execAddHeader_(s,'ASSET CONTROL','Tires & Warehouse Position','Tire requests, stock availability, installed assets and recorded stock value.',3);
@@ -957,7 +958,7 @@ function exportFleetExecutivePowerPoint(token) {
   execAddCard_(s,530,139,152,'Stock Value',d.tires.inventory?('SAR '+Math.round(d.tires.stockValue).toLocaleString('en-US')):'Data Incomplete','Recorded purchase cost of in-stock tires','#64748B');
   execAddRect_(s,38,239,310,114,'#FFFFFF',true);
   execAddText_(s,'WAREHOUSE ACTIVITY',54,252,270,16,10,'#102A43',true);
-  execAddText_(s,'Stock movements: '+(d.sources.Tire_Stock_Movements.available?d.tires.movements:'Data Incomplete')+'\\nVehicle tire surveys: '+(d.sources.Tire_Surveys.available?d.tires.surveys:'Data Incomplete')+'\\nInstallation records: '+(d.sources.Tire_Installations.available?d.tires.installations:'Data Incomplete'),54,278,270,65,10,'#334155',false);
+  execAddText_(s,'Stock movements: '+(d.sources.Tire_Stock_Movements.available?d.tires.movements:'Data Incomplete')+'\nVehicle tire surveys: '+(d.sources.Tire_Surveys.available?d.tires.surveys:'Data Incomplete')+'\nInstallation records: '+(d.sources.Tire_Installations.available?d.tires.installations:'Data Incomplete'),54,278,270,65,10,'#334155',false);
   execAddRect_(s,370,239,312,114,'#E8EEF4',true);
   execAddText_(s,'MANAGEMENT FOLLOW-UP',386,252,280,16,10,'#0B5260',true);
   execAddText_(s,d.tires.open+' tire requests remain open. '+(d.tires.inStock===0?'No tires are recorded as in stock.':d.tires.inStock+' tires are recorded in stock.'),386,278,275,48,12,'#102A43',true);
@@ -975,7 +976,7 @@ function exportFleetExecutivePowerPoint(token) {
   execAddRect_(s,370,239,312,114,'#E8EEF4',true);
   execAddText_(s,'DATA COVERAGE & ACTIONS',386,252,280,16,10,'#0B5260',true);
   const coverage=d.dataQuality.missingSheets.length?'Missing sheets: '+d.dataQuality.missingSheets.join(', '):'All report source sheets are present.';
-  execAddText_(s,coverage+'\\nConfirm pending handovers, clear overdue inspections and review high-priority tickets.',386,278,275,63,9,'#334155',false);
+  execAddText_(s,coverage+'\nConfirm pending handovers, clear overdue inspections and review high-priority tickets.',386,278,275,63,9,'#334155',false);
   pres.saveAndClose();
   const exportUrl='https://www.googleapis.com/drive/v3/files/'+pres.getId()+'/export?mimeType='+encodeURIComponent('application/vnd.openxmlformats-officedocument.presentationml.presentation');
   const response=UrlFetchApp.fetch(exportUrl,{headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()},muteHttpExceptions:true});

@@ -828,7 +828,7 @@ function buildFleetExecutiveData_() {
   const openMaintenance=maintenance.filter(x=>!reportIsClosed_(x.status));
   const completedMaintenance=maintenance.filter(x=>String(x.status||'').toLowerCase()==='completed');
   const openTires=tireReq.filter(x=>!reportIsClosed_(x.status));
-  const completedTires=tireReq.filter(x=>reportIsClosed_(x.status));
+  const completedTires=tireReq.filter(x=>['completed','closed'].includes(String(x.status||'').trim().toLowerCase()));
   const inStock=inventory.filter(x=>String(x.status||'').trim().toLowerCase()==='in stock');
   const installed=inventory.filter(x=>String(x.status||'').trim().toLowerCase()==='installed');
   const overdueInspections=inspections.filter(x=>String(x.status||'').toLowerCase()!=='completed'&&x.due_date&&String(x.due_date).slice(0,10)<todayKey);
@@ -837,7 +837,9 @@ function buildFleetExecutiveData_() {
   const completedHandovers=handovers.filter(x=>String(x.status||'').toLowerCase()==='completed');
   const pendingHandovers=handovers.filter(x=>!reportIsClosed_(x.status));
   const totalMaintenanceCost=maintenance.reduce((a,x)=>a+reportNumber_(x.cost),0);
-  const totalStockValue=inStock.reduce((a,x)=>a+reportNumber_(x.purchase_cost),0);
+  const totalStockValue=inStock.reduce((a,x)=>a+reportNumber_(x.purchase_cost),0), stockCostCount=inStock.filter(x=>x.purchase_cost!==''&&x.purchase_cost!==null).length;
+  const warehouseMap={};inStock.forEach(x=>{const k=String(x.warehouse||'Unassigned').trim()||'Unassigned';warehouseMap[k]=(warehouseMap[k]||0)+1;});
+  const warehouseRows=Object.keys(warehouseMap).map(k=>({name:k,count:warehouseMap[k]})).sort((a,b)=>b.count-a.count).slice(0,5);
   const bySite={}; active.forEach(v=>{const k=String(v.site||'Not assigned').trim()||'Not assigned';bySite[k]=(bySite[k]||0)+1;});
   const siteRows=Object.keys(bySite).map(k=>({name:k,count:bySite[k]})).sort((a,b)=>b.count-a.count).slice(0,6);
   const byType={};maintenance.forEach(x=>{const k=String(x.maintenance_type||'Unclassified').trim()||'Unclassified';byType[k]=(byType[k]||0)+reportNumber_(x.cost);});
@@ -868,7 +870,7 @@ function buildFleetExecutiveData_() {
     fleet:{total:vehicles.length,active:active.length,inactive:vehicles.length-active.length,assigned:active.length-missingVehicleDrivers,unassigned:missingVehicleDrivers,bySite:siteRows},
     maintenance:{total:maintenance.length,completed:completedMaintenance.length,open:openMaintenance.length,cost:totalMaintenanceCost,withCost:maintenance.filter(x=>x.cost!==''&&x.cost!==null).length,byType:typeRows,monthly:months},
     tickets:{total:tickets.length,open:openTickets.length,closed:tickets.length-openTickets.length,highPriority:openTickets.filter(x=>['high','urgent','critical'].includes(String(x.priority||'').toLowerCase())).length},
-    tires:{requests:tireReq.length,open:openTires.length,completed:completedTires.length,inventory:inventory.length,inStock:inStock.length,installed:installed.length,stockValue:totalStockValue,installations:installs.length,movements:movements.length,surveys:surveys.length},
+    tires:{requests:tireReq.length,open:openTires.length,completed:completedTires.length,inventory:inventory.length,inStock:inStock.length,installed:installed.length,stockValue:totalStockValue,stockCostCount,warehouseBySite:warehouseRows,installations:installs.length,movements:movements.length,surveys:surveys.length},
     handovers:{total:handovers.length,completed:completedHandovers.length,pending:pendingHandovers.length},
     inspections:{total:inspections.length,completed:completedInspections.length,pending:pendingInspections.length,overdue:overdueInspections.length},
     utilization:{kmEntries:km.length,oilChanges:oil.length,oilOverdue,oilWarning},
@@ -901,7 +903,7 @@ function execAddCard_(slide,x,y,w,label,value,note,accent) {
   execAddText_(slide,value,x+16,y+27,w-28,29,23,'#0F172A',true);
   execAddText_(slide,note||'',x+16,y+57,w-28,13,8,'#64748B',false);
 }
-function execAddHeader_(slide,kicker,title,subtitle,page) {
+function execAddHeader_(slide,kicker,title,subtitle,page,generatedAt) {
   slide.getBackground().setSolidFill('#F3F6FA');
   execAddRect_(slide,0,0,720,9,'#0B2438',false);
   execAddText_(slide,"MA'ADEN   |   IVANHOE ELECTRIC",38,24,420,18,9,'#0B5260',true);
@@ -909,7 +911,7 @@ function execAddHeader_(slide,kicker,title,subtitle,page) {
   execAddText_(slide,title,38,67,644,32,22,'#102A43',true);
   execAddText_(slide,subtitle,38,101,644,20,9,'#526477',false);
   execAddRect_(slide,38,378,644,1,'#D8E1EA',false);
-  execAddText_(slide,'FLEET MANAGEMENT  •  LIVE SYSTEM DATA  •  '+page+' / 4',38,382,644,12,7,'#718096',false);
+  execAddText_(slide,'FLEET MANAGEMENT  •  LIVE DATA  •  '+generatedAt+'  •  '+page+' / 4',38,382,644,12,7,'#718096',false);
 }
 function execAddBarRows_(slide,items,x,y,w,maxRows,formatter) {
   const list=(items||[]).slice(0,maxRows), max=Math.max(1,...list.map(x=>Number(x.value)||0));
@@ -928,7 +930,7 @@ function exportFleetExecutivePowerPoint(token) {
   // Reuse the presentation's first blank slide, then append exactly three more.
   let s=slides.length?slides[0]:pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
   s.getPageElements().forEach(element=>element.remove());
-  execAddHeader_(s,'EXECUTIVE BRIEFING','Fleet Performance at a Glance','A consolidated view of fleet readiness, service workload and operational exposure.',1);
+  execAddHeader_(s,'EXECUTIVE BRIEFING','Fleet Performance at a Glance','A consolidated view of fleet readiness, service workload and operational exposure.',1,d.generatedAt);
   execAddCard_(s,38,139,150,'Active Fleet',execMetric_(d,'Vehicles',d.fleet.active),'of '+execMetric_(d,'Vehicles',d.fleet.total)+' registered vehicles','#0F766E');
   execAddCard_(s,202,139,150,'Open Requests',execMultiMetric_(d,['Tickets','Tire_Requests'],d.tickets.open+d.tires.open),'Maintenance + tire requests','#D97706');
   execAddCard_(s,366,139,150,'Maintenance Spend',d.maintenance.withCost?('SAR '+Math.round(d.maintenance.cost).toLocaleString('en-US')):'Data Incomplete',d.maintenance.withCost+' records with cost data','#2563EB');
@@ -941,7 +943,7 @@ function exportFleetExecutivePowerPoint(token) {
   execAddText_(s,d.dataQuality.missingSheets.length?'Data coverage incomplete: '+d.dataQuality.missingSheets.join(', '):'All expected source sheets are available.',486,315,180,32,8,'#526477',false);
   // Slide 2 — maintenance and ticket backlog.
   s=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
-  execAddHeader_(s,'SERVICE DELIVERY','Maintenance & Workload','Recorded maintenance activity, costs and open work requiring management attention.',2);
+  execAddHeader_(s,'SERVICE DELIVERY','Maintenance & Workload','Recorded maintenance activity, costs and open work requiring management attention.',2,d.generatedAt);
   execAddCard_(s,38,139,150,'Maintenance Records',execMetric_(d,'Maintenance',d.maintenance.total),d.maintenance.completed+' completed / '+d.maintenance.open+' open','#0F766E');
   execAddCard_(s,202,139,150,'Maintenance Cost',d.maintenance.withCost?'SAR '+Math.round(d.maintenance.cost).toLocaleString('en-US'):'Data Incomplete',d.maintenance.withCost+' cost entries','#2563EB');
   execAddCard_(s,366,139,150,'Open Tickets',execMetric_(d,'Tickets',d.tickets.open),d.tickets.highPriority+' high / urgent priority','#D97706');
@@ -953,21 +955,22 @@ function exportFleetExecutivePowerPoint(token) {
   execAddText_(s,d.maintenance.monthly.length?d.maintenance.monthly.map(x=>x.month+': SAR '+Math.round(x.cost).toLocaleString('en-US')).join('\n'):'Data Incomplete — no dated maintenance cost records.',505,272,160,72,8,'#334155',false);
   // Slide 3 — tires and warehouse.
   s=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
-  execAddHeader_(s,'ASSET CONTROL','Tires & Warehouse Position','Tire requests, stock availability, installed assets and recorded stock value.',3);
+  execAddHeader_(s,'ASSET CONTROL','Tires & Warehouse Position','Tire requests, stock availability, installed assets and recorded stock value.',3,d.generatedAt);
   execAddCard_(s,38,139,150,'Tire Requests',execMetric_(d,'Tire_Requests',d.tires.requests),d.tires.open+' open / '+d.tires.completed+' completed','#D97706');
   execAddCard_(s,202,139,150,'In-Stock Tires',execMetric_(d,'Tire_Inventory',d.tires.inStock),'of '+d.tires.inventory+' inventory records','#0F766E');
   execAddCard_(s,366,139,150,'Installed Tires',execMetric_(d,'Tire_Inventory',d.tires.installed),execMetric_(d,'Tire_Installations',d.tires.installations)+' installation records','#2563EB');
   execAddCard_(s,530,139,152,'Stock Value',d.tires.inventory?('SAR '+Math.round(d.tires.stockValue).toLocaleString('en-US')):'Data Incomplete','Recorded purchase cost of in-stock tires','#64748B');
   execAddRect_(s,38,239,310,114,'#FFFFFF',true);
-  execAddText_(s,'WAREHOUSE ACTIVITY',54,252,270,16,10,'#102A43',true);
-  execAddText_(s,'Stock movements: '+(d.sources.Tire_Stock_Movements.available?d.tires.movements:'Data Incomplete')+'\nVehicle tire surveys: '+(d.sources.Tire_Surveys.available?d.tires.surveys:'Data Incomplete')+'\nInstallation records: '+(d.sources.Tire_Installations.available?d.tires.installations:'Data Incomplete'),54,278,270,65,10,'#334155',false);
+  execAddText_(s,'IN-STOCK BY WAREHOUSE',54,252,270,16,10,'#102A43',true);
+  execAddText_(s,d.sources.Tire_Inventory.available?(d.tires.warehouseBySite.length?d.tires.warehouseBySite.map(x=>x.name+': '+x.count+' tires').join('\n'):'No in-stock tires recorded.'):'Data Incomplete',54,276,270,54,9,'#334155',false);
+  execAddText_(s,'Movements: '+(d.sources.Tire_Stock_Movements.available?d.tires.movements:'Data Incomplete')+'  •  Surveys: '+(d.sources.Tire_Surveys.available?d.tires.surveys:'Data Incomplete'),54,333,270,12,7,'#64748B',false);
   execAddRect_(s,370,239,312,114,'#E8EEF4',true);
   execAddText_(s,'MANAGEMENT FOLLOW-UP',386,252,280,16,10,'#0B5260',true);
   execAddText_(s,d.tires.open+' tire requests remain open. '+(d.tires.inStock===0?'No tires are recorded as in stock.':d.tires.inStock+' tires are recorded in stock.'),386,278,275,48,12,'#102A43',true);
   execAddText_(s,'Stock valuation is based only on recorded purchase_cost values; missing costs are not estimated.',386,328,275,18,7,'#526477',false);
   // Slide 4 — handovers, compliance and management actions.
   s=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
-  execAddHeader_(s,'GOVERNANCE & READINESS','Compliance, Handovers & Priorities','Evidence of driver transitions, scheduled inspections and daily vehicle controls.',4);
+  execAddHeader_(s,'GOVERNANCE & READINESS','Compliance, Handovers & Priorities','Evidence of driver transitions, scheduled inspections and daily vehicle controls.',4,d.generatedAt);
   execAddCard_(s,38,139,150,'Handovers',execMetric_(d,'Handovers',d.handovers.total),d.handovers.completed+' completed / '+d.handovers.pending+' pending','#0F766E');
   execAddCard_(s,202,139,150,'Inspections',execMetric_(d,'Inspections',d.inspections.total),d.inspections.completed+' completed / '+d.inspections.pending+' pending','#2563EB');
   execAddCard_(s,366,139,150,'Overdue Checks',execMetric_(d,'Inspections',d.inspections.overdue),'Inspection due dates passed','#DC2626');

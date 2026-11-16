@@ -1,5 +1,6 @@
 const APP = { NAME: 'Fleet ERP', VERSION: '0.1.0', SESSION_TTL: 21600 };
 const TABLES = {
+  Handovers: ['handover_id','vehicle_id','vehicle_plate','old_driver','new_driver','old_driver_phone','new_driver_phone','handover_date','handover_km','status','checklist_json','condition_notes','snapshot_json','created_by','created_at','old_driver_signed_at','new_driver_signed_at'],
   Vehicles: ['vehicle_id','plate','make','model','year','site','assigned_driver','driver_phone','current_km','last_oil_km','oil_interval_km','vehicle_pin_hash','status','created_at','updated_at'],
   KM_Records: ['record_id','vehicle_id','reading_km','reading_date','driver_name','notes','created_by','created_at'],
   Oil_Changes: ['record_id','vehicle_id','reading_km','change_date','oil_type','notes','created_by','created_at'],
@@ -163,6 +164,7 @@ function getAppData(token) {
     tireInventory:user.role==='Owner'?recentRows_('Tire_Inventory',1000):[],
     tireInstallations:readRecords('Tire_Installations'),
     tireStockMovements:user.role==='Owner'?recentRows_('Tire_Stock_Movements',1000):[],
+    handovers:user.role==='Owner'?recentRows_('Handovers',500):[],
     driverNames, selectedDriverName:user.selectedDriverName||'', requiresDriverSelection:user.role==='Driver'&&!user.selectedDriverName, serverTime:new Date().toISOString()
   };
 }
@@ -565,15 +567,51 @@ function addVehicle(token,payload) {
 }
 function updateVehicle(token,id,payload) {
   const user=requireOwner_(token);
-  const patch={plate:String(payload.plate||'').trim().toUpperCase(),make:String(payload.make||''),model:String(payload.model||''),year:String(payload.year||''),site:String(payload.site||''),assigned_driver:String(payload.driver||''),driver_phone:String(payload.phone||''),oil_interval_km:Number(payload.oilIntervalKm||5000),status:String(payload.status||'Active'),updated_at:new Date()};
+  const previous=rows_('Vehicles').find(v=>String(v.vehicle_id)===String(id));
+  if(!previous) throw new Error('Vehicle not found.');
+  const oldDriver=String(previous.assigned_driver||'').trim(), newDriver=String(payload.driver||'').trim();
+  const driverChanged=oldDriver.toLowerCase()!==newDriver.toLowerCase();
+  const patch={plate:String(payload.plate||'').trim().toUpperCase(),make:String(payload.make||''),model:String(payload.model||''),year:String(payload.year||''),site:String(payload.site||''),assigned_driver:newDriver,driver_phone:String(payload.phone||''),oil_interval_km:Number(payload.oilIntervalKm||5000),status:String(payload.status||'Active'),updated_at:new Date()};
   if(payload.currentKm!==undefined) patch.current_km=Number(payload.currentKm||0);
   if(payload.lastOilKm!==undefined) patch.last_oil_km=Number(payload.lastOilKm||0);
   if(payload.vehiclePin) {
     if(String(payload.vehiclePin).length<4) throw new Error('Vehicle access code must be at least 4 characters.');
     const salt=Utilities.getUuid(); patch.vehicle_pin_hash=salt+':'+hash_(salt+String(payload.vehiclePin));
   }
-  updateById_('Vehicles','vehicle_id',id,patch);
-  audit_(user.fullName,'UPDATE','Vehicle',id,'Updated '+patch.plate);
+  const lock=LockService.getScriptLock();lock.waitLock(10000);
+  try {
+    if(driverChanged && oldDriver && newDriver) {
+      const existing=rows_('Handovers').find(h=>String(h.vehicle_id)===String(id)&&String(h.old_driver)===oldDriver&&String(h.new_driver)===newDriver&&String(h.status)!=='Completed');
+      if(!existing) {
+        const now=new Date(),hid=Utilities.getUuid();
+        sheet_('Handovers').appendRow([hid,String(id),patch.plate,oldDriver,newDriver,String(previous.driver_phone||''),patch.driver_phone,now,Number(previous.current_km||0),'Pending Signatures','{}','Driver assignment changed; vehicle handover required.','{}',user.fullName,now,'','']);
+      }
+    }
+    updateById_('Vehicles','vehicle_id',id,patch);
+  } finally {lock.releaseLock();}
+  audit_(user.fullName,'UPDATE','Vehicle',id,'Updated '+patch.plate+(driverChanged?'; driver changed from '+(oldDriver||'Unassigned')+' to '+(newDriver||'Unassigned'):''));
+  return {ok:true,handoverRequired:driverChanged&&!!oldDriver&&!!newDriver,oldDriver,newDriver};
+}
+function createHandover(token,payload) {
+  const user=requireOwner_(token),v=rows_('Vehicles').find(x=>String(x.vehicle_id)===String(payload.vehicleId));
+  if(!v)throw new Error('Vehicle not found.');
+  const oldDriver=String(payload.oldDriver||'').trim(),newDriver=String(payload.newDriver||'').trim();
+  if(!oldDriver||!newDriver||oldDriver.toLowerCase()===newDriver.toLowerCase())throw new Error('Old and new driver names must be different.');
+  const id=Utilities.getUuid(),now=new Date();
+  const checklist=payload.checklist||{};
+  const snapshot=payload.snapshot||{};
+  sheet_('Handovers').appendRow([id,v.vehicle_id,v.plate,oldDriver,newDriver,String(payload.oldPhone||''),String(payload.newPhone||''),payload.date||now,Number(payload.km||v.current_km||0),'Pending Signatures',JSON.stringify(checklist),String(payload.notes||''),JSON.stringify(snapshot),user.fullName,now,'','']);
+  audit_(user.fullName,'CREATE','Handover',id,v.plate+'; '+oldDriver+' -> '+newDriver);
+  return {ok:true,id};
+}
+function completeHandover(token,id,side) {
+  const user=requireOwner_(token);
+  if(!['old','new'].includes(side))throw new Error('Invalid signature side.');
+  const patch=side==='old'?{old_driver_signed_at:new Date()}:{new_driver_signed_at:new Date()};
+  updateById_('Handovers','handover_id',id,patch);
+  const h=rows_('Handovers').find(x=>String(x.handover_id)===String(id));
+  if(h&&h.old_driver_signed_at&&h.new_driver_signed_at)updateById_('Handovers','handover_id',id,{status:'Completed'});
+  audit_(user.fullName,'SIGN','Handover',id,side+' driver signature recorded');
   return {ok:true};
 }
 function getAuditLog(token) {

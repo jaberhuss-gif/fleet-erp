@@ -726,7 +726,7 @@ async function downloadFleetExecutivePptx(){
  popup.document.write('<p style="font:16px Arial;padding:30px">Generating the four-slide PowerPoint from live Fleet ERP data…</p>');
  try{
   const result=await rpc('exportFleetExecutivePowerPoint',TOKEN);
-  popup.location.href=result.url;
+  popup.location.href=result.downloadUrl||result.url;
   alert('PowerPoint generated successfully: '+result.name+'\\nData as of: '+result.generatedAt);
  }catch(e){popup.close();alert('PowerPoint export failed: '+(e.message||String(e)));}
 }

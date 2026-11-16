@@ -369,8 +369,8 @@ function ticketsHtml(rows){
     '<label>Description *</label><textarea id="ticketDescription" rows="4" maxlength="3000" required placeholder="Describe the problem...">'+
     '</textarea><div class="form-actions"><button class="btn primary" type="submit">Submit Request</button></div></form></div>';
   const register=ticketRegisterHtml(rows);
-  if(isDriver) return '<div class="page-title"><div><h2>🛠️ Report an Issue</h2><p>Report a maintenance issue for your selected vehicle.</p></div></div>'+form+'<div class="panel"><h3>My Requests Register</h3>'+register+'</div>';
-  return '<div class="page-title"><div><h2>🎫 Vehicle Maintenance & Tickets</h2><p>Report and follow vehicle issues.</p></div><button class="btn secondary" onclick="refreshAndRender()">↻ Refresh</button></div>'+form+'<div class="panel"><h3>Requests Register</h3>'+register+'</div>';
+  if(isDriver) return '<div class="page-title"><div><h2>🛠️ Maintenance Issue Report</h2><p>Submit a vehicle issue directly to Fleet Management.</p></div></div>'+form+'<div class="panel"><h3>My Submitted Requests</h3>'+register+'</div>';
+  return '<div class="page-title"><div><h2>🎫 Incoming Vehicle Maintenance Requests</h2><p>Requests submitted by drivers. Review, follow up and confirm completed repairs.</p></div><button class="btn secondary" onclick="refreshAndRender()">↻ Refresh</button></div><div class="panel"><h3>Driver Requests Register</h3>'+register+'</div>';
 }
 function ticketRegisterHtml(rows){
   if(!rows.length) return '<div class="empty">No requests recorded.</div>';

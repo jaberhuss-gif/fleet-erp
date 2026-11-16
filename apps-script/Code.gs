@@ -21,6 +21,7 @@ const TABLES = {
 function doGet(e) {
   const params = e && e.parameter ? e.parameter : {};
   if (String(params.action || '') === 'maintenance-confirm') return renderMaintenancePrompt_(params);
+  if (String(params.action || '') === 'inspection-confirm') return renderInspectionPrompt_(params);
   return HtmlService.createTemplateFromFile('Index').evaluate()
     .setTitle(APP.NAME)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
@@ -532,24 +533,98 @@ function installTireForRequest(token,payload) {
     return {ok:true,installationId,installKm,vehiclePlate:vehicle.plate,serial:tire.manufacturer_serial};
   } finally { lock.releaseLock(); }
 }
+function ensureInspectionColumns_() {
+  const sh=sheet_('Inspections'), headers=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(String);
+  ['close_date','confirmation_token_hash','confirmation_expires_at','confirmation_at','confirmed_by','reminder_sent_at','next_due_date'].forEach(name=>{
+    if(headers.indexOf(name)<0) sh.getRange(1,sh.getLastColumn()+1).setValue(name);
+  });
+}
+function ensureVehicleCloseDateColumn_() {
+  const sh=sheet_('Vehicles'), headers=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(String);
+  if(headers.indexOf('close_date')<0) sh.getRange(1,sh.getLastColumn()+1).setValue('close_date');
+}
 function saveInspection(token,payload) {
   const user=requireOwner_(token), v=permittedVehicle_(user,payload.vehicleId);
+  ensureInspectionColumns_();
   const type=String(payload.inspectionType||'').trim();
   if(!['Annual','6-Month'].includes(type)) throw new Error('Select Annual or 6-Month inspection.');
   const due=String(payload.dueDate||'').trim();
-  const status=String(payload.status||'Pending');
   if(!due) throw new Error('Inspection due date is required.');
+  const closeDate=String(payload.closeDate||'').trim();
+  if(type==='6-Month' && closeDate) {
+    ensureVehicleCloseDateColumn_();
+    updateById_('Vehicles','vehicle_id',v.vehicle_id,{close_date:closeDate,updated_at:new Date()});
+  }
   const id=Utilities.getUuid(), now=new Date();
-  sheet_('Inspections').appendRow([id,v.vehicle_id,type,due,status==='Completed'?now:'',status,Number(payload.cost||0),String(payload.notes||''),now]);
+  const sh=sheet_('Inspections');
+  sh.appendRow([id,v.vehicle_id,type,due,'','Pending',Number(payload.cost||0),String(payload.notes||''),now,closeDate,'','','','','','', '']);
   audit_(user.fullName,'CREATE','Inspection',id,type+' inspection for '+v.plate);
   return {ok:true,id};
 }
 function updateInspection(token,id,status,notes,cost) {
   const user=requireOwner_(token);
-  if(!['Pending','Completed','Overdue'].includes(String(status))) throw new Error('Invalid inspection status.');
-  updateById_('Inspections','record_id',id,{status:String(status),completed_date:status==='Completed'?new Date():'',notes:String(notes||''),cost:Number(cost||0)});
+  if(String(status)==='Completed') throw new Error('Inspections can only be completed after the driver confirms YES through WhatsApp.');
+  if(!['Pending','Overdue','Pending Driver Confirmation'].includes(String(status))) throw new Error('Invalid inspection status.');
+  updateById_('Inspections','record_id',id,{status:String(status),notes:String(notes||''),cost:Number(cost||0)});
   audit_(user.fullName,'UPDATE','Inspection',id,'Status '+status);
   return {ok:true};
+}
+function prepareInspectionConfirmation(token,id) {
+  const user=requireOwner_(token), record=rows_('Inspections').find(x=>String(x.record_id)===String(id));
+  if(!record) throw new Error('Inspection record not found.');
+  if(String(record.status)==='Completed') throw new Error('This inspection is already confirmed as completed.');
+  const vehicle=rows_('Vehicles').find(v=>String(v.vehicle_id)===String(record.vehicle_id));
+  if(!vehicle) throw new Error('Vehicle not found.');
+  const phone=String(vehicle.driver_phone||'').replace(/\\D/g,'');
+  if(!phone) throw new Error('No driver phone number is saved for this vehicle.');
+  ensureInspectionColumns_();
+  const raw=Utilities.getUuid().replace(/-/g,'')+Utilities.getUuid().replace(/-/g,'');
+  const expires=new Date(Date.now()+14*24*60*60*1000);
+  updateById_('Inspections','record_id',id,{status:'Pending Driver Confirmation',confirmation_token_hash:hash_(raw),confirmation_expires_at:expires});
+  audit_(user.fullName,'SEND_CONFIRMATION','Inspection',id,'WhatsApp YES/NO confirmation link prepared.');
+  const base=ScriptApp.getService().getUrl();
+  if(!base) throw new Error('Deploy the Apps Script as a Web App before generating confirmation links.');
+  return {phone,driverName:String(vehicle.assigned_driver||'Driver'),vehiclePlate:String(vehicle.plate||vehicle.vehicle_id),type:String(record.inspection_type),dueDate:String(record.due_date||''),yesUrl:base+'?action=inspection-confirm&token='+encodeURIComponent(raw)+'&answer=yes',noUrl:base+'?action=inspection-confirm&token='+encodeURIComponent(raw)+'&answer=no'};
+}
+function renderInspectionPrompt_(params) {
+  const token=String(params.token||''), answer=String(params.answer||'').toLowerCase();
+  if(!/^[a-f0-9]{64}$/i.test(token)||!['yes','no'].includes(answer)) return HtmlService.createHtmlOutput(confirmationPage_('Invalid link','This inspection confirmation link is invalid. Please contact Fleet Management.'));
+  const label=answer==='yes'?'YES — confirm the inspection is completed':'NO — the inspection is not completed';
+  const html='<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:Arial;background:#f1f5f9;padding:24px;color:#0f172a}.card{max-width:520px;margin:8vh auto;background:white;padding:30px;border-radius:14px;text-align:center;box-shadow:0 8px 30px #0001}button{border:0;border-radius:9px;background:#2563eb;color:white;padding:15px 22px;font-size:17px;font-weight:bold;cursor:pointer}</style></head><body><div class="card"><h2>Vehicle Inspection Confirmation</h2><p>Please confirm the inspection status for your vehicle.</p><button onclick="send()" id="confirm">'+label+'</button><p id="result"></p></div><script>function send(){var b=document.getElementById("confirm"),r=document.getElementById("result");b.disabled=true;r.textContent="Submitting…";google.script.run.withSuccessHandler(function(html){document.open();document.write(html);document.close();}).withFailureHandler(function(e){b.disabled=false;r.textContent=e&&e.message?e.message:"Unable to record confirmation.";}).confirmInspectionFromLink("TOKEN","ANSWER");}</script></body></html>';
+  return HtmlService.createHtmlOutput(html.replace('TOKEN',token).replace('ANSWER',answer));
+}
+function confirmInspectionFromLink(token,answer) {
+  const raw=String(token||''), choice=String(answer||'').toLowerCase();
+  if(!raw||!['yes','no'].includes(choice)) return confirmationPage_('Invalid response','This confirmation response is invalid.');
+  const lock=LockService.getScriptLock();lock.waitLock(10000);
+  try {
+    ensureInspectionColumns_();
+    const sh=sheet_('Inspections'), values=sh.getDataRange().getValues(), headers=values[0].map(String), ix={};headers.forEach((h,i)=>ix[h]=i);
+    const digest=hash_(raw);let row=-1;
+    for(let i=1;i<values.length;i++) if(String(values[i][ix.confirmation_token_hash]||'')===digest){row=i+1;break;}
+    if(row<0) return confirmationPage_('Link not found','This link is invalid, already used, or replaced. Contact Fleet Management.');
+    const record=values[row-1], expiry=new Date(record[ix.confirmation_expires_at]);
+    if(isNaN(expiry.getTime())||expiry.getTime()<Date.now()) return confirmationPage_('Link expired','This confirmation link has expired. Contact Fleet Management for a new link.');
+    if(String(record[ix.status])==='Completed') return confirmationPage_('Already confirmed','This inspection has already been confirmed. Thank you.');
+    const now=new Date(), id=String(record[ix.record_id]), vehicleId=String(record[ix.vehicle_id]), type=String(record[ix.inspection_type]);
+    sh.getRange(row,ix.confirmation_token_hash+1).setValue('');
+    sh.getRange(row,ix.confirmation_expires_at+1).setValue('');
+    sh.getRange(row,ix.confirmation_at+1).setValue(now);
+    sh.getRange(row,ix.confirmed_by+1).setValue(choice==='yes'?'Driver YES':'Driver NO');
+    sh.getRange(row,ix.status+1).setValue(choice==='yes'?'Completed':'Pending');
+    if(choice==='yes') sh.getRange(row,ix.completed_date+1).setValue(now);
+    audit_('Driver','WHATSAPP_CONFIRM','Inspection',id,choice.toUpperCase()+'; vehicle '+vehicleId);
+    if(choice==='yes') {
+      const base=new Date(now);base.setHours(12,0,0,0);
+      const months=type==='Annual'?12:6, next=new Date(base);next.setMonth(next.getMonth()+months);
+      const existing=rows_('Inspections').some(x=>String(x.vehicle_id)===vehicleId&&String(x.inspection_type)===type&&String(x.status)!=='Completed'&&String(x.due_date)===next.toISOString().slice(0,10));
+      if(!existing) sh.appendRow([Utilities.getUuid(),vehicleId,type,next.toISOString().slice(0,10),'','Pending',0,'Automatically scheduled after driver WhatsApp confirmation',now,'','','','','','','', '']);
+      if(type==='Annual') {
+        rows_('Inspections').filter(x=>String(x.vehicle_id)===vehicleId&&String(x.inspection_type)==='6-Month'&&String(x.status)!=='Completed').forEach(x=>updateById_('Inspections','record_id',x.record_id,{status:'Completed',completed_date:now,confirmation_at:now,confirmed_by:'Closed by Annual inspection confirmation'}));
+      }
+    }
+    return confirmationPage_(choice==='yes'?'Inspection confirmed':'Inspection not confirmed',choice==='yes'?'Thank you. Fleet Management has recorded the completion date.':'Thank you. The inspection remains open and Fleet Management will follow up.');
+  } finally {lock.releaseLock();}
 }
 function addVehicle(token,payload) {
   const user=requireOwner_(token);

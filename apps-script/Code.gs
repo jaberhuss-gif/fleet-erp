@@ -995,5 +995,5 @@ function exportFleetExecutivePowerPoint(token) {
   file.setDescription('Four-slide executive fleet dashboard generated from live Fleet ERP records on '+d.generatedAt+'.');
   DriveApp.getFileById(pres.getId()).setTrashed(true);
   audit_(user.fullName,'EXPORT','Fleet Executive Report',file.getId(),'Four-slide live-data PowerPoint exported.');
-  return {ok:true,url:file.getUrl(),name:filename,generatedAt:d.generatedAt,slides:4};
+  return {ok:true,url:file.getUrl(),downloadUrl:'https://drive.google.com/uc?export=download&id='+file.getId(),name:filename,generatedAt:d.generatedAt,slides:4};
 }

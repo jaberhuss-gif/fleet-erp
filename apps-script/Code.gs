@@ -125,7 +125,6 @@ function logout(token) {
 }
 function getAppData(token) {
   const user = requireSession_(token);
-  if (user.role === 'Owner') ensureHandoverSheet_();
   // Vehicle Master is small and must be current; activity sheets can grow indefinitely.
   const allVehicles = rows_('Vehicles').map(v => enrichVehicle_(v));
   const activeVehicles = allVehicles.filter(v => String(v.status || 'Active').trim().toLowerCase() !== 'inactive');
@@ -165,7 +164,7 @@ function getAppData(token) {
     tireInventory:user.role==='Owner'?recentRows_('Tire_Inventory',1000):[],
     tireInstallations:readRecords('Tire_Installations'),
     tireStockMovements:user.role==='Owner'?recentRows_('Tire_Stock_Movements',1000):[],
-    handovers:user.role==='Owner'?recentRows_('Handovers',500):[],
+    handovers:user.role==='Owner'?(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Handovers')?recentRows_('Handovers',500):[]):[],
     driverNames, selectedDriverName:user.selectedDriverName||'', requiresDriverSelection:user.role==='Driver'&&!user.selectedDriverName, serverTime:new Date().toISOString()
   };
 }

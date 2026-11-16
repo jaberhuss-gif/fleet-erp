@@ -19,7 +19,7 @@ const TABLES = {
 
 function doGet(e) {
   const params = e && e.parameter ? e.parameter : {};
-  if (String(params.action || '') === 'maintenance-confirm') return renderMaintenanceConfirmation_(params);
+  if (String(params.action || '') === 'maintenance-confirm') return renderMaintenancePrompt_(params);
   return HtmlService.createTemplateFromFile('Index').evaluate()
     .setTitle(APP.NAME)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
@@ -264,6 +264,17 @@ function ensureTicketConfirmationColumns_() {
     if(headers.indexOf(name)<0){sh.getRange(1,sh.getLastColumn()+1).setValue(name);headers.push(name);}
   });
 }
+function renderMaintenancePrompt_(params) {
+  const token=String(params.token||''), answer=String(params.answer||'').toLowerCase();
+  if(!/^[a-f0-9]{64}$/i.test(token)||!['yes','no'].includes(answer))
+    return HtmlService.createHtmlOutput(confirmationPage_('Invalid link','This confirmation link is invalid. Please contact Fleet Management.'));
+  const label=answer==='yes'?'YES — confirm the issue is fixed':'NO — the issue is not fixed';
+  const html='<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font-family:Arial,sans-serif;background:#f1f5f9;margin:0;padding:24px;color:#0f172a}.card{max-width:520px;margin:8vh auto;background:white;padding:30px;border-radius:14px;box-shadow:0 8px 30px #0001;text-align:center}button{border:0;border-radius:9px;background:#2563eb;color:white;padding:15px 22px;font-size:17px;font-weight:bold;cursor:pointer}p{line-height:1.7}</style></head><body><div class="card"><h2>Vehicle Maintenance Confirmation</h2><p>Please confirm your response below. This will update the Fleet ticket.</p><button id="confirm" onclick="confirmAnswer()">'+label+'</button><p id="result"></p></div><script>function confirmAnswer(){var b=document.getElementById("confirm"),r=document.getElementById("result");b.disabled=true;r.textContent="Submitting…";google.script.run.withSuccessHandler(function(html){document.open();document.write(html);document.close();}).withFailureHandler(function(e){b.disabled=false;r.textContent=e&&e.message?e.message:"Unable to record your response.";}).confirmMaintenanceFromLink("TOKEN_PLACEHOLDER","ANSWER_PLACEHOLDER");}</script></body></html>';
+  return HtmlService.createHtmlOutput(html.replace('TOKEN_PLACEHOLDER',token).replace('ANSWER_PLACEHOLDER',answer));
+}
+function confirmMaintenanceFromLink(token,answer) {
+  return renderMaintenanceConfirmation_({token:String(token||''),answer:String(answer||'')}).getContent();
+}
 function renderMaintenanceConfirmation_(params) {
   const raw=String(params.token||''), answer=String(params.answer||'').toLowerCase();
   if(!raw||!['yes','no'].includes(answer)) return HtmlService.createHtmlOutput(confirmationPage_('Invalid link','This confirmation link is invalid. Please contact Fleet Management.'));
@@ -288,7 +299,7 @@ function renderMaintenanceConfirmation_(params) {
       sh.getRange(row,ix.closure_method+1).setValue('WhatsApp Confirmation');
     } else {
       if(String(record[ix.status])==='Pending Driver Confirmation') sh.getRange(row,ix.status+1).setValue('In Progress');
-      sh.getRange(row,ix.closure_method+1).setValue('Driver reported NOT fixed');
+      sh.getRange(row,ix.closure_method+1).setValue('');
     }
     audit_('Driver','WHATSAPP_CONFIRMATION','Ticket',String(record[ix.ticket_id]||''),'Driver answered '+answer.toUpperCase());
     return HtmlService.createHtmlOutput(confirmationPage_(answer==='yes'?'Thank you — ticket closed':'Thank you — ticket remains open',answer==='yes'?'Your confirmation was recorded. The maintenance ticket is now closed.':'Your response was recorded. The ticket remains open and Fleet Management will follow up.'));

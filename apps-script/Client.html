@@ -358,59 +358,28 @@ function oilHtml(v){
  '</tbody></table></div></div>';
 }
 function ticketsHtml(rows){
- const isDriver=USER.role==='Driver';
- const vehicles=DATA.vehicles||[];
- const vehicleOptions=vehicles.map(v=>'<option value="'+esc(v.vehicle_id)+'">'+esc(v.plate)+'</option>').join('');
- const register=ticketRegisterHtml(rows);
-
- if(isDriver){
-  return '<div class="page-title"><div><h2>🛠️ Report an Issue</h2><p>Fleet / Fleet vehicle and maintenance actions.</p></div></div>'+
-   '<div class="panel"><h3>Report an Issue</h3>'+
-   '<p>Select your vehicle, choose the issue type, and describe the problem. Use the voice button to speak.</p>'+
-   '<form onsubmit="saveTicket(event)">'+
-   '<label>Vehicle *</label><select id="ticketVehicle" required><option value="">-- Select vehicle --</option>'+vehicleOptions+'</select>'+
-   '<div class="form-row">'+
-   '<div><label>Issue Type *</label><select id="ticketCategory" required>'+
-   '<option value="">-- Select issue type --</option>'+
-   '<option>Tires</option><option>Engine</option><option>A/C</option><option>Lights</option>'+
-   '<option>Brakes</option><option>Battery</option><option>Door</option><option>Wipers</option>'+
-   '<option>Oil Engine</option><option>Other</option></select></div>'+
-   '<div><label>Priority</label><select id="ticketPriority">'+
-   '<option>Low</option><option>Medium</option><option>High</option><option>Critical</option>'+
-   '</select></div></div>'+
-   '<label>Description *</label><textarea id="ticketDescription" rows="5" required placeholder="Describe the vehicle issue..."></textarea>'+
-   '<div class="form-actions">'+
-   '<button type="button" class="btn secondary" onclick="startIssueSpeech()">🎤 Speak Description</button>'+
-   '<button class="btn primary" type="submit">Submit Report</button>'+
-   '</div></form></div>'+
-   '<div class="panel"><h3>My Requests Register</h3>'+register+'</div>';
- }
-
- return '<div class="page-title"><div><h2>🎫 Vehicle Maintenance & Tickets</h2><p>Report and follow vehicle issues.</p></div></div>'+
-   '<div class="panel"><form onsubmit="saveTicket(event)"><div class="form-row">'+
-   '<div><label>Vehicle</label><select id="ticketVehicle" required>'+vehicleOptions+'</select></div>'+
-   '<div><label>Category</label><select id="ticketCategory"><option>Maintenance</option><option>Mechanical</option><option>Electrical</option><option>Tires</option><option>Accident</option></select></div>'+
-   '<div><label>Priority</label><select id="ticketPriority"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select></div>'+
-   '</div><label>Issue Title</label><input id="ticketTitle" required><label>Description</label><textarea id="ticketDescription" required></textarea>'+
-   '<div class="form-actions"><button class="btn primary">Submit Request</button></div></form></div>'+
-   '<div class="panel"><h3>Requests Register</h3>'+register+'</div>';
- }
- 
- function ticketRegisterHtml(rows){
+  const isDriver=USER.role==='Driver', vehicles=DATA.vehicles||[];
+  const vehicleOptions=vehicles.map(v=>'<option value="'+esc(v.vehicle_id)+'">'+esc(v.plate)+'</option>').join('');
+  const categories=['Maintenance','Mechanical','Electrical','Tires','Accident'].map(x=>'<option>'+x+'</option>').join('');
+  const form='<div class="panel"><h3>Report a Vehicle Issue</h3><form onsubmit="saveTicket(event)"><div class="form-row">'+
+    '<div><label>Vehicle *</label><select id="ticketVehicle" required><option value="">-- Select vehicle --</option>'+vehicleOptions+'</select></div>'+
+    '<div><label>Category *</label><select id="ticketCategory" required>'+categories+'</select></div>'+
+    '<div><label>Priority *</label><select id="ticketPriority" required><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select></div></div>'+
+    '<label>Issue Title *</label><input id="ticketTitle" maxlength="120" required placeholder="Brief issue title">'+
+    '<label>Description *</label><textarea id="ticketDescription" rows="4" maxlength="3000" required placeholder="Describe the problem...">'+
+    '</textarea><div class="form-actions"><button class="btn primary" type="submit">Submit Request</button></div></form></div>';
+  const register=ticketRegisterHtml(rows);
+  if(isDriver) return '<div class="page-title"><div><h2>🛠️ Report an Issue</h2><p>Report a maintenance issue for your selected vehicle.</p></div></div>'+form+'<div class="panel"><h3>My Requests Register</h3>'+register+'</div>';
+  return '<div class="page-title"><div><h2>🎫 Vehicle Maintenance & Tickets</h2><p>Report and follow vehicle issues.</p></div><button class="btn secondary" onclick="refreshAndRender()">↻ Refresh</button></div>'+form+'<div class="panel"><h3>Requests Register</h3>'+register+'</div>';
+}
+function ticketRegisterHtml(rows){
   if(!rows.length) return '<div class="empty">No requests recorded.</div>';
   const owner=canManageFleet();
-  return '<div class="table-wrap"><table><thead><tr>'+
-   '<th>Vehicle</th><th>Category</th><th>Title / Description</th><th>Priority</th><th>Reported By</th><th>Date</th><th>Status</th>'+(owner?'<th>Follow-up</th>':'')+
-   '</tr></thead><tbody>'+
-   rows.slice().reverse().map(t=>'<tr><td><b>'+esc(vehiclePlate(t.vehicle_id))+'</b></td>'+
-    '<td>'+esc(t.category)+'</td><td><b>'+esc(t.title)+'</b><br><small>'+esc(t.description||'')+'</small></td><td>'+priorityBadge(t.priority)+'</td><td>'+esc(t.reported_by)+'</td>'+
-    '<td>'+esc(t.reported_at)+'</td><td>'+status(t.status)+'</td>'+
-    (owner?'<td><select id="ticketStatus_'+esc(t.ticket_id)+'"><option '+(t.status==='Open'?'selected':'')+'>Open</option><option '+(t.status==='In Progress'?'selected':'')+'>In Progress</option><option '+(t.status==='Pending Driver Confirmation'?'selected':'')+'>Pending Driver Confirmation</option><option '+(t.status==='Closed'?'selected':'')+'>Closed</option></select><div class="form-actions"><button class="btn secondary" type="button" data-ticket-id="'+esc(t.ticket_id)+'" onclick="changeTicketStatus(this)">Update</button><button class="btn primary" type="button" data-ticket-id="'+esc(t.ticket_id)+'" onclick="openTicketWhatsApp(this)">📱 WhatsApp</button></div></td>':'')+
-    '</tr>').join('')+
-   '</tbody></table></div>';
- }
- 
- function canManageFleet(){return USER.role==='Owner';}
+  return '<div class="table-wrap"><table><thead><tr><th>Vehicle</th><th>Title</th><th>Category</th><th>Priority</th><th>Driver</th><th>Submitted</th><th>Status</th><th>Closure Method</th><th>Confirmation Date/Time</th>'+(owner?'<th>Follow-up</th>':'')+'</tr></thead><tbody>'+
+    rows.slice().reverse().map(t=>'<tr><td><b>'+esc(vehiclePlate(t.vehicle_id))+'</b></td><td><b>'+esc(t.title)+'</b><br><small>'+esc(t.description||'')+'</small></td><td>'+esc(t.category)+'</td><td>'+priorityBadge(t.priority)+'</td><td>'+esc(t.reported_by)+'</td><td>'+esc(t.reported_at)+'</td><td>'+status(t.status)+'</td><td>'+esc(t.closure_method||'—')+'</td><td>'+esc(t.confirmation_at||'—')+'</td>'+
+    (owner?'<td><select id="ticketStatus_'+esc(t.ticket_id)+'"><option '+(t.status==='Open'?'selected':'')+'>Open</option><option '+(t.status==='In Progress'?'selected':'')+'>In Progress</option><option '+(t.status==='Pending Driver Confirmation'?'selected':'')+'>Pending Driver Confirmation</option><option '+(t.status==='Closed'?'selected':'')+'>Closed</option></select><div class="form-actions"><button class="btn secondary" type="button" data-ticket-id="'+esc(t.ticket_id)+'" onclick="changeTicketStatus(this)">Update</button><button class="btn primary" type="button" data-ticket-id="'+esc(t.ticket_id)+'" onclick="openTicketWhatsApp(this)">📱 WhatsApp</button></div></td>':'')+'</tr>').join('')+'</tbody></table></div>';
+}
+function canManageFleet(){return USER.role==='Owner';}
 function tiresHtml(rows,vehicles){
  const owner=canManageFleet(), inventory=DATA.tireInventory||[], installations=DATA.tireInstallations||[], movements=DATA.tireStockMovements||[];
  const opts=vehicles.map(v=>'<option value="'+esc(v.vehicle_id)+'">'+esc(v.plate)+'</option>').join('');
@@ -582,23 +551,15 @@ async function changeTicketStatus(button){
   }catch(err){alert(err.message||String(err));}
 }
 async function openTicketWhatsApp(button){
-  const id=button?.dataset.ticketId;
-  const popup=window.open('about:blank','_blank');
+  const id=button?.dataset.ticketId, popup=window.open('about:blank','_blank');
   if(!popup){alert('Please allow pop-ups to open WhatsApp.');return;}
   try{
-   await refreshData();
-   const ticket=(DATA.tickets||[]).find(x=>String(x.ticket_id)===String(id));
-   const vehicle=ticket?(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(ticket.vehicle_id)):null;
-   if(!ticket||!vehicle){popup.close();alert('Ticket or vehicle data could not be refreshed.');return;}
-   const info={driverName:vehicle.assigned_driver||ticket.reported_by||'Driver',driverPhone:normalizeWhatsAppPhone(vehicle.driver_phone),vehiclePlate:vehicle.plate||vehicle.vehicle_id,currentKm:vehicle.current_km,category:ticket.category,title:ticket.title,priority:ticket.priority,description:ticket.description};
-   if(!info.driverPhone){popup.close();alert('No WhatsApp number is saved for the current driver assigned to this vehicle.');return;}
-   const nl=String.fromCharCode(10);
-   const isKm=String(info.category||'').toLowerCase()==='daily km';
-   const parts=isKm
-    ? ['Hello '+(info.driverName||'Driver')+',','','No KM reading has been recorded today for vehicle '+(info.vehiclePlate||'')+'.','Last reading: '+Number(info.currentKm||0).toLocaleString()+' km.','','Please record the current odometer reading.','','Thank you,','Fleet Management']
-    : ['Hello '+(info.driverName||'Driver')+',','','Vehicle '+(info.vehiclePlate||'')+' requires your attention.','Issue: '+(info.title||info.category||'Maintenance'),'Priority: '+(info.priority||'Medium'),'Details: '+(info.description||'-'),'Current KM: '+Number(info.currentKm||0).toLocaleString()+' km.','','Please visit the workshop or contact Fleet Management and confirm the action.','','Thank you,','Fleet Management'];
-   popup.location.href='https://wa.me/'+info.driverPhone+'?text='+encodeURIComponent(parts.join(nl));
-  }catch(err){try{popup.close();}catch(e){}alert('Unable to prepare WhatsApp message: '+(err.message||String(err)));}
+    const prepared=await rpc('prepareTicketConfirmation',TOKEN,id);
+    const nl=String.fromCharCode(10);
+    const message=['Hello '+prepared.driverName+',','','Has the maintenance issue for vehicle '+prepared.vehiclePlate+' been fixed?','Issue: '+prepared.title,'','','YES — '+prepared.yesUrl,'NO — '+prepared.noUrl,'','','Please tap YES only if the issue is fully fixed. If not, tap NO.','','Fleet Management'].join(nl);
+    popup.location.href='https://wa.me/'+normalizeWhatsAppPhone(prepared.phone)+'?text='+encodeURIComponent(message);
+    await refreshData();render();
+  }catch(err){try{popup.close();}catch(e){}alert('Unable to prepare confirmation message: '+(err.message||String(err)));}
 }
 async function submitTireForm(e){e.preventDefault();try{await rpc('createTireRequest',TOKEN,{vehicleId:el('tireVehicle').value,requestType:el('tireType').value,description:el('tireDescription').value});alert('Tire request submitted.');await refreshData();render();}catch(err){alert(err.message);}}
 async function changeTireStatus(id){try{const next=el('tireStatus_'+id).value;await rpc('updateTireRequest',TOKEN,id,next,'');await refreshData();render();}catch(err){alert(err.message||String(err));}}

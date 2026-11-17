@@ -777,6 +777,95 @@ function session_(token) {
   return raw ? JSON.parse(raw) : null;
 }
 function requireSession_(token) { const u=session_(token); if(!u) throw new Error('Session expired. Please sign in again.'); return u; }
+
+/**
+ * Historical six-month maintenance report import (2026-10-19).
+ * Preview is read-only. Import is a separate Owner-only action and is idempotent.
+ */
+function historicalSixMonthSource_() {
+  return [
+    {plate:'1737 BUA',driver:'Zahid Ali',site:'Uqlat Saqour',opened:'2026-09-24',status:'Completed',confirmed:'2026-10-15',description:'1- Engine belt (serpentine belt) 2- Front brake pads 3- Weak front and rear shock absorbers 4- Wheel bearing adjustment + greasing',rawDate:'0206-09-24'},
+    {plate:'1543 BUA',driver:'Mulwa',site:'Al Quwayiyah',opened:'2026-09-23',status:'Completed',confirmed:'2026-10-12',description:'1- Rear coil spring set 2- Steering damper 3- Airbag clock spring'},
+    {plate:'1706 BUA',driver:'Fahad',site:'Al Quwayiyah',opened:'2026-09-23',status:'Completed',confirmed:'2026-10-12',description:'1- Spring bushing set 2- Steering column 3- Front brake pads 4- Airbag clock spring'},
+    {plate:'1722 BUA',driver:'Muhammad Siddique',site:'Al Quwayiyah',opened:'2026-09-23',status:'Completed',confirmed:'2026-10-12',description:'1- Greasing front axles (CV joints) 2- Steering gear box 3- Steering column 4- Outer tie rod — 2 pcs 5- Brake switch'},
+    {plate:'2349 EUA',driver:'Jibu Mutumba',site:'Al Quwayiyah',opened:'2026-09-23',status:'Completed',confirmed:'2026-10-12',description:'1- Rear shock absorber mounts 2- Front outer tie rod — 2 pcs 3- Airbag clock spring — Code B1806'},
+    {plate:'4463 JUA',driver:'John',site:'Al Quwayiyah',opened:'2026-10-06',status:'Completed',confirmed:'2026-10-12',annualAutoClose:true,description:'1- Airbag clock spring 2- Greasing front CV joint 3- Rear shock absorber mount 4- Steering column 5- Front right CV axle bearing'},
+    {plate:'4479 JUA',driver:'Iman helal',site:'Al Quwayiyah',opened:'2026-09-23',status:'Completed',confirmed:'2026-10-12',description:'1- Front wheel bearing 2- Engine belt 3- Rear spring bushing 4- Front brake pads'},
+    {plate:'6183 ZUA',driver:'Asad Ullah',site:'Al Quwayiyah',opened:'2026-09-23',status:'Completed',confirmed:'2026-10-12',description:'1- Engine belt 2- Airbag clock spring 3- Bearing tightening'},
+    {plate:'1357 JER',driver:'Ayaz ullah',site:'Al Sabiyah',opened:'2026-09-24',status:'Completed',confirmed:'2026-10-09',description:'Good condition'},
+    {plate:'1369 JER',driver:'Amir',site:'Uqlat Saqour',opened:'2026-09-24',status:'Completed',confirmed:'2026-10-08',description:'Good condition'},
+    {plate:'1560 EHR',driver:'Asif',site:'Al Quwayiyah',opened:'2026-09-24',status:'Completed',confirmed:'2026-10-07',description:'Good condition'},
+    {plate:'1709 BUA',driver:'Umer Hassan',site:'Uqlat Al Soqour',opened:'2026-10-14',status:'Completed',confirmed:'2026-10-14',annualAutoClose:true,description:'1- Oxygen sensor (O2 sensor) 2- Engine belt (serpentine belt) 3- Weak rear shock absorbers 4- Wheel bearing adjustment + greasing'},
+    {plate:'1713 BUA',driver:'Sajid khan',site:'Uqlat Al Soqour',opened:'2026-10-14',status:'Completed',confirmed:'2026-10-14',annualAutoClose:true,description:'1- Front differential seal (front diff oil seal) 2- Wheel bearing adjustment + greasing 3- Engine belt (serpentine belt)'},
+    {plate:'1738 BUA',driver:'Naveed Jamal',site:'Sabeyah',opened:'2026-09-24',status:'Completed',confirmed:'2026-10-12',description:'1- Front and rear brake shoes/brake linings replaced. 2- Greasing completed. 3- Wheel alignment completed. 4- Handbrake issue rectified. 5- Drums polished.'},
+    {plate:'2158 EUA',driver:'RIAZ AHMAD',site:'Al Quwayiyah',opened:'2026-10-06',status:'Completed',confirmed:'2026-10-12',annualAutoClose:true,description:'1- Steering column 2- Front wheel bearing 3- Front brake pads 4- Adjusting control arm mounts (due to stone impacts) 5- Rear shock absorber mounts'},
+    {plate:'2287 EUA',driver:'YASIRTAHSEEN',site:'Uqlat Saqour',opened:'2026-09-24',status:'Completed',confirmed:'2026-10-15',description:'1- Rear engine oil seal – leaking oil 2- Rear shock absorbers – mounts (rear shock mounts) 3- Wheel bearing adjustment + greasing 4- Engine belt (serpentine belt) 5- Oxygen sensor (O2 sensor)'},
+    {plate:'2290 EUA',driver:'Mohammed Owais',site:'Uqlat Saqour',opened:'2026-09-24',status:'Open',confirmed:'',description:'1- Wheel bearing adjustment + greasing 2- Front brake pads'},
+    {plate:'2295 EUA',driver:'Mohamed Arif',site:'Uqlat Saqour',opened:'2026-09-24',status:'Completed',confirmed:'2026-10-15',description:'1- Engine belt (serpentine belt) 2- Rear shock mounts 3- Wheel bearing adjustment + greasing'},
+    {plate:'2687 EUA',driver:'Samuel',site:'Sabeyah',opened:'2026-09-24',status:'Completed',confirmed:'2026-10-12',description:'1- Front brake shoes/brake linings replaced. 2- Wheel alignment completed. 3- Wheel balancing (Mizan) completed. 4- Drums polished.'},
+    {plate:'4435 JUA',driver:'Zia uddin',site:'Uqlat Saqour',opened:'2026-10-08',status:'Completed',confirmed:'2026-10-08',annualAutoClose:true,description:'1- Engine belt (serpentine belt)'},
+    {plate:'4481 JUA',driver:'Abdul wahid',site:'Al Quwayiyah',opened:'2026-10-12',status:'Completed',confirmed:'2026-10-12',annualAutoClose:true,description:'1- Play in the idler arm 2- Outer tie rod 3- Front brake pads 4- Wheel bearing adjustment + greasing'},
+    {plate:'4532 LUA',driver:'Kashif',site:'Uqlat Saqour',opened:'2026-09-24',status:'Completed',confirmed:'2026-10-15',description:'1- Wheel bearing adjustment + greasing 2- Engine belt (serpentine belt) 3- Rear shock mounts (rear shock absorber mounts)'},
+    {plate:'4533 LUA',driver:'HAMID ULLAH',site:'Uqlat Saqour',opened:'2026-09-24',status:'Pending Driver Confirmation',confirmed:'',description:'1- Weak front shock absorbers (front struts) 2- Wheel bearing adjustment + greasing 3- Engine belt (serpentine belt)'},
+    {plate:'4538 LUA',driver:'Shah Saood',site:'Uqlat Saqour',opened:'2026-09-24',status:'Completed',confirmed:'2026-10-15',description:'1- Engine belt (serpentine belt) 2- Front engine oil seal (leaking) 3- Stabilizer bar bushings (sway bar bushings) 4- Wheel bearing adjustment + greasing'},
+    {plate:'1716 BUA',driver:'Farhan Razzaq',site:'Wadi Beddah',opened:'2026-10-09',status:'Completed',confirmed:'2026-10-09',annualAutoClose:true,description:'Annual inspection confirmation recorded in source report; no separate six-month repair description supplied.'},
+    {plate:'2110 EUA',driver:'Mohammad Shahbaz',site:'Wadi Beddah',opened:'2026-10-08',status:'Completed',confirmed:'2026-10-08',annualAutoClose:true,description:'Annual inspection confirmation recorded in source report; no separate six-month repair description supplied.'},
+    {plate:'2344 EUA',driver:'M. Nouman',site:'Wadi Beddah',opened:'2026-10-12',status:'Completed',confirmed:'',annualAutoClose:true,description:'Annual inspection confirmation recorded in source report; no separate six-month repair description supplied.'},
+    {plate:'4430 JUA',driver:'Said Muhammad',site:'Al Hulayfa',opened:'2026-10-12',status:'Completed',confirmed:'',annualAutoClose:true,description:'Annual inspection confirmation recorded in source report; no separate six-month repair description supplied.'},
+    {plate:'4980 JUA',driver:'Ayaz ullah',site:'Sabayia',opened:'2026-10-11',status:'Completed',confirmed:'2026-10-11',annualAutoClose:true,description:'Annual inspection confirmation recorded in source report; no separate six-month repair description supplied.'},
+    {plate:'5456 TKA',driver:'Mehtab',site:'Al Quwayiyah',opened:'2026-10-10',status:'Completed',confirmed:'2026-10-10',annualAutoClose:true,description:'Annual inspection confirmation recorded in source report; no separate six-month repair description supplied.'}
+  ];
+}
+function historicalSixMonthPlan_() {
+  const source=historicalSixMonthSource_(), vehicles=rows_('Vehicles'), existing=rows_('Maintenance');
+  const norm=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const plateMap={}; vehicles.forEach(v=>{const k=norm(v.plate);if(k)(plateMap[k]||(plateMap[k]=[])).push(v);});
+  const plan=source.map((r,i)=>{
+    const matches=plateMap[norm(r.plate)]||[], vehicle=matches.length===1?matches[0]:null;
+    const recordId='H6M-20261019-'+norm(r.plate);
+    const marker='[HISTORICAL_REPORT_2026-10-19]';
+    const duplicate=existing.some(x=>String(x.record_id||'')===recordId || (
+      vehicle && String(x.vehicle_id)===String(vehicle.vehicle_id) &&
+      /6[ -]?month/i.test(String(x.maintenance_type||'')) &&
+      String(x.scheduled_date||'').slice(0,10)===r.opened &&
+      String(x.notes||'').indexOf(r.description)>=0
+    ));
+    return {source:r,vehicle,recordId,duplicate,unresolved:matches.length!==1};
+  });
+  return {sourceTotal:source.length,ready:plan.filter(x=>x.vehicle&&!x.duplicate).length,duplicates:plan.filter(x=>x.duplicate).length,unresolved:plan.filter(x=>x.unresolved).map(x=>({plate:x.source.plate,matches:(plateMap[norm(x.source.plate)]||[]).length})),plan};
+}
+function previewHistoricalSixMonthImport(token) {
+  requireOwner_(token);
+  const p=historicalSixMonthPlan_();
+  return {sourceTotal:p.sourceTotal,ready:p.ready,duplicates:p.duplicates,unresolved:p.unresolved,correctedSourceDate:'1737 BUA: 0206-09-24 corrected to 2026-09-24 based on the report context; original value retained in notes.',statusSummary:{completed:p.plan.filter(x=>x.source.status==='Completed').length,open:p.plan.filter(x=>x.source.status==='Open').length,pendingDriverConfirmation:p.plan.filter(x=>x.source.status==='Pending Driver Confirmation').length},canImport:p.ready>0&&p.unresolved.length===0};
+}
+function importHistoricalSixMonthReport(token) {
+  requireOwner_(token);
+  const lock=LockService.getScriptLock();lock.waitLock(30000);
+  try {
+    const p=historicalSixMonthPlan_();
+    if(p.unresolved.length)throw new Error('Import paused: vehicle plate mapping needs review for '+p.unresolved.map(x=>x.plate).join(', ')+'. No rows were imported.');
+    if(!p.ready)return {ok:true,inserted:0,duplicates:p.duplicates,message:'All historical records are already present; no duplicates added.'};
+    const sh=sheet_('Maintenance');
+    const required=TABLES.Maintenance;
+    let headers=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(String);
+    required.forEach(k=>{if(headers.indexOf(k)<0){sh.getRange(1,sh.getLastColumn()+1).setValue(k);headers.push(k);}});
+    const now=new Date(),newRows=[];
+    p.plan.filter(x=>x.vehicle&&!x.duplicate).forEach(x=>{
+      const r=x.source,confirmed=!!r.confirmed;
+      const note='[HISTORICAL_REPORT_2026-10-19] Driver: '+r.driver+' | Location: '+r.site+' | Priority: Medium | '+r.description+
+        (r.annualAutoClose?' | LEGACY SOURCE STATUS: report marked Completed following Annual inspection confirmation. Preserved as historical only; current workflow does not auto-close six-month maintenance from Annual confirmation.':'')+
+        (r.rawDate?' | Original source date typo: '+r.rawDate+'; interpreted as '+r.opened+'.':'')+
+        ' | Completion date was not separately supplied in the source report.';
+      const obj={record_id:x.recordId,vehicle_id:String(x.vehicle.vehicle_id),maintenance_type:'6-Month Maintenance',scheduled_date:r.opened,completed_date:'',status:r.status,technician:r.driver,cost:'',notes:note,created_at:now,updated_at:now,confirmation_token_hash:'',confirmation_expires_at:'',confirmation_answer:confirmed?'YES':'',confirmation_at:confirmed?r.confirmed:'',confirmed_by:confirmed?r.driver:'',confirmation_source:confirmed?'WhatsApp (historical report)':'',next_due_date:'',reminder_date:'',reminder_sent_at:''};
+      newRows.push(headers.map(h=>Object.prototype.hasOwnProperty.call(obj,h)?obj[h]:''));
+    });
+    if(newRows.length)sh.getRange(sh.getLastRow()+1,1,newRows.length,headers.length).setValues(newRows);
+    audit_('Owner','IMPORT','Maintenance','HISTORICAL_REPORT_2026-10-19','Imported '+newRows.length+' historical six-month records; skipped '+p.duplicates+' duplicates. No annual records imported.');
+    return {ok:true,inserted:newRows.length,duplicates:p.duplicates,sourceTotal:p.sourceTotal,message:'Historical six-month report imported. Refresh the Maintenance page to see the records.'};
+  } finally {lock.releaseLock();}
+}
+
 function requireOwner_(token) { const u=requireSession_(token); if(u.role!=='Owner') throw new Error('You do not have permission for this action.'); return u; }
 function permittedVehicle_(user,id) {
   const v=rows_('Vehicles').find(x=>String(x.vehicle_id)===String(id));

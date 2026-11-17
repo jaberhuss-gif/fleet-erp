@@ -724,7 +724,7 @@ function sixMonthMaintenanceHtml(rows,vehicles){
   return m?m[3]+'/'+m[2]+'/'+m[1]:String(value);
  };
  const html=six.slice().sort((a,b)=>String(b.scheduled_date||'').localeCompare(String(a.scheduled_date||''))).map(r=>{
-  const v=(vehicles||[]).find(x=>String(x.vehicle_id)===String(r.vehicle_id))||{},done=/^completed$/i.test(String(r.status||'').trim()),answer=String(r.confirmation_answer||'').toUpperCase(),source=String(r.confirmation_source||'').toLowerCase(),sourceSite=(String(r.notes||'').match(/Location: ([^|]+)/)||[])[1],displayNotes=/^Automatically scheduled six months/i.test(String(r.notes||''))?('Driver: '+(r.technician||v.assigned_driver||'—')+' | Location: '+(sourceSite||v.site||'—')+' | Priority: — | Automatically scheduled six months after previous maintenance completion.'):String(r.notes||'—').replace('[HISTORICAL_REPORT_2026-10-19] ','');
+  const v=(vehicles||[]).find(x=>String(x.vehicle_id)===String(r.vehicle_id))||{},done=/^completed$/i.test(String(r.status||'').trim()),answer=String(r.confirmation_answer||'').toUpperCase(),source=String(r.confirmation_source||'').toLowerCase(),sourceSite=(String(r.notes||'').match(/Location: ([^|]+)/)||[])[1],displayNotes=/^Automatically scheduled six months/i.test(String(r.notes||''))?('Driver: '+(r.technician||v.assigned_driver||'—')+' | Location: '+(sourceSite||v.site||'—')+' | Priority: Not set | Work: Routine 6-month preventive maintenance; service details will be recorded after completion.'):String(r.notes||'—').replace('[HISTORICAL_REPORT_2026-10-19] ','');
   const confirmed=answer==='YES'&&source.indexOf('whatsapp')===0;
   const autoCycle=String(r.notes||'').indexOf('Automatically scheduled six months')===0;
   let confirmation;

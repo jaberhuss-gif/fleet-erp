@@ -635,7 +635,7 @@ function confirmSixMonthMaintenanceFromLink(token,answer){
     const due=Utilities.formatDate(next,'Asia/Riyadh','yyyy-MM-dd');
     const dup=rows_('Maintenance').some(x=>String(x.vehicle_id)===vehicle&&String(x.maintenance_type)===type&&String(x.status||'').toLowerCase()!=='completed'&&String(x.scheduled_date||'').slice(0,10)===due);
     sh.getRange(row,ix.next_due_date+1).setValue(next);
-    if(!dup){const rem=maintenanceAddMonths_(next,-1),vehicleInfo=rows_('Vehicles').find(x=>String(x.vehicle_id)===vehicle)||{},driver=String(vehicleInfo.assigned_driver||'Driver'),site=String(vehicleInfo.site||'—'),cycleNotes='Driver: '+driver+' | Location: '+site+' | Priority: Not set | Work: Routine 6-month preventive maintenance; service details will be recorded after completion.';sh.appendRow([Utilities.getUuid(),vehicle,type,next,'','Open',driver,0,cycleNotes,now,now]);const nr=sh.getLastRow();if(ix.reminder_date!==undefined)sh.getRange(nr,ix.reminder_date+1).setValue(rem||'');}
+    if(!dup){const rem=maintenanceAddMonths_(next,-1),vehicleInfo=rows_('Vehicles').find(x=>String(x.vehicle_id)===vehicle)||{},driver=String(vehicleInfo.assigned_driver||'Driver'),site=String(vehicleInfo.site||'—'),cycleNotes='Priority: Not set | Work: Routine 6-month preventive maintenance; service details will be recorded after completion.';sh.appendRow([Utilities.getUuid(),vehicle,type,next,'','Open',driver,0,cycleNotes,now,now]);const nr=sh.getLastRow();if(ix.reminder_date!==undefined)sh.getRange(nr,ix.reminder_date+1).setValue(rem||'');}
    }
   }else sh.getRange(row,ix.status+1).setValue('Open');
   audit_('Driver','WHATSAPP_CONFIRMATION','6-Month Maintenance',id,'Driver answered '+choice.toUpperCase());

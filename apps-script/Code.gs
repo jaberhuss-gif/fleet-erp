@@ -5,7 +5,7 @@ const TABLES = {
   KM_Records: ['record_id','vehicle_id','reading_km','reading_date','driver_name','notes','created_by','created_at'],
   Oil_Changes: ['record_id','vehicle_id','reading_km','change_date','oil_type','notes','created_by','created_at'],
   Tickets: ['ticket_id','vehicle_id','category','title','description','priority','status','reported_by','reported_at','assigned_to','closed_at','notes'],
-  Maintenance: ['record_id','vehicle_id','maintenance_type','scheduled_date','completed_date','status','technician','cost','notes','created_at','updated_at'],
+  Maintenance: ['record_id','vehicle_id','maintenance_type','scheduled_date','completed_date','status','technician','cost','notes','created_at','updated_at','confirmation_token_hash','confirmation_expires_at','confirmation_answer','confirmation_at','confirmed_by','confirmation_source','next_due_date','reminder_date','reminder_sent_at'],
   Tire_Requests: ['request_id','vehicle_id','request_type','description','status','requested_by','requested_at','notes'],
   Tire_Inventory: ['tire_id','manufacturer_serial','brand','model','size','warehouse','received_date','purchase_cost','status','notes','created_by','created_at','installation_id'],
   Tire_Installations: ['installation_id','vehicle_id','position','tire_id','manufacturer_serial','request_id','install_date','install_km','removal_date','removal_km','distance_km','status','installed_by','removed_by','notes','created_at','updated_at'],
@@ -21,6 +21,7 @@ const TABLES = {
 function doGet(e) {
   const params = e && e.parameter ? e.parameter : {};
   if (String(params.action || '') === 'maintenance-confirm') return renderMaintenancePrompt_(params);
+  if (String(params.action || '') === 'six-month-confirm') return renderSixMonthMaintenancePrompt_(params);
   if (String(params.action || '') === 'inspection-confirm') return renderInspectionPrompt_(params);
   return HtmlService.createTemplateFromFile('Index').evaluate()
     .setTitle(APP.NAME)
@@ -592,6 +593,56 @@ function updateInspection(token,id,status,notes,cost) {
   audit_(user.fullName,'UPDATE','Inspection',id,'Status '+status);
   return {ok:true};
 }
+
+function ensureMaintenanceConfirmationColumns_(){const sh=sheet_('Maintenance'),h=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(String);['confirmation_token_hash','confirmation_expires_at','confirmation_answer','confirmation_at','confirmed_by','confirmation_source','next_due_date','reminder_date','reminder_sent_at'].forEach(k=>{if(h.indexOf(k)<0)sh.getRange(1,sh.getLastColumn()+1).setValue(k);});}
+function maintenanceAddMonths_(value,months){const d=new Date(value);if(isNaN(d.getTime()))return null;const day=d.getDate(),n=new Date(d.getFullYear(),d.getMonth()+months,1,12);n.setDate(Math.min(day,new Date(n.getFullYear(),n.getMonth()+1,0).getDate()));return n;}
+function prepareSixMonthMaintenanceConfirmation(token,id){
+ const user=requireOwner_(token),r=rows_('Maintenance').find(x=>String(x.record_id)===String(id));if(!r)throw Error('Maintenance record not found.');
+ if(!/6[ -]?month/i.test(String(r.maintenance_type||'')))throw Error('Not a 6-Month Maintenance record.');
+ if(String(r.status||'').toLowerCase()==='completed')throw Error('This record is already completed.');
+ const v=rows_('Vehicles').find(x=>String(x.vehicle_id)===String(r.vehicle_id));if(!v)throw Error('Vehicle not found.');
+ const phone=String(v.driver_phone||'').replace(/\\D/g,'');if(!phone)throw Error('No driver WhatsApp number is saved.');
+ ensureMaintenanceConfirmationColumns_();const raw=Utilities.getUuid().replace(/-/g,'')+Utilities.getUuid().replace(/-/g,'');
+ updateById_('Maintenance','record_id',id,{status:'Pending Driver Confirmation',confirmation_token_hash:hash_(raw),confirmation_expires_at:new Date(Date.now()+14*86400000),confirmation_answer:'',confirmation_at:'',confirmed_by:'',confirmation_source:''});
+ audit_(user.fullName,'SEND_CONFIRMATION','6-Month Maintenance',id,'WhatsApp confirmation link prepared.');
+ const base=ScriptApp.getService().getUrl();if(!base)throw Error('Deploy the Apps Script as a Web App before generating links.');
+ return {phone,driverName:String(v.assigned_driver||r.technician||'Driver'),vehiclePlate:String(v.plate||v.vehicle_id),notes:String(r.notes||''),status:'Pending Driver Confirmation',yesUrl:base+'?action=six-month-confirm&token='+encodeURIComponent(raw)+'&answer=yes',noUrl:base+'?action=six-month-confirm&token='+encodeURIComponent(raw)+'&answer=no'};
+}
+function renderSixMonthMaintenancePrompt_(p){
+ const raw=String(p.token||''),answer=String(p.answer||'').toLowerCase();if(!/^[a-f0-9]{64}$/i.test(raw)||!['yes','no'].includes(answer))return HtmlService.createHtmlOutput(confirmationPage_('Invalid link','This confirmation link is invalid.'));
+ const sh=sheet_('Maintenance'),v=sh.getDataRange().getValues(),h=v[0].map(String),ix={};h.forEach((x,i)=>ix[x]=i);
+ const digest=hash_(raw);let rec=null;for(let i=1;i<v.length;i++)if(String(v[i][ix.confirmation_token_hash]||'')===digest){rec=v[i];break;}
+ if(!rec)return HtmlService.createHtmlOutput(confirmationPage_('Invalid or used link','This link is invalid or already used.'));
+ const expiry=new Date(rec[ix.confirmation_expires_at]);if(isNaN(expiry.getTime())||expiry<Date.now())return HtmlService.createHtmlOutput(confirmationPage_('Link expired','Contact Fleet Management for a new link.'));
+ const html='<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:Arial;background:#f1f5f9;padding:24px}.card{max-width:520px;margin:8vh auto;background:white;padding:30px;border-radius:14px}button{width:100%;padding:14px;background:#0f766e;color:white;border:0;border-radius:8px;font-size:16px}</style></head><body><div class="card"><h2>6-Month Maintenance Confirmation</h2><p>Submit your actual maintenance result.</p><button onclick="submitAnswer()">Confirm '+answer.toUpperCase()+'</button><p id="result"></p></div><script>function submitAnswer(){var b=document.querySelector("button"),r=document.getElementById("result");b.disabled=true;r.textContent="Submitting…";google.script.run.withSuccessHandler(function(h){document.open();document.write(h);document.close();}).withFailureHandler(function(e){b.disabled=false;r.textContent=e.message||"Error";}).confirmSixMonthMaintenanceFromLink("TOKEN","ANSWER");}</script></body></html>';
+ return HtmlService.createHtmlOutput(html.replace('TOKEN',raw).replace('ANSWER',answer));
+}
+function confirmSixMonthMaintenanceFromLink(token,answer){
+ const choice=String(answer||'').toLowerCase();if(!['yes','no'].includes(choice))return confirmationPage_('Invalid response','Invalid response.');
+ const lock=LockService.getScriptLock();lock.waitLock(10000);
+ try{
+  ensureMaintenanceConfirmationColumns_();const sh=sheet_('Maintenance'),v=sh.getDataRange().getValues(),h=v[0].map(String),ix={};h.forEach((x,i)=>ix[x]=i);
+  const digest=hash_(String(token||''));let row=-1;for(let i=1;i<v.length;i++)if(String(v[i][ix.confirmation_token_hash]||'')===digest){row=i+1;break;}
+  if(row<0)return HtmlService.createHtmlOutput(confirmationPage_('Invalid link','This link is invalid or already used.'));
+  const r=v[row-1],expiry=new Date(r[ix.confirmation_expires_at]);if(isNaN(expiry.getTime())||expiry<Date.now())return HtmlService.createHtmlOutput(confirmationPage_('Expired','Please request a new link.'));
+  if(String(r[ix.status]||'').toLowerCase()==='completed')return HtmlService.createHtmlOutput(confirmationPage_('Already completed','This record is already completed.'));
+  const now=new Date(),id=String(r[ix.record_id]),vehicle=String(r[ix.vehicle_id]),type=String(r[ix.maintenance_type]||'6-Month Maintenance');
+  ['confirmation_token_hash','confirmation_expires_at'].forEach(k=>sh.getRange(row,ix[k]+1).setValue(''));
+  sh.getRange(row,ix.confirmation_answer+1).setValue(choice.toUpperCase());sh.getRange(row,ix.confirmation_at+1).setValue(now);sh.getRange(row,ix.confirmed_by+1).setValue('Driver');sh.getRange(row,ix.confirmation_source+1).setValue('WhatsApp');
+  if(choice==='yes'){
+   sh.getRange(row,ix.status+1).setValue('Completed');sh.getRange(row,ix.completed_date+1).setValue(now);
+   const next=maintenanceAddMonths_(now,6);if(next){
+    const due=Utilities.formatDate(next,'Asia/Riyadh','yyyy-MM-dd');
+    const dup=rows_('Maintenance').some(x=>String(x.vehicle_id)===vehicle&&String(x.maintenance_type)===type&&String(x.status||'').toLowerCase()!=='completed'&&String(x.scheduled_date||'').slice(0,10)===due);
+    sh.getRange(row,ix.next_due_date+1).setValue(next);
+    if(!dup){const rem=maintenanceAddMonths_(next,-1);sh.appendRow([Utilities.getUuid(),vehicle,type,next,'','Open','',0,'Automatically scheduled six months after WhatsApp-confirmed completion',now,now]);const nr=sh.getLastRow();if(ix.reminder_date!==undefined)sh.getRange(nr,ix.reminder_date+1).setValue(rem||'');}
+   }
+  }else sh.getRange(row,ix.status+1).setValue('Open');
+  audit_('Driver','WHATSAPP_CONFIRMATION','6-Month Maintenance',id,'Driver answered '+choice.toUpperCase());
+  return HtmlService.createHtmlOutput(confirmationPage_(choice==='yes'?'Maintenance confirmed':'Maintenance remains open',choice==='yes'?'Completion was recorded and the next 6-month cycle was scheduled.':'Your response was recorded. Maintenance remains open.'));
+ }finally{lock.releaseLock();}
+}
+
 function prepareInspectionConfirmation(token,id) {
   const user=requireOwner_(token), record=rows_('Inspections').find(x=>String(x.record_id)===String(id));
   if(!record) throw new Error('Inspection record not found.');
@@ -642,13 +693,7 @@ function confirmInspectionFromLink(token,answer) {
       const months=type==='Annual'?12:6, next=new Date(base);next.setMonth(next.getMonth()+months);
       const existing=rows_('Inspections').some(x=>String(x.vehicle_id)===vehicleId&&String(x.inspection_type)===type&&String(x.status)!=='Completed'&&String(x.due_date)===Utilities.formatDate(next,'Asia/Riyadh','yyyy-MM-dd'));
       if(!existing) sh.appendRow([Utilities.getUuid(),vehicleId,type,Utilities.formatDate(next,'Asia/Riyadh','yyyy-MM-dd'),'','Pending',0,'Automatically scheduled after driver WhatsApp confirmation',now,'','','','','','']);
-      if(type==='Annual') {
-        rows_('Inspections').filter(x=>String(x.vehicle_id)===vehicleId&&String(x.inspection_type)==='6-Month'&&String(x.status)!=='Completed').forEach(x=>updateById_('Inspections','record_id',x.record_id,{status:'Completed',completed_date:now,confirmation_at:now,confirmed_by:'Closed by Annual inspection confirmation'}));
-        const sixDue=new Date(base);sixDue.setMonth(sixDue.getMonth()+6);
-        const sixKey=Utilities.formatDate(sixDue,'Asia/Riyadh','yyyy-MM-dd');
-        const hasSix=rows_('Inspections').some(x=>String(x.vehicle_id)===vehicleId&&String(x.inspection_type)==='6-Month'&&String(x.status)!=='Completed'&&String(x.due_date)===sixKey);
-        if(!hasSix) sh.appendRow([Utilities.getUuid(),vehicleId,'6-Month',sixKey,'','Pending',0,'Automatically scheduled six months after annual inspection confirmation',now,'','','','','','','']);
-      }
+      // Annual inspections are independent from the 6-Month Maintenance register.
     }
     return confirmationPage_(choice==='yes'?'Inspection confirmed':'Inspection not confirmed',choice==='yes'?'Thank you. Fleet Management has recorded the completion date.':'Thank you. The inspection remains open and Fleet Management will follow up.');
   } finally {lock.releaseLock();}

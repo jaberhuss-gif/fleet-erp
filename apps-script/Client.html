@@ -549,61 +549,21 @@ async function reopenSurvey(vehicleId){
  try{await rpc('reopenTireSurvey',TOKEN,vehicleId,note);alert('Tire survey reopened.');await refreshData();render();}catch(e){alert(e.message);}
 }
 function inspectionsHtml(rows,vehicles){
- const active=(vehicles||[]).filter(v=>String(v.status||'Active').trim().toLowerCase()!=='inactive');
- const records=(rows||[]).slice();
- const dateKey=value=>{
-  if(!value)return '';
-  const raw=String(value);
-  const m=raw.match(/^(\d{4}-\d{2}-\d{2})/);
-  if(m)return m[1];
-  const d=new Date(value);
-  return Number.isNaN(d.getTime())?'':d.toISOString().slice(0,10);
- };
- const today=new Date((DATA.serverTime||new Date().toISOString()));
- const todayKey=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Riyadh',year:'numeric',month:'2-digit',day:'2-digit'}).format(today);
- const daysLeft=due=>{const a=new Date(todayKey+'T12:00:00'),b=new Date(due+'T12:00:00');return Math.round((b-a)/86400000);};
- const statusFor=x=>{
-  if(String(x.status)==='Completed')return 'completed';
-  const due=dateKey(x.due_date);
-  if(!due)return 'unset';
-  const left=daysLeft(due);
-  return left<0?'overdue':left<=30?'warning':'pending';
- };
- const labelFor=x=>({completed:'Completed',overdue:'Overdue',warning:'Due within 30 days',pending:'Scheduled',unset:'Date not set'})[statusFor(x)];
- const virtual=[];
- active.forEach(v=>{
-  ['Annual','6-Month'].forEach(type=>{
-   const list=records.filter(x=>String(x.vehicle_id)===String(v.vehicle_id)&&String(x.inspection_type)===type);
-   if(!list.length){let due='';if(type==='6-Month'&&v.close_date){const d=new Date(String(v.close_date).slice(0,10)+'T12:00:00');if(!Number.isNaN(d.getTime())){d.setMonth(d.getMonth()+6);due=d.toISOString().slice(0,10);}}virtual.push({record_id:'',vehicle_id:v.vehicle_id,inspection_type:type,due_date:due,completed_date:'',cost:0,status:'Pending',_virtual:true,close_date:v.close_date||''});}
-  });
- });
- const all=records.concat(virtual).sort((a,b)=>{
-  const da=dateKey(a.due_date)||'9999-12-31',db=dateKey(b.due_date)||'9999-12-31';
-  return da.localeCompare(db)||String(a.inspection_type).localeCompare(String(b.inspection_type));
- });
- const count=(key)=>all.filter(x=>statusFor(x)===key).length;
- const firstClose=String(active[0]?.close_date||'').slice(0,10);
+ const active=(vehicles||[]).filter(v=>String(v.status||'Active').trim().toLowerCase()!=='inactive'),all=(rows||[]).filter(x=>String(x.inspection_type||'Annual').toLowerCase()==='annual').slice();
+ const dateKey=v=>{if(!v)return '';const m=String(v).match(/^(\d{4}-\d{2}-\d{2})/);if(m)return m[1];const d=new Date(v);return isNaN(d.getTime())?'':d.toISOString().slice(0,10);};
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Riyadh',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(DATA.serverTime||Date.now()));
+ const left=d=>Math.round((new Date(d+'T12:00:00')-new Date(today+'T12:00:00'))/86400000),state=x=>{if(String(x.status)==='Completed')return 'completed';const d=dateKey(x.due_date);if(!d)return 'unset';const n=left(d);return n<0?'overdue':n<=30?'warning':'pending';};
+ const label=x=>({completed:'Completed',overdue:'Overdue',warning:'Due within 30 days',pending:'Scheduled',unset:'Date not set'})[state(x)],count=k=>all.filter(x=>state(x)===k).length;
+ all.sort((a,b)=>(dateKey(a.due_date)||'9999').localeCompare(dateKey(b.due_date)||'9999'));
  const options=active.map(v=>'<option value="'+esc(v.vehicle_id)+'">'+esc(v.plate)+'</option>').join('');
- const form=canManageFleet()?'<div class="panel"><h3>Schedule Inspection</h3><form onsubmit="saveInspectionForm(event)"><div class="form-row"><div><label>Vehicle</label><select id="inspVehicle" required onchange="inspectionVehicleChanged()">'+options+'</select></div><div><label>Inspection Type</label><select id="inspType" onchange="inspectionTypeChanged()"><option>Annual</option><option>6-Month</option></select></div><div><label>Vehicle Close Date (for 6-Month cycle)</label><input id="inspCloseDate" type="date" value="'+esc(firstClose)+'" onchange="inspectionTypeChanged()"></div><div><label>Next Due Date</label><input id="inspDue" type="date" required></div><div><label>Estimated / Actual Cost (SAR)</label><input id="inspCost" type="number" min="0" step="0.01" value="0"></div></div><label>Notes</label><textarea id="inspNotes" placeholder="Inspection reference, location, or remarks"></textarea><div class="form-actions"><button class="btn primary">Save Inspection</button></div><small class="muted">For 6-Month inspections, entering a vehicle close date automatically calculates the due date six months later.</small></form></div>':'';
- const rowsHtml=all.map(x=>{
-  const v=active.find(z=>String(z.vehicle_id)===String(x.vehicle_id))||{};
-  const state=statusFor(x),due=dateKey(x.due_date),complete=dateKey(x.completed_date),id=String(x.record_id||'');
-  const rowStyle=state==='completed'?'background:#dcfce7':state==='overdue'?'background:#fee2e2':state==='warning'?'background:#fef3c7':'';
-  const actions=canManageFleet()?(id?'<button class="btn secondary" data-inspection-id="'+esc(id)+'" onclick="sendInspectionReminder(this)">📱 Reminder</button> <button class="btn primary" data-inspection-id="'+esc(id)+'" onclick="sendInspectionConfirmation(this)">🔗 Send Confirmation Link</button>':'<span class="muted">Schedule date first</span>'):'';
-  return '<tr style="'+rowStyle+'"><td><b>'+esc(v.plate||vehiclePlate(x.vehicle_id))+'</b><br><small>'+esc(v.assigned_driver||'Driver not assigned')+'</small></td><td>'+esc(x.inspection_type)+'</td><td>'+esc(due||'Not set')+'</td><td>'+esc(complete||'-')+'</td><td>'+esc(dateKey(x.confirmation_at)||'-')+'</td><td>'+esc(x.confirmed_by||'-')+'</td><td>'+fmt(x.cost)+'</td><td><span class="badge '+(state==='completed'?'safe':state==='overdue'?'urgent':state==='warning'?'warning':'info')+'">'+esc(labelFor(x))+'</span></td>'+(canManageFleet()?'<td>'+actions+'</td>':'')+'</tr>';
- }).join('');
- return '<div class="page-title"><div><h2>📅 Annual & 6-Month Inspections</h2><p>Full fleet inspection calendar, 30-day warnings, driver WhatsApp confirmation and printable evidence.</p></div><div class="form-actions"><button class="btn secondary" onclick="refreshAndRender()">↻ Refresh</button><button class="btn primary" onclick="printInspectionReport()">🖨️ Print Inspection Report</button></div></div>'+
- '<div class="cards-grid">'+card('Total Vehicles',active.length,'Active vehicles')+card('Overdue',count('overdue'),'Past due date','urgent')+card('Due Within 30 Days',count('warning'),'Send driver reminder','warning')+card('Completed',count('completed'),'Driver confirmation recorded','safe')+'</div>'+form+
- '<div class="panel"><h3>Fleet Inspection Register</h3><div class="form-row" style="margin-bottom:12px"><input id="inspectionSearch" class="table-search" placeholder="Search vehicle / driver / type" oninput="filterInspectionRows()"><select id="inspectionFilter" onchange="filterInspectionRows()"><option value="">All statuses</option><option value="overdue">Overdue</option><option value="warning">Due within 30 days</option><option value="pending">Scheduled</option><option value="completed">Completed</option><option value="unset">Date not set</option></select></div><div class="table-wrap"><table id="inspectionTable"><thead><tr><th>Vehicle / Driver</th><th>Type</th><th>Due Date</th><th>Completed</th><th>Confirmation Date</th><th>Confirmation Source</th><th>Cost (SAR)</th><th>Status</th>'+(canManageFleet()?'<th>Action</th>':'')+'</tr></thead><tbody>'+(rowsHtml||'<tr><td colspan="9" class="empty">No active vehicles found.</td></tr>')+'</tbody></table></div><p class="muted" style="font-size:11px;margin-top:12px">Yellow: due within 30 days · Red: overdue · Green: completed and confirmed by driver. A missing date must be imported or scheduled before reminders can be sent.</p></div>';
+ const form=canManageFleet()?'<div class="panel"><h3>Schedule Annual Inspection</h3><form onsubmit="saveInspectionForm(event)"><div class="form-row"><div><label>Vehicle</label><select id="inspVehicle" required>'+options+'</select></div><div><label>Due Date</label><input id="inspDue" type="date" required></div><div><label>Cost (SAR)</label><input id="inspCost" type="number" min="0" step="0.01" value="0"></div></div><label>Notes</label><textarea id="inspNotes"></textarea><div class="form-actions"><button class="btn primary">Save Annual Inspection</button></div></form></div>':'';
+ const body=all.map(x=>{const v=active.find(z=>String(z.vehicle_id)===String(x.vehicle_id))||{},due=dateKey(x.due_date),id=String(x.record_id||''),st=state(x),days=due?left(due):null,remind=days!==null&&days<=30&&st!=='completed';
+ const action=canManageFleet()?(id?((remind?'<button class="btn secondary" data-inspection-id="'+esc(id)+'" onclick="sendInspectionReminder(this)">📱 WhatsApp Reminder</button> ':'')+'<button class="btn primary" data-inspection-id="'+esc(id)+'" onclick="sendInspectionConfirmation(this)">🔗 WhatsApp Confirmation</button>'):'—'):'';
+ return '<tr><td><b>'+esc(v.plate||vehiclePlate(x.vehicle_id))+'</b><br><small>'+esc(v.assigned_driver||'Driver not assigned')+'</small></td><td>Annual</td><td>'+esc(due||'Not set')+'</td><td>'+esc(dateKey(x.completed_date)||'-')+'</td><td>'+esc(dateKey(x.confirmation_at)||'-')+'</td><td>'+esc(x.confirmed_by||'-')+'</td><td>'+fmt(x.cost)+'</td><td>'+status(label(x))+'</td>'+(canManageFleet()?'<td>'+action+'</td>':'')+'</tr>';}).join('');
+ return '<div class="page-title"><div><h2>📅 Annual Inspection Register</h2><p>Annual inspections only. WhatsApp reminder appears only within 30 days of due date or when overdue.</p></div><div class="form-actions"><button class="btn secondary" onclick="refreshAndRender()">↻ Refresh</button><button class="btn primary" onclick="printInspectionReport()">🖨 Print Inspection Report</button></div></div><div class="cards-grid">'+card('Annual Records',all.length,'Annual only')+card('Overdue',count('overdue'),'Past due','urgent')+card('Due Within 30 Days',count('warning'),'WhatsApp reminder','warning')+card('Completed',count('completed'),'Driver confirmed','safe')+'</div>'+form+'<div class="panel"><h3>Annual Inspection Register</h3><div class="form-row"><input id="inspectionSearch" class="table-search" placeholder="Search vehicle / driver" oninput="filterInspectionRows()"><select id="inspectionFilter" onchange="filterInspectionRows()"><option value="">All statuses</option><option value="overdue">Overdue</option><option value="warning">Due within 30 days</option><option value="pending">Scheduled</option><option value="completed">Completed</option><option value="unset">Date not set</option></select></div><div class="table-wrap"><table id="inspectionTable"><thead><tr><th>Vehicle / Driver</th><th>Type</th><th>Due Date</th><th>Completed</th><th>Confirmation Date</th><th>Confirmation Source</th><th>Cost (SAR)</th><th>Status</th>'+(canManageFleet()?'<th>Action</th>':'')+'</tr></thead><tbody>'+(body||'<tr><td colspan="9">No annual inspection records found. Annual data can be supplied separately.</td></tr>')+'</tbody></table></div></div>';
 }
-function inspectionVehicleChanged(){const v=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(el('inspVehicle')?.value));if(v&&el('inspCloseDate'))el('inspCloseDate').value=String(v.close_date||'').slice(0,10);inspectionTypeChanged();}
-function inspectionTypeChanged(){
- const type=el('inspType')?.value,close=el('inspCloseDate')?.value;
- if(type==='6-Month'&&close){
-  const d=new Date(close+'T12:00:00');d.setMonth(d.getMonth()+6);
-  el('inspDue').value=d.toISOString().slice(0,10);
- }
-}
+function inspectionVehicleChanged(){}
+function inspectionTypeChanged(){}
 function filterInspectionRows(){
  const q=(el('inspectionSearch')?.value||'').toLowerCase(),f=el('inspectionFilter')?.value||'';
  document.querySelectorAll('#inspectionTable tbody tr').forEach(tr=>{
@@ -612,15 +572,14 @@ function filterInspectionRows(){
   tr.style.display=(!q||text.includes(q))&&(!f||f===key)?'':'none';
  });
 }
-async function sendInspectionReminder(button){
- const id=button?.dataset.inspectionId,record=(DATA.inspections||[]).find(x=>String(x.record_id)===String(id));
- if(!record)return;
- const v=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(record.vehicle_id));
- if(!v){alert('Vehicle not found.');return;}
- const phone=normalizeWhatsAppPhone(v.driver_phone);
- if(!phone){alert('No WhatsApp number is saved for this vehicle.');return;}
- const due=String(record.due_date||'').slice(0,10),message='Hello '+(v.assigned_driver||'Driver')+',\\n\\nReminder: '+record.inspection_type+' inspection for vehicle '+(v.plate||v.vehicle_id)+' is due on '+due+'. Please arrange the inspection and update Fleet Management once completed.\\n\\nFleet Management';
- window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(message),'_blank');
+function sendInspectionReminder(button){
+ const id=button?.dataset.inspectionId,record=(DATA.inspections||[]).find(x=>String(x.record_id)===String(id));if(!record)return;
+ const due=String(record.due_date||'').slice(0,10),d=due?new Date(due+'T12:00:00'):null,today=new Date(DATA.serverTime||Date.now());today.setHours(12,0,0,0);
+ if(!d||Math.round((d-today)/86400000)>30){alert('Reminder is available only within 30 days of due date or when overdue.');return;}
+ const v=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(record.vehicle_id));if(!v){alert('Vehicle not found.');return;}
+ const phone=normalizeWhatsAppPhone(v.driver_phone);if(!phone){alert('No WhatsApp number is saved for this vehicle.');return;}
+ const msg='Hello '+(v.assigned_driver||'Driver')+',\\n\\nReminder: Annual inspection for vehicle '+(v.plate||v.vehicle_id)+' is due on '+due+'. Please arrange it and update Fleet Management once completed.\\n\\nFleet Management';
+ window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(msg),'_blank');
 }
 async function sendInspectionConfirmation(button){
  const id=button?.dataset.inspectionId,popup=window.open('about:blank','_blank');
@@ -756,32 +715,24 @@ async function downloadFleetExecutivePptx(){
 }
 
 function sixMonthMaintenanceHtml(rows,vehicles){
- const sixMonth=(rows||[]).filter(r=>/6[ -]?month/i.test(String(r.maintenance_type||'')));
- const pending=sixMonth.filter(r=>!/^completed$/i.test(String(r.status||'').trim()));
- const plateFor=id=>{const v=(vehicles||[]).find(x=>String(x.vehicle_id)===String(id));return v?.plate||id;};
- const driverFor=id=>{const v=(vehicles||[]).find(x=>String(x.vehicle_id)===String(id));return v?.assigned_driver||'';};
- const phoneFor=id=>{const v=(vehicles||[]).find(x=>String(x.vehicle_id)===String(id));return v?.driver_phone||'';};
- const rowsHtml=sixMonth.slice().sort((a,b)=>String(b.scheduled_date||'').localeCompare(String(a.scheduled_date||''))).map(r=>{
-  const v=(vehicles||[]).find(x=>String(x.vehicle_id)===String(r.vehicle_id))||{};
-  const isComplete=/^completed$/i.test(String(r.status||'').trim());
-  const action=!isComplete?'<button class="btn success" onclick="sendSixMonthMaintenanceWhatsApp(\''+esc(r.record_id)+'\')">WhatsApp</button>':'—';
-  return '<tr><td><b>'+esc(v.plate||r.vehicle_id)+'</b></td><td>'+esc(v.assigned_driver||r.technician||'—')+'</td><td>'+esc(v.site||'—')+'</td><td>'+esc(r.maintenance_type||'6-Month Maintenance')+'</td><td>'+esc(r.notes||'—')+'</td><td>'+esc(r.scheduled_date||'—')+'</td><td>'+esc(r.completed_date||'—')+'</td><td>'+status(r.status||'Open')+'</td><td class="no-print">'+action+'</td></tr>';
+ const six=(rows||[]).filter(r=>/6[ -]?month/i.test(String(r.maintenance_type||''))),pending=six.filter(r=>!/^completed$/i.test(String(r.status||'').trim()));
+ const html=six.slice().sort((a,b)=>String(b.scheduled_date||'').localeCompare(String(a.scheduled_date||''))).map(r=>{
+  const v=(vehicles||[]).find(x=>String(x.vehicle_id)===String(r.vehicle_id))||{},done=/^completed$/i.test(String(r.status||'').trim()),answer=String(r.confirmation_answer||'').toUpperCase();
+  const confirm=answer==='YES'&&String(r.confirmation_source||'').toLowerCase()==='whatsapp'?'<span class="badge safe">Confirmed via WhatsApp</span>':answer==='NO'?'<span class="badge warning">Driver replied NO</span>':'<span class="muted">Not confirmed</span>';
+  const action=!done&&r.record_id?'<button class="btn success" onclick="sendSixMonthMaintenanceWhatsApp(\''+esc(r.record_id)+'\')">WhatsApp Confirmation</button>':'—';
+  return '<tr><td><b>'+esc(v.plate||r.vehicle_id)+'</b></td><td>'+esc(v.assigned_driver||r.technician||'—')+'</td><td>'+esc(v.site||'—')+'</td><td>'+esc(r.maintenance_type)+'</td><td>'+esc(r.notes||'—')+'</td><td>'+esc(r.scheduled_date||'—')+'</td><td>'+esc(r.completed_date||'—')+'</td><td>'+status(r.status||'Open')+'</td><td>'+confirm+'</td><td>'+action+'</td></tr>';
  }).join('');
- return '<div class="page-title"><div><h2>6-Month Maintenance Follow-up</h2><p>Maintenance history and outstanding driver follow-up.</p></div><div class="form-actions"><button class="btn secondary" onclick="refreshAndRender()">↻ Refresh</button><button class="btn primary" onclick="printSixMonthMaintenanceReport()">🖨 Print Report</button></div></div>'+
- '<div class="cards-grid">'+card('Total 6-Month Records',sixMonth.length,'Records in Maintenance sheet')+card('Completed',sixMonth.length-pending.length,'Closed maintenance')+card('Not Completed',pending.length,'Requires follow-up','warning')+'</div>'+
- '<div class="panel"><div class="table-wrap"><table id="sixMonthMaintenanceTable"><thead><tr><th>Vehicle</th><th>Driver</th><th>Site</th><th>Maintenance Type</th><th>Work / Notes</th><th>Opened / Scheduled</th><th>Completed Date</th><th>Status</th><th class="no-print">Action</th></tr></thead><tbody>'+(rowsHtml||'<tr><td colspan="9">No 6-Month Maintenance records found.</td></tr>')+'</tbody></table></div></div>';
+ return '<div class="page-title"><div><h2>6-Month Maintenance Follow-up</h2><p>Maintenance history and driver WhatsApp confirmation.</p></div><div class="form-actions"><button class="btn secondary" onclick="refreshAndRender()">↻ Refresh</button><button class="btn primary" onclick="printSixMonthMaintenanceReport()">🖨 Print Report</button></div></div><div class="cards-grid">'+card('Total 6-Month Records',six.length,'Maintenance records')+card('Completed',six.length-pending.length,'Completed')+card('Not Completed',pending.length,'Requires follow-up','warning')+'</div><div class="panel"><div class="table-wrap"><table id="sixMonthMaintenanceTable"><thead><tr><th>Vehicle</th><th>Driver</th><th>Site</th><th>Type</th><th>Work / Notes</th><th>Opened / Scheduled</th><th>Completed Date</th><th>Status</th><th>Driver Confirmation</th><th>Action</th></tr></thead><tbody>'+(html||'<tr><td colspan="10">No 6-Month Maintenance records found.</td></tr>')+'</tbody></table></div><p class="muted">Completed history is preserved. WhatsApp confirmation is recorded only after the driver submits YES or NO.</p></div>';
 }
-function sendSixMonthMaintenanceWhatsApp(recordId){
+async function sendSixMonthMaintenanceWhatsApp(recordId){
  const r=(DATA.maintenance||[]).find(x=>String(x.record_id)===String(recordId));
  if(!r||/^completed$/i.test(String(r.status||'').trim())){alert('This record is already completed or unavailable.');return;}
- const v=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(r.vehicle_id))||{};
- const phone=normalizeWhatsAppPhone(v.driver_phone||'');
- if(!phone){alert('No driver phone number is saved for this vehicle.');return;}
- const popup=window.open('about:blank','_blank');
- if(!popup){alert('Please allow pop-ups to open WhatsApp.');return;}
- const nl=String.fromCharCode(10);
- const message=['Hello '+(v.assigned_driver||'Driver')+',','','Please complete the pending 6-month maintenance inspection for vehicle '+(v.plate||r.vehicle_id)+'.','Work / Notes: '+(r.notes||'6-Month Maintenance'),'Current status: '+(r.status||'Open'),'','Please reply to this message and confirm once the inspection and required work are completed.','Do not confirm before completion.','','Fleet Management'].join(nl);
- popup.location.href='https://wa.me/'+phone+'?text='+encodeURIComponent(message);
+ const popup=window.open('about:blank','_blank');if(!popup){alert('Please allow pop-ups to open WhatsApp.');return;}
+ try{
+  const p=await rpc('prepareSixMonthMaintenanceConfirmation',TOKEN,recordId),nl=String.fromCharCode(10);
+  const message=['Hello '+p.driverName+',','','Please confirm the 6-month maintenance for vehicle '+p.vehiclePlate+'.','Work / Notes: '+(p.notes||'6-Month Maintenance'),'','YES — '+p.yesUrl,'NO — '+p.noUrl,'','Tap YES only after the work is completed. If it is not completed, tap NO.','','Fleet Management'].join(nl);
+  popup.location.href='https://wa.me/'+normalizeWhatsAppPhone(p.phone)+'?text='+encodeURIComponent(message);await refreshData();render();
+ }catch(e){try{popup.close();}catch(x){}alert(e.message||String(e));}
 }
 function printSixMonthMaintenanceReport(){
  const table=document.getElementById('sixMonthMaintenanceTable');

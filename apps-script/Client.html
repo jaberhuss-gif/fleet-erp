@@ -718,32 +718,45 @@ function sixMonthMaintenanceHtml(rows,vehicles){
  const all=rows||[],six=all.filter(r=>/6[ -]?month/i.test(String(r.maintenance_type||''))),pending=six.filter(r=>!/^completed$/i.test(String(r.status||'').trim()));
  const today=new Date(DATA.serverTime||Date.now());today.setHours(12,0,0,0);
  const daysToDue=value=>{if(!value)return null;const d=new Date(String(value).slice(0,10)+'T12:00:00');return isNaN(d.getTime())?null:Math.round((d-today)/86400000);};
+ const displayDate=value=>{
+  if(!value)return '—';
+  const raw=String(value).slice(0,10),m=raw.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
+  return m?m[3]+'/'+m[2]+'/'+m[1]:String(value);
+ };
  const html=six.slice().sort((a,b)=>String(b.scheduled_date||'').localeCompare(String(a.scheduled_date||''))).map(r=>{
   const v=(vehicles||[]).find(x=>String(x.vehicle_id)===String(r.vehicle_id))||{},done=/^completed$/i.test(String(r.status||'').trim()),answer=String(r.confirmation_answer||'').toUpperCase(),source=String(r.confirmation_source||'').toLowerCase(),sourceSite=(String(r.notes||'').match(/Location: ([^|]+)/)||[])[1],displayNotes=String(r.notes||'—').replace('[HISTORICAL_REPORT_2026-10-19] ','');
   const confirmed=answer==='YES'&&source.indexOf('whatsapp')===0;
   const autoCycle=String(r.notes||'').indexOf('Automatically scheduled six months')===0;
-  const confirmation=confirmed?'<span class="badge safe">Confirmed via WhatsApp</span><br><small>'+esc(r.confirmation_at||'')+'</small>':answer==='NO'?'<span class="badge warning">Driver replied NO</span><br><small>'+esc(r.confirmation_at||'')+'</small>':autoCycle?'<span class="muted">Not yet due for confirmation</span>':'<span class="muted">Not confirmed</span>';
+  let confirmation;
+  if(confirmed) confirmation='<span class="badge safe">Confirmed via WhatsApp</span><br><small>'+esc(displayDate(r.confirmation_at))+'</small>';
+  else if(answer==='NO') confirmation='<span class="badge warning">Driver replied NO</span><br><small>'+esc(displayDate(r.confirmation_at))+'</small>';
+  else if(done) confirmation='<span class="muted">Historical completion — no WhatsApp confirmation recorded</span>';
+  else if(autoCycle) confirmation='<span class="muted">Confirmation due after maintenance</span>';
+  else confirmation='<span class="muted">Not confirmed</span>';
   const dueDays=daysToDue(r.scheduled_date);
-  let statusHtml=status(r.status||'Open'), action='—';
+  let statusHtml=done?'<span class="badge safe">Completed</span>':status(r.status||'Open'), action='—';
   if(autoCycle&&!done){
    if(dueDays!==null&&dueDays>30){
     statusHtml='<span class="badge">Scheduled</span><br><small class="muted">Due in '+dueDays+' days</small>';
-    action='<span class="muted">WhatsApp reminder available from '+esc(new Date(new Date(String(r.scheduled_date).slice(0,10)+'T12:00:00').getTime()-30*86400000).toLocaleDateString('en-GB'))+'</span>';
+    action='<span class="muted">WhatsApp reminder available from '+esc(displayDate(new Date(new Date(String(r.scheduled_date).slice(0,10)+'T12:00:00').getTime()-30*86400000).toISOString()))+'</span>';
    }else if(dueDays!==null&&dueDays>=0&&dueDays<=30){
     statusHtml='<span class="badge warning">Upcoming – Due Soon</span><br><small>'+dueDays+' days remaining</small>';
     action=r.record_id?'<button class="btn success" onclick="sendSixMonthDueReminder(&quot;'+esc(r.record_id)+'&quot;)">WhatsApp Reminder</button>':'<span class="muted">Reminder unavailable</span>';
    }else if(dueDays!==null&&dueDays<0){
     statusHtml='<span class="badge urgent">Overdue</span><br><small>'+Math.abs(dueDays)+' days overdue</small>';
     action=r.record_id?'<button class="btn success" onclick="sendSixMonthDueReminder(&quot;'+esc(r.record_id)+'&quot;)">WhatsApp Follow-up</button>':'—';
+   }else{
+    statusHtml='<span class="badge">Scheduled</span>';
+    action='<span class="muted">Due date unavailable</span>';
    }
   }else if(!done&&r.record_id){
    action='<button class="btn success" onclick="sendSixMonthMaintenanceWhatsApp(&quot;'+esc(r.record_id)+'&quot;)">WhatsApp Confirmation</button>';
   }
-  return '<tr><td><b>'+esc(v.plate||r.vehicle_id)+'</b></td><td>'+esc(r.technician||v.assigned_driver||'—')+'</td><td>'+esc(sourceSite||v.site||'—')+'</td><td>'+esc(r.maintenance_type)+'</td><td>'+esc(displayNotes)+'</td><td>'+esc(r.scheduled_date||'—')+'</td><td>'+esc(r.completed_date||'—')+'</td><td>'+statusHtml+'</td><td>'+confirmation+'</td><td>'+action+'</td></tr>';
+  return '<tr><td><b>'+esc(v.plate||r.vehicle_id)+'</b></td><td>'+esc(r.technician||v.assigned_driver||'—')+'</td><td>'+esc(sourceSite||v.site||'—')+'</td><td>'+esc(r.maintenance_type)+'</td><td>'+esc(displayNotes)+'</td><td>'+esc(displayDate(r.scheduled_date))+'</td><td>'+esc(displayDate(r.completed_date))+'</td><td>'+statusHtml+'</td><td>'+confirmation+'</td><td>'+action+'</td></tr>';
  }).join('');
  const ownerTools=USER&&USER.role==='Owner'?'<div class="panel"><h3>Historical report import — 19 Oct 2026</h3><p class="muted">Preview maps the 30 source records to Vehicle Master and checks duplicates. Nothing is written until you explicitly press Import.</p><div class="form-actions"><button class="btn secondary" onclick="previewSixMonthImport()">Preview 30 Historical Records</button></div><div id="sixMonthImportPreview" class="muted" style="margin-top:12px"></div></div>':'';
  const empty=html||'<tr><td colspan="10">'+(all.length?'No records have a 6-Month maintenance type. Raw Maintenance rows: '+all.length+'. Check the source sheet type values or run the historical import preview.':'No Maintenance rows were returned from the connected spreadsheet. Use the historical report preview below to check and import the 30 records.')+'</td></tr>';
- return '<div class="page-title"><div><h2>6-Month Maintenance Follow-up</h2><p>Maintenance history, driver confirmation and upcoming service reminders.</p></div><div class="form-actions"><button class="btn secondary" onclick="refreshAndRender()">↻ Refresh</button><button class="btn primary" onclick="printSixMonthMaintenanceReport()">🖨 Print Report</button></div></div><div class="cards-grid">'+card('Total 6-Month Records',six.length,'Maintenance records')+card('Completed',six.length-pending.length,'Completed')+card('Not Completed',pending.length,'Includes future scheduled cycles','warning')+'</div>'+ownerTools+'<div class="panel"><div class="table-wrap"><table id="sixMonthMaintenanceTable"><thead><tr><th>Vehicle</th><th>Driver</th><th>Site</th><th>Type</th><th>Work / Notes</th><th>Opened / Scheduled</th><th>Completed Date</th><th>Status</th><th>Driver Confirmation</th><th>Action</th></tr></thead><tbody>'+empty+'</tbody></table></div><p class="muted">Future six-month cycles remain Scheduled until they approach their due date. A WhatsApp reminder becomes available during the 30 days before the due date. A reminder does not complete the maintenance or count as driver confirmation.</p></div>';
+ return '<div class="page-title"><div><h2>6-Month Maintenance Follow-up</h2><p>Maintenance history, driver confirmation and upcoming service reminders.</p></div><div class="form-actions"><button class="btn secondary" onclick="refreshAndRender()">↻ Refresh</button><button class="btn primary" onclick="printSixMonthMaintenanceReport()">🖨 Print Report</button></div></div><div class="cards-grid">'+card('Total 6-Month Records',six.length,'Maintenance records')+card('Completed',six.length-pending.length,'Completed')+card('Not Completed',pending.length,'Includes future scheduled cycles','warning')+'</div>'+ownerTools+'<div class="panel"><div class="table-wrap"><table id="sixMonthMaintenanceTable"><thead><tr><th>Vehicle</th><th>Driver</th><th>Site</th><th>Type</th><th>Work / Notes</th><th>Opened / Scheduled</th><th>Completed Date</th><th>Status</th><th>Driver Confirmation</th><th>Action</th></tr></thead><tbody>'+empty+'</tbody></table></div><p class="muted">All records use the same table columns and date format. Completed historical records remain Completed. The next cycle stays Scheduled, and WhatsApp Reminder appears automatically only during the 30 days before its due date. Sending a reminder does not mark maintenance as completed or confirmed.</p></div>';
 }
 async function sendSixMonthDueReminder(recordId){
  const r=(DATA.maintenance||[]).find(x=>String(x.record_id)===String(recordId));

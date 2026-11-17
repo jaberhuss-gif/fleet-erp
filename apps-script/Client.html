@@ -1,6 +1,8 @@
 <script>
 let REPORT_DATA=null;
 let TOKEN='', USER=null, DATA=null, PAGE='dashboard', DRIVER_TAB='km';
+let PAGE_HISTORY=[];
+let AUTO_REFRESH_TIMER=null;
 const el=id=>document.getElementById(id);
 function rpc(name,...args){return new Promise((resolve,reject)=>google.script.run.withSuccessHandler(resolve).withFailureHandler(e=>reject(new Error(e.message||String(e))))[name](...args));}
 function setLoginMode(mode){
@@ -40,7 +42,9 @@ async function openApp(){
   await refreshData();
   document.getElementById('userLabel').textContent=(USER.role==='Driver'?(DATA.selectedDriverName||'Driver'):(USER.fullName||USER.username))+' · '+USER.role;
   renderNavigation();
+  PAGE_HISTORY=[];
   showPage(USER.role==='Driver'?'fleet':'dashboard');
+  startAutoRefresh();
   document.getElementById('loginView').classList.add('hidden');
   document.getElementById('appView').classList.remove('hidden');
  }catch(e){
@@ -68,12 +72,14 @@ async function retryAppLoad(){
   showAppLoadError(e&&e.message?e.message:String(e));
  }
 }
-async function logout(){try{await rpc('logout',TOKEN);}catch(e){}TOKEN='';USER=null;DATA=null;sessionStorage.removeItem('fleetToken');document.getElementById('appView').classList.add('hidden');document.getElementById('loginView').classList.remove('hidden');}
+async function logout(){if(AUTO_REFRESH_TIMER){clearInterval(AUTO_REFRESH_TIMER);AUTO_REFRESH_TIMER=null;}PAGE_HISTORY=[];try{await rpc('logout',TOKEN);}catch(e){}TOKEN='';USER=null;DATA=null;sessionStorage.removeItem('fleetToken');document.getElementById('appView').classList.add('hidden');document.getElementById('loginView').classList.remove('hidden');}
 function renderNavigation(){
  const driverPages=['fleet','handovers','troubleshooter'];
  document.querySelectorAll('.nav-btn').forEach(b=>{b.style.display=USER.role!=='Driver'||driverPages.includes(b.dataset.page)?'block':'none';});
  document.querySelectorAll('[data-nav-group]').forEach(g=>{g.style.display=[...g.querySelectorAll('.nav-btn')].some(b=>b.style.display!=='none')?'block':'none';});
-}function showPage(page){
+}
+function showPage(page, fromBack){
+ if(!fromBack && PAGE && page!==PAGE) PAGE_HISTORY.push(PAGE);
  if(USER?.role==='Driver'&&['fleet','km','maintenance','tickets','tires','tire-survey'].includes(page)){
   DRIVER_TAB=page==='fleet'?'km':(page==='tickets'?'maintenance':page);
   page='fleet';
@@ -86,7 +92,22 @@ function renderNavigation(){
  if(page==='audit'){loadAuditPage();return;}
  if(page==='reports'){loadFleetReports();return;}
  render();
-}function toggleTheme(){
+}
+function goBackPage(){
+ while(PAGE_HISTORY.length){const previous=PAGE_HISTORY.pop();if(previous!==PAGE){showPage(previous,true);return;}}
+ showPage(USER&&USER.role==='Driver'?'fleet':'dashboard',true);
+}
+function startAutoRefresh(){
+ if(AUTO_REFRESH_TIMER)clearInterval(AUTO_REFRESH_TIMER);
+ AUTO_REFRESH_TIMER=setInterval(async()=>{
+  if(!TOKEN||!USER||document.hidden)return;
+  const active=document.activeElement;
+  if(active&&(/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)||active.isContentEditable))return;
+  try{await refreshData();if(PAGE==='reports'){await loadFleetReports();return;}if(PAGE==='audit'){await loadAuditPage();return;}render();}
+  catch(e){console.warn('Automatic Fleet ERP refresh failed:',e);}
+ },60000);
+}
+function toggleTheme(){
  const dark=document.body.classList.toggle('dark-mode');
  const b=document.getElementById('themeToggle');
  if(b)b.textContent=dark?'☀️':'🌙';
@@ -110,6 +131,8 @@ function render(){
  else if(PAGE==='reports')root.innerHTML=fleetReportsHtml(REPORT_DATA);
   else if(PAGE==='handovers')root.innerHTML=handoversHtml(DATA.handovers||[],vehicles);
  else root.innerHTML=placeholderHtml(PAGE);
+ const toolbar='<div class="page-title global-page-tools"><div><small class="muted">Auto refresh every 60 seconds</small></div><div class="form-actions"><button class="btn secondary" type="button" onclick="goBackPage()">← Go Back</button><button class="btn secondary" type="button" onclick="refreshAndRender()">↻ Refresh Now</button></div></div>';
+ root.innerHTML=toolbar+root.innerHTML;
 }function dashboardHtml(v,t,k,overdue,warning){
  const openTires=(DATA.tireRequests||[]).filter(x=>!['Completed','Rejected','Closed'].includes(String(x.status)));
  const pendingInspections=(DATA.inspections||[]).filter(x=>String(x.status)!=='Completed');

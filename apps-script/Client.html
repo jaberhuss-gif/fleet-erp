@@ -690,7 +690,7 @@ async function submitTireForm(e){e.preventDefault();try{await rpc('createTireReq
 async function changeTireStatus(id){try{const next=el('tireStatus_'+id).value;await rpc('updateTireRequest',TOKEN,id,next,'');await refreshData();render();}catch(err){alert(err.message||String(err));}}
 async function saveInspectionForm(e){e.preventDefault();try{await rpc('saveInspection',TOKEN,{vehicleId:el('inspVehicle').value,inspectionType:el('inspType').value,dueDate:el('inspDue').value,closeDate:el('inspCloseDate').value,cost:el('inspCost').value,notes:el('inspNotes').value});alert('Inspection saved.');await refreshData();render();}catch(err){alert(err.message);}}
 async function changeInspectionStatus(id){try{await rpc('updateInspection',TOKEN,id,el('inspStatus_'+id).value,'',0);await refreshData();render();}catch(err){alert(err.message);}}
-async function loadAuditPage(){const root=document.getElementById('mainContent');root.innerHTML='<div class="loading">Loading audit log…</div>';try{const rows=await rpc('getAuditLog',TOKEN);root.innerHTML='<div class="page-title"><div><h2>Audit Log</h2><p>Recent system activity.</p></div></div><div class="panel"><div class="table-wrap"><table><thead><tr><th>Date</th><th>User</th><th>Action</th><th>Entity</th><th>Details</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(r.created_at)+'</td><td>'+esc(r.actor)+'</td><td>'+esc(r.action)+'</td><td>'+esc(r.entity)+'</td><td>'+esc(r.details)+'</td></tr>').join('')+'</tbody></table></div></div>';}catch(e){root.innerHTML='<div class="alert error">'+esc(e.message)+'</div>';}}
+async function loadAuditPage(){const root=document.getElementById('mainContent');root.innerHTML='<div class="loading">Loading audit log…</div>';try{const rows=await rpc('getAuditLog',TOKEN);root.innerHTML='<div class="page-title"><div><h2>Audit Log</h2><p>Recent system activity.</p></div></div><div class="panel"><div class="table-wrap"><table><thead><tr><th>Date</th><th>User</th><th>Action</th><th>Entity</th><th>Details</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(r.created_at)+'</td><td>'+esc(r.actor)+'</td><td>'+esc(r.action)+'</td><td>'+esc(r.entity)+'</td><td>'+esc(r.details)+'</td></tr>').join('')+'</tbody></table></div></div>';root.innerHTML='<div class="page-title global-page-tools"><div><small class="muted">Auto refresh every 60 seconds</small></div><div class="form-actions"><button class="btn secondary" onclick="goBackPage()">← Go Back</button><button class="btn secondary" onclick="refreshAndRender()">↻ Refresh Now</button></div></div>'+root.innerHTML;}catch(e){root.innerHTML='<div class="alert error">'+esc(e.message)+'</div>';}}
 
 function handoversHtml(rows,vehicles){
  if(!canManageFleet())return '<div class="alert warning">Owner access required.</div>';
@@ -847,7 +847,7 @@ async function saveTicket(e){
  }catch(err){alert(err.message);}
 }
 
-async function refreshAndRender(){try{await refreshData();render();}catch(e){alert(e.message);}}
+async function refreshAndRender(){try{await refreshData();if(PAGE==='audit'){await loadAuditPage();return;}if(PAGE==='reports'){await loadFleetReports();return;}render();}catch(e){alert(e.message);}}
 function normalizeWhatsAppPhone(value){
  let phone=String(value||'').replace(/\D/g,'');
  if(phone.startsWith('00'))phone=phone.slice(2);

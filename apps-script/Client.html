@@ -102,7 +102,8 @@ function render(){
  else if(PAGE==='vehicles')root.innerHTML=vehiclesHtml(vehicles);
  else if(PAGE==='km')root.innerHTML=USER.role==='Driver'?driverKmHtml(vehicles):kmHtml(vehicles);
  else if(PAGE==='oil')root.innerHTML=oilHtml(vehicles);
- else if(PAGE==='tickets'||PAGE==='maintenance')root.innerHTML=ticketsHtml(tickets);
+ else if(PAGE==='tickets')root.innerHTML=ticketsHtml(tickets);
+ else if(PAGE==='maintenance')root.innerHTML=sixMonthMaintenanceHtml(DATA.maintenance||[],vehicles);
  else if(PAGE==='tires')root.innerHTML=tiresHtml(DATA.tireRequests||[],vehicles);
  else if(PAGE==='tire-survey')root.innerHTML=tireSurveyHtml(vehicles);
  else if(PAGE==='inspections')root.innerHTML=inspectionsHtml(DATA.inspections||[],vehicles);
@@ -729,6 +730,45 @@ async function downloadFleetExecutivePptx(){
   popup.location.href=result.downloadUrl||result.url;
   alert('PowerPoint generated successfully: '+result.name+'\\nData as of: '+result.generatedAt);
  }catch(e){popup.close();alert('PowerPoint export failed: '+(e.message||String(e)));}
+}
+
+function sixMonthMaintenanceHtml(rows,vehicles){
+ const sixMonth=(rows||[]).filter(r=>/6[ -]?month/i.test(String(r.maintenance_type||'')));
+ const pending=sixMonth.filter(r=>!/^completed$/i.test(String(r.status||'').trim()));
+ const plateFor=id=>{const v=(vehicles||[]).find(x=>String(x.vehicle_id)===String(id));return v?.plate||id;};
+ const driverFor=id=>{const v=(vehicles||[]).find(x=>String(x.vehicle_id)===String(id));return v?.assigned_driver||'';};
+ const phoneFor=id=>{const v=(vehicles||[]).find(x=>String(x.vehicle_id)===String(id));return v?.driver_phone||'';};
+ const rowsHtml=sixMonth.slice().sort((a,b)=>String(b.scheduled_date||'').localeCompare(String(a.scheduled_date||''))).map(r=>{
+  const v=(vehicles||[]).find(x=>String(x.vehicle_id)===String(r.vehicle_id))||{};
+  const isComplete=/^completed$/i.test(String(r.status||'').trim());
+  const action=!isComplete?'<button class="btn success" onclick="sendSixMonthMaintenanceWhatsApp(\''+esc(r.record_id)+'\')">WhatsApp</button>':'—';
+  return '<tr><td><b>'+esc(v.plate||r.vehicle_id)+'</b></td><td>'+esc(v.assigned_driver||r.technician||'—')+'</td><td>'+esc(v.site||'—')+'</td><td>'+esc(r.maintenance_type||'6-Month Maintenance')+'</td><td>'+esc(r.notes||'—')+'</td><td>'+esc(r.scheduled_date||'—')+'</td><td>'+esc(r.completed_date||'—')+'</td><td>'+status(r.status||'Open')+'</td><td class="no-print">'+action+'</td></tr>';
+ }).join('');
+ return '<div class="page-title"><div><h2>6-Month Maintenance Follow-up</h2><p>Maintenance history and outstanding driver follow-up.</p></div><div class="form-actions"><button class="btn secondary" onclick="refreshAndRender()">↻ Refresh</button><button class="btn primary" onclick="printSixMonthMaintenanceReport()">🖨 Print Report</button></div></div>'+
+ '<div class="cards-grid">'+card('Total 6-Month Records',sixMonth.length,'Records in Maintenance sheet')+card('Completed',sixMonth.length-pending.length,'Closed maintenance')+card('Not Completed',pending.length,'Requires follow-up','warning')+'</div>'+
+ '<div class="panel"><div class="table-wrap"><table id="sixMonthMaintenanceTable"><thead><tr><th>Vehicle</th><th>Driver</th><th>Site</th><th>Maintenance Type</th><th>Work / Notes</th><th>Opened / Scheduled</th><th>Completed Date</th><th>Status</th><th class="no-print">Action</th></tr></thead><tbody>'+(rowsHtml||'<tr><td colspan="9">No 6-Month Maintenance records found.</td></tr>')+'</tbody></table></div></div>';
+}
+function sendSixMonthMaintenanceWhatsApp(recordId){
+ const r=(DATA.maintenance||[]).find(x=>String(x.record_id)===String(recordId));
+ if(!r||/^completed$/i.test(String(r.status||'').trim())){alert('This record is already completed or unavailable.');return;}
+ const v=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(r.vehicle_id))||{};
+ const phone=normalizeWhatsAppPhone(v.driver_phone||'');
+ if(!phone){alert('No driver phone number is saved for this vehicle.');return;}
+ const popup=window.open('about:blank','_blank');
+ if(!popup){alert('Please allow pop-ups to open WhatsApp.');return;}
+ const nl=String.fromCharCode(10);
+ const message=['Hello '+(v.assigned_driver||'Driver')+',','','Please complete the pending 6-month maintenance inspection for vehicle '+(v.plate||r.vehicle_id)+'.','Work / Notes: '+(r.notes||'6-Month Maintenance'),'Current status: '+(r.status||'Open'),'','Please reply to this message and confirm once the inspection and required work are completed.','Do not confirm before completion.','','Fleet Management'].join(nl);
+ popup.location.href='https://wa.me/'+phone+'?text='+encodeURIComponent(message);
+}
+function printSixMonthMaintenanceReport(){
+ const table=document.getElementById('sixMonthMaintenanceTable');
+ if(!table){alert('Report table is not available.');return;}
+ const w=window.open('','_blank');
+ if(!w){alert('Please allow pop-ups to print the report.');return;}
+ const style='<style>@page{size:A4 landscape;margin:12mm}body{font:11px Arial;color:#172033}h1{font-size:18px}p{color:#475569}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:6px;text-align:left;vertical-align:top}th{background:#e2e8f0}.no-print{display:none!important}</style>';
+ w.document.open();
+ w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>6-Month Maintenance Report</title>'+style+'</head><body><h1>Ma’aden Ivanhoe Electric JV — Fleet Management</h1><h2>6-Month Maintenance Report</h2><p>Printed: '+esc(new Date().toLocaleString())+'</p>'+table.outerHTML+'<script>window.onload=function(){window.print();};<\\/script></body></html>');
+ w.document.close();
 }
 
 function placeholderHtml(p){

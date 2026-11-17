@@ -721,8 +721,8 @@ function sixMonthMaintenanceHtml(rows,vehicles){
  const html=six.slice().sort((a,b)=>String(b.scheduled_date||'').localeCompare(String(a.scheduled_date||''))).map(r=>{
   const v=(vehicles||[]).find(x=>String(x.vehicle_id)===String(r.vehicle_id))||{},done=/^completed$/i.test(String(r.status||'').trim()),answer=String(r.confirmation_answer||'').toUpperCase(),source=String(r.confirmation_source||'').toLowerCase(),sourceSite=(String(r.notes||'').match(/Location: ([^|]+)/)||[])[1],displayNotes=String(r.notes||'—').replace('[HISTORICAL_REPORT_2026-10-19] ','');
   const confirmed=answer==='YES'&&source.indexOf('whatsapp')===0;
-  const confirmation=confirmed?'<span class="badge safe">Confirmed via WhatsApp</span><br><small>'+esc(r.confirmation_at||'')+'</small>':answer==='NO'?'<span class="badge warning">Driver replied NO</span><br><small>'+esc(r.confirmation_at||'')+'</small>':'<span class="muted">Not confirmed</span>';
   const autoCycle=String(r.notes||'').indexOf('Automatically scheduled six months')===0;
+  const confirmation=confirmed?'<span class="badge safe">Confirmed via WhatsApp</span><br><small>'+esc(r.confirmation_at||'')+'</small>':answer==='NO'?'<span class="badge warning">Driver replied NO</span><br><small>'+esc(r.confirmation_at||'')+'</small>':autoCycle?'<span class="badge safe">Previous cycle confirmed via WhatsApp</span><br><small>This is the next scheduled cycle; its own confirmation is due after completion.</small>':'<span class="muted">Not confirmed</span>';
   const dueDays=daysToDue(r.scheduled_date);
   let statusHtml=status(r.status||'Open'), action='—';
   if(autoCycle&&!done){

@@ -715,7 +715,7 @@ async function downloadFleetExecutivePptx(){
 }
 
 function sixMonthMaintenanceHtml(rows,vehicles){
- const all=rows||[],six=all.filter(r=>/6\\s*[- ]?\\s*month/i.test(String(r.maintenance_type||''))),pending=six.filter(r=>!/^completed$/i.test(String(r.status||'').trim()));
+ const all=rows||[],six=all.filter(r=>/6[ -]?month/i.test(String(r.maintenance_type||''))),pending=six.filter(r=>!/^completed$/i.test(String(r.status||'').trim()));
  const today=new Date(DATA.serverTime||Date.now());today.setHours(12,0,0,0);
  const daysToDue=value=>{if(!value)return null;const d=new Date(String(value).slice(0,10)+'T12:00:00');return isNaN(d.getTime())?null:Math.round((d-today)/86400000);};
  const html=six.slice().sort((a,b)=>String(b.scheduled_date||'').localeCompare(String(a.scheduled_date||''))).map(r=>{

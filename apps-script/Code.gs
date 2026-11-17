@@ -271,6 +271,29 @@ function renderMaintenancePrompt_(params) {
   const token=String(params.token||''), answer=String(params.answer||'').toLowerCase();
   if(!/^[a-f0-9]{64}$/i.test(token)||!['yes','no'].includes(answer))
     return HtmlService.createHtmlOutput(confirmationPage_('Invalid link','This confirmation link is invalid. Please contact Fleet Management.'));
+
+  // Check the one-time token BEFORE displaying the YES/NO action.
+  // The token is stored as a hash; a cleared or replaced hash means it cannot be used again.
+  const sh=sheet_('Tickets'), values=sh.getDataRange().getValues();
+  if(!values.length) return HtmlService.createHtmlOutput(confirmationPage_('Invalid link','This confirmation link is invalid or has already been used. Please contact Fleet Management.'));
+  const headers=values[0].map(String), ix={};
+  headers.forEach((h,i)=>ix[h]=i);
+  const required=['confirmation_token_hash','confirmation_expires_at','status'];
+  if(required.some(k=>ix[k]===undefined))
+    return HtmlService.createHtmlOutput(confirmationPage_('Confirmation unavailable','The confirmation record cannot be verified. Please contact Fleet Management.'));
+  const digest=hash_(token);
+  let record=null;
+  for(let i=1;i<values.length;i++) {
+    if(String(values[i][ix.confirmation_token_hash]||'')===digest) { record=values[i]; break; }
+  }
+  if(!record)
+    return HtmlService.createHtmlOutput(confirmationPage_('Already used or invalid','This confirmation link has already been used, replaced, or is invalid. No further response can be submitted.'));
+  const expiry=new Date(record[ix.confirmation_expires_at]);
+  if(isNaN(expiry.getTime())||expiry.getTime()<Date.now())
+    return HtmlService.createHtmlOutput(confirmationPage_('Link expired','This confirmation link has expired. Please contact Fleet Management for a new link.'));
+  if(String(record[ix.status])==='Closed')
+    return HtmlService.createHtmlOutput(confirmationPage_('Already closed','This maintenance ticket has already been closed. Thank you.'));
+
   const label=answer==='yes'?'YES — confirm the issue is fixed':'NO — the issue is not fixed';
   const html='<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font-family:Arial,sans-serif;background:#f1f5f9;margin:0;padding:24px;color:#0f172a}.card{max-width:520px;margin:8vh auto;background:white;padding:30px;border-radius:14px;box-shadow:0 8px 30px #0001;text-align:center}button{border:0;border-radius:9px;background:#2563eb;color:white;padding:15px 22px;font-size:17px;font-weight:bold;cursor:pointer}p{line-height:1.7}</style></head><body><div class="card"><h2>Vehicle Maintenance Confirmation</h2><p>Please confirm your response below. This will update the Fleet ticket.</p><button id="confirm" onclick="confirmAnswer()">'+label+'</button><p id="result"></p></div><script>function confirmAnswer(){var b=document.getElementById("confirm"),r=document.getElementById("result");b.disabled=true;r.textContent="Submitting…";google.script.run.withSuccessHandler(function(html){document.open();document.write(html);document.close();}).withFailureHandler(function(e){b.disabled=false;r.textContent=e&&e.message?e.message:"Unable to record your response.";}).confirmMaintenanceFromLink("TOKEN_PLACEHOLDER","ANSWER_PLACEHOLDER");}</script></body></html>';
   return HtmlService.createHtmlOutput(html.replace('TOKEN_PLACEHOLDER',token).replace('ANSWER_PLACEHOLDER',answer));

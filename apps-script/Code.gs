@@ -603,9 +603,9 @@ function prepareSixMonthMaintenanceConfirmation(token,id){
  const v=rows_('Vehicles').find(x=>String(x.vehicle_id)===String(r.vehicle_id));if(!v)throw Error('Vehicle not found.');
  const phone=String(v.driver_phone||'').replace(/\\D/g,'');if(!phone)throw Error('No driver WhatsApp number is saved.');
  ensureMaintenanceConfirmationColumns_();const raw=Utilities.getUuid().replace(/-/g,'')+Utilities.getUuid().replace(/-/g,'');
+ const base=ScriptApp.getService().getUrl();if(!base)throw Error('Deploy the Apps Script as a Web App before generating links.');
  updateById_('Maintenance','record_id',id,{status:'Pending Driver Confirmation',confirmation_token_hash:hash_(raw),confirmation_expires_at:new Date(Date.now()+14*86400000),confirmation_answer:'',confirmation_at:'',confirmed_by:'',confirmation_source:''});
  audit_(user.fullName,'SEND_CONFIRMATION','6-Month Maintenance',id,'WhatsApp confirmation link prepared.');
- const base=ScriptApp.getService().getUrl();if(!base)throw Error('Deploy the Apps Script as a Web App before generating links.');
  return {phone,driverName:String(v.assigned_driver||r.technician||'Driver'),vehiclePlate:String(v.plate||v.vehicle_id),notes:String(r.notes||''),status:'Pending Driver Confirmation',yesUrl:base+'?action=six-month-confirm&token='+encodeURIComponent(raw)+'&answer=yes',noUrl:base+'?action=six-month-confirm&token='+encodeURIComponent(raw)+'&answer=no'};
 }
 function renderSixMonthMaintenancePrompt_(p){

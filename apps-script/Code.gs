@@ -628,7 +628,7 @@ function confirmSixMonthMaintenanceFromLink(token,answer){
   if(String(r[ix.status]||'').toLowerCase()==='completed')return HtmlService.createHtmlOutput(confirmationPage_('Already completed','This record is already completed.'));
   const now=new Date(),id=String(r[ix.record_id]),vehicle=String(r[ix.vehicle_id]),type=String(r[ix.maintenance_type]||'6-Month Maintenance');
   ['confirmation_token_hash','confirmation_expires_at'].forEach(k=>sh.getRange(row,ix[k]+1).setValue(''));
-  sh.getRange(row,ix.confirmation_answer+1).setValue(choice.toUpperCase());sh.getRange(row,ix.confirmation_at+1).setValue(now);sh.getRange(row,ix.confirmed_by+1).setValue('Driver');sh.getRange(row,ix.confirmation_source+1).setValue('WhatsApp');
+  sh.getRange(row,ix.confirmation_answer+1).setValue(choice.toUpperCase());sh.getRange(row,ix.confirmation_at+1).setValue(now);sh.getRange(row,ix.confirmed_by+1).setValue(String(rows_('Vehicles').find(x=>String(x.vehicle_id)===String(r[ix.vehicle_id]))?.assigned_driver||'Driver'));sh.getRange(row,ix.confirmation_source+1).setValue('WhatsApp');
   if(choice==='yes'){
    sh.getRange(row,ix.status+1).setValue('Completed');sh.getRange(row,ix.completed_date+1).setValue(now);
    const next=maintenanceAddMonths_(now,6);if(next){

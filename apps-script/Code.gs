@@ -166,7 +166,7 @@ function getAppData(token) {
     tireInventory:user.role==='Owner'?recentRows_('Tire_Inventory',1000):[],
     tireInstallations:readRecords('Tire_Installations'),
     tireStockMovements:user.role==='Owner'?recentRows_('Tire_Stock_Movements',1000):[],
-    handovers:user.role==='Owner'?(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Handovers')?recentRows_('Handovers',500):[]):[],
+    handovers:user.role==='Owner'?(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Handovers')?rows_('Handovers'):[]):[],
     driverNames, selectedDriverName:user.selectedDriverName||'', requiresDriverSelection:user.role==='Driver'&&!user.selectedDriverName, serverTime:new Date().toISOString()
   };
 }

@@ -156,17 +156,41 @@ async function addVehicleForm(e){e.preventDefault();try{await rpc('addVehicle',T
 function kmHtml(v){
  if(USER.role==='Driver') return driverKmHtml(v);
  const vehicles=(v||[]).filter(x=>String(x.status||'Active').trim().toLowerCase()!=='inactive');
- const today=(DATA.serverTime?new Date(DATA.serverTime):new Date()).toLocaleDateString('en-CA',{timeZone:'Asia/Riyadh'});
- const dayKey=value=>{
-  if(!value)return '';
-  const d=value instanceof Date?value:new Date(value);
-  return Number.isNaN(d.getTime())?'':d.toLocaleDateString('en-CA',{timeZone:'Asia/Riyadh'});
+ const riyadhDateKey=value=>{
+  if(value===null||value===undefined||value==='')return '';
+  if(value instanceof Date){
+   if(Number.isNaN(value.getTime()))return '';
+   const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Riyadh',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(value);
+   const part=type=>parts.find(p=>p.type===type)?.value||'';
+   return part('year')+'-'+part('month')+'-'+part('day');
+  }
+  const raw=String(value).trim();
+  const localMatch=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ ,T]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if(localMatch){
+   const day=localMatch[1].padStart(2,'0'),month=localMatch[2].padStart(2,'0'),year=localMatch[3];
+   return year+'-'+month+'-'+day;
+  }
+  const parsed=new Date(raw);
+  if(Number.isNaN(parsed.getTime()))return '';
+  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Riyadh',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(parsed);
+  const part=type=>parts.find(p=>p.type===type)?.value||'';
+  return part('year')+'-'+part('month')+'-'+part('day');
  };
- const todays=(DATA.km||[]).filter(r=>dayKey(r.reading_date)===today);
+ const kmTimestamp=value=>{
+  if(value===null||value===undefined||value==='')return 0;
+  if(value instanceof Date)return Number.isNaN(value.getTime())?0:value.getTime();
+  const raw=String(value).trim();
+  const localMatch=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ ,T]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if(localMatch)return Date.UTC(Number(localMatch[3]),Number(localMatch[2])-1,Number(localMatch[1]),Number(localMatch[4]||0),Number(localMatch[5]||0),Number(localMatch[6]||0));
+  const parsed=new Date(raw);
+  return Number.isNaN(parsed.getTime())?0:parsed.getTime();
+ };
+ const today=riyadhDateKey(DATA.serverTime||new Date());
+ const todays=(DATA.km||[]).filter(r=>riyadhDateKey(r.reading_date)===today);
  const latestByVehicle={};
  todays.forEach(r=>{
   const id=String(r.vehicle_id);
-  if(!latestByVehicle[id]||new Date(r.created_at||r.reading_date)>new Date(latestByVehicle[id].created_at||latestByVehicle[id].reading_date))latestByVehicle[id]=r;
+  if(!latestByVehicle[id]||kmTimestamp(r.created_at||r.reading_date)>kmTimestamp(latestByVehicle[id].created_at||latestByVehicle[id].reading_date))latestByVehicle[id]=r;
  });
  const entered=vehicles.filter(v=>latestByVehicle[String(v.vehicle_id)]).length;
  const missing=vehicles.length-entered;

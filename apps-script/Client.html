@@ -173,17 +173,19 @@ async function saveVehicleEdit(e){
  const oldDriver=String(before.assigned_driver||'').trim(),newDriver=String(el('editDriver').value||'').trim();
  const changed=oldDriver.toLowerCase()!==newDriver.toLowerCase();
  if(changed&&oldDriver&&newDriver&&!confirm('Confirm driver handover?\\n\\nOutgoing driver: '+oldDriver+'\\nIncoming driver: '+newDriver+'\\n\\nThe vehicle assignment will be updated and a handover form will open for printing.'))return;
+ let handoverWindow=null;
+ if(changed&&oldDriver&&newDriver){handoverWindow=window.open('about:blank','_blank');if(!handoverWindow)alert('The browser blocked the print window. Allow pop-ups to print the handover form automatically.');}
  const button=el('saveVehicleEditBtn');button.disabled=true;button.textContent='Saving…';
  try{
   const result=await rpc('updateVehicle',TOKEN,id,{plate:el('editPlate').value,make:el('editMake').value,model:el('editModel').value,year:el('editYear').value,site:el('editSite').value,driver:newDriver,phone:el('editPhone').value,currentKm:el('editKm').value,lastOilKm:el('editOilKm').value,oilIntervalKm:el('editInterval').value,status:el('editStatus').value,vehiclePin:el('editPin').value});
   closeVehicleEdit();await refreshData();render();
   if(result&&result.handoverRequired&&result.handoverId){
    alert('Driver assignment updated. The handover form for '+result.oldDriver+' → '+result.newDriver+' will now open for printing and signatures.');
-   printHandover(result.handoverId);
+   printHandover(result.handoverId,handoverWindow);
   }else if(changed){
    alert('Vehicle assignment updated. A handover form was not created because both an outgoing and incoming driver name are required.');
   }else alert('Vehicle details updated successfully.');
- }catch(err){alert(err.message||String(err));}
+ }catch(err){if(handoverWindow)try{handoverWindow.close();}catch(closeError){}alert(err.message||String(err));}
  finally{button.disabled=false;button.textContent='Save Changes';}
 }
 async function addVehicleForm(e){e.preventDefault();try{await rpc('addVehicle',TOKEN,{plate:el('newPlate').value,make:el('newMake').value,model:el('newModel').value,year:el('newYear').value,site:el('newSite').value,driver:el('newDriver').value,phone:el('newPhone').value,currentKm:el('newKm').value,lastOilKm:el('newOilKm').value,oilIntervalKm:el('newInterval').value,vehiclePin:el('newPin').value});alert('Vehicle added. Give its access code only to its assigned drivers.');await refreshData();render();}catch(err){alert(err.message);}}
@@ -747,7 +749,7 @@ async function saveHandover(e){
  try{const result=await rpc('createHandover',TOKEN,{vehicleId:el('hoVehicle').value,oldDriver:el('hoOld').value,newDriver:el('hoNew').value,newPhone:el('hoPhone').value,date:el('hoDate').value,km:el('hoKm').value,notes:el('hoNotes').value,snapshot:{vehicle:v||{}}});await refreshData();render();printHandover(result.id);}
  catch(err){alert(err.message||String(err));}
 }
-function printHandover(id){
+function printHandover(id,targetWindow){
  const h=(DATA.handovers||[]).find(x=>String(x.handover_id)===String(id));if(!h){alert('Handover record not found.');return;}
  const v=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(h.vehicle_id))||{};
  const escv=x=>esc(x===undefined||x===null||x===''?'—':String(x));
@@ -773,7 +775,7 @@ function printHandover(id){
  '<div class="signs"><div class="signature">Handed over by (Old Driver): '+escv(h.old_driver)+'<div class="sigline">Signature / التوقيع</div></div><div class="signature">Received by (New Driver): '+escv(h.new_driver)+'<div class="sigline">Signature / التوقيع</div></div></div>'+
  '<footer>Fleet Management · Record: '+escv(h.handover_id)+' · Vehicle condition / remarks: '+escv(h.condition_notes)+'</footer>'+
  '<script>window.onload=function(){setTimeout(function(){window.print()},400)};<\/script></body></html>';
- const w=window.open('','_blank');if(!w){alert('Allow pop-ups to print the handover form.');return;}w.document.open();w.document.write(html);w.document.close();
+ const w=targetWindow||window.open('','_blank');if(!w){alert('Allow pop-ups to print the handover form. You can also print it from the Handovers register.');return;}w.document.open();w.document.write(html);w.document.close();
 }
 
 

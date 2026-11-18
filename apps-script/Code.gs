@@ -720,25 +720,33 @@ function updateVehicle(token,id,payload) {
   const oldDriver=String(previous.assigned_driver||'').trim(), newDriver=String(payload.driver||'').trim();
   const driverChanged=oldDriver.toLowerCase()!==newDriver.toLowerCase();
   const patch={plate:String(payload.plate||'').trim().toUpperCase(),make:String(payload.make||''),model:String(payload.model||''),year:String(payload.year||''),site:String(payload.site||''),assigned_driver:newDriver,driver_phone:String(payload.phone||''),oil_interval_km:Number(payload.oilIntervalKm||5000),status:String(payload.status||'Active'),updated_at:new Date()};
+  if(!patch.plate) throw new Error('Vehicle plate is required.');
+  if(rows_('Vehicles').some(v=>String(v.vehicle_id)!==String(id)&&String(v.plate||'').trim().toUpperCase()===patch.plate)) throw new Error('This vehicle plate already exists.');
   if(payload.currentKm!==undefined) patch.current_km=Number(payload.currentKm||0);
   if(payload.lastOilKm!==undefined) patch.last_oil_km=Number(payload.lastOilKm||0);
   if(payload.vehiclePin) {
     if(String(payload.vehiclePin).length<4) throw new Error('Vehicle access code must be at least 4 characters.');
     const salt=Utilities.getUuid(); patch.vehicle_pin_hash=salt+':'+hash_(salt+String(payload.vehiclePin));
   }
+  let handoverId='';
   const lock=LockService.getScriptLock();lock.waitLock(10000);
   try {
+    // Create or reuse the handover BEFORE changing the assigned driver.
     if(driverChanged && oldDriver && newDriver) {
-      const existing=rows_('Handovers').find(h=>String(h.vehicle_id)===String(id)&&String(h.old_driver)===oldDriver&&String(h.new_driver)===newDriver&&String(h.status)!=='Completed');
-      if(!existing) {
-        const now=new Date(),hid=Utilities.getUuid();
-        sheet_('Handovers').appendRow([hid,String(id),patch.plate,oldDriver,newDriver,String(previous.driver_phone||''),patch.driver_phone,now,Number(previous.current_km||0),'Pending Signatures','{}','Driver assignment changed; vehicle handover required.','{}',user.fullName,now,'','']);
+      const handovers=rows_('Handovers');
+      const existing=handovers.find(h=>String(h.vehicle_id)===String(id)&&String(h.old_driver||'').trim().toLowerCase()===oldDriver.toLowerCase()&&String(h.new_driver||'').trim().toLowerCase()===newDriver.toLowerCase()&&String(h.status||'').toLowerCase()!=='completed');
+      if(existing) {
+        handoverId=String(existing.handover_id);
+      } else {
+        const now=new Date();handoverId=Utilities.getUuid();
+        const snapshot={vehicle:{...previous},assignment:{oldDriver,newDriver,changedAt:now.toISOString()},source:'Vehicle Master driver assignment'};
+        sheet_('Handovers').appendRow([handoverId,String(id),previous.plate,oldDriver,newDriver,String(previous.driver_phone||''),patch.driver_phone,now,Number(previous.current_km||0),'Pending Signatures','{}','Driver assignment changed; vehicle handover required.',JSON.stringify(snapshot),user.fullName,now,'','']);
       }
     }
     updateById_('Vehicles','vehicle_id',id,patch);
   } finally {lock.releaseLock();}
   audit_(user.fullName,'UPDATE','Vehicle',id,'Updated '+patch.plate+(driverChanged?'; driver changed from '+(oldDriver||'Unassigned')+' to '+(newDriver||'Unassigned'):''));
-  return {ok:true,handoverRequired:driverChanged&&!!oldDriver&&!!newDriver,oldDriver,newDriver};
+  return {ok:true,handoverRequired:!!handoverId,handoverId,oldDriver,newDriver};
 }
 function createHandover(token,payload) {
   const user=requireOwner_(token);

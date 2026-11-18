@@ -776,22 +776,22 @@ function importTrustedHistoricalHandovers(token) {
   const byPlate={};
   vehicles.forEach(v=>byPlate[String(v.plate||'').trim().toUpperCase()]=v);
   const records=[
-    {plate:'2295 EUA',date:'2026-07-11',driver:'Syed Rahman',phone:'055 598 4615',km:299074,lastOil:296768,since:2306,remaining:2694,oilStatus:'OK',
+    {plate:'2295 EUA',site:'Uqlat Al Soqour',date:'2026-11-07',driver:'Syed Rahman',phone:'055 598 4615',km:299074,lastOil:296768,since:2306,remaining:2694,oilStatus:'OK',
      tires:[['Front Left','1d5849','Dunlop green'],['Front Right','1b7487','Dunlop green'],['Rear Left','11b7488','Dunlop green'],['Rear Right','1f1313','Dunlop green'],['Spare','1b2745','Dunlop green'],['Sixth','1b3903','Dunlop green']],
      maintenance:[['2026-10-15','6-Month Maintenance Repair','Completed'],['2026-10-12','Other','Closed'],['2026-10-03','Daily KM Missing','Vehicle Closed']],
      annual:['2025-12-14','2026-12-14'],six:['2026-10-15','2027-04-15']},
-    {plate:'4431 JUA',date:'2026-07-11',driver:'Shah Saood',phone:'053397109',km:269782,lastOil:268245,since:1537,remaining:3463,oilStatus:'OK',
-     tires:[],maintenance:[['2026-10-12','Door','Closed'],['2026-10-03','Daily KM Missing','Vehicle Closed'],['2026-10-02','Daily KM Missing','Vehicle Closed']],
+    {plate:'4431 JUA',site:'Uqlat Al Soqour',date:'2026-11-07',driver:'Shah Saood',phone:'053397109',km:269782,lastOil:268245,since:1537,remaining:3463,oilStatus:'OK',
+     tires:[['Front Left','',''],['Front Right','',''],['Rear Left','',''],['Rear Right','',''],['Spare','',''],['Sixth','','']],maintenance:[['2026-10-12','Door','Closed'],['2026-10-03','Daily KM Missing','Vehicle Closed'],['2026-10-02','Daily KM Missing','Vehicle Closed']],
      annual:['2026-11-02','2027-11-02'],six:['2026-11-02','2027-05-02']},
-    {plate:'4435 JUA',date:'2026-07-11',driver:'',phone:'',km:263392,lastOil:261263,since:2129,remaining:2871,oilStatus:'OK',
+    {plate:'4435 JUA',site:'Uqlat Al Soqour',date:'2026-11-07',driver:'',phone:'',km:263392,lastOil:261263,since:2129,remaining:2871,oilStatus:'OK',
      tires:[['Front Left','1b7488','Dunlop green'],['Front Right','1b7485','Dunlop green'],['Rear Left','1b7485','Dunlop green'],['Rear Right','1d5849','Dunlop green'],['Spare','1b7487','Dunlop green'],['Sixth','E2318','Dunlop green']],
      maintenance:[['2026-10-11','Other','Completed'],['2026-10-03','Daily KM Missing','Vehicle Closed'],['2026-09-27','Daily KM Missing','Vehicle Closed']],
      annual:['2026-10-08','2027-10-08'],six:['2026-10-08','2027-04-08']},
-    {plate:'4481 JUA',date:'2026-11-14',oldDriver:'Abdul wahid',driver:'Mehtab',phone:'0504610896',km:293962,lastOil:289039,since:4923,remaining:77,oilStatus:'DUE SOON',
+    {plate:'4481 JUA',site:'Mahd ad Dhahab',date:'2026-11-14',oldDriver:'Abdul wahid',driver:'Mehtab',phone:'0504610896',km:293962,lastOil:289039,since:4923,remaining:77,oilStatus:'DUE SOON',
      tires:[['Front Left','1B7486','DUNLOP green'],['Front Right','1B7489','DUNLOP green'],['Rear Left','1D6020','DUNLOP green'],['Rear Right','1B7487','DUNLOP green'],['Spare','1F1313','DUNLOP green'],['Sixth','1D8019','DUNLOP green']],
      maintenance:[['2026-10-17','Brakes','Completed'],['2026-10-17','Other','Completed'],['2026-10-17','Other','Completed']],
      annual:['2026-10-12','2027-10-12'],six:['2026-10-12','2027-04-12']},
-    {plate:'4538 LUA',date:'2026-11-07',driver:'Saddam Azam',phone:'0595684065',km:273542,lastOil:269516,since:4026,remaining:974,oilStatus:'OK',
+    {plate:'4538 LUA',site:'Uqlat Al Soqour',date:'2026-11-07',driver:'Saddam Azam',phone:'0595684065',km:273542,lastOil:269516,since:4026,remaining:974,oilStatus:'OK',
      tires:[['Front Left','1b7485','Dunlop green'],['Front Right','1b7488','Dunlop green'],['Rear Left','1b7488','Dunlop green'],['Rear Right','1b7485','Dunlop green'],['Spare','1b0092','Dunlop green'],['Sixth','1b7485','Dunlop green']],
      maintenance:[['2026-11-03','Other','Completed'],['2026-10-17','Tires','Completed'],['2026-10-15','6-Month Maintenance Repair','Completed']],
      annual:['2026-02-04','2027-02-04'],six:['2026-10-15','2027-04-15']}
@@ -805,7 +805,7 @@ function importTrustedHistoricalHandovers(token) {
   ['Reflective Triangle / مثلث عاكسة','Fire Extinguisher 3kg / طفاية حريق 3 كيلو','Air Blower / منفاخ الهواء','Tire Wrench / مفتاح براغي الإطارات','Jack / جك رافع السيارة','Wheel Chock / ويل شوك','Sand Ladders','Daily Checking of Vehicle Wheel Nuts'].forEach((x,i)=>checklist[String(i+1)]=false);
   const values=pending.map(r=>{
     const v=byPlate[r.plate], old=r.oldDriver||'', neu=r.driver||'';
-    const snapshot={source:'Trusted legacy handover form',vehicle:{make:v.make||'Toyota',model:v.model||'Land Cruiser',year:v.year||'2013',site:v.site||'Uqlat Al Soqour'},oil:{currentKm:r.km,lastOilKm:r.lastOil,sinceOil:r.since,remaining:r.remaining,interval:5000,status:r.oilStatus},tires:r.tires.map(t=>({position:t[0],serial:t[1],brand:t[2],condition:''})),maintenance:r.maintenance.map(m=>({date:m[0],item:m[1],status:m[2]})),inspections:{annual:{date:r.annual[0],nextDate:r.annual[1]},sixMonth:{date:r.six[0],nextDate:r.six[1]}},checklist};
+    const snapshot={source:'Trusted legacy handover form',vehicle:{make:v.make||'Toyota',model:v.model||'Land Cruiser',year:v.year||'2013',site:r.site},oil:{currentKm:r.km,lastOilKm:r.lastOil,sinceOil:r.since,remaining:r.remaining,interval:5000,status:r.oilStatus},tires:r.tires.map(t=>({position:t[0],serial:t[1],brand:t[2],condition:''})),maintenance:r.maintenance.map(m=>({date:m[0],item:m[1],status:m[2]})),inspections:{annual:{date:r.annual[0],nextDate:r.annual[1]},sixMonth:{date:r.six[0],nextDate:r.six[1]}},checklist};
     return [Utilities.getUuid(),v.vehicle_id,r.plate,old,neu,old?'':'',r.phone,new Date(r.date+'T12:00:00+03:00'),r.km,'Historical Record (Unsigned)',JSON.stringify(checklist),'Imported from verified original printed form',JSON.stringify(snapshot),user.fullName,now,'',''];
   });
   const lock=LockService.getScriptLock();lock.waitLock(10000);

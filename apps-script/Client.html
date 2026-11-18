@@ -147,11 +147,45 @@ function vehicleTable(rows){if(!rows.length)return '<div class="empty">No vehicl
 }
 function vehiclesHtml(v){
  const admin=USER.role==='Owner';
+ const rows=(v||[]).map(x=>'<tr><td><b>'+esc(x.plate)+'</b></td><td>'+esc((x.make||'')+' '+(x.model||''))+'</td><td>'+esc(x.site||'-')+'</td><td>'+esc(x.assigned_driver||'—')+'</td><td>'+esc(x.driver_phone||'—')+'</td><td>'+fmt(x.current_km)+'</td><td>'+status(x.status)+'</td>'+(admin?'<td><button class="btn secondary small" type="button" onclick="openVehicleEdit(\\''+esc(x.vehicle_id)+'\\')">Edit</button></td>':'')+'</tr>').join('');
+ const table='<div class="table-wrap"><table><thead><tr><th>Plate</th><th>Make / Model</th><th>Site</th><th>Assigned Driver</th><th>Driver Phone</th><th>Current KM</th><th>Status</th>'+(admin?'<th>Action</th>':'')+'</tr></thead><tbody>'+(rows||'<tr><td colspan="'+(admin?8:7)+'">No vehicles found.</td></tr>')+'</tbody></table></div>';
  return '<div class="page-title"><div><h2>🚙 Vehicle Master</h2><p>Vehicle identity, driver assignment and current status.</p></div>'+(admin?'<button class="btn primary" onclick="toggleVehicleForm()">+ Add Vehicle</button>':'')+'</div>'+
  '<div id="vehicleFormWrap" class="panel hidden"><h3>Add Vehicle</h3><form onsubmit="addVehicleForm(event)"><div class="form-row"><div><label>Plate</label><input id="newPlate" required></div><div><label>Make</label><input id="newMake"></div><div><label>Model</label><input id="newModel"></div><div><label>Year</label><input id="newYear"></div><div><label>Site</label><input id="newSite"></div><div><label>Assigned Driver</label><input id="newDriver"></div><div><label>Driver Phone</label><input id="newPhone"></div><div><label>Current KM</label><input id="newKm" type="number" min="0" value="0"></div><div><label>Last Oil KM</label><input id="newOilKm" type="number" min="0" value="0"></div><div><label>Oil Interval KM</label><input id="newInterval" type="number" min="1000" value="5000"></div><div><label>Vehicle Access Code (optional)</label><input id="newPin" type="password" minlength="4" placeholder="Not required for shared Driver Portal"></div></div><div class="form-actions"><button class="btn primary">Save Vehicle</button><button type="button" class="btn secondary" onclick="toggleVehicleForm()">Cancel</button></div></form></div>'+
- '<div class="panel">'+vehicleTable(v)+'</div>';
+ (admin?'<div id="vehicleEditWrap" class="panel hidden"><div class="page-title"><div><h3>Edit Vehicle & Driver Assignment</h3><p class="muted">Changing the assigned driver automatically creates a handover for the outgoing and incoming drivers.</p></div></div><form onsubmit="saveVehicleEdit(event)"><input id="editVehicleId" type="hidden"><div class="form-row"><div><label>Plate</label><input id="editPlate" required></div><div><label>Make</label><input id="editMake"></div><div><label>Model</label><input id="editModel"></div><div><label>Year</label><input id="editYear"></div><div><label>Site</label><input id="editSite"></div><div><label>Assigned Driver</label><input id="editDriver" required></div><div><label>Driver Phone</label><input id="editPhone"></div><div><label>Current KM</label><input id="editKm" type="number" min="0"></div><div><label>Last Oil KM</label><input id="editOilKm" type="number" min="0"></div><div><label>Oil Interval KM</label><input id="editInterval" type="number" min="1000"></div><div><label>Status</label><select id="editStatus"><option>Active</option><option>Inactive</option></select></div><div><label>New Vehicle Access Code (optional)</label><input id="editPin" type="password" minlength="4" placeholder="Leave blank to keep current code"></div></div><div class="form-actions"><button class="btn primary" id="saveVehicleEditBtn">Save Changes</button><button type="button" class="btn secondary" onclick="closeVehicleEdit()">Cancel</button></div></form><div id="vehicleEditMessage" class="muted"></div></div>':'')+
+ '<div class="panel">'+table+'</div>';
 }
-function toggleVehicleForm(){document.getElementById('vehicleFormWrap').classList.toggle('hidden');}
+function toggleVehicleForm(){const box=el('vehicleFormWrap');if(box)box.classList.toggle('hidden');}
+function openVehicleEdit(id){
+ if(USER.role!=='Owner')return;
+ const v=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(id));
+ if(!v){alert('Vehicle not found. Refresh the page and try again.');return;}
+ const values={editVehicleId:v.vehicle_id,editPlate:v.plate,editMake:v.make,editModel:v.model,editYear:v.year,editSite:v.site,editDriver:v.assigned_driver,editPhone:v.driver_phone,editKm:v.current_km,editOilKm:v.last_oil_km,editInterval:v.oil_interval_km||5000,editStatus:v.status||'Active',editPin:''};
+ Object.keys(values).forEach(k=>{if(el(k))el(k).value=values[k]??'';});
+ if(el('vehicleEditMessage'))el('vehicleEditMessage').textContent='Current assigned driver: '+(v.assigned_driver||'Unassigned');
+ const box=el('vehicleEditWrap');box.classList.remove('hidden');box.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function closeVehicleEdit(){const box=el('vehicleEditWrap');if(box)box.classList.add('hidden');}
+async function saveVehicleEdit(e){
+ e.preventDefault();
+ if(USER.role!=='Owner')return;
+ const id=el('editVehicleId').value, before=(DATA.vehicles||[]).find(x=>String(x.vehicle_id)===String(id));
+ if(!before){alert('Vehicle record is no longer available. Refresh and try again.');return;}
+ const oldDriver=String(before.assigned_driver||'').trim(),newDriver=String(el('editDriver').value||'').trim();
+ const changed=oldDriver.toLowerCase()!==newDriver.toLowerCase();
+ if(changed&&oldDriver&&newDriver&&!confirm('Confirm driver handover?\\n\\nOutgoing driver: '+oldDriver+'\\nIncoming driver: '+newDriver+'\\n\\nThe vehicle assignment will be updated and a handover form will open for printing.'))return;
+ const button=el('saveVehicleEditBtn');button.disabled=true;button.textContent='Saving…';
+ try{
+  const result=await rpc('updateVehicle',TOKEN,id,{plate:el('editPlate').value,make:el('editMake').value,model:el('editModel').value,year:el('editYear').value,site:el('editSite').value,driver:newDriver,phone:el('editPhone').value,currentKm:el('editKm').value,lastOilKm:el('editOilKm').value,oilIntervalKm:el('editInterval').value,status:el('editStatus').value,vehiclePin:el('editPin').value});
+  closeVehicleEdit();await refreshData();render();
+  if(result&&result.handoverRequired&&result.handoverId){
+   alert('Driver assignment updated. The handover form for '+result.oldDriver+' → '+result.newDriver+' will now open for printing and signatures.');
+   printHandover(result.handoverId);
+  }else if(changed){
+   alert('Vehicle assignment updated. A handover form was not created because both an outgoing and incoming driver name are required.');
+  }else alert('Vehicle details updated successfully.');
+ }catch(err){alert(err.message||String(err));}
+ finally{button.disabled=false;button.textContent='Save Changes';}
+}
 async function addVehicleForm(e){e.preventDefault();try{await rpc('addVehicle',TOKEN,{plate:el('newPlate').value,make:el('newMake').value,model:el('newModel').value,year:el('newYear').value,site:el('newSite').value,driver:el('newDriver').value,phone:el('newPhone').value,currentKm:el('newKm').value,lastOilKm:el('newOilKm').value,oilIntervalKm:el('newInterval').value,vehiclePin:el('newPin').value});alert('Vehicle added. Give its access code only to its assigned drivers.');await refreshData();render();}catch(err){alert(err.message);}}
 function kmHtml(v){
  if(USER.role==='Driver') return driverKmHtml(v);
